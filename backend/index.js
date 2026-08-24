@@ -42,7 +42,7 @@ app.post("/api/save-address", async (req, res) => {
       landmark
     } = req.body;
 
-    if (!latitude || !longitude) {
+    if (latitude == null || longitude == null) {
       return res.status(400).json({
         success: false,
         message: "Lokatsiya koordinatalari topilmadi"
@@ -71,7 +71,6 @@ app.post("/api/save-address", async (req, res) => {
 
     if (error) {
       console.error(error);
-
       return res.status(500).json({
         success: false,
         message: "Manzilni saqlashda xatolik",
@@ -84,10 +83,85 @@ app.post("/api/save-address", async (req, res) => {
       message: "Manzil muvaffaqiyatli saqlandi",
       data
     });
-
   } catch (error) {
     console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
+});
 
+app.post("/api/orders", async (req, res) => {
+  try {
+    const {
+      telegram_id,
+      username,
+      first_name,
+      phone,
+      items,
+      subtotal,
+      delivery,
+      discount,
+      total,
+      address,
+      payment,
+      status,
+      created_at
+    } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Buyurtma mahsulotlari topilmadi"
+      });
+    }
+
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Telefon raqami kiritilmagan"
+      });
+    }
+
+    const order = {
+      telegram_id,
+      username,
+      first_name,
+      phone,
+      items,
+      subtotal,
+      delivery,
+      discount,
+      total,
+      address,
+      payment,
+      status: status || "Qabul qilindi",
+      created_at: created_at || new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from("orders")
+      .insert([order])
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      return res.status(500).json({
+        success: false,
+        message: "Buyurtmani saqlashda xatolik",
+        error: error.message
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Buyurtma muvaffaqiyatli saqlandi",
+      data
+    });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({
       success: false,
       message: "Server xatosi"
