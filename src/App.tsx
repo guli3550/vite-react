@@ -265,7 +265,16 @@ export default function App() {
   const [phone, setPhone] = useState("");
   const [payment, setPayment] = useState("cash");
 
-  const [address, setAddress] = useState<Address>({});
+  const [address, setAddress] = useState<Address>({
+  latitude: 0,
+  longitude: 0,
+  region: "",
+  district: "",
+  street: "",
+  house: "",
+  apartment: "",
+  landmark: "",
+});
   const [locationLoading, setLocationLoading] = useState(false);
 
   const [promo, setPromo] = useState("");
