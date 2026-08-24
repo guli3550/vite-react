@@ -1,0 +1,239 @@
+/* GULI responsive system: phone, tablet, iPad, laptop and desktop. */
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: #fff9fa;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #fff9fa;
+}
+
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #c9526b;
+  outline-offset: 2px;
+}
+
+/* iPhone / Android portrait: safe areas and compact controls. */
+@media (max-width: 479px) {
+  .app {
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+
+  .hero {
+    min-height: clamp(330px, 86svh, 520px);
+  }
+
+  .heroOverlay {
+    min-height: inherit;
+    padding: 34px 22px;
+  }
+
+  .heroOverlay h1 {
+    font-size: clamp(32px, 10vw, 42px);
+  }
+
+  .bottomNav {
+    height: calc(68px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .productGrid {
+    gap: 9px;
+  }
+
+  .productInfo {
+    padding: 9px;
+  }
+
+  .productInfo h3 {
+    font-size: 12px;
+  }
+}
+
+/* Large phones / small tablets. */
+@media (min-width: 480px) and (max-width: 767px) {
+  .app {
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero {
+    min-height: 430px;
+  }
+}
+
+/* iPad portrait and tablet. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  body {
+    background: #f5eef0;
+  }
+
+  .app {
+    width: min(100%, 920px);
+    max-width: 920px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: #fff9fa;
+    box-shadow: 0 0 45px rgba(50, 20, 30, 0.06);
+  }
+
+  .topbar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .section,
+  .page {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .detailImageWrap {
+    max-width: 680px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .detailContent {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+}
+
+/* Laptop / desktop. */
+@media (min-width: 1024px) {
+  body {
+    background: #f3edef;
+  }
+
+  .app {
+    width: min(100%, 1440px);
+    max-width: 1440px;
+    margin: 0 auto;
+    min-height: 100vh;
+    background: #fff9fa;
+    box-shadow: 0 0 60px rgba(50, 20, 30, 0.08);
+  }
+
+  .topbar {
+    height: 76px;
+    padding-left: 34px;
+    padding-right: 34px;
+  }
+
+  .section,
+  .page {
+    padding-left: clamp(24px, 4vw, 52px);
+    padding-right: clamp(24px, 4vw, 52px);
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .hero {
+    margin-left: clamp(18px, 3vw, 42px);
+    margin-right: clamp(18px, 3vw, 42px);
+    min-height: min(62vh, 560px);
+  }
+
+  .heroOverlay {
+    min-height: min(62vh, 560px);
+    padding-left: clamp(36px, 6vw, 90px);
+  }
+
+  .heroOverlay h1 {
+    max-width: 620px;
+    font-size: clamp(42px, 4vw, 64px);
+  }
+
+  .sectionTitle h2,
+  .pageHeader h1 {
+    font-size: 26px;
+  }
+
+  .checkoutCard,
+  .summary,
+  .cartList,
+  .profileMenu,
+  .ordersList {
+    max-width: 900px;
+  }
+
+  .bottomNav {
+    left: 50%;
+    right: auto;
+    width: min(100%, 620px);
+    transform: translateX(-50%);
+    border: 1px solid #f0e1e4;
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+  }
+}
+
+/* Wide monitors: avoid over-stretching product content. */
+@media (min-width: 1440px) {
+  .productGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Landscape phones and compact laptop heights. */
+@media (orientation: landscape) and (max-height: 620px) {
+  .hero,
+  .heroOverlay {
+    min-height: 330px;
+  }
+
+  .bottomNav {
+    height: 58px;
+  }
+
+  .app {
+    padding-bottom: 68px;
+  }
+}
+
+/* Reduced-motion accessibility. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
