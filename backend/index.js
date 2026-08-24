@@ -52,6 +52,35 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+app.get("/api/orders", async (req, res) => {
+  try {
+    const telegramId = req.query.telegram_id;
+    if (!telegramId) return res.status(400).json({ success: false, message: "telegram_id kerak" });
+    const { data, error } = await supabase.from("orders").select("*").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(100);
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (error) {
+    console.error("Orders API error:", error);
+    res.status(500).json({ success: false, message: "Buyurtmalarni yuklashda xatolik" });
+  }
+});
+
+app.get("/api/reverse-geocode", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ success: false, message: "Koordinatalar noto'g'ri" });
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, { headers: { "User-Agent": "GULI-Lingerie-Telegram-Mini-App/1.0" } });
+    if (!response.ok) throw new Error(`Geocoding HTTP ${response.status}`);
+    const result = await response.json();
+    const a = result.address || {};
+    res.json({ success: true, data: { region: a.state || a.region || a.province || "", district: a.city_district || a.district || a.county || a.city || "", street: a.road || a.pedestrian || a.street || "", display_name: result.display_name || "" } });
+  } catch (error) {
+    console.error("Reverse geocode error:", error);
+    res.status(502).json({ success: false, message: "Manzilni avtomatik aniqlab bo'lmadi" });
+  }
+});
+
 app.get("/api/products/:id", async (req, res) => {
   try {
     const data = await getProduct(req.params.id);
