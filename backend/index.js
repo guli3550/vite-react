@@ -152,6 +152,8 @@ app.post("/api/orders", async (req, res) => {
       console.error(error);
 
       // A repeated order number should not create a duplicate order.
+      // If the original row was created before Telegram identity was
+      // available, backfill telegram_id / username / first_name now.
       if (error.code === "23505") {
         const existing = await supabase
           .from("orders")
@@ -160,10 +162,44 @@ app.post("/api/orders", async (req, res) => {
           .maybeSingle();
 
         if (existing.data) {
+          const identityPatch = {};
+
+          if (telegram_id != null && existing.data.telegram_id == null) {
+            identityPatch.telegram_id = telegram_id;
+          }
+          if (username && existing.data.username == null) {
+            identityPatch.username = username;
+          }
+          if (first_name && existing.data.first_name == null) {
+            identityPatch.first_name = first_name;
+          }
+
+          let updated = existing.data;
+
+          if (Object.keys(identityPatch).length > 0) {
+            const result = await supabase
+              .from("orders")
+              .update(identityPatch)
+              .eq("id", existing.data.id)
+              .select()
+              .single();
+
+            if (result.error) {
+              console.error(result.error);
+              return res.status(500).json({
+                success: false,
+                message: "Telegram ma'lumotlarini yangilashda xatolik",
+                error: result.error.message
+              });
+            }
+
+            updated = result.data;
+          }
+
           return res.status(200).json({
             success: true,
             message: "Buyurtma allaqachon saqlangan",
-            data: existing.data,
+            data: updated,
             duplicate: true
           });
         }
