@@ -95,6 +95,7 @@ app.post("/api/save-address", async (req, res) => {
 app.post("/api/orders", async (req, res) => {
   try {
     const {
+      order_number,
       telegram_id,
       username,
       first_name,
@@ -125,17 +126,18 @@ app.post("/api/orders", async (req, res) => {
     }
 
     const order = {
-      telegram_id,
-      username,
-      first_name,
-      phone,
+      order_number: order_number || null,
+      telegram_id: telegram_id || null,
+      username: username || null,
+      first_name: first_name || null,
+      phone: phone.trim(),
       items,
-      subtotal,
-      delivery,
-      discount,
-      total,
-      address,
-      payment,
+      subtotal: Number(subtotal) || 0,
+      delivery: Number(delivery) || 0,
+      discount: Number(discount) || 0,
+      total: Number(total) || 0,
+      address: address || null,
+      payment: payment || "cash",
       status: status || "Qabul qilindi",
       created_at: created_at || new Date().toISOString()
     };
@@ -148,6 +150,25 @@ app.post("/api/orders", async (req, res) => {
 
     if (error) {
       console.error(error);
+
+      // A repeated order number should not create a duplicate order.
+      if (error.code === "23505") {
+        const existing = await supabase
+          .from("orders")
+          .select("*")
+          .eq("order_number", order_number)
+          .maybeSingle();
+
+        if (existing.data) {
+          return res.status(200).json({
+            success: true,
+            message: "Buyurtma allaqachon saqlangan",
+            data: existing.data,
+            duplicate: true
+          });
+        }
+      }
+
       return res.status(500).json({
         success: false,
         message: "Buyurtmani saqlashda xatolik",
