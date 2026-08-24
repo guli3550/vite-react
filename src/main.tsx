@@ -9,6 +9,17 @@ const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ||
   'https://guli-lingerie-api.onrender.com'
 
+function getTelegramUser() {
+  const webApp = window.Telegram?.WebApp
+
+  if (webApp) {
+    webApp.ready()
+    webApp.expand()
+  }
+
+  return webApp?.initDataUnsafe?.user ?? null
+}
+
 // App currently keeps orders in localStorage.
 // This bridge sends each new local order to the backend once.
 if (typeof window !== 'undefined') {
@@ -29,18 +40,24 @@ if (typeof window !== 'undefined') {
         window.localStorage.getItem('guli_synced_order_ids') || '[]',
       ) as string[]
 
-      if (syncedIds.includes(latestOrder.id)) return
+      const telegramUser = getTelegramUser()
 
-      const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      // If an older record was synced without Telegram identity, allow it to
+      // be sent again after the Telegram SDK has been loaded.
+      const identityKey = `guli_synced_identity_${latestOrder.id}`
+      const hasIdentityBeenSynced =
+        window.localStorage.getItem(identityKey) === 'true'
+
+      if (syncedIds.includes(latestOrder.id) && hasIdentityBeenSynced) return
 
       void fetch(`${API_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_number: latestOrder.id,
-          telegram_id: telegramUser?.id,
-          username: telegramUser?.username,
-          first_name: telegramUser?.first_name,
+          telegram_id: telegramUser?.id ?? null,
+          username: telegramUser?.username ?? null,
+          first_name: telegramUser?.first_name ?? null,
           phone: latestOrder.phone,
           items: latestOrder.items,
           subtotal: latestOrder.subtotal,
@@ -59,11 +76,15 @@ if (typeof window !== 'undefined') {
             throw new Error(`HTTP ${response.status}: ${message}`)
           }
 
-          const nextSyncedIds = [...syncedIds, latestOrder.id].slice(-100)
+          const nextSyncedIds = [...new Set([...syncedIds, latestOrder.id])].slice(-100)
           originalSetItem(
             'guli_synced_order_ids',
             JSON.stringify(nextSyncedIds),
           )
+
+          if (telegramUser?.id) {
+            originalSetItem(identityKey, 'true')
+          }
         })
         .catch((error) => {
           console.error('GULI API order sync failed:', error)
