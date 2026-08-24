@@ -3,11 +3,15 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-const API_URL = import.meta.env.VITE_API_URL as string | undefined
+// Production backend. VITE_API_URL can override this value when configured
+// in Vercel/another hosting provider.
+const API_URL =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ||
+  'https://guli-lingerie-api.onrender.com'
 
 // App currently keeps orders in localStorage.
 // This bridge sends each new local order to the backend once.
-if (API_URL && typeof window !== 'undefined') {
+if (typeof window !== 'undefined') {
   const originalSetItem = window.localStorage.setItem.bind(window.localStorage)
 
   window.localStorage.setItem = (key: string, value: string) => {
@@ -28,9 +32,8 @@ if (API_URL && typeof window !== 'undefined') {
       if (syncedIds.includes(latestOrder.id)) return
 
       const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
-      const apiBase = API_URL.replace(/\/$/, '')
 
-      void fetch(`${apiBase}/api/orders`, {
+      void fetch(`${API_URL}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
