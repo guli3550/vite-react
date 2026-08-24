@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
-const { listProducts, getProduct, toProduct } = require("./catalog");
+const { listProducts, getProduct } = require("./catalog");
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -13,8 +13,9 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const ADMIN_SECRET = process.env.ADMIN_SECRET || ADMIN_PASSWORD;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 const ADMIN_TOKEN_TTL = 8 * 60 * 60 * 1000;
+const TELEGRAM_INITDATA_TTL = 24 * 60 * 60;
 
 async function telegramApi(method, body) {
   if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan");
@@ -34,6 +35,35 @@ function safeEqual(a, b) { const left = Buffer.from(String(a)); const right = Bu
 function signAdminToken(payload) { const body = Buffer.from(JSON.stringify(payload)).toString("base64url"); const signature = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url"); return `${body}.${signature}`; }
 function verifyAdminToken(token) { try { if (!ADMIN_SECRET || !token) return false; const [body, signature] = String(token).split("."); if (!body || !signature) return false; const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url"); if (!safeEqual(signature, expected)) return false; const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")); return payload.role === "admin" && Number(payload.exp) > Date.now(); } catch { return false; } }
 function requireAdmin(req, res, next) { const header = req.headers.authorization || ""; const token = header.startsWith("Bearer ") ? header.slice(7) : ""; if (!verifyAdminToken(token)) return res.status(401).json({ success: false, message: "Admin sessiyasi yaroqsiz yoki tugagan" }); next(); }
+
+function verifyTelegramInitData(initData) {
+  if (!TELEGRAM_BOT_TOKEN || !initData) return null;
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    const authDate = Number(params.get("auth_date"));
+    if (!hash || !Number.isFinite(authDate)) return null;
+    if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > TELEGRAM_INITDATA_TTL) return null;
+    const pairs = [];
+    params.forEach((value, key) => { if (key !== "hash") pairs.push(`${key}=${value}`); });
+    pairs.sort();
+    const dataCheckString = pairs.join("\n");
+    const secretKey = crypto.createHmac("sha256", "WebAppData").update(TELEGRAM_BOT_TOKEN).digest();
+    const calculatedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+    if (!safeEqual(calculatedHash, hash)) return null;
+    const rawUser = params.get("user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    if (!user?.id) return null;
+    return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null };
+  } catch { return null; }
+}
+function requireTelegramUser(req, res, next) {
+  const initData = req.headers["x-telegram-init-data"] || "";
+  const user = verifyTelegramInitData(initData);
+  if (!user) return res.status(401).json({ success: false, message: "Telegram sessiyasi tasdiqlanmadi. Mini App'ni Telegram ichidan oching." });
+  req.telegramUser = user;
+  next();
+}
 function productPayload(body) { return { name: String(body.name || "").trim(), category: String(body.category || "Boshqa").trim(), description: String(body.description || ""), price: Number(body.price) || 0, old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price), image: String(body.image || ""), images: Array.isArray(body.images) ? body.images : [], sizes: Array.isArray(body.sizes) ? body.sizes : [], colors: Array.isArray(body.colors) ? body.colors : [], rating: Number(body.rating) || 0, reviews: Number(body.reviews) || 0, stock: Math.max(0, Number(body.stock) || 0), featured: Boolean(body.featured), active: body.active !== false, sort_order: Number(body.sort_order) || 0, updated_at: new Date().toISOString() }; }
 
 app.get("/", (req, res) => res.json({ success: true, message: "GULI Premium API ishlayapti 🌷" }));
@@ -44,13 +74,13 @@ app.get("/api/products", async (req, res) => {
   catch (error) { console.error("Products API error:", error); res.status(500).json({ success: false, message: "Mahsulotlarni yuklashda xatolik" }); }
 });
 
-app.get("/api/orders", async (req, res) => {
-  try { const telegramId = req.query.telegram_id; if (!telegramId) return res.status(400).json({ success: false, message: "telegram_id kerak" }); const { data, error } = await supabase.from("orders").select("*").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(100); if (error) throw error; res.json({ success: true, data: data || [] }); }
+app.get("/api/orders", requireTelegramUser, async (req, res) => {
+  try { const telegramId = req.telegramUser.id; const { data, error } = await supabase.from("orders").select("*").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(100); if (error) throw error; res.json({ success: true, data: data || [] }); }
   catch (error) { console.error("Orders API error:", error); res.status(500).json({ success: false, message: "Buyurtmalarni yuklashda xatolik" }); }
 });
 
-app.get("/api/telegram-user", async (req, res) => {
-  try { const telegramId = req.query.telegram_id; if (!telegramId) return res.status(400).json({ success: false, message: "telegram_id kerak" }); const { data, error } = await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone").eq("telegram_id", telegramId).maybeSingle(); if (error) throw error; res.json({ success: true, data: data || null }); }
+app.get("/api/telegram-user", requireTelegramUser, async (req, res) => {
+  try { const telegramId = req.telegramUser.id; const { data, error } = await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone").eq("telegram_id", telegramId).maybeSingle(); if (error) throw error; res.json({ success: true, data: data || null }); }
   catch (error) { console.error("Telegram user API error:", error); res.status(500).json({ success: false, message: "Telegram foydalanuvchisini olishda xatolik" }); }
 });
 
@@ -77,35 +107,52 @@ app.post("/api/telegram/webhook", async (req, res) => {
   } catch (error) { console.error("Telegram webhook xatosi:", error); res.sendStatus(200); }
 });
 
-app.post("/api/save-address", async (req, res) => {
+app.post("/api/save-address", requireTelegramUser, async (req, res) => {
   try {
-    const { telegram_id, username, phone, latitude, longitude, region, district, street, house, apartment, landmark } = req.body;
-    if (!telegram_id) return res.status(400).json({ success: false, message: "telegram_id kerak" });
+    const { username, phone, latitude, longitude, region, district, street, house, apartment, landmark } = req.body;
     if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) return res.status(400).json({ success: false, message: "Lokatsiya koordinatalari topilmadi" });
-    const row = { telegram_id, username: username || null, phone: phone || null, latitude: Number(latitude), longitude: Number(longitude), region: region || null, district: district || null, street: street || null, house: house || null, apartment: apartment || null, landmark: landmark || null };
+    const row = { telegram_id: req.telegramUser.id, username: username || req.telegramUser.username || null, phone: phone || null, latitude: Number(latitude), longitude: Number(longitude), region: region || null, district: district || null, street: street || null, house: house || null, apartment: apartment || null, landmark: landmark || null };
     const { data, error } = await supabase.from("saved_addresses").insert([row]).select().single();
     if (error) throw error;
     res.json({ success: true, message: "Manzil muvaffaqiyatli saqlandi", data });
   } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Manzilni saqlashda xatolik" }); }
 });
 
-app.post("/api/orders", async (req, res) => {
+app.post("/api/orders", requireTelegramUser, async (req, res) => {
   try {
-    const { order_number, telegram_id, username, first_name, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;
+    const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari topilmadi" });
     if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
     let telegram_phone = null;
-    if (telegram_id != null) { const { data } = await supabase.from("telegram_users").select("telegram_phone").eq("telegram_id", telegram_id).maybeSingle(); telegram_phone = data?.telegram_phone || null; }
-    const order = { order_number: order_number || null, telegram_id: telegram_id || null, username: username || null, first_name: first_name || null, telegram_phone, phone: phone.trim(), items, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };
+    const { data: userRow } = await supabase.from("telegram_users").select("telegram_phone").eq("telegram_id", req.telegramUser.id).maybeSingle();
+    telegram_phone = userRow?.telegram_phone || null;
+    const order = { order_number: order_number || null, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("orders").insert([order]).select().single();
-    if (error) { if (error.code === "23505" && order_number) { const existing = await supabase.from("orders").select("*").eq("order_number", order_number).maybeSingle(); if (existing.data) return res.status(200).json({ success: true, message: "Buyurtma allaqachon saqlangan", data: existing.data, duplicate: true }); } console.error(error); return res.status(500).json({ success: false, message: "Buyurtmani saqlashda xatolik", error: error.message }); }
+    if (error) { if (error.code === "23505" && order_number) { const existing = await supabase.from("orders").select("*").eq("order_number", order_number).eq("telegram_id", req.telegramUser.id).maybeSingle(); if (existing.data) return res.status(200).json({ success: true, message: "Buyurtma allaqachon saqlangan", data: existing.data, duplicate: true }); } console.error(error); return res.status(500).json({ success: false, message: "Buyurtmani saqlashda xatolik", error: error.message }); }
     res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
   } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Server xatosi" }); }
 });
 
-// Secure admin authentication and management API. The secret never reaches the browser.
+app.post("/api/promo/validate", async (req, res) => {
+  try {
+    const code = String(req.body?.code || "").trim().toUpperCase();
+    const subtotal = Number(req.body?.subtotal) || 0;
+    if (!code) return res.status(400).json({ success: false, message: "Promo kodini kiriting" });
+    const { data, error } = await supabase.from("promo_codes").select("code,discount_type,discount_value,min_order_amount,usage_limit,used_count,starts_at,expires_at,active").eq("code", code).eq("active", true).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, message: "Promo kod topilmadi yoki faol emas" });
+    const now = Date.now();
+    if (data.starts_at && new Date(data.starts_at).getTime() > now) return res.status(400).json({ success: false, message: "Promo kod hali kuchga kirmagan" });
+    if (data.expires_at && new Date(data.expires_at).getTime() < now) return res.status(400).json({ success: false, message: "Promo kod muddati tugagan" });
+    if (data.usage_limit != null && Number(data.used_count || 0) >= Number(data.usage_limit)) return res.status(400).json({ success: false, message: "Promo koddan foydalanish limiti tugagan" });
+    if (subtotal < Number(data.min_order_amount || 0)) return res.status(400).json({ success: false, message: `Minimal buyurtma ${Number(data.min_order_amount || 0).toLocaleString("uz-UZ")} so‘m` });
+    const discount = data.discount_type === "percent" ? Math.round(subtotal * Number(data.discount_value) / 100) : Math.min(subtotal, Number(data.discount_value));
+    res.json({ success: true, data: { code: data.code, discount, discount_type: data.discount_type, discount_value: Number(data.discount_value) } });
+  } catch (error) { console.error("Promo validation error:", error); res.status(500).json({ success: false, message: "Promo kodni tekshirishda xatolik" }); }
+});
+
 app.post("/api/admin/login", (req, res) => {
-  if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) return res.status(503).json({ success: false, message: "Admin environment sozlanmagan" });
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) return res.status(503).json({ success: false, message: "Admin environment sozlanmagan: ADMIN_USERNAME, ADMIN_PASSWORD va ADMIN_SECRET kerak" });
   const username = String(req.body?.username || ""); const password = String(req.body?.password || "");
   if (!safeEqual(username, ADMIN_USERNAME) || !safeEqual(password, ADMIN_PASSWORD)) return res.status(401).json({ success: false, message: "Login yoki parol noto‘g‘ri" });
   const token = signAdminToken({ role: "admin", sub: username, iat: Date.now(), exp: Date.now() + ADMIN_TOKEN_TTL });
@@ -141,8 +188,8 @@ app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => { try { const
 app.get("/api/admin/users", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,updated_at").order("updated_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Mijozlarni yuklashda xatolik" }); } });
 
 app.get("/api/admin/promos", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("promo_codes").select("*").order("created_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodlarni yuklashda xatolik" }); } });
-app.post("/api/admin/promos", requireAdmin, async (req, res) => { try { const payload = { code: String(req.body?.code || "").trim().toUpperCase(), discount_type: req.body?.discount_type === "fixed" ? "fixed" : "percent", discount_value: Number(req.body?.discount_value) || 0, min_order_amount: Number(req.body?.min_order_amount) || 0, usage_limit: req.body?.usage_limit == null || req.body.usage_limit === "" ? null : Number(req.body.usage_limit), active: req.body?.active !== false }; if (!payload.code || payload.discount_value <= 0) return res.status(400).json({ success: false, message: "Promo kodi va chegirma qiymatini kiriting" }); const { data, error } = await supabase.from("promo_codes").insert([payload]).select("*").single(); if (error) throw error; res.status(201).json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Promo kod yaratishda xatolik" }); } });
-app.put("/api/admin/promos/:id", requireAdmin, async (req, res) => { try { const payload = { code: String(req.body?.code || "").trim().toUpperCase(), discount_type: req.body?.discount_type === "fixed" ? "fixed" : "percent", discount_value: Number(req.body?.discount_value) || 0, min_order_amount: Number(req.body?.min_order_amount) || 0, usage_limit: req.body?.usage_limit == null || req.body.usage_limit === "" ? null : Number(req.body.usage_limit), active: req.body?.active !== false }; const { data, error } = await supabase.from("promo_codes").update(payload).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodni yangilashda xatolik" }); } });
+app.post("/api/admin/promos", requireAdmin, async (req, res) => { try { const payload = { code: String(req.body?.code || "").trim().toUpperCase(), discount_type: req.body?.discount_type === "fixed" ? "fixed" : "percent", discount_value: Number(req.body?.discount_value) || 0, min_order_amount: Number(req.body?.min_order_amount) || 0, usage_limit: req.body?.usage_limit == null || req.body.usage_limit === "" ? null : Number(req.body.usage_limit), active: req.body?.active !== false }; if (!payload.code || payload.discount_value <= 0) return res.status(400).json({ success: false, message: "Promo kodi va chegirma qiymatini kiriting" }); if (payload.discount_type === "percent" && payload.discount_value > 100) return res.status(400).json({ success: false, message: "Foizli chegirma 100% dan oshmasin" }); const { data, error } = await supabase.from("promo_codes").insert([payload]).select("*").single(); if (error) throw error; res.status(201).json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Promo kod yaratishda xatolik" }); } });
+app.put("/api/admin/promos/:id", requireAdmin, async (req, res) => { try { const payload = { code: String(req.body?.code || "").trim().toUpperCase(), discount_type: req.body?.discount_type === "fixed" ? "fixed" : "percent", discount_value: Number(req.body?.discount_value) || 0, min_order_amount: Number(req.body?.min_order_amount) || 0, usage_limit: req.body?.usage_limit == null || req.body.usage_limit === "" ? null : Number(req.body.usage_limit), active: req.body?.active !== false }; if (!payload.code || payload.discount_value <= 0 || (payload.discount_type === "percent" && payload.discount_value > 100)) return res.status(400).json({ success: false, message: "Promo ma’lumotlari noto‘g‘ri" }); const { data, error } = await supabase.from("promo_codes").update(payload).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodni yangilashda xatolik" }); } });
 app.delete("/api/admin/promos/:id", requireAdmin, async (req, res) => { try { const { error } = await supabase.from("promo_codes").delete().eq("id", req.params.id); if (error) throw error; res.json({ success: true }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodni o‘chirishda xatolik" }); } });
 
 const statuses = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
