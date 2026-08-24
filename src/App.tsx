@@ -993,12 +993,57 @@ export default function App() {
 
         {address.latitude && (
           <div className="locationSuccess">
-            <b>📍 Manzil saqlandi</b>
-            <small>
-              {address.latitude.toFixed(6)},{" "}
-              {address.longitude?.toFixed(6)}
-            </small>
-          </div>
+  <b>📍 Manzil saqlandi</b>
+
+  <small>
+    {address.latitude?.toFixed(6)},{" "}
+    {address.longitude?.toFixed(6)}
+  </small>
+
+  <iframe
+    title="Yetkazib berish manzili"
+    src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+      (address.longitude || 0) - 0.005
+    },${
+      (address.latitude || 0) - 0.005
+    },${
+      (address.longitude || 0) + 0.005
+    },${
+      (address.latitude || 0) + 0.005
+    }&layer=mapnik&marker=${
+      address.latitude || 0
+    },${
+      address.longitude || 0
+    }`}
+    style={{
+      width: "100%",
+      height: "220px",
+      border: "0",
+      borderRadius: "16px",
+      marginTop: "12px",
+    }}
+    loading="lazy"
+  />
+
+  <a
+    href={`https://www.openstreetmap.org/?mlat=${
+      address.latitude || 0
+    }&mlon=${
+      address.longitude || 0
+    }#map=17/${address.latitude || 0}/${address.longitude || 0}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{
+      display: "block",
+      marginTop: "10px",
+      textAlign: "center",
+      textDecoration: "none",
+      fontWeight: "600",
+    }}
+  >
+    🗺️ Xaritada kattaroq ko‘rish
+  </a>
+</div>
         )}
 
         <input
