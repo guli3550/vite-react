@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
+import Admin from './admin/Admin.tsx'
 import './index.css'
 
 if (typeof window !== 'undefined') {
@@ -9,8 +10,10 @@ if (typeof window !== 'undefined') {
   webApp?.expand()
 }
 
+const isAdmin = typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/admin'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {isAdmin ? <Admin /> : <App />}
   </StrictMode>,
 )
