@@ -5,8 +5,8 @@ import './index.css'
 
 const API_URL = import.meta.env.VITE_API_URL as string | undefined
 
-// The current App stores orders in localStorage.
-// This bridge keeps that UI behaviour while syncing new orders to the backend.
+// App currently keeps orders in localStorage.
+// This bridge sends each new local order to the backend once.
 if (API_URL && typeof window !== 'undefined') {
   const originalSetItem = window.localStorage.setItem.bind(window.localStorage)
 
@@ -19,14 +19,22 @@ if (API_URL && typeof window !== 'undefined') {
       const orders = JSON.parse(value)
       const latestOrder = Array.isArray(orders) ? orders[0] : null
 
-      if (!latestOrder || latestOrder.__synced) return
+      if (!latestOrder?.id) return
+
+      const syncedIds = JSON.parse(
+        window.localStorage.getItem('guli_synced_order_ids') || '[]',
+      ) as string[]
+
+      if (syncedIds.includes(latestOrder.id)) return
 
       const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+      const apiBase = API_URL.replace(/\/$/, '')
 
-      void fetch(`${API_URL.replace(/\/$/, '')}/api/orders`, {
+      void fetch(`${apiBase}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          order_number: latestOrder.id,
           telegram_id: telegramUser?.id,
           username: telegramUser?.username,
           first_name: telegramUser?.first_name,
@@ -39,11 +47,24 @@ if (API_URL && typeof window !== 'undefined') {
           address: latestOrder.address,
           payment: latestOrder.payment,
           status: latestOrder.status,
-          created_at: latestOrder.createdAt,
+          created_at: new Date().toISOString(),
         }),
-      }).catch((error) => {
-        console.error('GULI API order sync failed:', error)
       })
+        .then(async (response) => {
+          if (!response.ok) {
+            const message = await response.text()
+            throw new Error(`HTTP ${response.status}: ${message}`)
+          }
+
+          const nextSyncedIds = [...syncedIds, latestOrder.id].slice(-100)
+          originalSetItem(
+            'guli_synced_order_ids',
+            JSON.stringify(nextSyncedIds),
+          )
+        })
+        .catch((error) => {
+          console.error('GULI API order sync failed:', error)
+        })
     } catch (error) {
       console.error('GULI order sync parse failed:', error)
     }
