@@ -1,0 +1,85 @@
+/* GULI checkout mobile fixes — loaded after App.css */
+.checkoutPage,
+.checkoutCard,
+.checkoutCard * {
+  box-sizing: border-box;
+}
+
+.checkoutPage {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.checkoutCard {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.checkoutCard .input,
+.checkoutCard .phoneAutoButton,
+.checkoutCard .locationButton {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Never allow two Telegram phone actions to appear together. */
+.checkoutCard .phoneAutoButton + .phoneAutoButton,
+.checkoutCard .phoneAutoButton ~ .phoneAutoButton {
+  display: none !important;
+}
+
+/* Keep both address columns inside the card on small screens. */
+.checkoutCard .twoInputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.checkoutCard .twoInputs > .input,
+.checkoutCard > .input.full {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.checkoutCard .twoInputs > .input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cleaner address section spacing. */
+.checkoutCard .addressFieldsLabel {
+  margin: 14px 0 7px;
+}
+
+.checkoutCard .mapCaption {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Prevent long entered values from pushing the layout sideways. */
+.checkoutCard input {
+  min-width: 0;
+}
+
+@media (max-width: 380px) {
+  .checkoutCard {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .checkoutCard .twoInputs {
+    gap: 8px;
+  }
+
+  .checkoutCard .input {
+    padding: 12px 10px;
+    font-size: 13px;
+  }
+}
