@@ -1,21 +1,11 @@
 import React, { useState } from 'react';
 
-interface Product {
-  id: number;
-  name: string;
-  price: number;
-  image: string;
-  category: string;
-  sizes: string[];
-}
-
-const PRODUCTS: Product[] = [
+const PRODUCTS = [
   {
     id: 1,
-    name: "Ipakli kechki libos (Shtuk)",
+    name: "Ipakli kechki libos",
     price: 250000,
     image: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=500",
-    category: "Lingerie",
     sizes: ["S", "M", "L"]
   },
   {
@@ -23,7 +13,6 @@ const PRODUCTS: Product[] = [
     name: "Dantelli premium to'plam",
     price: 180000,
     image: "https://images.unsplash.com/photo-1583496661160-fb5886a0aaaa?w=500",
-    category: "Sets",
     sizes: ["75B", "80B", "85C"]
   },
   {
@@ -31,15 +20,14 @@ const PRODUCTS: Product[] = [
     name: "Kashshof pijama to'plami",
     price: 210000,
     image: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=500",
-    category: "Pajamas",
     sizes: ["M", "L", "XL"]
   }
 ];
 
 export default function App() {
-  const [cart, setCart] = useState<{ product: Product; size: string }[]>([]);
+  const [cart, setCart] = useState([]);
 
-  const addToCart = (product: Product, size: string) => {
+  const addToCart = (product, size) => {
     setCart([...cart, { product, size }]);
     alert(`${product.name} (${size}) savatchaga qo'shildi!`);
   };
@@ -47,18 +35,17 @@ export default function App() {
   const sendOrder = () => {
     if (cart.length === 0) return alert("Savatchangiz bo'sh!");
     
-    let text = "🛍 *Yangi buyurtma!*\n\n";
+    let text = "🛍 Yangi buyurtma!\n\n";
     let total = 0;
     cart.forEach((item, index) => {
       text += `${index + 1}. ${item.product.name} (${item.size}) - ${item.product.price.toLocaleString()} so'm\n`;
       total += item.product.price;
     });
-    text += `\n💰 *Jami:* ${total.toLocaleString()} so'm`;
+    text += `\n💰 Jami: ${total.toLocaleString()} so'm`;
 
-    // Telegram WebApp orqali ma'lumotni botga yuborish
-    if ((window as any).Telegram?.WebApp) {
-      (window as any).Telegram.WebApp.sendData(text);
-      (window as any).Telegram.WebApp.close();
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.sendData(text);
+      window.Telegram.WebApp.close();
     } else {
       alert("Buyurtma shakllandi:\n\n" + text);
     }
@@ -124,5 +111,4 @@ export default function App() {
       )}
     </div>
   );
-    }
-    
+}
