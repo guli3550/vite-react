@@ -1,7 +1,6 @@
--- GULI LINGERIE: final legacy-database repair.
--- IMPORTANT: this version never assigns JSONB directly into a TEXT column.
--- It first creates replacement JSONB columns, copies legacy text as JSON strings,
--- then swaps the columns. Safe to run again after a failed attempt.
+-- GULI LINGERIE: safe legacy-database repair.
+-- Does not assign JSONB values to legacy TEXT columns.
+-- Keeps original text columns until replacement JSONB columns are populated.
 
 alter table if exists public.products add column if not exists name text;
 alter table if exists public.products add column if not exists category text;
@@ -20,27 +19,42 @@ alter table if exists public.products add column if not exists updated_at timest
 
 do $$
 begin
+  -- images: migrate TEXT -> JSONB through a temporary column.
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='images' and data_type='text') then
-    alter table public.products add column images_jsonb jsonb default '[]'::jsonb;
-    update public.products set images_jsonb = case when images is null or btrim(images) = '' then '[]'::jsonb else jsonb_build_array(images) end;
+    alter table public.products add column if not exists images_jsonb jsonb default '[]'::jsonb;
+    update public.products
+      set images_jsonb = case
+        when images is null or btrim(images) = '' then '[]'::jsonb
+        else jsonb_build_array(images)
+      end;
     alter table public.products drop column images;
     alter table public.products rename column images_jsonb to images;
   elsif not exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='images') then
     alter table public.products add column images jsonb default '[]'::jsonb;
   end if;
 
+  -- sizes: migrate TEXT -> JSONB through a temporary column.
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='sizes' and data_type='text') then
-    alter table public.products add column sizes_jsonb jsonb default '[]'::jsonb;
-    update public.products set sizes_jsonb = case when sizes is null or btrim(sizes) = '' then '[]'::jsonb else jsonb_build_array(sizes) end;
+    alter table public.products add column if not exists sizes_jsonb jsonb default '[]'::jsonb;
+    update public.products
+      set sizes_jsonb = case
+        when sizes is null or btrim(sizes) = '' then '[]'::jsonb
+        else jsonb_build_array(sizes)
+      end;
     alter table public.products drop column sizes;
     alter table public.products rename column sizes_jsonb to sizes;
   elsif not exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='sizes') then
     alter table public.products add column sizes jsonb default '[]'::jsonb;
   end if;
 
+  -- colors: migrate TEXT -> JSONB through a temporary column.
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='colors' and data_type='text') then
-    alter table public.products add column colors_jsonb jsonb default '[]'::jsonb;
-    update public.products set colors_jsonb = case when colors is null or btrim(colors) = '' then '[]'::jsonb else jsonb_build_array(colors) end;
+    alter table public.products add column if not exists colors_jsonb jsonb default '[]'::jsonb;
+    update public.products
+      set colors_jsonb = case
+        when colors is null or btrim(colors) = '' then '[]'::jsonb
+        else jsonb_build_array(colors)
+      end;
     alter table public.products drop column colors;
     alter table public.products rename column colors_jsonb to colors;
   elsif not exists (select 1 from information_schema.columns where table_schema='public' and table_name='products' and column_name='colors') then
@@ -48,12 +62,10 @@ begin
   end if;
 end $$;
 
+-- Null cleanup for scalar fields only.
 update public.products set description = '' where description is null;
 update public.products set price = 0 where price is null;
 update public.products set image = '' where image is null;
-update public.products set images = '[]'::jsonb where images is null;
-update public.products set sizes = '[]'::jsonb where sizes is null;
-update public.products set colors = '[]'::jsonb where colors is null;
 update public.products set rating = 0 where rating is null;
 update public.products set reviews = 0 where reviews is null;
 update public.products set stock = 0 where stock is null;
@@ -70,6 +82,7 @@ alter table if exists public.products enable row level security;
 drop policy if exists products_public_read on public.products;
 create policy products_public_read on public.products for select using (active = true);
 
+-- Orders migration.
 alter table if exists public.orders add column if not exists telegram_id bigint;
 alter table if exists public.orders add column if not exists username text;
 alter table if exists public.orders add column if not exists first_name text;
