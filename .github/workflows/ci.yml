@@ -28,3 +28,9 @@ jobs:
           node --check backend/customerServer.js
           node --check backend/customerIdentityPatch.js
           node --check backend/reviewPatchV2.js
+          node --check backend/clickPaymentPatch.js
+      - name: Validate browser enhancers
+        run: |
+          node --check payment-enhancer.js
+          node --check marketplace-enhancer.js
+          node --check reviews-enhancer.js
