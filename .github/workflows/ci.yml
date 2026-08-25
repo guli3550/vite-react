@@ -27,3 +27,4 @@ jobs:
           node --check backend/index.js
           node --check backend/customerServer.js
           node --check backend/customerIdentityPatch.js
+          node --check backend/reviewPatchV2.js
