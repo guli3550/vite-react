@@ -21,6 +21,7 @@ source = source.replace(
   'return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null };',
   'return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null, photo_url: user.photo_url || null };'
 );
+source = source.replace('express.json({ limit: "4mb" })', 'express.json({ limit: "8mb" })');
 
 const marker = '\nconst PORT=process.env.PORT||10000;';
 if (!source.includes(marker)) throw new Error("customerServer: backend/index.js marker not found");
