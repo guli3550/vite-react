@@ -1,5 +1,23 @@
-// CRM Telegram profile-photo support. Uses Telegram Bot API directly so no
-// extra Supabase columns or Storage bucket are required.
+// CRM Telegram profile-photo support.
+// Telegram Bot API supplies the profile-photo list; the browser receives only
+// short-lived signed proxy URLs, so the bot token is never exposed and an
+// <img> request does not need an Authorization header.
+function signPhotoAccess(telegramId, fileId, expires) {
+  const payload = `${Number(telegramId)}.${String(fileId)}.${Number(expires)}`;
+  return crypto.createHmac("sha256", ADMIN_SECRET).update(payload).digest("base64url");
+}
+function photoProxyUrl(telegramId, fileId) {
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  const signature = signPhotoAccess(telegramId, fileId, expires);
+  return `${BASE_URL}/api/admin/users/${encodeURIComponent(telegramId)}/photo/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+}
+function verifyPhotoAccess(telegramId, fileId, expires, signature) {
+  if (!ADMIN_SECRET || !signature || !Number.isFinite(Number(expires))) return false;
+  if (Number(expires) < Math.floor(Date.now() / 1000)) return false;
+  const expected = signPhotoAccess(telegramId, fileId, expires);
+  return safeEqual(signature, expected);
+}
+
 async function getTelegramProfilePhotoList(telegramId) {
   try {
     const result = await telegramApi("getUserProfilePhotos", { user_id: Number(telegramId), offset: 0, limit: 100 });
@@ -15,7 +33,7 @@ async function getTelegramProfilePhotoList(telegramId) {
         width: largest.width || 0,
         height: largest.height || 0,
         current: i === 0,
-        url: `${BASE_URL}/api/admin/users/${encodeURIComponent(telegramId)}/photo/${encodeURIComponent(largest.file_id)}`
+        url: photoProxyUrl(telegramId, largest.file_id)
       });
     }
     return { total_count: Number(result?.total_count || photos.length), photos };
@@ -52,12 +70,15 @@ app.get("/api/admin/users/:telegramId/details", requireAdmin, async (req, res) =
   }
 });
 
-app.get("/api/admin/users/:telegramId/photo/:fileId", requireAdmin, async (req, res) => {
+// Browser image elements cannot attach the admin Bearer header. This endpoint
+// therefore accepts only the short-lived HMAC signature generated above.
+app.get("/api/admin/users/:telegramId/photo/:fileId", async (req, res) => {
   try {
     const telegramId = Number(req.params.telegramId);
-    if (!Number.isFinite(telegramId)) return res.status(400).end();
     const fileId = String(req.params.fileId || "");
-    if (!fileId) return res.status(400).end();
+    const expires = Number(req.query.expires);
+    const signature = String(req.query.signature || "");
+    if (!Number.isFinite(telegramId) || !fileId || !verifyPhotoAccess(telegramId, fileId, expires, signature)) return res.status(403).end();
     const file = await telegramApi("getFile", { file_id: fileId });
     if (!file?.file_path) return res.status(404).end();
     const response = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${file.file_path}`);
@@ -65,6 +86,7 @@ app.get("/api/admin/users/:telegramId/photo/:fileId", requireAdmin, async (req, 
     const contentType = response.headers.get("content-type") || "image/jpeg";
     const buffer = Buffer.from(await response.arrayBuffer());
     res.set("Content-Type", contentType);
+    res.set("Content-Length", String(buffer.length));
     res.set("Cache-Control", "private, max-age=3600");
     res.send(buffer);
   } catch (error) {
