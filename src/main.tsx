@@ -4,6 +4,7 @@ import App from './App.tsx'
 import Admin from './admin/AdminPro.tsx'
 import './index.css'
 import './admin/AdminNaming.css'
+import './admin/promoEnhancer'
 
 if (typeof window !== 'undefined') {
   const webApp = window.Telegram?.WebApp
