@@ -3,7 +3,7 @@ const path = require("path");
 
 const indexPath = path.join(__dirname, "index.js");
 const identityPatchPath = path.join(__dirname, "customerIdentityPatch.js");
-const reviewPatchPath = path.join(__dirname, "reviewPatch.js");
+const reviewPatchPath = path.join(__dirname, "reviewPatchV2.js");
 let source = fs.readFileSync(indexPath, "utf8");
 const patch = fs.readFileSync(identityPatchPath, "utf8") + "\n" + fs.readFileSync(reviewPatchPath, "utf8");
 
