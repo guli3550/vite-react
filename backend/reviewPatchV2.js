@@ -124,9 +124,59 @@ app.post("/api/reviews", requireTelegramUser, async (req, res) => {
 
 app.get("/api/admin/reviews", requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase.from("product_reviews").select("id,product_id,product_code,telegram_id,username,first_name,rating,comment,photos,verified_purchase,order_number,status,created_at,updated_at").order("created_at", { ascending: false }).limit(500);
-    if (error) throw error;
-    res.json({ success: true, data: data || [] });
+    const { data: reviewRows, error: reviewError } = await supabase.from("product_reviews").select("id,product_id,product_code,telegram_id,username,first_name,rating,comment,photos,verified_purchase,order_number,status,created_at,updated_at").order("created_at", { ascending: false }).limit(500);
+    if (reviewError) throw reviewError;
+    const rows = reviewRows || [];
+    const productIds = [...new Set(rows.map((row) => row.product_id).filter((value) => value != null && value !== ""))];
+    const productCodes = [...new Set(rows.map((row) => String(row.product_code || "")).filter(Boolean))];
+    const telegramIds = [...new Set(rows.map((row) => row.telegram_id).filter((value) => value != null))];
+    const orderNumbers = [...new Set(rows.map((row) => String(row.order_number || "")).filter(Boolean))];
+
+    const [productsByIdResult, productsByCodeResult, usersResult, ordersResult] = await Promise.all([
+      productIds.length ? supabase.from("products").select("id,product_code,name,title,image,images,category,price,old_price,stock,active").in("id", productIds) : Promise.resolve({ data: [], error: null }),
+      productCodes.length ? supabase.from("products").select("id,product_code,name,title,image,images,category,price,old_price,stock,active").in("product_code", productCodes) : Promise.resolve({ data: [], error: null }),
+      telegramIds.length ? supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,updated_at").in("telegram_id", telegramIds) : Promise.resolve({ data: [], error: null }),
+      orderNumbers.length ? supabase.from("orders").select("order_number,status,total,subtotal,delivery,discount,phone,address,created_at,updated_at").in("order_number", orderNumbers) : Promise.resolve({ data: [], error: null })
+    ]);
+    const firstError = [productsByIdResult.error, productsByCodeResult.error, usersResult.error, ordersResult.error].find(Boolean);
+    if (firstError) throw firstError;
+
+    const productMap = new Map();
+    [...(productsByIdResult.data || []), ...(productsByCodeResult.data || [])].forEach((product) => productMap.set(String(product.id), product));
+    const userMap = new Map((usersResult.data || []).map((user) => [String(user.telegram_id), user]));
+    const orderMap = new Map((ordersResult.data || []).map((order) => [String(order.order_number), order]));
+
+    const enriched = rows.map((row) => {
+      const product = productMap.get(String(row.product_id)) || (productCodes.length ? (productsByCodeResult.data || []).find((item) => String(item.product_code) === String(row.product_code)) : null) || null;
+      const user = userMap.get(String(row.telegram_id)) || null;
+      const order = orderMap.get(String(row.order_number)) || null;
+      return {
+        ...row,
+        product_name: product?.name || product?.title || null,
+        product_title: product?.title || product?.name || null,
+        product_image: product?.image || (Array.isArray(product?.images) ? product.images[0] : null) || null,
+        product_images: Array.isArray(product?.images) ? product.images : [],
+        product_category: product?.category || null,
+        product_price: product?.price ?? null,
+        product_old_price: product?.old_price ?? null,
+        product_stock: product?.stock ?? null,
+        product_active: product?.active ?? null,
+        customer_username: user?.username || row.username || null,
+        customer_first_name: user?.first_name || row.first_name || null,
+        customer_last_name: user?.last_name || null,
+        customer_phone: user?.telegram_phone || null,
+        order_status: order?.status || null,
+        order_total: order?.total ?? null,
+        order_subtotal: order?.subtotal ?? null,
+        order_delivery: order?.delivery ?? null,
+        order_discount: order?.discount ?? null,
+        order_phone: order?.phone || null,
+        order_address: order?.address || null,
+        order_created_at: order?.created_at || null,
+        order_updated_at: order?.updated_at || null
+      };
+    });
+    res.json({ success: true, data: enriched });
   } catch (error) {
     console.error("Admin reviews GET error:", error);
     res.status(500).json({ success: false, message: "Sharhlarni yuklashda xatolik" });
