@@ -27,3 +27,4 @@ jobs:
           git add backend/index.js src/admin/AdminPro.tsx src/admin/ProductModalV2.tsx src/admin/AdminPro.css src/App.tsx supabase/product_order_codes.sql .github/workflows/apply-product-system.yml .github/workflows/apply-product-system-v2.yml scripts/apply_product_system.py
           git commit -m 'Apply product codes and selectors [product-system-v2-applied]'
           git push
+# retry after patch-script route matcher fix
