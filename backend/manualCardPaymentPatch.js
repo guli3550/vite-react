@@ -3,22 +3,74 @@
   const CARD_NUMBER = String(process.env.CARD_PAYMENT_NUMBER || "").replace(/\D/g, "");
   const CARD_HOLDER = String(process.env.CARD_PAYMENT_NAME || "").trim();
   const RECEIPT_BUCKET = "payment-receipts";
+  const GUEST_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000;
   const initials = (name) => String(name || "").trim().split(/\s+/).filter(Boolean).map((part) => `${part.slice(0, 2)}...`).join(" ");
   const normalizePath = (value) => String(value || "").replace(/^\/+/, "");
+  const signGuestToken = (guestId, expiresAt) => {
+    const payload = Buffer.from(JSON.stringify({ guestId: Number(guestId), exp: Number(expiresAt) })).toString("base64url");
+    const signature = crypto.createHmac("sha256", String(process.env.ADMIN_SECRET || "")).update(payload).digest("base64url");
+    return `${payload}.${signature}`;
+  };
+  const verifyGuestToken = (token) => {
+    try {
+      const [payload, signature] = String(token || "").split(".");
+      if (!payload || !signature || !process.env.ADMIN_SECRET) return null;
+      const expected = crypto.createHmac("sha256", String(process.env.ADMIN_SECRET)).update(payload).digest("base64url");
+      if (!safeEqual(signature, expected)) return null;
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (!Number.isSafeInteger(Number(data.guestId)) || Number(data.guestId) >= 0 || Number(data.exp) < Date.now()) return null;
+      return { id: Number(data.guestId), username: null, first_name: null, last_name: null };
+    } catch { return null; }
+  };
+  const requireCustomerUser = (req, res, next) => {
+    const initData = req.headers["x-telegram-init-data"] || "";
+    const telegramUser = verifyTelegramInitData(initData);
+    if (telegramUser) { req.customerUser = telegramUser; return next(); }
+    const guestUser = verifyGuestToken(req.headers["x-guli-guest-token"] || "");
+    if (guestUser) { req.customerUser = guestUser; return next(); }
+    return res.status(401).json({ success: false, message: "Mijoz sessiyasi topilmadi. Telegram Mini App yoki brauzer sessiyasini yangilang." });
+  };
   async function ensureReceiptBucket() {
     const existing = await supabase.storage.getBucket(RECEIPT_BUCKET);
     if (!existing.error) return;
     const created = await supabase.storage.createBucket(RECEIPT_BUCKET, { public: false, allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"], fileSizeLimit: "6MB" });
     if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
   }
-  app.get("/api/payment/card-info", requireTelegramUser, async (req, res) => {
+
+  app.post("/api/guest-session", (req, res) => {
+    if (!process.env.ADMIN_SECRET) return res.status(503).json({ success: false, message: "Brauzer sessiyasi backend secret bilan sozlanmagan." });
+    const random = BigInt(`0x${crypto.randomBytes(7).toString("hex")}`);
+    const guestId = -Number((random % 900000000000n) + 100000000000n);
+    const expiresAt = Date.now() + GUEST_TOKEN_TTL;
+    res.json({ success: true, data: { token: signGuestToken(guestId, expiresAt), expires_at: new Date(expiresAt).toISOString() } });
+  });
+
+  app.get("/api/payment/card-info", requireCustomerUser, async (req, res) => {
     if (!/^\d{16}$/.test(CARD_NUMBER) || !CARD_HOLDER) return res.status(503).json({ success: false, message: "Karta to‘lovi rekvizitlari backend environment'da sozlanmagan." });
     res.json({ success: true, data: { card_number: CARD_NUMBER, holder_initials: initials(CARD_HOLDER) } });
   });
-  app.post("/api/orders/:orderNumber/receipt", requireTelegramUser, async (req, res) => {
+
+  app.post("/api/guest/orders", requireCustomerUser, async (req, res) => {
+    try {
+      if (req.customerUser.id > 0) return res.status(400).json({ success: false, message: "Telegram sessiyasi uchun asosiy checkout ishlatiladi." });
+      const { phone, items, address, payment, status, promo_code } = req.body || {};
+      if (!String(phone || "").trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
+      if (!Array.isArray(items) || !items.length || items.length > 100) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari noto‘g‘ri" });
+      const orderInput = { order_number: null, username: null, first_name: null, phone: String(phone).trim(), items, address: address || null, payment: payment || "card_manual", status: status || "Qabul qilindi", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
+      const { data, error } = await supabase.rpc("create_secure_order", { p_order: orderInput, p_telegram_id: req.customerUser.id });
+      if (error) throw error;
+      res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
+    } catch (error) {
+      console.error("Guest secure checkout error:", error);
+      const statusCode = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori/i.test(error.message || "") ? 400 : 500;
+      res.status(statusCode).json({ success: false, message: error.message || "Buyurtmani saqlashda xatolik" });
+    }
+  });
+
+  app.post("/api/orders/:orderNumber/receipt", requireCustomerUser, async (req, res) => {
     try {
       const orderNumber = String(req.params.orderNumber || "").trim();
-      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,total,telegram_id,payment").eq("order_number", orderNumber).eq("telegram_id", req.telegramUser.id).maybeSingle();
+      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,total,telegram_id,payment,payment_status").eq("order_number", orderNumber).eq("telegram_id", req.customerUser.id).maybeSingle();
       if (orderError) throw orderError;
       if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
       if (String(order.payment || "") !== "card_manual") return res.status(400).json({ success: false, message: "Bu buyurtma karta orqali to‘lov uchun yaratilmagan" });
@@ -32,7 +84,7 @@
       const buffer = Buffer.from(data, "base64");
       const { error: uploadError } = await supabase.storage.from(RECEIPT_BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
       if (uploadError) throw uploadError;
-      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("telegram_id", req.telegramUser.id).select("id,order_number,total,payment_status").single();
+      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("telegram_id", req.customerUser.id).select("id,order_number,total,payment_status").single();
       if (updateError) throw updateError;
       res.json({ success: true, message: "Chek muvaffaqiyatli yuborildi. Admin tekshiradi.", data: updated });
     } catch (error) {
