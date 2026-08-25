@@ -16,6 +16,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 const ADMIN_TOKEN_TTL = 8 * 60 * 60 * 1000;
 const TELEGRAM_INITDATA_TTL = 24 * 60 * 60;
+const ADMIN_STATUSES = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
 
 async function telegramApi(method, body) {
   if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan");
@@ -208,7 +209,7 @@ app.put("/api/admin/products/:id", requireAdmin, async (req, res) => { try { con
 app.delete("/api/admin/products/:id", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("products").update({ active: false, updated_at: new Date().toISOString() }).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Mahsulotni yashirishda xatolik" }); } });
 
 app.get("/api/admin/orders", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Admin buyurtmalarini yuklashda xatolik" }); } });
-app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => { try { const status = statuses.includes(String(req.body?.status)) ? String(req.body.status) : "Qabul qilindi"; const { data, error } = await supabase.from("orders").update({ status, updated_at: new Date().toISOString() }).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Buyurtma statusini yangilashda xatolik" }); } });
+app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => { try { const status = ADMIN_STATUSES.includes(String(req.body?.status)) ? String(req.body.status) : "Qabul qilindi"; const { data, error } = await supabase.from("orders").update({ status, updated_at: new Date().toISOString() }).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Buyurtma statusini yangilashda xatolik" }); } });
 
 app.get("/api/admin/users", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,updated_at").order("updated_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Mijozlarni yuklashda xatolik" }); } });
 
