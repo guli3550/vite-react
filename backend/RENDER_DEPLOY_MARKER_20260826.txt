@@ -1,0 +1,1 @@
+Render deployment trigger: Telegram Mini App production configuration is in backend/telegramBotPatch.js. This marker intentionally has no runtime effect and exists to force the backend service to rebuild from the latest main commit.
