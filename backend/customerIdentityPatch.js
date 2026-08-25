@@ -70,6 +70,21 @@ app.get("/api/admin/users/:telegramId/details", requireAdmin, async (req, res) =
   }
 });
 
+app.get("/api/admin/order/:orderNumber/customer-photos", requireAdmin, async (req, res) => {
+  try {
+    const orderNumber = String(req.params.orderNumber || "").trim();
+    if (!orderNumber) return res.status(400).json({ success: false, message: "Buyurtma raqami noto‘g‘ri" });
+    const { data: order, error } = await supabase.from("orders").select("telegram_id,username,first_name").eq("order_number", orderNumber).maybeSingle();
+    if (error) throw error;
+    if (!order?.telegram_id) return res.json({ success: true, data: { telegram_id: null, photos: [] } });
+    const photoResult = await getTelegramProfilePhotoList(order.telegram_id);
+    res.json({ success: true, data: { telegram_id: order.telegram_id, username: order.username || null, first_name: order.first_name || null, photos: photoResult.photos, photoCount: photoResult.total_count } });
+  } catch (error) {
+    console.error("Admin order customer photos error:", error);
+    res.status(500).json({ success: false, message: "Buyurtma mijoz rasmini yuklashda xatolik" });
+  }
+});
+
 // Browser image elements cannot attach the admin Bearer header. This endpoint
 // therefore accepts only the short-lived HMAC signature generated above.
 app.get("/api/admin/users/:telegramId/photo/:fileId", async (req, res) => {
