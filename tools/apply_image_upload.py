@@ -1,0 +1,116 @@
+from pathlib import Path
+
+# Backend: secure admin-only upload to Supabase Storage.
+p = Path('backend/index.js')
+s = p.read_text()
+s = s.replace('app.use(express.json({ limit: "1mb" }));', 'app.use(express.json({ limit: "4mb" }));')
+marker = 'app.post("/api/admin/login", (req, res) =>'
+endpoint = r'''app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
+  try {
+    const { data, mimeType, extension } = req.body || {};
+    if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" });
+    if (!String(mimeType || "").startsWith("image/")) return res.status(400).json({ success: false, message: "Faqat rasm fayli yuklash mumkin" });
+    if (data.length > 3200000) return res.status(413).json({ success: false, message: "Rasm hajmi juda katta" });
+    const bucket = "product-images";
+    const existing = await supabase.storage.getBucket(bucket);
+    if (existing.error) {
+      const created = await supabase.storage.createBucket(bucket, { public: true, allowedMimeTypes: ["image/*"], fileSizeLimit: "3MB" });
+      if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
+    }
+    const cleanExt = String(extension || "webp").replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp";
+    const path = `products/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
+    const buffer = Buffer.from(data, "base64");
+    const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
+    if (error) throw error;
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+    res.json({ success: true, data: { path, url: publicData.publicUrl } });
+  } catch (error) {
+    console.error("Admin image upload error:", error);
+    res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" });
+  }
+});
+
+'''
+if marker not in s:
+    raise SystemExit('backend marker not found')
+if '/api/admin/upload-image' not in s:
+    s = s.replace(marker, endpoint + marker)
+p.write_text(s)
+
+# Frontend: add upload helper and connect it to product modal.
+p = Path('src/admin/AdminPro.tsx')
+s = p.read_text()
+marker = ' const saveProduct=async(e:FormEvent)=>'
+helper = r''' const uploadImage=async(file:File)=>{
+  if(!file.type.startsWith("image/")) throw Error("Faqat rasm fayli tanlang");
+  setBusy(true);
+  try{
+    const bitmap=await createImageBitmap(file);
+    const max=1600;
+    const scale=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
+    const canvas=document.createElement("canvas");
+    canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+    canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    const ctx=canvas.getContext("2d");
+    if(!ctx) throw Error("Rasm tayyorlashda xatolik");
+    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+    bitmap.close();
+    const dataUrl=canvas.toDataURL("image/webp",0.82);
+    const data=dataUrl.split(",")[1];
+    const r=await request("/api/admin/upload-image",{method:"POST",body:JSON.stringify({data,mimeType:"image/webp",extension:"webp"})});
+    notify("Rasm yuklandi ✓");
+    return r.data.url as string;
+  }catch(e){notify(e instanceof Error?e.message:"Rasmni yuklashda xatolik");throw e}finally{setBusy(false)}
+ };
+'''
+if marker not in s:
+    raise SystemExit('frontend saveProduct marker not found')
+if 'const uploadImage=async(file:File)' not in s:
+    s = s.replace(marker, helper + marker)
+old_call = '{productOpen&&<ProductModal value={product} busy={busy} onClose={()=>setProductOpen(false)} onChange={setProduct} onSave={saveProduct}/>}'
+new_call = '{productOpen&&<ProductModal value={product} busy={busy} onClose={()=>setProductOpen(false)} onChange={setProduct} onSave={saveProduct} onUpload={uploadImage}/>}'
+if old_call not in s:
+    raise SystemExit('ProductModal call not found')
+s = s.replace(old_call, new_call)
+
+start = s.index('function ProductModal(')
+end = s.index('function PromoModal(', start)
+new_modal = r'''function ProductModal({value,busy,onClose,onChange,onSave,onUpload}:{value:Product;busy:boolean;onClose:()=>void;onChange:(v:Product)=>void;onSave:(e:FormEvent)=>void;onUpload:(file:File)=>Promise<string>}){
+ const set=(k:keyof Product,v:any)=>onChange({...value,[k]:v});
+ const [uploading,setUploading]=useState(false);
+ const [extraUploading,setExtraUploading]=useState(false);
+ const chooseMain=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setUploading(true);try{const url=await onUpload(file);set("image",url)}finally{setUploading(false)}};
+ const chooseExtras=async(e:React.ChangeEvent<HTMLInputElement>)=>{const files=Array.from(e.target.files||[]);e.target.value="";if(!files.length)return;setExtraUploading(true);try{const urls:string[]=[];for(const file of files) urls.push(await onUpload(file));set("images",[...(value.images||[]),...urls])}finally{setExtraUploading(false)}};
+ const removeExtra=(index:number)=>set("images",(value.images||[]).filter((_,i)=>i!==index));
+ return <Modal title={value.id?"Mahsulotni tahrirlash":"Yangi mahsulot"} eyebrow="CATALOG" onClose={onClose}>
+  <form onSubmit={onSave}>
+   <section className="imageUploadSection">
+    <div className="imageUploadTitle"><div><span className="proEyebrow">MEDIA</span><h3>Mahsulot rasmlari</h3></div><span className="imageHint">URL kerak emas</span></div>
+    <div className="mainImagePicker">
+     {value.image?<div className="mainImagePreview"><img src={value.image} alt="Asosiy rasm"/><button type="button" onClick={()=>set("image","")}>×</button></div>:<div className="mainImageEmpty"><span>📷</span><b>{uploading?"Yuklanmoqda…":"Asosiy rasm"}</b><small>Telefon galereyasidan tanlang</small></div>}
+     <label className="uploadButton"><input type="file" accept="image/*" onChange={chooseMain} disabled={uploading||busy}/>{value.image?"↻ Rasmni almashtirish":"＋ Rasm tanlash"}</label>
+    </div>
+    <div className="extraImageHead"><b>Qo‘shimcha rasmlar</b><label className="miniUpload"><input type="file" accept="image/*" multiple onChange={chooseExtras} disabled={extraUploading||busy}/>{extraUploading?"Yuklanmoqda…":"＋ Bir nechta rasm"}</label></div>
+    {(value.images||[]).length>0&&<div className="extraImages">{(value.images||[]).map((url,i)=><div className="extraImage" key={`${url}-${i}`}><img src={url} alt=""/><button type="button" onClick={()=>removeExtra(i)}>×</button></div>)}</div>}
+   </section>
+   <div className="formGrid"><label>Nom<input value={value.name} onChange={e=>set("name",e.target.value)} required/></label><label>Kategoriya<input value={value.category} onChange={e=>set("category",e.target.value)} required/></label><label>Narx<input type="number" min="0" value={value.price} onChange={e=>set("price",Number(e.target.value))}/></label><label>Eski narx<input type="number" min="0" value={value.old_price??""} onChange={e=>set("old_price",e.target.value?Number(e.target.value):null)}/></label><label>Ombor<input type="number" min="0" value={value.stock} onChange={e=>set("stock",Number(e.target.value))}/></label><label>Tartib<input type="number" value={value.sort_order||0} onChange={e=>set("sort_order",Number(e.target.value))}/></label></div>
+   <div className="formGrid"><label>O‘lchamlar<input value={(value.sizes||[]).join(", ")} onChange={e=>set("sizes",e.target.value.split(",").map(x=>x.trim()).filter(Boolean))}/></label><label>Ranglar<input value={(value.colors||[]).join(", ")} onChange={e=>set("colors",e.target.value.split(",").map(x=>x.trim()).filter(Boolean))}/></label></div>
+   <label>Tavsif<textarea rows={5} value={value.description} onChange={e=>set("description",e.target.value)}/></label>
+   <div className="checkRow"><label><input type="checkbox" checked={value.featured} onChange={e=>set("featured",e.target.checked)}/> Tanlangan</label><label><input type="checkbox" checked={value.active!==false} onChange={e=>set("active",e.target.checked)}/> Katalogda faol</label></div>
+   <div className="modalActions"><button type="button" onClick={onClose}>Bekor qilish</button><button className="proPrimary" disabled={busy||uploading||extraUploading}>Saqlash</button></div>
+  </form>
+ </Modal>
+}
+'''
+s = s[:start] + new_modal + s[end:]
+p.write_text(s)
+
+# Frontend styles for image-first layout.
+p = Path('src/admin/AdminPro.css')
+s = p.read_text()
+css = r'''
+.imageUploadSection{background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;margin-bottom:16px}.imageUploadTitle{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}.imageUploadTitle h3{margin:4px 0 0;font-size:16px}.imageHint{font-size:10px;color:#5b8d72;background:#eef8f1;border-radius:999px;padding:6px 9px;font-weight:700}.mainImagePicker{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}.mainImagePreview,.mainImageEmpty{width:120px;height:150px;border-radius:15px;overflow:hidden;border:1px dashed #e1c9d0;background:#fbf3f5;position:relative;display:grid;place-items:center;text-align:center}.mainImagePreview img{width:100%;height:100%;object-fit:cover}.mainImagePreview button,.extraImage button{position:absolute;right:6px;top:6px;border:0;background:rgba(35,22,28,.72);color:#fff;width:28px;height:28px;border-radius:50%;font-size:18px;cursor:pointer}.mainImageEmpty span{font-size:30px}.mainImageEmpty b,.mainImageEmpty small{display:block}.mainImageEmpty small{color:var(--muted);font-size:10px;margin-top:3px}.uploadButton,.miniUpload{display:inline-flex!important;align-items:center;justify-content:center;cursor:pointer;border-radius:12px!important;border:1px solid #e5c9d0!important;background:#fff!important;color:var(--rose)!important;padding:11px 14px!important;font-size:12px!important;font-weight:700!important;margin:0!important}.uploadButton input,.miniUpload input{display:none!important}.extraImageHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:12px}.extraImages{display:flex;gap:9px;overflow:auto;margin-top:10px;padding-bottom:2px}.extraImage{width:68px;height:82px;flex:0 0 auto;border-radius:11px;overflow:hidden;position:relative;background:#f7e9ed}.extraImage img{width:100%;height:100%;object-fit:cover}.extraImage button{width:22px;height:22px;font-size:15px;right:4px;top:4px}
+@media(max-width:760px){.mainImagePicker{grid-template-columns:100px 1fr}.mainImagePreview,.mainImageEmpty{width:100px;height:125px}.imageUploadSection{padding:12px}.imageUploadTitle h3{font-size:15px}.uploadButton{width:100%}.extraImageHead{align-items:flex-start;flex-direction:column}}
+'''
+if '.imageUploadSection{' not in s:
+    p.write_text(s + css)
