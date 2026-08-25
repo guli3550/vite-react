@@ -4,11 +4,9 @@
   "description": "GULI LINGERIE Telegram Mini App Backend",
   "main": "index.js",
   "scripts": {
-    "start": "node -r ./orderSecurityPatch.js -r ./telegramRuntimePatch.js index.js"
+    "start": "node -r ./orderSecurityPatch.js -r ./telegramRuntimePatch.js -r ./authRuntimePatch.js index.js"
   },
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
     "cors": "^2.8.5",
