@@ -37,23 +37,6 @@ async function findVerifiedReviewOrder(telegramId, productId, productCode) {
   return null;
 }
 
-async function refreshProductReviewAggregate(productId) {
-  const { data: reviews, error } = await supabase.from("product_reviews").select("rating").eq("product_id", productId).eq("status", "approved");
-  if (error) throw error;
-  const { data: product, error: productError } = await supabase.from("products").select("rating,reviews").eq("id", productId).maybeSingle();
-  if (productError) throw productError;
-  const baseCount = Number(product?.reviews || 0);
-  const baseRating = Number(product?.rating || 0);
-  const newCount = (reviews || []).length;
-  // Existing rating/review counters may represent imported historical reviews.
-  // Keep them as the legacy aggregate and add verified GULI reviews transparently.
-  const totalCount = baseCount + newCount;
-  const totalRating = baseRating * baseCount + (reviews || []).reduce((sum, r) => sum + Number(r.rating || 0), 0);
-  const rating = totalCount ? Math.round((totalRating / totalCount) * 100) / 100 : 0;
-  const { error } = await supabase.from("products").update({ rating, reviews: totalCount, updated_at: new Date().toISOString() }).eq("id", productId);
-  if (error) throw error;
-}
-
 app.get("/api/reviews", async (req, res) => {
   try {
     const code = String(req.query.product_code || "").trim();
@@ -66,8 +49,12 @@ app.get("/api/reviews", async (req, res) => {
     const rows = (data || []).map(row => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
     const distribution = [5,4,3,2,1].map(star => ({ star, count: rows.filter(r => Number(r.rating) === star).length }));
     const liveCount = rows.length;
-    const liveAverage = liveCount ? Math.round(rows.reduce((sum, r) => sum + Number(r.rating || 0), 0) / liveCount * 100) / 100 : 0;
-    res.json({ success: true, data: { reviews: rows, distribution, live_count: liveCount, live_average: liveAverage, legacy_count: Number(product.reviews || 0), legacy_average: Number(product.rating || 0), total_count: Number(product.reviews || 0), total_average: Number(product.rating || 0) } });
+    const liveSum = rows.reduce((sum, r) => sum + Number(r.rating || 0), 0);
+    const legacyCount = Number(product.reviews || 0);
+    const legacyAverage = Number(product.rating || 0);
+    const totalCount = legacyCount + liveCount;
+    const totalAverage = totalCount ? Math.round(((legacyAverage * legacyCount + liveSum) / totalCount) * 100) / 100 : 0;
+    res.json({ success: true, data: { reviews: rows, distribution, live_count: liveCount, live_average: liveCount ? Math.round(liveSum / liveCount * 100) / 100 : 0, legacy_count: legacyCount, legacy_average: legacyAverage, total_count: totalCount, total_average: totalAverage } });
   } catch (error) {
     console.error("Public reviews API error:", error);
     res.status(500).json({ success: false, message: "Sharhlarni yuklashda xatolik" });
@@ -123,7 +110,6 @@ app.post("/api/reviews", requireTelegramUser, async (req, res) => {
     const row = { product_id: product.id, product_code: code, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, rating, comment, photos: photoUrls, verified_purchase: true, order_number: order.order_number, status: "approved", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("product_reviews").insert([row]).select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").single();
     if (error) throw error;
-    await refreshProductReviewAggregate(product.id);
     res.status(201).json({ success: true, message: "Sharhingiz e’lon qilindi ✓", data: { ...data, display_name: reviewDisplayName(data) } });
   } catch (error) {
     console.error("Create review error:", error);
@@ -140,7 +126,6 @@ app.delete("/api/admin/reviews/:id", requireAdmin, async (req, res) => {
     if (!review) return res.status(404).json({ success: false, message: "Sharh topilmadi" });
     const { error } = await supabase.from("product_reviews").delete().eq("id", id);
     if (error) throw error;
-    await refreshProductReviewAggregate(review.product_id);
     res.json({ success: true });
   } catch (error) {
     console.error("Delete review error:", error);
