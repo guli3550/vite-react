@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
-import Admin from './admin/Admin.tsx'
+import Admin from './admin/AdminPro.tsx'
 import './index.css'
 
 if (typeof window !== 'undefined') {
@@ -9,8 +9,6 @@ if (typeof window !== 'undefined') {
   webApp?.ready()
   webApp?.expand()
 
-  // Customer API calls must carry Telegram's signed initData so the backend
-  // can bind orders, addresses and phone data to the real Telegram user.
   const originalFetch = window.fetch.bind(window)
   const apiBase = (import.meta.env.VITE_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '')
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
