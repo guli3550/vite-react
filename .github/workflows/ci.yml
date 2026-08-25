@@ -20,5 +20,7 @@ jobs:
         run: npm install
       - name: Build frontend
         run: npm run build
+      - name: Install backend dependencies
+        run: npm install --prefix backend
       - name: Validate backend syntax
         run: node --check backend/index.js
