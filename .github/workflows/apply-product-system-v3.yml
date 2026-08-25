@@ -1,0 +1,33 @@
+name: Apply GULI product system v3
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-product-system-v3.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[product-system-v3-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch to latest main
+        run: python3 scripts/apply_product_system.py
+      - name: Verify
+        run: |
+          node --check backend/index.js
+          npm install
+          npm run build
+      - name: Rebase and commit
+        run: |
+          git config user.name 'guli3550-bot'
+          git config user.email 'guli3550-bot@users.noreply.github.com'
+          git add backend/index.js src/admin/AdminPro.tsx src/admin/ProductModalV2.tsx src/admin/ProductModalV2.css src/App.tsx supabase/product_order_codes.sql .github/workflows/apply-product-system.yml .github/workflows/apply-product-system-v2.yml .github/workflows/apply-product-system-v3.yml scripts/apply_product_system.py
+          git stash push -u -m 'product-system-patch' || true
+          git pull --rebase origin main
+          git stash pop || true
+          rm -f .github/workflows/apply-product-system.yml .github/workflows/apply-product-system-v2.yml .github/workflows/apply-product-system-v3.yml scripts/apply_product_system.py
+          git add -A
+          git commit -m 'Apply product codes and selectors [product-system-v3-applied]'
+          git push origin main
