@@ -1,20 +1,16 @@
 import { ChangeEvent, FormEvent, useState } from "react";
 import "./AdminPro.css";
+import "./ProductModalV2.css";
 
 type Product={id?:number;product_code?:string;name:string;category:string;description:string;price:number;old_price?:number|null;image:string;images:string[];sizes:string[];colors:string[];rating:number;reviews:number;stock:number;featured:boolean;active?:boolean;sort_order?:number};
 
 const categories=["Byustgalter","Trusik","Komplektlar","Uy kiyimlari","Sexy lingerie","Boshqalar"];
 const sizes=["XS","S","M","L","XL","XXL","3XL","75B","75C","80B","80C","85B","85C","90B","90C","Universal"];
-const colors=[
- ["Qora","#111111"],["Oq","#ffffff"],["Qizil","#d91e36"],["Bordo","#800020"],["Pushti","#f4a6b8"],["Och pushti","#ffd6e0"],["Bej","#e8c9a8"],["Krem","#f5ead2"],["Jigarrang","#7a4b2a"],["To‘q ko‘k","#17365d"],["Ko‘k","#3b82c4"],["Yashil","#2f7d4a"],["Zaytun","#71823b"],["Sariq","#f1c40f"],["To‘q sariq","#e67e22"],["Binafsha","#7e57c2"],["Kulrang","#808080"]
-] as const;
+const colors=[["Qora","#111111"],["Oq","#ffffff"],["Qizil","#d91e36"],["Bordo","#800020"],["Pushti","#f4a6b8"],["Och pushti","#ffd6e0"],["Bej","#e8c9a8"],["Krem","#f5ead2"],["Jigarrang","#7a4b2a"],["To‘q ko‘k","#17365d"],["Ko‘k","#3b82c4"],["Yashil","#2f7d4a"],["Zaytun","#71823b"],["Sariq","#f1c40f"],["To‘q sariq","#e67e22"],["Binafsha","#7e57c2"],["Kulrang","#808080"]] as const;
 
 export default function ProductModalV2({value,busy,onClose,onChange,onSave,onUpload}:{value:Product;busy:boolean;onClose:()=>void;onChange:(v:Product)=>void;onSave:(e:FormEvent)=>void;onUpload:(file:File)=>Promise<string>}){
- const set=(k:keyof Product,v:any)=>onChange({...value,[k]:v});
- const [uploading,setUploading]=useState(false); const [extraUploading,setExtraUploading]=useState(false);
- const parseColor=(v:string)=>{const [name,hex]=String(v||"").split("|");return {name:name||v,hex:hex||"#ddd"};};
- const selectedColors=(value.colors||[]).map(parseColor);
- const hasColor=(hex:string)=>selectedColors.some(c=>c.hex.toLowerCase()===hex.toLowerCase());
+ const set=(k:keyof Product,v:any)=>onChange({...value,[k]:v}); const [uploading,setUploading]=useState(false); const [extraUploading,setExtraUploading]=useState(false);
+ const parseColor=(v:string)=>{const [name,hex]=String(v||"").split("|");return {name:name||v,hex:hex||"#ddd"}}; const selectedColors=(value.colors||[]).map(parseColor); const hasColor=(hex:string)=>selectedColors.some(c=>c.hex.toLowerCase()===hex.toLowerCase());
  const toggleColor=(name:string,hex:string)=>{const next=hasColor(hex)?(value.colors||[]).filter(v=>parseColor(v).hex.toLowerCase()!==hex.toLowerCase()):[...(value.colors||[]),`${name}|${hex}`];set("colors",next)};
  const toggleSize=(size:string)=>{const current=value.sizes||[];set("sizes",current.includes(size)?current.filter(v=>v!==size):[...current,size])};
  const chooseMain=async(e:ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setUploading(true);try{set("image",await onUpload(file))}finally{setUploading(false)}};
