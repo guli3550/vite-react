@@ -36,7 +36,19 @@ async function getTelegramProfilePhotoList(telegramId) {
         url: photoProxyUrl(telegramId, largest.file_id)
       });
     }
-    return { total_count: Number(result?.total_count || photos.length), photos };
+    if (photos.length) return { total_count: Number(result?.total_count || photos.length), photos };
+
+    // Some accounts expose the current private-chat avatar through getChat even
+    // when getUserProfilePhotos returns an empty history. Use it as a final
+    // current-photo fallback; the returned file is still served through our proxy.
+    try {
+      const chat = await telegramApi("getChat", { chat_id: Number(telegramId) });
+      const fileId = chat?.photo?.big_file_id || chat?.photo?.small_file_id || "";
+      if (fileId) return { total_count: 1, photos: [{ file_id: fileId, file_unique_id: chat.photo.big_file_unique_id || chat.photo.small_file_unique_id || fileId, width: 640, height: 640, current: true, url: photoProxyUrl(telegramId, fileId) }] };
+    } catch (fallbackError) {
+      console.warn("Telegram current avatar fallback unavailable:", fallbackError.message);
+    }
+    return { total_count: Number(result?.total_count || 0), photos: [] };
   } catch (error) {
     console.warn("Telegram profile photos unavailable:", error.message);
     return { total_count: 0, photos: [] };
