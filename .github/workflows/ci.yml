@@ -28,9 +28,10 @@ jobs:
           node --check backend/customerServer.js
           node --check backend/customerIdentityPatch.js
           node --check backend/reviewPatchV2.js
-          node --check backend/clickPaymentPatch.js
+          node --check backend/manualCardPaymentPatch.js
       - name: Validate browser enhancers
         run: |
-          node --check payment-enhancer.js
+          node --check card-payment-enhancer.js
+          node --check admin-payment-enhancer.js
           node --check marketplace-enhancer.js
           node --check reviews-enhancer.js
