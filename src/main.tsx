@@ -21,6 +21,17 @@ if (typeof window !== 'undefined') {
     }
     return originalFetch(input, init)
   }
+
+  // Mobile keyboards may append digits to the initial `0` in controlled number inputs
+  // (for example `0` + `12` -> `012`). Normalize before React receives the input event.
+  document.addEventListener('input', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLInputElement) || target.type !== 'number') return
+    const value = target.value
+    if (/^0+\d/.test(value)) {
+      target.value = value.replace(/^0+(?=\d)/, '')
+    }
+  }, true)
 }
 
 const isAdmin = typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/admin'
