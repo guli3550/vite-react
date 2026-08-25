@@ -1,12 +1,8 @@
 // GULI Telegram bot UX + live order status notifications.
-// The bot's Mini App URL is intentionally pinned to the production alias so a Vercel
-// deployment URL change can never leave Telegram pointing at an old preview build.
 (() => {
-  const WEB_APP_URL = "https://vite-react-seven-inky-10.vercel.app/?tgapp=20260825";
+  const WEB_APP_URL = "https://vite-react-guli3550.vercel.app/?tgapp=v20260825";
   const STORE_TEXT = "🛍 Do‘konni ochish";
-  const statuses = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
-
   const storeKeyboard = (inline = false) => inline
     ? { inline_keyboard: [[{ text: STORE_TEXT, web_app: { url: WEB_APP_URL } }]] }
     : { keyboard: [[{ text: STORE_TEXT, web_app: { url: WEB_APP_URL } }]], resize_keyboard: true, is_persistent: true };
@@ -21,63 +17,34 @@
       const price = Math.round(Number(p.price || item?.price || 0));
       return `• ${name}${code ? ` [${code}]` : ""} × ${qty}${price ? ` — ${price.toLocaleString("uz-UZ")} so‘m` : ""}`;
     });
-    const more = items.length > 12 ? `\n• +${items.length - 12} ta mahsulot` : "";
     const payment = paymentLabels[String(order?.payment_status || "pending")] || "To‘lov kutilmoqda";
-    return [
-      `🛍 <b>GULI PREMIUM — BUYURTMA</b>`,
-      `№ <b>${String(order?.order_number || "—")}</b>`,
-      "",
-      "<b>Sotib olingan mahsulotlar:</b>",
-      lines.join("\n") || "• Mahsulot ma’lumoti mavjud emas",
-      more,
-      "",
-      `💰 <b>Jami:</b> ${Math.round(Number(order?.total || 0)).toLocaleString("uz-UZ")} so‘m`,
-      `📌 <b>Hozirgi status:</b> ${String(order?.status || "Qabul qilindi")}`,
-      `💳 <b>To‘lov:</b> ${payment}`,
-      "",
-      "Status o‘zgarsa, ushbu xabar yangilanadi."
-    ].join("\n");
+    return [`🛍 <b>GULI PREMIUM — BUYURTMA</b>`,`№ <b>${String(order?.order_number || "—")}</b>`,"","<b>Sotib olingan mahsulotlar:</b>",lines.join("\n") || "• Mahsulot ma’lumoti mavjud emas","",`💰 <b>Jami:</b> ${Math.round(Number(order?.total || 0)).toLocaleString("uz-UZ")} so‘m`,`📌 <b>Hozirgi status:</b> ${String(order?.status || "Qabul qilindi")}`,`💳 <b>To‘lov:</b> ${payment}`,"","Status o‘zgarsa, ushbu xabar yangilanadi."].join("\n");
   };
 
   async function sendOrEditOrderMessage(order, telegramId, existingMessageId = null) {
     if (!telegramId || !order?.order_number) return null;
-    const chatId = Number(telegramId);
-    const text = orderText(order);
-    const markup = storeKeyboard(true);
+    const chatId = Number(telegramId), text = orderText(order), markup = storeKeyboard(true);
     try {
       if (existingMessageId) {
-        const edited = await telegramApi("editMessageText", { chat_id: chatId, message_id: Number(existingMessageId), text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
-        if (edited) return Number(existingMessageId);
+        await telegramApi("editMessageText", { chat_id: chatId, message_id: Number(existingMessageId), text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+        return Number(existingMessageId);
       }
-    } catch (error) {
-      console.warn("Telegram order message edit failed:", error.message);
-    }
+    } catch {}
     try {
       const sent = await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
       const messageId = Number(sent?.message_id || 0) || null;
-      if (messageId) {
-        try { await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(order.order_number)); } catch (error) { console.warn("Order message id could not be stored:", error.message); }
-      }
+      if (messageId) await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(order.order_number));
       return messageId;
-    } catch (error) {
-      console.warn("Telegram order notification failed:", error.message);
-      return null;
-    }
+    } catch (error) { console.warn("Telegram order notification failed:", error.message); return null; }
   }
 
   async function configureTelegramBot() {
     if (!TELEGRAM_BOT_TOKEN) return;
     try {
-      await telegramApi("setMyCommands", { commands: [
-        { command: "start", description: "GULI do‘konini ochish" },
-        { command: "shop", description: "Onlayn do‘konni ochish" }
-      ] });
-      // This updates the bot's default menu button for all private chats.
+      await telegramApi("setMyCommands", { commands: [{ command: "start", description: "GULI do‘konini ochish" }, { command: "shop", description: "Onlayn do‘konni ochish" }] });
       await telegramApi("setChatMenuButton", { menu_button: { type: "web_app", text: STORE_TEXT, web_app: { url: WEB_APP_URL } } });
       console.log(`Telegram Mini App menu configured: ${WEB_APP_URL}`);
-    } catch (error) {
-      console.warn("Telegram bot menu configuration failed:", error.message);
-    }
+    } catch (error) { console.warn("Telegram bot menu configuration failed:", error.message); }
   }
 
   const webhookLayer = (app._router?.stack || []).find((layer) => layer.route?.path === "/api/telegram/webhook" && layer.route?.methods?.post);
@@ -85,17 +52,9 @@
     const original = webhookLayer.route.stack[webhookLayer.route.stack.length - 1].handle;
     webhookLayer.route.stack[webhookLayer.route.stack.length - 1].handle = async (req, res, next) => {
       try {
-        const message = req.body?.message;
-        const chatId = message?.chat?.id;
-        const text = String(message?.text || "").trim();
-        const contact = message?.contact;
+        const message = req.body?.message, chatId = message?.chat?.id, text = String(message?.text || "").trim(), contact = message?.contact;
         if (chatId && /^\/start(?:@\w+)?/i.test(text)) {
-          await telegramApi("sendMessage", {
-            chat_id: Number(chatId),
-            text: "🌷 <b>GULI_3550 Online Market</b> ga xush kelibsiz!\n\nAyollar uchun ichki kiyimlar, komplektlar, uy kiyimlari va boshqa mahsulotlarni onlayn buyurtma qilishingiz mumkin.\n\n📦 Mahsulot tanlang → buyurtma bering → HUMO/UZCARD orqali to‘lang → chekni shu oynadan yuboring.\n\nAvval telefon raqamingizni yuboring, keyin do‘konni oching.",
-            parse_mode: "HTML",
-            reply_markup: { keyboard: [[{ text: "📱 Telefon raqamimni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true }
-          });
+          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "🌷 <b>GULI_3550 Online Market</b> ga xush kelibsiz!\n\nAyollar uchun ichki kiyimlar, komplektlar, uy kiyimlari va boshqa mahsulotlarni onlayn buyurtma qilishingiz mumkin.\n\n📦 Mahsulot tanlang → buyurtma bering → HUMO/UZCARD orqali to‘lang → chekni shu oynadan yuboring.\n\nAvval telefon raqamingizni yuboring, keyin do‘konni oching.", parse_mode: "HTML", reply_markup: { keyboard: [[{ text: "📱 Telefon raqamimni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } });
           return res.sendStatus(200);
         }
         if (chatId && /^\/(shop|store)(?:@\w+)?/i.test(text)) {
@@ -103,64 +62,35 @@
           return res.sendStatus(200);
         }
         if (chatId && contact?.phone_number) {
-          const telegramUser = message?.from || {};
-          const ownerId = Number(contact.user_id || telegramUser.id || chatId);
-          if (ownerId) {
-            const { error } = await supabase.from("telegram_users").upsert({ telegram_id: ownerId, username: telegramUser.username || null, first_name: telegramUser.first_name || null, last_name: telegramUser.last_name || null, telegram_phone: String(contact.phone_number), updated_at: new Date().toISOString() }, { onConflict: "telegram_id" });
-            if (error) console.warn("Telegram contact upsert failed:", error.message);
-          }
+          const telegramUser = message?.from || {}, ownerId = Number(contact.user_id || telegramUser.id || chatId);
+          if (ownerId) await supabase.from("telegram_users").upsert({ telegram_id: ownerId, username: telegramUser.username || null, first_name: telegramUser.first_name || null, last_name: telegramUser.last_name || null, telegram_phone: String(contact.phone_number), updated_at: new Date().toISOString() }, { onConflict: "telegram_id" });
           await telegramApi("sendMessage", { chat_id: Number(chatId), text: "✅ Telefon raqamingiz saqlandi. Endi GULI do‘konini ochishingiz mumkin.", reply_markup: storeKeyboard(false) });
           return res.sendStatus(200);
         }
         return original(req, res, next);
-      } catch (error) {
-        console.error("Telegram enhanced webhook error:", error);
-        return res.sendStatus(200);
-      }
+      } catch (error) { console.error("Telegram enhanced webhook error:", error); return res.sendStatus(200); }
     };
   }
 
   function wrapRoute(path, method, after) {
     const layer = (app._router?.stack || []).find((item) => item.route?.path === path && item.route?.methods?.[method]);
     if (!layer?.route?.stack?.length) return;
-    const index = layer.route.stack.length - 1;
-    const original = layer.route.stack[index].handle;
+    const index = layer.route.stack.length - 1, original = layer.route.stack[index].handle;
     layer.route.stack[index].handle = async (req, res, next) => {
-      let payload = null;
-      const originalJson = res.json.bind(res);
-      res.json = (body) => { payload = body; return originalJson(body); };
+      let payload = null; const originalJson = res.json.bind(res); res.json = (body) => { payload = body; return originalJson(body); };
       try { await original(req, res, next); } finally { try { await after(req, payload); } catch (error) { console.warn("Telegram order post-action failed:", error.message); } }
     };
   }
-
   const notifyOrder = async (req, payload) => {
     if (!payload?.success || !payload?.data) return;
     const order = Array.isArray(payload.data) ? payload.data[0] : payload.data;
     const telegramId = Number(order?.telegram_id || req.telegramUser?.id || 0);
-    if (!telegramId || telegramId < 1) return;
-    const messageId = Number(order?.telegram_status_message_id || 0) || null;
-    const savedId = await sendOrEditOrderMessage(order, telegramId, messageId);
-    if (savedId && savedId !== messageId) {
-      try { await supabase.from("orders").update({ telegram_status_message_id: savedId }).eq("order_number", String(order.order_number)); } catch {}
-    }
+    if (!telegramId) return;
+    await sendOrEditOrderMessage(order, telegramId, Number(order?.telegram_status_message_id || 0) || null);
   };
-
   wrapRoute("/api/orders", "post", notifyOrder);
   wrapRoute("/api/guest/orders", "post", notifyOrder);
-  wrapRoute("/api/admin/orders/:id", "put", async (req, payload) => {
-    if (!payload?.success || !payload?.data) return;
-    const order = payload.data;
-    const telegramId = Number(order?.telegram_id || 0);
-    if (!telegramId || telegramId < 1) return;
-    await sendOrEditOrderMessage(order, telegramId, Number(order?.telegram_status_message_id || 0) || null);
-  });
-  wrapRoute("/api/admin/orders/:id/payment", "put", async (req, payload) => {
-    if (!payload?.success || !payload?.data) return;
-    const order = payload.data;
-    const telegramId = Number(order?.telegram_id || 0);
-    if (!telegramId || telegramId < 1) return;
-    await sendOrEditOrderMessage(order, telegramId, Number(order?.telegram_status_message_id || 0) || null);
-  });
-
+  wrapRoute("/api/admin/orders/:id", "put", async (req, payload) => { if (payload?.success && payload?.data) await sendOrEditOrderMessage(payload.data, Number(payload.data.telegram_id || 0), Number(payload.data.telegram_status_message_id || 0) || null); });
+  wrapRoute("/api/admin/orders/:id/payment", "put", async (req, payload) => { if (payload?.success && payload?.data) await sendOrEditOrderMessage(payload.data, Number(payload.data.telegram_id || 0), Number(payload.data.telegram_status_message_id || 0) || null); });
   configureTelegramBot().catch(() => {});
 })();
