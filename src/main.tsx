@@ -4,6 +4,7 @@ import App from './App.tsx'
 import Admin from './admin/AdminPro.tsx'
 import './index.css'
 import './admin/AdminNaming.css'
+import './admin/CustomerIdentity.css'
 
 if (typeof window !== 'undefined') {
   const webApp = window.Telegram?.WebApp
@@ -20,6 +21,15 @@ if (typeof window !== 'undefined') {
       return originalFetch(input, { ...init, headers })
     }
     return originalFetch(input, init)
+  }
+
+  // Save the Telegram identity/profile-photo history in the CRM whenever the Mini App opens.
+  if (window.location.pathname.replace(/\/$/, '') !== '/admin' && webApp?.initData) {
+    void originalFetch(`${apiBase}/api/profile/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': webApp.initData },
+      body: '{}',
+    }).catch(() => {})
   }
 
   // Mobile keyboards may append digits to the initial `0` in controlled number inputs
