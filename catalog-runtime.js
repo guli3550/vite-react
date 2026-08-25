@@ -1,4 +1,11 @@
 (() => {
+  const styleHref = '/marketplace-fixes.css';
+  if (!document.querySelector(`link[href="${styleHref}"]`)) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `${styleHref}?v=1`;
+    document.head.appendChild(link);
+  }
   const nativeFetch = window.fetch.bind(window);
   const API_RE = /https?:\/\/[^/]+\/api\/products(?:\?|$)|\/api\/products(?:\?|$)/i;
   const CACHE_KEY = 'guli_catalog_cache_v3';
