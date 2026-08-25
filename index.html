@@ -27,30 +27,59 @@
           const product=products.find(p=>(code&&String(p.product_code||'')===code)||(title&&String(p.name||'').trim()===title));
           if(!product){wrap.dataset.galleryReady='';return}
           const urls=[product.image,...(Array.isArray(product.images)?product.images:[])].filter(Boolean);
-          if(urls.length<2){wrap.dataset.galleryReady='';return}
           const main=wrap.querySelector('img');
-          if(!main){wrap.dataset.galleryReady='';return}
+          if(!main||urls.length<1){wrap.dataset.galleryReady='';return}
           let index=0;
+          let startX=null;
+          const shell=document.createElement('div');
+          shell.className='guli-gallery-shell';
+          shell.style.cssText='margin:0 12px 4px;position:relative;';
           const gallery=document.createElement('div');
           gallery.className='guli-mini-gallery';
-          gallery.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:8px 2px 4px;scrollbar-width:none;touch-action:pan-x;';
-          const buttons=[];
-          const setImage=(i)=>{index=(i+urls.length)%urls.length;main.src=urls[index];buttons.forEach((b,n)=>{b.style.border=n===index?'2px solid #b95a70':'1px solid #eadde0';b.style.opacity=n===index?'1':'.75'});counter.textContent=`${index+1} / ${urls.length}`};
-          urls.forEach((url,i)=>{const b=document.createElement('button');b.type='button';b.style.cssText='flex:0 0 68px;width:68px;height:82px;padding:0;border:1px solid #eadde0;border-radius:12px;overflow:hidden;background:#fff;';const im=document.createElement('img');im.src=url;im.alt=`Rasm ${i+1}`;im.style.cssText='width:100%;height:100%;object-fit:cover;display:block;';b.appendChild(im);b.addEventListener('click',()=>setImage(i));gallery.appendChild(b);buttons.push(b)});
-          const nav=document.createElement('div');nav.style.cssText='display:flex;justify-content:center;align-items:center;gap:10px;margin-top:2px;';
-          const prev=document.createElement('button');prev.type='button';prev.textContent='‹';prev.style.cssText='width:38px;height:38px;border:0;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08);font-size:24px;';
-          const counter=document.createElement('span');counter.textContent=`1 / ${urls.length}`;counter.style.cssText='font-size:12px;font-weight:700;color:#9c6876;min-width:55px;text-align:center;';
-          const next=document.createElement('button');next.type='button';next.textContent='›';next.style.cssText=prev.style.cssText;
-          prev.addEventListener('click',()=>setImage(index-1));next.addEventListener('click',()=>setImage(index+1));nav.append(prev,counter,next);
-          wrap.append(gallery,nav);
+          gallery.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:9px 2px 5px;scrollbar-width:none;touch-action:pan-x;';
+          const dots=document.createElement('div');
+          dots.style.cssText='display:flex;justify-content:center;gap:5px;margin:4px 0 1px;';
+          const buttons=[];const dotEls=[];
+          const counter=document.createElement('span');
+          counter.style.cssText='position:absolute;right:10px;top:-44px;padding:6px 9px;border-radius:999px;background:rgba(0,0,0,.52);color:#fff;font-size:11px;font-weight:800;z-index:4;';
+          shell.append(gallery,dots,counter);
+          wrap.insertAdjacentElement('afterend',shell);
+          const nav=document.createElement('div');
+          nav.style.cssText='display:flex;justify-content:center;align-items:center;gap:9px;margin:1px 0 4px;';
+          const makeNav=(text)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='width:36px;height:36px;border:1px solid #eadde0;border-radius:50%;background:#fff;color:#9f5267;box-shadow:0 3px 12px rgba(60,25,35,.08);font-size:22px;line-height:1;';return b};
+          const prev=makeNav('‹');const next=makeNav('›');
+          nav.append(prev,next);
+          shell.append(nav);
+          const setImage=(i)=>{
+            if(!urls.length)return;
+            index=(i+urls.length)%urls.length;
+            main.src=urls[index];
+            main.alt=`${product.name} — ${index+1}-rasm`;
+            counter.textContent=`${index+1} / ${urls.length}`;
+            buttons.forEach((b,n)=>{b.style.border=n===index?'2px solid #b95a70':'1px solid #eadde0';b.style.opacity=n===index?'1':'.72'});
+            dotEls.forEach((d,n)=>{d.style.width=n===index?'18px':'6px';d.style.opacity=n===index?'1':'.35'});
+          };
+          urls.forEach((url,i)=>{
+            const b=document.createElement('button');b.type='button';b.setAttribute('aria-label',`Rasm ${i+1}`);b.style.cssText='flex:0 0 68px;width:68px;height:82px;padding:0;border:1px solid #eadde0;border-radius:12px;overflow:hidden;background:#fff;transition:.18s;';
+            const im=document.createElement('img');im.src=url;im.alt='';im.loading=i===0?'eager':'lazy';im.style.cssText='width:100%;height:100%;object-fit:cover;display:block;';
+            im.onerror=()=>{b.style.display='none'};b.appendChild(im);b.addEventListener('click',()=>setImage(i));gallery.appendChild(b);buttons.push(b);
+            const d=document.createElement('span');d.style.cssText='height:6px;width:6px;border-radius:999px;background:#b95a70;opacity:.35;transition:.18s;display:block;';dots.appendChild(d);dotEls.push(d);
+          });
+          prev.addEventListener('click',()=>setImage(index-1));next.addEventListener('click',()=>setImage(index+1));
+          const onStart=e=>{startX=e.touches?.[0]?.clientX??null};
+          const onEnd=e=>{if(startX==null)return;const endX=e.changedTouches?.[0]?.clientX??startX;const dx=endX-startX;if(Math.abs(dx)>45)setImage(index+(dx<0?1:-1));startX=null};
+          wrap.addEventListener('touchstart',onStart,{passive:true});wrap.addEventListener('touchend',onEnd,{passive:true});
+          wrap.style.overflow='hidden';
+          main.style.touchAction='pan-y';
           const desc=root.querySelector('.detailContent .description');
           if(desc){desc.style.display='block';desc.style.whiteSpace='pre-wrap';desc.style.lineHeight='1.7';desc.style.marginTop='14px';}
           setImage(0);
           wrap.dataset.galleryReady='1';
         };
-        const observer=new MutationObserver(()=>{const root=document.querySelector('.productDetail');if(root)enhance(root)});
+        const scan=()=>{const root=document.querySelector('.productDetail');if(root)enhance(root)};
+        const observer=new MutationObserver(scan);
         observer.observe(document.body,{childList:true,subtree:true});
-        setTimeout(()=>{const root=document.querySelector('.productDetail');if(root)enhance(root)},700);
+        setTimeout(scan,500);setTimeout(scan,1500);
       })();
     </script>
   </body>
