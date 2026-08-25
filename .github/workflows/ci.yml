@@ -23,4 +23,7 @@ jobs:
       - name: Install backend dependencies
         run: npm install --prefix backend
       - name: Validate backend syntax
-        run: node --check backend/index.js
+        run: |
+          node --check backend/index.js
+          node --check backend/customerServer.js
+          node --check backend/customerIdentityPatch.js
