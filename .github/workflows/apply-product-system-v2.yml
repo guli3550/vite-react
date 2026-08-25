@@ -1,0 +1,29 @@
+name: Apply GULI product system v2
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-product-system-v2.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[product-system-v2-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python3 scripts/apply_product_system.py
+      - name: Verify
+        run: |
+          node --check backend/index.js
+          npm install
+          npm run build
+      - name: Commit
+        run: |
+          git config user.name 'guli3550-bot'
+          git config user.email 'guli3550-bot@users.noreply.github.com'
+          rm -f .github/workflows/apply-product-system.yml .github/workflows/apply-product-system-v2.yml scripts/apply_product_system.py
+          git add backend/index.js src/admin/AdminPro.tsx src/admin/ProductModalV2.tsx src/admin/AdminPro.css src/App.tsx supabase/product_order_codes.sql .github/workflows/apply-product-system.yml .github/workflows/apply-product-system-v2.yml scripts/apply_product_system.py
+          git commit -m 'Apply product codes and selectors [product-system-v2-applied]'
+          git push
