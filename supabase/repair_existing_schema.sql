@@ -18,41 +18,31 @@ alter table if exists public.products add column if not exists created_at timest
 alter table if exists public.products add column if not exists updated_at timestamptz default now();
 alter table if exists public.products add column if not exists product_code text;
 
-update public.products
-set title = coalesce(nullif(trim(title), ''), nullif(trim(name), ''))
-where title is null or trim(title) = '';
+update public.products set title = coalesce(nullif(trim(title), ''), nullif(trim(name), '')) where title is null or trim(title) = '';
 
 do $$
 declare t text;
 begin
   select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='images';
-  if t is null then
-    alter table public.products add column images jsonb default '[]'::jsonb;
+  if t is null then alter table public.products add column images jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
     alter table public.products add column if not exists images_jsonb jsonb default '[]'::jsonb;
     execute 'update public.products set images_jsonb = case when images is null then ''[]''::jsonb else to_jsonb(images) end';
-    alter table public.products drop column images;
-    alter table public.products rename column images_jsonb to images;
+    alter table public.products drop column images; alter table public.products rename column images_jsonb to images;
   end if;
-
   select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='sizes';
-  if t is null then
-    alter table public.products add column sizes jsonb default '[]'::jsonb;
+  if t is null then alter table public.products add column sizes jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
     alter table public.products add column if not exists sizes_jsonb jsonb default '[]'::jsonb;
     execute 'update public.products set sizes_jsonb = case when sizes is null then ''[]''::jsonb else to_jsonb(sizes) end';
-    alter table public.products drop column sizes;
-    alter table public.products rename column sizes_jsonb to sizes;
+    alter table public.products drop column sizes; alter table public.products rename column sizes_jsonb to sizes;
   end if;
-
   select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='colors';
-  if t is null then
-    alter table public.products add column colors jsonb default '[]'::jsonb;
+  if t is null then alter table public.products add column colors jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
     alter table public.products add column if not exists colors_jsonb jsonb default '[]'::jsonb;
     execute 'update public.products set colors_jsonb = case when colors is null then ''[]''::jsonb else to_jsonb(colors) end';
-    alter table public.products drop column colors;
-    alter table public.products rename column colors_jsonb to colors;
+    alter table public.products drop column colors; alter table public.products rename column colors_jsonb to colors;
   end if;
 end $$;
 
@@ -78,16 +68,41 @@ do $$
 declare r record; next_code integer;
 begin
   for r in select id from public.products where product_code is null or product_code !~ '^[0-9]{6}$' loop
-    loop
-      next_code := floor(random() * 900000 + 100000)::integer;
-      exit when not exists (select 1 from public.products p where p.product_code = lpad(next_code::text, 6, '0'));
-    end loop;
+    loop next_code := floor(random() * 900000 + 100000)::integer; exit when not exists (select 1 from public.products p where p.product_code = lpad(next_code::text, 6, '0')); end loop;
     update public.products set product_code = lpad(next_code::text, 6, '0') where id = r.id;
   end loop;
 end $$;
 create unique index if not exists idx_products_product_code_unique on public.products (product_code);
 
-alter table if exists public.orders add column if not exists telegram_id bigint;
+-- Legacy databases sometimes created telegram_id as uuid. The application and
+-- Telegram API use numeric Telegram IDs (bigint). Preserve the legacy UUID data
+-- under a separate column and create the canonical bigint column.
+do $$
+declare t text;
+begin
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='orders' and column_name='telegram_id';
+  if t = 'uuid' then
+    alter table public.orders rename column telegram_id to telegram_id_legacy_uuid;
+    alter table public.orders add column telegram_id bigint;
+  elsif t is null then
+    alter table public.orders add column telegram_id bigint;
+  end if;
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='telegram_users' and column_name='telegram_id';
+  if t = 'uuid' then
+    alter table public.telegram_users rename column telegram_id to telegram_id_legacy_uuid;
+    alter table public.telegram_users add column telegram_id bigint;
+  elsif t is null and to_regclass('public.telegram_users') is not null then
+    alter table public.telegram_users add column telegram_id bigint;
+  end if;
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='saved_addresses' and column_name='telegram_id';
+  if t = 'uuid' then
+    alter table public.saved_addresses rename column telegram_id to telegram_id_legacy_uuid;
+    alter table public.saved_addresses add column telegram_id bigint;
+  elsif t is null and to_regclass('public.saved_addresses') is not null then
+    alter table public.saved_addresses add column telegram_id bigint;
+  end if;
+end $$;
+
 alter table if exists public.orders add column if not exists username text;
 alter table if exists public.orders add column if not exists first_name text;
 alter table if exists public.orders add column if not exists telegram_phone text;
@@ -103,21 +118,7 @@ alter table if exists public.orders add column if not exists created_at timestam
 alter table if exists public.orders add column if not exists updated_at timestamptz default now();
 alter table if exists public.orders add column if not exists order_number text;
 
--- Promo schema: create it if absent, then repair every required column if a legacy
--- promo_codes table already exists but is incomplete.
-create table if not exists public.promo_codes (
-  id bigint generated by default as identity primary key,
-  code text not null unique,
-  discount_type text not null default 'percent',
-  discount_value numeric(12,2) not null default 10,
-  min_order_amount numeric(12,2) not null default 0,
-  usage_limit integer,
-  used_count integer not null default 0,
-  starts_at timestamptz,
-  expires_at timestamptz,
-  active boolean not null default true,
-  created_at timestamptz not null default now()
-);
+create table if not exists public.promo_codes (id bigint generated by default as identity primary key, code text not null unique, discount_type text not null default 'percent', discount_value numeric(12,2) not null default 10, min_order_amount numeric(12,2) not null default 0, usage_limit integer, used_count integer not null default 0, starts_at timestamptz, expires_at timestamptz, active boolean not null default true, created_at timestamptz not null default now());
 alter table if exists public.promo_codes add column if not exists code text;
 alter table if exists public.promo_codes add column if not exists discount_type text default 'percent';
 alter table if exists public.promo_codes add column if not exists discount_value numeric(12,2) default 10;
@@ -137,7 +138,6 @@ update public.promo_codes set active = true where active is null;
 update public.promo_codes set created_at = now() where created_at is null;
 create unique index if not exists idx_promo_codes_code_unique on public.promo_codes (code);
 create index if not exists idx_promo_codes_active on public.promo_codes (active, code);
-
 create index if not exists idx_products_active_category on public.products (active, category, sort_order);
 create index if not exists idx_products_featured on public.products (featured, active);
 create index if not exists idx_orders_telegram_id on public.orders (telegram_id);
