@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -19,40 +16,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply Mini App catalog gallery fix
-        if: github.event_name == 'push'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          p=Path('src/App.tsx')
-          s=p.read_text()
-          if 'Mahsulot haqida' in s and 'Oldingi rasm' in s:
-              print('Catalog gallery already patched')
-          else:
-              pattern=r'function ProductImage\(\{product,detail=false\}:\{product:Product;detail\?:boolean\}\)\{.*?\n\}'
-              replacement=r'''function ProductImage({product,detail=false}:{product:Product;detail?:boolean}){
-  const [index,setIndex]=useState(0);
-  const list=[product.image,...(product.images||[])].filter(Boolean);
-  const safeIndex=Math.min(index,Math.max(list.length-1,0));
-  const current=list[safeIndex]||'';
-  const go=(next:number)=>{if(!list.length)return;setIndex((next+list.length)%list.length)};
-  const onTouchStart=(e:React.TouchEvent<HTMLDivElement>)=>{(e.currentTarget as any).__touchX=e.touches[0]?.clientX||0};
-  const onTouchEnd=(e:React.TouchEvent<HTMLDivElement>)=>{const x=(e.currentTarget as any).__touchX??0;const dx=(e.changedTouches[0]?.clientX||x)-x;if(Math.abs(dx)>45)go(safeIndex+(dx<0?1:-1))};
-  if(!detail)return <img src={current?imageUrl(product,safeIndex):placeholder(product.name)} alt={product.name} loading="lazy" decoding="async" onError={()=>go(safeIndex+1)}/>;
-  return <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{width:'100%',display:'flex',flexDirection:'column',gap:14}}>
-    <div style={{position:'relative',width:'100%',overflow:'hidden',borderRadius:28,background:'#f7eef0'}}>
-      <img src={current?imageUrl(product,safeIndex):placeholder(product.name)} alt={product.name} loading="eager" decoding="async" onError={()=>go(safeIndex+1)} style={{display:'block',width:'100%',height:'auto',maxHeight:'72vh',objectFit:'cover'}}/>
-      {list.length>1&&<><button type="button" aria-label="Oldingi rasm" onClick={()=>go(safeIndex-1)} style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',width:42,height:42,border:0,borderRadius:'50%',background:'rgba(255,255,255,.9)',fontSize:24,cursor:'pointer'}}>‹</button><button type="button" aria-label="Keyingi rasm" onClick={()=>go(safeIndex+1)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',width:42,height:42,border:0,borderRadius:'50%',background:'rgba(255,255,255,.9)',fontSize:24,cursor:'pointer'}}>›</button><div style={{position:'absolute',right:14,bottom:14,padding:'6px 10px',borderRadius:999,background:'rgba(0,0,0,.52)',color:'#fff',fontSize:12,fontWeight:700}}>{safeIndex+1} / {list.length}</div></>}
-    </div>
-    {list.length>1&&<div style={{display:'flex',gap:8,overflowX:'auto',padding:'2px 1px 4px'}}>{list.map((url,i)=><button type="button" key={`${url}-${i}`} aria-label={`Rasm ${i+1}`} onClick={()=>setIndex(i)} style={{flex:'0 0 68px',width:68,height:82,padding:0,border:i===safeIndex?'2px solid #b95a70':'1px solid #eadde0',borderRadius:12,overflow:'hidden',background:'#fff',opacity:i===safeIndex?1:.78}}><img src={imageUrl(product,i)} alt="" style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}/></button>)}</div>}
-    <div style={{padding:'4px 2px 8px'}}><div style={{fontSize:13,fontWeight:700,letterSpacing:'.12em',textTransform:'uppercase',color:'#a26f7c',marginBottom:8}}>Mahsulot haqida</div><div style={{fontSize:15,lineHeight:1.65,color:'#5f5558',whiteSpace:'pre-wrap'}}>{product.description?.trim()||'Mahsulot tavsifi hozircha kiritilmagan.'}</div></div>
-  </div>;
-}'''
-              ns,n=re.subn(pattern,replacement,s,count=1,flags=re.S)
-              if n!=1: raise SystemExit('ProductImage block not found')
-              p.write_text(ns)
-          PY
       - name: Install frontend dependencies
         run: npm install
       - name: Build frontend
@@ -64,15 +27,3 @@ jobs:
           node --check backend/index.js
           node --check backend/customerServer.js
           node --check backend/customerIdentityPatch.js
-      - name: Commit catalog gallery fix
-        if: github.event_name == 'push'
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/App.tsx
-          if git diff --cached --quiet; then
-            echo 'No catalog gallery changes to commit'
-          else
-            git commit -m 'Fix Mini App product gallery and description'
-            git push
-          fi
