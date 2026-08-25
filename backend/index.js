@@ -65,8 +65,30 @@ function requireTelegramUser(req, res, next) {
   req.telegramUser = user;
   next();
 }
-function productPayload(body) { return { name: String(body.name || "").trim(), category: String(body.category || "Boshqa").trim(), description: String(body.description || ""), price: Number(body.price) || 0, old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price), image: String(body.image || ""), images: Array.isArray(body.images) ? body.images : [], sizes: Array.isArray(body.sizes) ? body.sizes : [], colors: Array.isArray(body.colors) ? body.colors : [], rating: Number(body.rating) || 0, reviews: Number(body.reviews) || 0, stock: Math.max(0, Number(body.stock) || 0), featured: Boolean(body.featured), active: body.active !== false, sort_order: Number(body.sort_order) || 0, product_code: /^\d{6}$/.test(String(body.product_code || "")) ? String(body.product_code) : "", updated_at: new Date().toISOString() }; }
-
+function productPayload(body) {
+  const name = String(body.name || body.title || "").trim();
+  return {
+    // Legacy products table requires title; keep it synchronized with name.
+    title: String(body.title || name).trim(),
+    name,
+    category: String(body.category || "Boshqa").trim(),
+    description: String(body.description || ""),
+    price: Number(body.price) || 0,
+    old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price),
+    image: String(body.image || ""),
+    images: Array.isArray(body.images) ? body.images : [],
+    sizes: Array.isArray(body.sizes) ? body.sizes : [],
+    colors: Array.isArray(body.colors) ? body.colors : [],
+    rating: Number(body.rating) || 0,
+    reviews: Number(body.reviews) || 0,
+    stock: Math.max(0, Number(body.stock) || 0),
+    featured: Boolean(body.featured),
+    active: body.active !== false,
+    sort_order: Number(body.sort_order) || 0,
+    product_code: /^\d{6}$/.test(String(body.product_code || "")) ? String(body.product_code) : "",
+    updated_at: new Date().toISOString()
+  };
+}
 
 async function generateSixDigitCode(table, column, prefix = "") {
   for (let i = 0; i < 40; i++) {
@@ -138,6 +160,7 @@ app.post("/api/orders", requireTelegramUser, async (req, res) => {
   try {
     const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;
     const sixDigitOrderNumber = /^GULI-\d{6}$/.test(String(order_number || "")) ? String(order_number) : `GULI-${await generateSixDigitCode("orders", "order_number")}`;
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari topilmadi" });
     const normalizedItems = await Promise.all(items.map(async (item) => {
       const raw = item?.product || {};
       let code = raw.product_code || item?.product_code || "";
@@ -149,7 +172,6 @@ app.post("/api/orders", requireTelegramUser, async (req, res) => {
       if (copy.product) copy.product = { ...copy.product, product_code: code || null, name: code ? `${copy.product.name || "Mahsulot"} • GULI-${code}` : copy.product.name };
       return copy;
     }));
-    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari topilmadi" });
     if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
     let telegram_phone = null;
     const { data: userRow } = await supabase.from("telegram_users").select("telegram_phone").eq("telegram_id", req.telegramUser.id).maybeSingle();
@@ -247,6 +269,5 @@ app.post("/api/admin/promos", requireAdmin, async (req, res) => { try { const pa
 app.put("/api/admin/promos/:id", requireAdmin, async (req, res) => { try { const payload = { code: String(req.body?.code || "").trim().toUpperCase(), discount_type: req.body?.discount_type === "fixed" ? "fixed" : "percent", discount_value: Number(req.body?.discount_value) || 0, min_order_amount: Number(req.body?.min_order_amount) || 0, usage_limit: req.body?.usage_limit == null || req.body.usage_limit === "" ? null : Number(req.body.usage_limit), active: req.body?.active !== false }; if (!payload.code || payload.discount_value <= 0 || (payload.discount_type === "percent" && payload.discount_value > 100)) return res.status(400).json({ success: false, message: "Promo ma’lumotlari noto‘g‘ri" }); const { data, error } = await supabase.from("promo_codes").update(payload).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodni yangilashda xatolik" }); } });
 app.delete("/api/admin/promos/:id", requireAdmin, async (req, res) => { try { const { error } = await supabase.from("promo_codes").delete().eq("id", req.params.id); if (error) throw error; res.json({ success: true }); } catch (error) { res.status(500).json({ success: false, message: "Promo kodni o‘chirishda xatolik" }); } });
 
-const statuses = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => { console.log(`GULI API running on port ${PORT}`); setupTelegramWebhook(); });
