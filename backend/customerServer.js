@@ -2,9 +2,10 @@ const fs = require("fs");
 const path = require("path");
 
 const indexPath = path.join(__dirname, "index.js");
-const patchPath = path.join(__dirname, "customerIdentityPatch.js");
+const identityPatchPath = path.join(__dirname, "customerIdentityPatch.js");
+const reviewPatchPath = path.join(__dirname, "reviewPatch.js");
 let source = fs.readFileSync(indexPath, "utf8");
-const patch = fs.readFileSync(patchPath, "utf8");
+const patch = fs.readFileSync(identityPatchPath, "utf8") + "\n" + fs.readFileSync(reviewPatchPath, "utf8");
 
 source = source.replace(
   'const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;',
@@ -28,4 +29,4 @@ if (!source.includes(marker)) throw new Error("customerServer: backend/index.js 
 source = source.replace(marker, `\n${patch}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
-runner(require, module, module.exports, indexPath, __dirname);
+runner(require, module, module.exports, indexPath, __filename, __dirname);
