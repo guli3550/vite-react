@@ -8,7 +8,7 @@ declare global {
   }
 }
 
-type Product = { id: number; name: string; category: string; price: number; oldPrice?: number; image: string; images?: string[]; description: string; sizes: string[]; colors: string[]; rating: number; reviews: number; stock: number; featured?: boolean; discount?: number };
+type Product = { id: number; product_code?: string; name: string; category: string; price: number; oldPrice?: number; image: string; images?: string[]; description: string; sizes: string[]; colors: string[]; rating: number; reviews: number; stock: number; featured?: boolean; discount?: number };
 type CartItem = { product: Product; size: string; color: string; quantity: number };
 type Address = { latitude: number; longitude: number; region?: string; district?: string; street?: string; house?: string; apartment?: string; landmark?: string };
 type Order = { id: string; items: CartItem[]; subtotal: number; delivery: number; discount: number; total: number; address?: Address; phone: string; payment: string; status: string; createdAt: string };
@@ -18,8 +18,8 @@ const CATEGORIES = [{ name: "Barchasi", icon: "✦" }, { name: "Byustgalter", ic
 const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 const tg = () => window.Telegram?.WebApp;
 const formatPrice = (n: number) => `${Math.round(n).toLocaleString("uz-UZ")} so'm`;
-const formatDate = (v: string) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? "Sana noma'lum" : d.toLocaleDateString("uz-UZ"); };
-const orderNumber = () => `GULI-${Math.floor(1000000 + Math.random() * 9000000)}`;
+const formatDate = (v: string) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? "Sana noma'lum" : d.toLocaleString("uz-UZ", { dateStyle: "medium", timeStyle: "short" }); };
+const orderNumber = () => `GULI-${Math.floor(100000 + Math.random() * 900000)}`;
 const readStorage = <T,>(key: string, fallback: T): T => { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; } };
 const placeholder = (name = "GULI") => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0,18)}</text></svg>`)}`;
 const imageUrl = (p: Product, index = 0) => { const list = [p.image, ...(p.images || [])].filter(Boolean); const url = list[index] || list[0] || ""; if (!url) return placeholder(p.name); try { const u = new URL(url); if (u.hostname.includes("images.unsplash.com")) { u.searchParams.set("auto", "format"); u.searchParams.set("fit", "crop"); u.searchParams.set("w", "900"); u.searchParams.set("q", "78"); } return u.toString(); } catch { return url; } };

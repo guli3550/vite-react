@@ -65,7 +65,22 @@ function requireTelegramUser(req, res, next) {
   req.telegramUser = user;
   next();
 }
-function productPayload(body) { return { name: String(body.name || "").trim(), category: String(body.category || "Boshqa").trim(), description: String(body.description || ""), price: Number(body.price) || 0, old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price), image: String(body.image || ""), images: Array.isArray(body.images) ? body.images : [], sizes: Array.isArray(body.sizes) ? body.sizes : [], colors: Array.isArray(body.colors) ? body.colors : [], rating: Number(body.rating) || 0, reviews: Number(body.reviews) || 0, stock: Math.max(0, Number(body.stock) || 0), featured: Boolean(body.featured), active: body.active !== false, sort_order: Number(body.sort_order) || 0, updated_at: new Date().toISOString() }; }
+function productPayload(body) { return { name: String(body.name || "").trim(), category: String(body.category || "Boshqa").trim(), description: String(body.description || ""), price: Number(body.price) || 0, old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price), image: String(body.image || ""), images: Array.isArray(body.images) ? body.images : [], sizes: Array.isArray(body.sizes) ? body.sizes : [], colors: Array.isArray(body.colors) ? body.colors : [], rating: Number(body.rating) || 0, reviews: Number(body.reviews) || 0, stock: Math.max(0, Number(body.stock) || 0), featured: Boolean(body.featured), active: body.active !== false, sort_order: Number(body.sort_order) || 0, product_code: /^\d{6}$/.test(String(body.product_code || "")) ? String(body.product_code) : "", updated_at: new Date().toISOString() }; }
+
+
+async function generateSixDigitCode(table, column, prefix = "") {
+  for (let i = 0; i < 40; i++) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const { data, error } = await supabase.from(table).select(column).eq(column, prefix + code).maybeSingle();
+    if (error && !/column|schema cache/i.test(error.message || "")) throw error;
+    if (!data) return prefix + code;
+  }
+  throw new Error("6 xonali kod yaratilmadi");
+}
+async function ensureProductCode(payload) {
+  if (/^\d{6}$/.test(String(payload.product_code || ""))) return payload.product_code;
+  return generateSixDigitCode("products", "product_code");
+}
 
 app.get("/", (req, res) => res.json({ success: true, message: "GULI Premium API ishlayapti 🌷" }));
 app.get("/api/health", (req, res) => res.json({ success: true, status: "online" }));
@@ -122,12 +137,24 @@ app.post("/api/save-address", requireTelegramUser, async (req, res) => {
 app.post("/api/orders", requireTelegramUser, async (req, res) => {
   try {
     const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;
+    const sixDigitOrderNumber = /^GULI-\d{6}$/.test(String(order_number || "")) ? String(order_number) : `GULI-${await generateSixDigitCode("orders", "order_number")}`;
+    const normalizedItems = await Promise.all(items.map(async (item) => {
+      const raw = item?.product || {};
+      let code = raw.product_code || item?.product_code || "";
+      if (!/^\d{6}$/.test(String(code)) && raw.id) {
+        const found = await supabase.from("products").select("product_code").eq("id", raw.id).maybeSingle();
+        code = found.data?.product_code || "";
+      }
+      const copy = { ...item, product_code: code || null };
+      if (copy.product) copy.product = { ...copy.product, product_code: code || null, name: code ? `${copy.product.name || "Mahsulot"} • GULI-${code}` : copy.product.name };
+      return copy;
+    }));
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari topilmadi" });
     if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
     let telegram_phone = null;
     const { data: userRow } = await supabase.from("telegram_users").select("telegram_phone").eq("telegram_id", req.telegramUser.id).maybeSingle();
     telegram_phone = userRow?.telegram_phone || null;
-    const order = { order_number: order_number || null, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };
+    const order = { order_number: sixDigitOrderNumber, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items: normalizedItems, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("orders").insert([order]).select().single();
     if (error) { if (error.code === "23505" && order_number) { const existing = await supabase.from("orders").select("*").eq("order_number", order_number).eq("telegram_id", req.telegramUser.id).maybeSingle(); if (existing.data) return res.status(200).json({ success: true, message: "Buyurtma allaqachon saqlangan", data: existing.data, duplicate: true }); } console.error(error); return res.status(500).json({ success: false, message: "Buyurtmani saqlashda xatolik", error: error.message }); }
     res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
@@ -204,8 +231,10 @@ app.get("/api/admin/dashboard", requireAdmin, async (req, res) => {
 });
 
 app.get("/api/admin/products", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("products").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Admin mahsulotlarini yuklashda xatolik" }); } });
-app.post("/api/admin/products", requireAdmin, async (req, res) => { try { const payload = productPayload(req.body); if (!payload.name || payload.price < 0) return res.status(400).json({ success: false, message: "Mahsulot nomi va narxi noto‘g‘ri" }); const { data, error } = await supabase.from("products").insert([payload]).select("*").single(); if (error) throw error; res.status(201).json({ success: true, data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Mahsulot yaratishda xatolik" }); } });
-app.put("/api/admin/products/:id", requireAdmin, async (req, res) => { try { const payload = productPayload(req.body); const { data, error } = await supabase.from("products").update(payload).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Mahsulotni yangilashda xatolik" }); } });
+app.post("/api/admin/products", requireAdmin, async (req, res) => { try { const payload = productPayload(req.body);
+    payload.product_code = await ensureProductCode(payload); if (!payload.name || payload.price < 0) return res.status(400).json({ success: false, message: "Mahsulot nomi va narxi noto‘g‘ri" }); const { data, error } = await supabase.from("products").insert([payload]).select("*").single(); if (error) throw error; res.status(201).json({ success: true, data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Mahsulot yaratishda xatolik" }); } });
+app.put("/api/admin/products/:id", requireAdmin, async (req, res) => { try { const payload = productPayload(req.body);
+    payload.product_code = await ensureProductCode(payload); const { data, error } = await supabase.from("products").update(payload).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Mahsulotni yangilashda xatolik" }); } });
 app.delete("/api/admin/products/:id", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("products").update({ active: false, updated_at: new Date().toISOString() }).eq("id", req.params.id).select("*").single(); if (error) throw error; res.json({ success: true, data }); } catch (error) { res.status(500).json({ success: false, message: "Mahsulotni yashirishda xatolik" }); } });
 
 app.get("/api/admin/orders", requireAdmin, async (req, res) => { try { const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(Math.min(Number(req.query.limit) || 200, 500)); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { res.status(500).json({ success: false, message: "Admin buyurtmalarini yuklashda xatolik" }); } });
