@@ -20,7 +20,7 @@ const toArray = (value) => {
 
 const toProduct = (row) => ({
   id: row.id,
-  productCode: /^\d{6}$/.test(String(row.product_code || "")) ? String(row.product_code) : undefined,
+  product_code: /^\d{6}$/.test(String(row.product_code || "")) ? String(row.product_code) : undefined,
   name: row.name,
   category: row.category,
   price: Number(row.price || 0),
