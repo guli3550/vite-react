@@ -1,7 +1,8 @@
 -- GULI LINGERIE: robust legacy catalog repair.
--- Normalizes images/sizes/colors to JSONB and includes product/order code fields.
+-- Normalizes legacy products and includes the product/order code system.
 -- Safe to run again after a failed attempt.
 
+alter table if exists public.products add column if not exists title text;
 alter table if exists public.products add column if not exists name text;
 alter table if exists public.products add column if not exists category text;
 alter table if exists public.products add column if not exists description text default '';
@@ -17,6 +18,11 @@ alter table if exists public.products add column if not exists sort_order intege
 alter table if exists public.products add column if not exists created_at timestamptz default now();
 alter table if exists public.products add column if not exists updated_at timestamptz default now();
 alter table if exists public.products add column if not exists product_code text;
+
+-- Keep the legacy required title column synchronized with the admin name.
+update public.products
+set title = coalesce(nullif(trim(title), ''), nullif(trim(name), ''))
+where title is null or trim(title) = '';
 
 -- Normalize legacy JSON-like columns to JSONB.
 do $$
@@ -54,6 +60,9 @@ begin
   end if;
 end $$;
 
+update public.products set title = coalesce(nullif(trim(title), ''), nullif(trim(name), ''), '');
+update public.products set name = coalesce(nullif(trim(name), ''), nullif(trim(title), ''), '');
+update public.products set category = coalesce(nullif(trim(category), ''), 'Boshqa');
 update public.products set description = '' where description is null;
 update public.products set price = 0 where price is null;
 update public.products set image = '' where image is null;
