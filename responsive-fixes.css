@@ -1,85 +1,76 @@
-/* GULI checkout mobile fixes — loaded after App.css */
-.checkoutPage,
-.checkoutCard,
-.checkoutCard * {
-  box-sizing: border-box;
+/* GULI responsive + marketplace polish */
+*{box-sizing:border-box}
+html,body,#root{width:100%;min-width:320px;overflow-x:hidden}
+body{background:#fff9fa}
+
+.checkoutPage,.checkoutCard,.checkoutCard *{box-sizing:border-box}
+.checkoutPage{width:100%;max-width:100%;overflow-x:hidden}.checkoutCard{width:100%;min-width:0;overflow:hidden}
+.checkoutCard .input,.checkoutCard .phoneAutoButton,.checkoutCard .locationButton{max-width:100%;min-width:0}
+.checkoutCard .phoneAutoButton + .phoneAutoButton,.checkoutCard .phoneAutoButton ~ .phoneAutoButton{display:none!important}
+.checkoutCard .twoInputs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;width:100%;min-width:0}
+.checkoutCard .twoInputs>.input,.checkoutCard>.input.full{width:100%;min-width:0;max-width:100%}
+.checkoutCard .twoInputs>.input{overflow:hidden;text-overflow:ellipsis}.checkoutCard .addressFieldsLabel{margin:14px 0 7px}
+.checkoutCard .mapCaption{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.checkoutCard input{min-width:0}
+
+/* Product cards: stable geometry on 320–430px phones. */
+.productGrid{align-items:start!important;grid-auto-rows:auto!important}
+.productCard{min-width:0;align-self:start!important;display:flex;flex-direction:column;height:auto!important;overflow:hidden!important}
+.productImageWrap{width:100%;aspect-ratio:0.82!important;min-height:0;flex:none!important;background:#f5e9eb;overflow:hidden!important}
+.productImageWrap>img{width:100%!important;height:100%!important;min-height:0!important;object-fit:cover!important;display:block!important}
+.productInfo{min-width:0;min-height:146px;display:flex;flex-direction:column;padding:11px!important}
+.productInfo h3{min-height:34px!important;max-height:38px;overflow:hidden;margin:5px 0!important;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.productInfo>span,.categoryLabel{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cardBottom{margin-top:auto!important;padding-top:7px;min-height:38px}
+.cardBottom strong{white-space:nowrap}.cardBottom del{white-space:nowrap}
+.heartButton,.detailHeart{z-index:5!important}
+.discountBadge{z-index:4!important}
+
+/* Search/header: avoid clipped placeholders and keep controls thumb-friendly. */
+.pageHeader h1{letter-spacing:-.5px}.searchBox{min-height:52px!important;width:100%;overflow:hidden}
+.searchBox input{min-width:0!important;width:0;white-space:nowrap;text-overflow:ellipsis}
+.categoryTabs,.categoryScroll{padding-right:14px}
+.tab{min-height:40px;display:inline-flex;align-items:center}
+
+/* Catalog failure state becomes useful rather than a dead end. */
+.empty{min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.empty h3{font-size:20px}.empty p{max-width:310px}.guli-catalog-retry{margin:12px auto 0;display:block;width:min(290px,100%);padding:13px 16px;border:1px solid #dfacb8;border-radius:14px;background:#fff;color:#b74760;font-weight:800;font-size:11px}
+
+/* Home hero: less empty height on mobile, stronger retail hierarchy. */
+.hero,.heroOverlay{min-height:330px!important}.hero{margin:0 10px;border-radius:24px}.heroOverlay{padding:28px 22px!important}.heroOverlay h1{font-size:32px!important;max-width:300px}
+.section{padding-left:12px!important;padding-right:12px!important}.sectionTitle h2{font-size:22px}
+.categoryCard{min-width:104px;min-height:124px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+
+/* Product detail/gallery. */
+.detailImageWrap{margin:0 10px!important;border-radius:24px!important;aspect-ratio:.88!important}.detailContent{padding:18px 14px!important}.detailContent h1{font-size:27px!important;letter-spacing:-.4px}
+.guli-gallery-shell{margin-left:10px!important;margin-right:10px!important}.guli-mini-gallery{padding-left:0!important;padding-right:0!important}.guli-mini-gallery button{flex-basis:62px!important;width:62px!important;height:76px!important}
+
+/* Orders: readable metadata and compact status. */
+.orderCard{min-width:0;overflow:hidden}.orderHead,.orderFooter{gap:10px}.orderHead>*{min-width:0}.orderHead b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Bottom navigation: respect Android/Telegram safe area. */
+.bottomNav{height:calc(72px + env(safe-area-inset-bottom))!important;padding-bottom:max(8px,env(safe-area-inset-bottom))!important}
+.app{padding-bottom:calc(86px + env(safe-area-inset-bottom))!important}
+
+/* Review sheet is genuinely mobile-first. */
+.guli-review-sheet{padding-bottom:max(24px,env(safe-area-inset-bottom))!important}.guli-review-card{min-width:0}
+
+@media(min-width:700px){
+  .page,.section{max-width:1120px;margin-left:auto;margin-right:auto}
+  .productGrid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:16px!important}
+  .hero{max-width:1120px;margin-left:auto;margin-right:auto}
+  .productInfo{min-height:152px}
 }
-
-.checkoutPage {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
+@media(min-width:1100px){.productGrid{grid-template-columns:repeat(4,minmax(0,1fr))!important}.hero,.page,.section{max-width:1180px}}
+@media(max-width:430px){
+  .topbar{height:68px!important;padding-left:12px!important;padding-right:12px!important}
+  .brandIcon{width:40px!important;height:40px!important}.headerActions{gap:7px!important}.iconButton{width:43px!important;height:43px!important}
+  .page{padding:18px 12px!important}.pageHeader{margin-bottom:16px!important}.pageHeader h1{font-size:28px!important}
+  .productGrid{gap:10px!important}.productInfo{padding:10px!important;min-height:142px}.productInfo h3{font-size:13px!important}.cardBottom strong{font-size:12px!important}
+  .deliveryBanner{margin-left:12px!important;margin-right:12px!important}
 }
-
-.checkoutCard {
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
+@media(max-width:380px){
+  .checkoutCard{padding:14px;border-radius:18px}.checkoutCard .twoInputs{gap:8px}.checkoutCard .input{padding:12px 10px;font-size:13px}
+  .productGrid{gap:8px!important}.productImageWrap{aspect-ratio:.78!important}.productInfo{padding:9px!important;min-height:136px}.productInfo h3{font-size:12px!important;min-height:31px!important}.cardBottom strong{font-size:11px!important}
+  .categoryCard{min-width:96px;min-height:112px}
 }
-
-.checkoutCard .input,
-.checkoutCard .phoneAutoButton,
-.checkoutCard .locationButton {
-  max-width: 100%;
-  min-width: 0;
-}
-
-/* Never allow two Telegram phone actions to appear together. */
-.checkoutCard .phoneAutoButton + .phoneAutoButton,
-.checkoutCard .phoneAutoButton ~ .phoneAutoButton {
-  display: none !important;
-}
-
-/* Keep both address columns inside the card on small screens. */
-.checkoutCard .twoInputs {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-}
-
-.checkoutCard .twoInputs > .input,
-.checkoutCard > .input.full {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.checkoutCard .twoInputs > .input {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Cleaner address section spacing. */
-.checkoutCard .addressFieldsLabel {
-  margin: 14px 0 7px;
-}
-
-.checkoutCard .mapCaption {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Prevent long entered values from pushing the layout sideways. */
-.checkoutCard input {
-  min-width: 0;
-}
-
-@media (max-width: 380px) {
-  .checkoutCard {
-    padding: 14px;
-    border-radius: 18px;
-  }
-
-  .checkoutCard .twoInputs {
-    gap: 8px;
-  }
-
-  .checkoutCard .input {
-    padding: 12px 10px;
-    font-size: 13px;
-  }
-}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
