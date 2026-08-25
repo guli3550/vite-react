@@ -90,7 +90,39 @@ app.get("/api/reverse-geocode", async (req, res) => { try { const lat = Number(r
 app.get("/api/products/:id", async (req, res) => { try { const data = await getProduct(req.params.id); if (!data) return res.status(404).json({ success: false, message: "Mahsulot topilmadi" }); res.json({ success: true, data }); } catch (error) { console.error("Product detail API error:", error); res.status(500).json({ success: false, message: "Mahsulotni yuklashda xatolik" }); } });
 app.post("/api/telegram/webhook", async (req, res) => { try { const contact = req.body?.message?.contact; if (contact?.user_id && contact?.phone_number) { const telegramUser = req.body.message.from || {}; const { error } = await supabase.from("telegram_users").upsert({ telegram_id: contact.user_id, username: telegramUser.username || null, first_name: telegramUser.first_name || null, last_name: telegramUser.last_name || null, telegram_phone: contact.phone_number, updated_at: new Date().toISOString() }, { onConflict: "telegram_id" }); if (error) console.error("Telegram kontaktini saqlash xatosi:", error); } res.sendStatus(200); } catch (error) { console.error("Telegram webhook xatosi:", error); res.sendStatus(200); } });
 app.post("/api/save-address", requireTelegramUser, async (req, res) => { try { const { username, phone, latitude, longitude, region, district, street, house, apartment, landmark } = req.body; if (!Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude))) return res.status(400).json({ success: false, message: "Lokatsiya koordinatalari topilmadi" }); const row = { telegram_id: req.telegramUser.id, username: username || req.telegramUser.username || null, phone: phone || null, latitude: Number(latitude), longitude: Number(longitude), region: region || null, district: district || null, street: street || null, house: house || null, apartment: apartment || null, landmark: landmark || null }; const { data, error } = await supabase.from("saved_addresses").insert([row]).select().single(); if (error) throw error; res.json({ success: true, message: "Manzil muvaffaqiyatli saqlandi", data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Manzilni saqlashda xatolik" }); } });
-app.post("/api/orders", requireTelegramUser, async (req, res) => { try { const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body; const sixDigitOrderNumber = /^GULI-\d{6}$/.test(String(order_number || "")) ? String(order_number) : `GULI-${await generateSixDigitCode("orders", "order_number")}`; if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari topilmadi" }); const normalizedItems = await Promise.all(items.map(async (item) => { const raw = item?.product || {}; let code = raw.product_code || item?.product_code || ""; if (!/^\d{6}$/.test(String(code)) && raw.id) { const found = await supabase.from("products").select("product_code").eq("id", raw.id).maybeSingle(); code = found.data?.product_code || ""; } const copy = { ...item, product_code: code || null }; if (copy.product) copy.product = { ...copy.product, product_code: code || null, name: code ? `${copy.product.name || "Mahsulot"} • GULI-${code}` : copy.product.name }; return copy; })); if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" }); let telegram_phone = null; const { data: userRow } = await supabase.from("telegram_users").select("telegram_phone").eq("telegram_id", req.telegramUser.id).maybeSingle(); telegram_phone = userRow?.telegram_phone || null; const order = { order_number: sixDigitOrderNumber, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items: normalizedItems, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() }; const { data, error } = await supabase.from("orders").insert([order]).select().single(); if (error) { if (error.code === "23505" && order_number) { const existing = await supabase.from("orders").select("*").eq("order_number", order_number).eq("telegram_id", req.telegramUser.id).maybeSingle(); if (existing.data) return res.status(200).json({ success: true, message: "Buyurtma allaqachon saqlangan", data: existing.data, duplicate: true }); } console.error(error); return res.status(500).json({ success: false, message: "Buyurtmani saqlashda xatolik", error: error.message }); } res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data }); } catch (error) { console.error(error); res.status(500).json({ success: false, message: "Server xatosi" }); } });
+
+app.post("/api/orders", requireTelegramUser, async (req, res) => {
+  try {
+    const { order_number, phone, items, address, payment, status, created_at, promo_code } = req.body || {};
+    if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
+    if (!Array.isArray(items) || items.length === 0 || items.length > 100) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari noto‘g‘ri" });
+    const safeOrderNumber = /^GULI-\d{6}$/.test(String(order_number || "")) ? String(order_number) : null;
+    const orderInput = {
+      order_number: safeOrderNumber,
+      username: req.telegramUser.username || null,
+      first_name: req.telegramUser.first_name || null,
+      phone: phone.trim(),
+      items,
+      address: address || null,
+      payment: payment || "cash",
+      status: ADMIN_STATUSES.includes(String(status)) ? String(status) : "Qabul qilindi",
+      created_at: created_at || new Date().toISOString(),
+      promo_code: promo_code ? String(promo_code).trim().toUpperCase() : ""
+    };
+    const { data, error } = await supabase.rpc("create_secure_order", { p_order: orderInput, p_telegram_id: req.telegramUser.id });
+    if (error) {
+      console.error("Secure checkout RPC error:", error);
+      const missingRpc = /create_secure_order|function .* does not exist|schema cache/i.test(error.message || "");
+      if (missingRpc) return res.status(503).json({ success: false, message: "Xavfsiz checkout bazada hali o‘rnatilmagan. Supabase repair/commerce SQL'ni bir marta ishga tushiring." });
+      const statusCode = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|Telegram|miqdori/i.test(error.message || "") ? 400 : 500;
+      return res.status(statusCode).json({ success: false, message: error.message || "Buyurtmani saqlashda xatolik" });
+    }
+    res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
+  } catch (error) {
+    console.error("Secure checkout error:", error);
+    res.status(500).json({ success: false, message: "Server xatosi" });
+  }
+});
 
 app.post("/api/promo/validate", async (req, res) => {
   try {
