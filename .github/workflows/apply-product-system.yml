@@ -1,0 +1,198 @@
+name: Apply GULI product system
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-product-system.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[product-system-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch product codes, selectors and order display
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # ---------- Backend ----------
+          p = Path('backend/index.js')
+          s = p.read_text()
+
+          old_payload = re.search(r'function productPayload\(body\) \{.*?\n\napp\.get\("/"', s, re.S)
+          if not old_payload:
+              raise SystemExit('productPayload block not found')
+          new_payload = r'''function productPayload(body) {
+            return {
+              name: String(body.name || "").trim(),
+              category: String(body.category || "Boshqa").trim(),
+              description: String(body.description || ""),
+              price: Number(body.price) || 0,
+              old_price: body.old_price == null || body.old_price === "" ? null : Number(body.old_price),
+              image: String(body.image || ""),
+              images: Array.isArray(body.images) ? body.images : [],
+              sizes: Array.isArray(body.sizes) ? body.sizes : [],
+              colors: Array.isArray(body.colors) ? body.colors : [],
+              rating: Number(body.rating) || 0,
+              reviews: Number(body.reviews) || 0,
+              stock: Math.max(0, Number(body.stock) || 0),
+              featured: Boolean(body.featured),
+              active: body.active !== false,
+              sort_order: Number(body.sort_order) || 0,
+              product_code: /^\d{6}$/.test(String(body.product_code || "")) ? String(body.product_code) : "",
+              updated_at: new Date().toISOString()
+            };
+          }
+
+          async function generateUniqueCode(table, column, prefix = "") {
+            for (let attempt = 0; attempt < 30; attempt++) {
+              const code = String(Math.floor(100000 + Math.random() * 900000));
+              const { data, error } = await supabase.from(table).select(column).eq(column, prefix + code).maybeSingle();
+              if (error && !/column|schema cache/i.test(error.message || "")) throw error;
+              if (!data) return prefix + code;
+            }
+            throw new Error("6 xonali kod generatsiya qilib bo'lmadi");
+          }
+
+          async function ensureProductCode(payload, id = null) {
+            if (payload.product_code && /^\d{6}$/.test(payload.product_code)) return payload.product_code;
+            for (let attempt = 0; attempt < 30; attempt++) {
+              const code = String(Math.floor(100000 + Math.random() * 900000));
+              let q = supabase.from("products").select("id").eq("product_code", code).maybeSingle();
+              const { data, error } = await q;
+              if (error && !/column|schema cache/i.test(error.message || "")) throw error;
+              if (!data) return code;
+            }
+            throw new Error("Mahsulot kodi generatsiya qilinmadi");
+          }
+
+          s = s.replace(old_payload.group(0), new_payload + '\n\napp.get("/"')
+
+          # Add product_code to admin list/insert/update without changing existing routes.
+          post_marker = 'app.post("/api/admin/products", requireAdmin, async (req, res) => {'
+          if post_marker in s and 'ensureProductCode(payload)' not in s:
+              start = s.index(post_marker)
+              end = s.index('\n});', start) + 3
+              block = s[start:end]
+              block = block.replace('const payload = productPayload(req.body);', 'const payload = productPayload(req.body);\n    payload.product_code = await ensureProductCode(payload);')
+              block = block.replace('const payload=productPayload(req.body);', 'const payload=productPayload(req.body);\n    payload.product_code = await ensureProductCode(payload);')
+              s = s[:start] + block + s[end:]
+
+          put_marker = 'app.put("/api/admin/products/:id", requireAdmin, async (req, res) => {'
+          if put_marker in s:
+              start = s.index(put_marker)
+              end = s.index('\n});', start) + 3
+              block = s[start:end]
+              if 'ensureProductCode(payload' not in block:
+                  block = block.replace('const payload = productPayload(req.body);', 'const payload = productPayload(req.body);\n    payload.product_code = await ensureProductCode(payload, req.params.id);')
+                  block = block.replace('const payload=productPayload(req.body);', 'const payload=productPayload(req.body);\n    payload.product_code = await ensureProductCode(payload, req.params.id);')
+                  s = s[:start] + block + s[end:]
+
+          # Generate 6-digit GULI order number and attach product codes to order items.
+          order_marker = 'app.post("/api/orders", requireTelegramUser, async (req, res) => {'
+          if order_marker not in s:
+              raise SystemExit('orders route not found')
+          start = s.index(order_marker)
+          end = s.index('\n});', start) + 3
+          block = s[start:end]
+          if 'const sixDigitOrderNumber' not in block:
+              needle = 'const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;'
+              replacement = needle + '''\n    const sixDigitOrderNumber = /^GULI-\\d{6}$/.test(String(order_number || "")) ? String(order_number) : `GULI-${await generateUniqueCode("orders", "order_number")}`;\n    const normalizedItems = await Promise.all(items.map(async (item) => {\n      const rawProduct = item?.product || {};\n      let productCode = rawProduct.product_code || item?.product_code || "";\n      if (!/^\\d{6}$/.test(String(productCode)) && rawProduct.id) {\n        const found = await supabase.from("products").select("product_code,name").eq("id", rawProduct.id).maybeSingle();\n        productCode = found.data?.product_code || "";\n      }\n      const copy = { ...item };\n      if (copy.product) copy.product = { ...copy.product, product_code: productCode || null, name: productCode ? `${copy.product.name || "Mahsulot"} • GULI-${productCode}` : copy.product.name };\n      copy.product_code = productCode || null;\n      return copy;\n    }));'''
+              if needle not in block:
+                  raise SystemExit('order destructuring marker not found')
+              block = block.replace(needle, replacement)
+              block = block.replace('items, subtotal: Number(subtotal) || 0,', 'items: normalizedItems, subtotal: Number(subtotal) || 0,')
+              block = block.replace('order_number: order_number || null,', 'order_number: sixDigitOrderNumber,')
+              s = s[:start] + block + s[end:]
+
+          p.write_text(s)
+
+          # ---------- Admin ----------
+          p = Path('src/admin/AdminPro.tsx')
+          s = p.read_text()
+          s = s.replace('import { FormEvent, useEffect, useMemo, useState } from "react";', 'import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";')
+          s = s.replace('type Product={id?:number;name:string;', 'type Product={id?:number;product_code?:string;name:string;')
+          s = s.replace('const emptyProduct:Product={name:"",category:"Byustgalter"', 'const emptyProduct:Product={product_code:"",name:"",category:"Byustgalter"')
+          # Fix price/stock/sort numeric fields and auto sort order for new products.
+          s = s.replace('sort_order:Number(product.sort_order||0)};', 'sort_order:Number(product.sort_order||0)||(!product.id?Math.max(0,...products.map(p=>Number(p.sort_order)||0))+1:0)};')
+
+          start = s.index('function ProductModal(')
+          end = s.index('function PromoModal(', start)
+          modal = r'''function ProductModal({value,busy,onClose,onChange,onSave,onUpload}:{value:Product;busy:boolean;onClose:()=>void;onChange:(v:Product)=>void;onSave:(e:FormEvent)=>void;onUpload:(file:File)=>Promise<string>}){
+ const set=(k:keyof Product,v:any)=>onChange({...value,[k]:v});
+ const [uploading,setUploading]=useState(false); const [extraUploading,setExtraUploading]=useState(false);
+ const categories=["Byustgalter","Trusik","Komplektlar","Uy kiyimlari","Sexy lingerie","Boshqalar"];
+ const sizes=["XS","S","M","L","XL","XXL","3XL","75B","75C","80B","80C","85B","85C","90B","90C","Universal"];
+ const colors=[
+  ["Qora","#111111"],["Oq","#ffffff"],["Qizil","#d91e36"],["Bordo","#800020"],["Pushti","#f4a6b8"],["Och pushti","#ffd6e0"],["Bej","#e8c9a8"],["Krem","#f5ead2"],["Jigarrang","#7a4b2a"],["To‘q ko‘k","#17365d"],["Ko‘k","#3b82c4"],["Yashil","#2f7d4a"],["Zaytun","#71823b"],["Sariq","#f1c40f"],["To‘q sariq","#e67e22"],["Binafsha","#7e57c2"],["Kulrang","#808080"]
+ ] as const;
+ const parseColor=(v:string)=>{const [name,hex]=String(v||"").split("|");return {name:name||v,hex:hex||"#ddd"};};
+ const selectedColors=(value.colors||[]).map(parseColor);
+ const hasColor=(hex:string)=>selectedColors.some(c=>c.hex.toLowerCase()===hex.toLowerCase());
+ const toggleColor=(name:string,hex:string)=>{const next=hasColor(hex)?(value.colors||[]).filter(v=>parseColor(v).hex.toLowerCase()!==hex.toLowerCase()):[...(value.colors||[]),`${name}|${hex}`];set("colors",next)};
+ const toggleSize=(size:string)=>{const current=value.sizes||[];set("sizes",current.includes(size)?current.filter(v=>v!==size):[...current,size])};
+ const chooseMain=async(e:ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setUploading(true);try{set("image",await onUpload(file))}finally{setUploading(false)}};
+ const chooseExtras=async(e:ChangeEvent<HTMLInputElement>)=>{const files=Array.from(e.target.files||[]);e.target.value="";if(!files.length)return;setExtraUploading(true);try{const urls:string[]=[];for(const file of files)urls.push(await onUpload(file));set("images",[...(value.images||[]),...urls])}finally{setExtraUploading(false)}};
+ const removeExtra=(i:number)=>set("images",(value.images||[]).filter((_,n)=>n!==i));
+ return <Modal title={value.id?"Mahsulotni tahrirlash":"Yangi mahsulot"} eyebrow="CATALOG" onClose={onClose}>
+  <form onSubmit={onSave}>
+   <section className="imageUploadSection"><div className="imageUploadTitle"><div><span className="proEyebrow">MEDIA</span><h3>Mahsulot rasmlari</h3></div><span className="imageHint">URL kerak emas</span></div>
+    <div className="mainImagePicker">{value.image?<div className="mainImagePreview"><img src={value.image} alt="Asosiy rasm"/><button type="button" onClick={()=>set("image","")}>×</button></div>:<div className="mainImageEmpty"><span>📷</span><b>{uploading?"Yuklanmoqda…":"Asosiy rasm"}</b><small>Telefon galereyasidan tanlang</small></div>}<label className="uploadButton"><input type="file" accept="image/*" onChange={chooseMain} disabled={uploading||busy}/>{value.image?"↻ Rasmni almashtirish":"＋ Rasm tanlash"}</label></div>
+    <div className="extraImageHead"><b>Qo‘shimcha rasmlar</b><label className="miniUpload"><input type="file" accept="image/*" multiple onChange={chooseExtras} disabled={extraUploading||busy}/>{extraUploading?"Yuklanmoqda…":"＋ Bir nechta rasm"}</label></div>{(value.images||[]).length>0&&<div className="extraImages">{(value.images||[]).map((url,i)=><div className="extraImage" key={`${url}-${i}`}><img src={url} alt=""/><button type="button" onClick={()=>removeExtra(i)}>×</button></div>)}</div>}
+   </section>
+   <div className="formGrid"><label>Mahsulot kodi<input value={value.product_code||""} placeholder="Avtomatik 6 xonali kod" readOnly/></label><label>Kategoriya<select value={value.category} onChange={e=>set("category",e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></label></div>
+   <div className="formGrid"><label>Nom<input value={value.name} onChange={e=>set("name",e.target.value)} required/></label><label>Narx<input type="number" inputMode="numeric" min="0" value={value.price===0?"":String(value.price)} onFocus={e=>{if(value.price===0)e.currentTarget.select()}} onChange={e=>set("price",e.target.value===""?0:Number(e.target.value))} required/></label><label>Eski narx<input type="number" inputMode="numeric" min="0" value={value.old_price??""} onChange={e=>set("old_price",e.target.value?Number(e.target.value):null)}/></label><label>Ombor (dona)<input type="number" inputMode="numeric" min="0" value={value.stock===0?"":String(value.stock)} onFocus={e=>{if(value.stock===0)e.currentTarget.select()}} onChange={e=>set("stock",e.target.value===""?0:Number(e.target.value))}/></label><label>Tartib<input type="number" inputMode="numeric" min="1" value={value.sort_order||""} onChange={e=>set("sort_order",e.target.value?Number(e.target.value):0)}/><small className="fieldHint">1 = eng yuqorida. Yangi mahsulot avtomatik keyingi raqamni oladi.</small></label></div>
+   <label>O‘lchamlar<div className="choiceChips">{sizes.map(size=><button type="button" key={size} className={(value.sizes||[]).includes(size)?"choiceChip selected":"choiceChip"} onClick={()=>toggleSize(size)}>{size}</button>)}</div></label>
+   <label>Ranglar<div className="colorPalette">{colors.map(([name,hex])=><button type="button" key={hex} className={hasColor(hex)?"colorSwatch selected":"colorSwatch"} onClick={()=>toggleColor(name,hex)} title={name}><span style={{background:hex}}/>{name}</button>)}</div><div className="selectedColorList">{selectedColors.map(c=><span key={c.hex}><i style={{background:c.hex}}/>{c.name}<b>{c.hex}</b></span>)}</div></label>
+   <label>Tavsif<textarea rows={5} value={value.description} onChange={e=>set("description",e.target.value)}/></label>
+   <div className="checkRow"><label><input type="checkbox" checked={value.featured} onChange={e=>set("featured",e.target.checked)}/> Tanlangan</label><label><input type="checkbox" checked={value.active!==false} onChange={e=>set("active",e.target.checked)}/> Katalogda faol</label></div>
+   <div className="modalActions"><button type="button" onClick={onClose}>Bekor qilish</button><button className="proPrimary" disabled={busy||uploading||extraUploading}>{busy?"Saqlanmoqda…":"Saqlash"}</button></div>
+  </form>
+ </Modal>
+}
+'''
+          s = s[:start] + modal + s[end:]
+          p.write_text(s)
+
+          # ---------- Storefront ----------
+          p = Path('src/App.tsx')
+          s = p.read_text()
+          s = s.replace('type Product = { id: number; name: string;', 'type Product = { id: number; product_code?: string; name: string;')
+          s = s.replace('const CATEGORIES = [{ name: "Barchasi", icon: "✦" },', 'const CATEGORIES = [{ name: "Barchasi", icon: "✦" },')
+          s = s.replace('const orderNumber = () => `GULI-${Math.floor(1000000 + Math.random() * 9000000)}`;', 'const orderNumber = () => `GULI-${Math.floor(100000 + Math.random() * 900000)}`;')
+          s = s.replace('const formatDate = (v: string) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? "Sana noma\'lum" : d.toLocaleDateString("uz-UZ"); };', 'const formatDate = (v: string) => { const d = new Date(v); return Number.isNaN(d.getTime()) ? "Sana noma\'lum" : d.toLocaleString("uz-UZ", { dateStyle: "medium", timeStyle: "short" }); };')
+          # Make old/local orders use the same six-digit visual format.
+          s = s.replace('String(row.order_number || row.id || orderNumber()).replace(/^GULI-\\d{13}$/, orderNumber())', 'String(row.order_number || row.id || orderNumber())')
+          p.write_text(s)
+
+          # ---------- CSS additions ----------
+          p = Path('src/admin/AdminPro.css')
+          s = p.read_text()
+          css = r'''
+.fieldHint{display:block;color:var(--muted);font-size:10px;font-weight:500;margin-top:5px;line-height:1.35}.choiceChips{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px}.choiceChip{border:1px solid #ead9de;background:#fff;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:700;color:#5f4a52;cursor:pointer}.choiceChip.selected{background:#f5e1e6;border-color:#bd637b;color:#9a3e5b}.colorPalette{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}.colorSwatch{display:inline-flex;align-items:center;gap:6px;border:1px solid #ead9de;background:#fff;border-radius:10px;padding:7px 9px;font-size:10px;font-weight:700;color:#5f4a52;cursor:pointer}.colorSwatch span{width:17px;height:17px;border-radius:50%;border:1px solid #d9d0d3;box-shadow:inset 0 0 0 2px rgba(255,255,255,.5)}.colorSwatch.selected{border-color:#bd637b;background:#f8e9ed;color:#9a3e5b}.selectedColorList{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.selectedColorList span{display:inline-flex;align-items:center;gap:5px;background:#f7eef1;border-radius:999px;padding:5px 8px;font-size:10px}.selectedColorList i{width:14px;height:14px;border-radius:50%;border:1px solid #d2c5c9}.selectedColorList b{font-weight:600;color:#8b737b}
+'''
+          if '.choiceChips{' not in s: p.write_text(s + css)
+          PY
+
+      - name: Verify build
+        run: |
+          node --check backend/index.js
+          npm install
+          npm run build
+
+      - name: Commit changes and clean up
+        run: |
+          git config user.name 'guli3550-bot'
+          git config user.email 'guli3550-bot@users.noreply.github.com'
+          rm -f .github/workflows/apply-product-system.yml
+          git add backend/index.js src/admin/AdminPro.tsx src/admin/AdminPro.css src/App.tsx supabase/product_order_codes.sql .github/workflows/apply-product-system.yml
+          git commit -m 'Add product codes, selectors and six digit orders [product-system-applied]'
+          git push
