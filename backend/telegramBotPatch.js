@@ -1,7 +1,8 @@
 // GULI Telegram bot UX + live order status notifications.
-// Injected into the customer server after the main routes are registered.
+// The bot's Mini App URL is intentionally pinned to the production alias so a Vercel
+// deployment URL change can never leave Telegram pointing at an old preview build.
 (() => {
-  const WEB_APP_URL = String(process.env.WEB_APP_URL || "https://vite-react-seven-inky-10.vercel.app").trim().replace(/\/$/, "");
+  const WEB_APP_URL = "https://vite-react-seven-inky-10.vercel.app/?tgapp=20260825";
   const STORE_TEXT = "🛍 Do‘konni ochish";
   const statuses = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
@@ -55,11 +56,7 @@
       const sent = await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
       const messageId = Number(sent?.message_id || 0) || null;
       if (messageId) {
-        try {
-          await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(order.order_number));
-        } catch (error) {
-          console.warn("Order message id could not be stored:", error.message);
-        }
+        try { await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(order.order_number)); } catch (error) { console.warn("Order message id could not be stored:", error.message); }
       }
       return messageId;
     } catch (error) {
@@ -75,6 +72,7 @@
         { command: "start", description: "GULI do‘konini ochish" },
         { command: "shop", description: "Onlayn do‘konni ochish" }
       ] });
+      // This updates the bot's default menu button for all private chats.
       await telegramApi("setChatMenuButton", { menu_button: { type: "web_app", text: STORE_TEXT, web_app: { url: WEB_APP_URL } } });
       console.log(`Telegram Mini App menu configured: ${WEB_APP_URL}`);
     } catch (error) {
