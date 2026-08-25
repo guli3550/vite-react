@@ -1,6 +1,5 @@
 -- GULI LINGERIE: robust legacy catalog repair.
--- Normalizes images/sizes/colors to JSONB whether the old columns are TEXT,
--- TEXT[] (PostgreSQL array), or another legacy type.
+-- Normalizes images/sizes/colors to JSONB and includes product/order code fields.
 -- Safe to run again after a failed attempt.
 
 alter table if exists public.products add column if not exists name text;
@@ -17,14 +16,14 @@ alter table if exists public.products add column if not exists active boolean de
 alter table if exists public.products add column if not exists sort_order integer default 0;
 alter table if exists public.products add column if not exists created_at timestamptz default now();
 alter table if exists public.products add column if not exists updated_at timestamptz default now();
+alter table if exists public.products add column if not exists product_code text;
 
+-- Normalize legacy JSON-like columns to JSONB.
 do $$
 declare
   t text;
 begin
-  -- images
-  select data_type into t from information_schema.columns
-    where table_schema='public' and table_name='products' and column_name='images';
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='images';
   if t is null then
     alter table public.products add column images jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
@@ -34,9 +33,7 @@ begin
     alter table public.products rename column images_jsonb to images;
   end if;
 
-  -- sizes
-  select data_type into t from information_schema.columns
-    where table_schema='public' and table_name='products' and column_name='sizes';
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='sizes';
   if t is null then
     alter table public.products add column sizes jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
@@ -46,9 +43,7 @@ begin
     alter table public.products rename column sizes_jsonb to sizes;
   end if;
 
-  -- colors
-  select data_type into t from information_schema.columns
-    where table_schema='public' and table_name='products' and column_name='colors';
+  select data_type into t from information_schema.columns where table_schema='public' and table_name='products' and column_name='colors';
   if t is null then
     alter table public.products add column colors jsonb default '[]'::jsonb;
   elsif t <> 'jsonb' then
@@ -74,12 +69,22 @@ update public.products set sort_order = 0 where sort_order is null;
 update public.products set created_at = now() where created_at is null;
 update public.products set updated_at = now() where updated_at is null;
 
-create index if not exists idx_products_active_category on public.products (active, category, sort_order);
-create index if not exists idx_products_featured on public.products (featured, active);
+-- Fill missing product codes with unique six-digit values.
+do $$
+declare
+  r record;
+  next_code integer;
+begin
+  for r in select id from public.products where product_code is null or product_code !~ '^[0-9]{6}$' loop
+    loop
+      next_code := floor(random() * 900000 + 100000)::integer;
+      exit when not exists (select 1 from public.products p where p.product_code = lpad(next_code::text, 6, '0'));
+    end loop;
+    update public.products set product_code = lpad(next_code::text, 6, '0') where id = r.id;
+  end loop;
+end $$;
 
-alter table if exists public.products enable row level security;
-drop policy if exists products_public_read on public.products;
-create policy products_public_read on public.products for select using (active = true);
+create unique index if not exists idx_products_product_code_unique on public.products (product_code);
 
 alter table if exists public.orders add column if not exists telegram_id bigint;
 alter table if exists public.orders add column if not exists username text;
@@ -95,8 +100,16 @@ alter table if exists public.orders add column if not exists payment text defaul
 alter table if exists public.orders add column if not exists status text default 'Qabul qilindi';
 alter table if exists public.orders add column if not exists created_at timestamptz default now();
 alter table if exists public.orders add column if not exists updated_at timestamptz default now();
+alter table if exists public.orders add column if not exists order_number text;
 
+create index if not exists idx_products_active_category on public.products (active, category, sort_order);
+create index if not exists idx_products_featured on public.products (featured, active);
 create index if not exists idx_orders_telegram_id on public.orders (telegram_id);
 create index if not exists idx_orders_status_created_at on public.orders (status, created_at desc);
+create index if not exists idx_orders_order_number on public.orders (order_number);
+
+alter table if exists public.products enable row level security;
+drop policy if exists products_public_read on public.products;
+create policy products_public_read on public.products for select using (active = true);
 
 select 'GULI schema repair completed successfully' as result;
