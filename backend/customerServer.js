@@ -5,9 +5,11 @@ const indexPath = path.join(__dirname, "index.js");
 const identityPatchPath = path.join(__dirname, "customerIdentityPatch.js");
 const reviewPatchPath = path.join(__dirname, "reviewPatchV2.js");
 const manualPaymentPatchPath = path.join(__dirname, "manualCardPaymentPatch.js");
+const telegramBotPatchPath = path.join(__dirname, "telegramBotPatch.js");
 let source = fs.readFileSync(indexPath, "utf8");
 const patch = fs.readFileSync(identityPatchPath, "utf8") + "\n" + fs.readFileSync(reviewPatchPath, "utf8");
 const manualPaymentPatch = fs.readFileSync(manualPaymentPatchPath, "utf8");
+const telegramBotPatch = fs.readFileSync(telegramBotPatchPath, "utf8");
 
 source = source.replace(
   'const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;',
@@ -25,7 +27,7 @@ source = source.replace('express.json({ limit: "4mb" })', 'express.json({ limit:
 
 const marker = '\nconst PORT=process.env.PORT||10000;';
 if (!source.includes(marker)) throw new Error("customerServer: backend/index.js marker not found");
-source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${marker}`);
+source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
 runner(require, module, module.exports, indexPath, __dirname);
