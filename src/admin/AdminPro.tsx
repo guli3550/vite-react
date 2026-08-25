@@ -19,7 +19,27 @@ export default function AdminPro(){
  const [token,setToken]=useState(()=>sessionStorage.getItem("guli_admin_token")||"");const [login,setLogin]=useState("");const [password,setPassword]=useState("");const [loginError,setLoginError]=useState("");const [busy,setBusy]=useState(false);const [tab,setTab]=useState("dashboard");const [dashboard,setDashboard]=useState<any>(null);const [products,setProducts]=useState<Product[]>([]);const [orders,setOrders]=useState<Order[]>([]);const [users,setUsers]=useState<User[]>([]);const [promos,setPromos]=useState<Promo[]>([]);const [query,setQuery]=useState("");const [statusFilter,setStatusFilter]=useState("all");const [selectedOrder,setSelectedOrder]=useState<Order|null>(null);const [selectedUser,setSelectedUser]=useState<User|null>(null);const [product,setProduct]=useState<Product>(emptyProduct);const [promo,setPromo]=useState<Promo>(emptyPromo);const [productOpen,setProductOpen]=useState(false);const [promoOpen,setPromoOpen]=useState(false);const [toast,setToast]=useState("");
  const notify=(m:string)=>{setToast(m);window.setTimeout(()=>setToast(""),2600)};const logout=()=>{sessionStorage.removeItem("guli_admin_token");setToken("")};
  const request=async(path:string,options:RequestInit={})=>{const r=await fetch(`${API}${path}`,{...options,headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,...(options.headers||{})}});if(r.status===401){logout();throw Error("Admin sessiyasi tugagan")};const j=await r.json();if(!r.ok||j.success===false)throw Error(j.message||"Server xatosi");return j};
- const load=async()=>{if(!token)return;setBusy(true);try{const [d,p,o,u,pr]=await Promise.all([request("/api/admin/dashboard"),request("/api/admin/products?limit=500"),request("/api/admin/orders?limit=500"),request("/api/admin/users?limit=500"),request("/api/admin/promos?limit=500")]);setDashboard(d.data);setProducts(p.data||[]);setOrders(o.data||[]);setUsers(u.data||[]);setPromos(pr.data||[])}catch(e){notify(e instanceof Error?e.message:"Yuklashda xatolik")}finally{setBusy(false)}};
+ const load=async()=>{if(!token)return;setBusy(true);const errors:string[]=[];try{
+   const results=await Promise.allSettled([
+     request("/api/admin/dashboard"),
+     request("/api/admin/products?limit=500"),
+     request("/api/admin/orders?limit=500"),
+     request("/api/admin/users?limit=500"),
+     request("/api/admin/promos?limit=500")
+   ]);
+   const [d,p,o,u,pr]=results;
+   if(d.status==="fulfilled") setDashboard(d.value.data);
+   else errors.push(`Dashboard: ${d.reason instanceof Error?d.reason.message:"xatolik"}`);
+   if(p.status==="fulfilled") setProducts(p.value.data||[]);
+   else errors.push(`Mahsulotlar: ${p.reason instanceof Error?p.reason.message:"xatolik"}`);
+   if(o.status==="fulfilled") setOrders(o.value.data||[]);
+   else errors.push(`Buyurtmalar: ${o.reason instanceof Error?o.reason.message:"xatolik"}`);
+   if(u.status==="fulfilled") setUsers(u.value.data||[]);
+   else errors.push(`Mijozlar: ${u.reason instanceof Error?u.reason.message:"xatolik"}`);
+   if(pr.status==="fulfilled") setPromos(pr.value.data||[]);
+   else errors.push(`Promo kodlar: ${pr.reason instanceof Error?pr.reason.message:"xatolik"}`);
+   if(errors.length) notify(errors.join(" • ")); else notify("Ma’lumotlar yangilandi ✓");
+ }catch(e){notify(e instanceof Error?e.message:"Yuklashda xatolik")}finally{setBusy(false)}};
  useEffect(()=>{if(token)load()},[token]);
  const doLogin=async(e:FormEvent)=>{e.preventDefault();setBusy(true);setLoginError("");try{const r=await fetch(`${API}/api/admin/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:login,password})});const j=await r.json();if(!r.ok||!j.success)throw Error(j.message||"Kirish rad etildi");sessionStorage.setItem("guli_admin_token",j.token);setToken(j.token)}catch(e){setLoginError(e instanceof Error?e.message:"Kirishda xatolik")}finally{setBusy(false)}};
  const productsFiltered=useMemo(()=>products.filter(p=>`${p.name} ${p.category}`.toLowerCase().includes(query.toLowerCase())),[products,query]);
