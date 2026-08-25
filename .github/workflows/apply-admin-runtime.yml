@@ -1,0 +1,35 @@
+name: Apply GULI admin runtime fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-admin-runtime.yml'
+      - 'tools/fix_admin_runtime.py'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[admin-runtime-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Apply runtime fix
+        run: python3 tools/fix_admin_runtime.py
+      - name: Verify backend syntax
+        run: node --check backend/index.js
+      - name: Verify frontend build
+        run: |
+          npm install
+          npm run build
+      - name: Commit and clean up
+        run: |
+          git config user.name 'guli3550-bot'
+          git config user.email 'guli3550-bot@users.noreply.github.com'
+          rm -f .github/workflows/apply-admin-runtime.yml tools/fix_admin_runtime.py
+          git add backend/index.js .github/workflows/apply-admin-runtime.yml tools/fix_admin_runtime.py
+          git commit -m 'Fix admin order status runtime [admin-runtime-applied]'
+          git push
