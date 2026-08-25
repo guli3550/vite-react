@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -27,16 +24,3 @@ jobs:
         run: npm install --prefix backend
       - name: Validate backend syntax
         run: node --check backend/index.js
-      - name: Persist build-time source normalization
-        if: github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'chore: product-code search')
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "No source normalization changes needed."
-            exit 0
-          fi
-          git add src/admin/AdminPro.tsx src/App.tsx
-          git commit -m "chore: product-code search"
-          git push
