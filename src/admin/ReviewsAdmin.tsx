@@ -27,7 +27,27 @@ export default function ReviewsAdmin({ token }: { token: string }) {
   const [status, setStatus] = useState<"all" | "approved" | "hidden">("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [photo, setPhoto] = useState<{ urls: string[]; index: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true); setError("");
+      try {
+        const response = await fetch(`${API}/api/admin/reviews`, { headers: { Authorization: `Bearer ${token}` } });
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || json?.success === false) throw new Error(json?.message || `Server xatosi (${response.status})`);
+        if (!cancelled) setReviews(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Sharhlarni yuklashda xatolik");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [token, reloadKey]);
 
   const request = async (path: string, options: RequestInit = {}) => {
     const response = await fetch(`${API}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
@@ -35,15 +55,6 @@ export default function ReviewsAdmin({ token }: { token: string }) {
     if (!response.ok || json?.success === false) throw new Error(json?.message || `Server xatosi (${response.status})`);
     return json;
   };
-
-  const load = async () => {
-    setLoading(true); setError("");
-    try { const json = await request("/api/admin/reviews"); setReviews(Array.isArray(json.data) ? json.data : []); }
-    catch (e) { setError(e instanceof Error ? e.message : "Sharhlarni yuklashda xatolik"); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { void load(); }, [token]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -63,7 +74,8 @@ export default function ReviewsAdmin({ token }: { token: string }) {
     catch (e) { setError(e instanceof Error ? e.message : "Sharhni o‘chirishda xatolik"); }
   };
 
-  const stats = { total: reviews.length, approved: reviews.filter((r) => r.status === "approved").length, hidden: reviews.filter((r) => r.status === "hidden").length, verified: reviews.filter((r) => r.verified_purchase).length, average: reviews.length ? reviews.reduce((s, r) => s + Number(r.rating || 0), 0) / reviews.length : 0 };
+  const approvedReviews = reviews.filter((r) => r.status === "approved");
+  const stats = { total: reviews.length, approved: approvedReviews.length, hidden: reviews.filter((r) => r.status === "hidden").length, verified: reviews.filter((r) => r.verified_purchase).length, average: approvedReviews.length ? approvedReviews.reduce((s, r) => s + Number(r.rating || 0), 0) / approvedReviews.length : 0 };
 
   return <section className="reviewsAdmin">
     <div className="reviewsStats">
@@ -76,7 +88,7 @@ export default function ReviewsAdmin({ token }: { token: string }) {
     <div className="reviewsPanel">
       <div className="reviewsToolbar">
         <div className="reviewsSearch"><span>⌕</span><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="6 xonali kod, order №, mijoz yoki sharh..."/></div>
-        <div className="reviewsFilters">{(["all", "approved", "hidden"] as const).map((value) => <button key={value} className={status === value ? "active" : ""} onClick={() => setStatus(value)}>{value === "all" ? "Barchasi" : value === "approved" ? "Ko‘rinadi" : "Yashirilgan"}</button>)}<button onClick={() => void load()} disabled={loading}>↻</button></div>
+        <div className="reviewsFilters">{(["all", "approved", "hidden"] as const).map((value) => <button key={value} className={status === value ? "active" : ""} onClick={() => setStatus(value)}>{value === "all" ? "Barchasi" : value === "approved" ? "Ko‘rinadi" : "Yashirilgan"}</button>)}<button onClick={() => setReloadKey((value) => value + 1)} disabled={loading}>↻</button></div>
       </div>
       {error && <div className="reviewsError">{error}</div>}
       {loading ? <div className="reviewsEmpty">Sharhlar yuklanmoqda…</div> : filtered.length === 0 ? <div className="reviewsEmpty"><strong>Sharh topilmadi</strong><span>Qidiruv yoki filter shartini o‘zgartiring.</span></div> : <div className="reviewsGrid">{filtered.map((review) => {
