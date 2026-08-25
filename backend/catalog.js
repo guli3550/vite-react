@@ -20,6 +20,7 @@ const toArray = (value) => {
 
 const toProduct = (row) => ({
   id: row.id,
+  productCode: /^\d{6}$/.test(String(row.product_code || "")) ? String(row.product_code) : undefined,
   name: row.name,
   category: row.category,
   price: Number(row.price || 0),
@@ -52,7 +53,7 @@ async function listProducts({ category, search, featured, limit = 100 } = {}) {
 
   if (search?.trim()) {
     const safe = search.trim().replace(/[%(),]/g, " ");
-    query = query.or(`name.ilike.%${safe}%,category.ilike.%${safe}%`);
+    query = query.or(`name.ilike.%${safe}%,category.ilike.%${safe}%,product_code.eq.${safe}`);
   }
 
   if (featured !== undefined) query = query.eq("featured", featured);
