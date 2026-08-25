@@ -23,7 +23,9 @@ if (typeof window !== 'undefined') {
     return originalFetch(input, init)
   }
 
-  // Save Telegram's current avatar and profile-photo history whenever the Mini App opens.
+  // Telegram exposes WebAppUser.photo_url to Mini Apps when the user's privacy
+  // settings allow it. The backend also queries getUserProfilePhotos, so CRM
+  // does not depend on a client-side-only URL being present.
   if (window.location.pathname.replace(/\/$/, '') !== '/admin' && webApp?.initData) {
     void originalFetch(`${apiBase}/api/profile/sync`, {
       method: 'POST',
@@ -32,8 +34,9 @@ if (typeof window !== 'undefined') {
     }).catch(() => {})
   }
 
-  // CRM photo enhancement: the legacy drawer is kept intact, while this small
-  // DOM adapter loads the richer photo gallery endpoint and upgrades its avatar.
+  // CRM photo bridge. Customer and order drawers are rendered by AdminPro,
+  // so this adapter upgrades their existing avatar/icon without duplicating the
+  // drawer implementation. Photo URLs are short-lived signed proxy URLs.
   if (window.location.pathname.replace(/\/$/, '') === '/admin') {
     let galleryPhotos: Array<{ url: string; current?: boolean }> = []
     let galleryIndex = 0
@@ -56,38 +59,76 @@ if (typeof window !== 'undefined') {
       document.body.appendChild(overlay)
     }
 
+    const attachPhotos = (element: HTMLElement, photos: Array<{ url: string; current?: boolean }>) => {
+      if (!photos.length) return
+      galleryPhotos = photos
+      galleryIndex = Math.max(0, photos.findIndex((p) => p.current))
+      const photo = photos[galleryIndex]
+      const image = document.createElement('img')
+      image.src = photo.url
+      image.alt = 'Telegram profil rasmi'
+      image.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block'
+      image.onerror = () => { element.dataset.photoEnhanced = '0'; image.remove() }
+      element.replaceChildren(image)
+      element.style.cursor = 'pointer'
+      element.title = 'Telegram profil rasmlarini ko‘rish'
+      element.addEventListener('click', renderGallery, { once: true })
+      const parent = element.parentElement
+      if (parent && !parent.querySelector('[data-crm-photo-counter]')) {
+        const counter = document.createElement('small')
+        counter.dataset.crmPhotoCounter = '1'
+        counter.textContent = `${photos.length} ta rasm · ko‘rish →`
+        counter.style.cssText = 'display:block;margin-top:5px;color:#9b7d86;font-size:11px;cursor:pointer'
+        parent.appendChild(counter)
+        counter.addEventListener('click', renderGallery)
+      }
+    }
+
     const enhanceCustomerAvatar = async (avatar: HTMLElement) => {
       if (avatar.dataset.photoEnhanced === '1') return
       const drawer = avatar.closest('.drawer')
       if (!drawer) return
+      const explicitId = avatar.dataset.telegramId || ''
       const text = drawer.textContent || ''
       const match = text.match(/ID:\s*(\d+)/)
-      if (!match) return
+      const telegramId = explicitId || match?.[1] || ''
+      if (!telegramId) return
       avatar.dataset.photoEnhanced = '1'
       try {
         const token = sessionStorage.getItem('guli_admin_token') || ''
-        const response = await originalFetch(`${apiBase}/api/admin/users/${match[1]}/details`, { headers: { Authorization: `Bearer ${token}` } })
+        const response = await originalFetch(`${apiBase}/api/admin/users/${encodeURIComponent(telegramId)}/details`, { headers: { Authorization: `Bearer ${token}` } })
         const json = await response.json()
         const photos = Array.isArray(json?.data?.photos) ? json.data.photos.filter((p: any) => p?.url) : []
-        if (!photos.length) return
-        galleryPhotos = photos
-        galleryIndex = Math.max(0, photos.findIndex((p: any) => p.current))
-        avatar.innerHTML = `<img src="${photos[galleryIndex].url}" alt="Telegram profil rasmi" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block"/>`
-        avatar.style.cursor = 'pointer'
-        avatar.title = 'Telegram profil rasmlarini ko‘rish'
-        avatar.addEventListener('click', renderGallery)
-        const counter = document.createElement('small')
-        counter.textContent = `${photos.length} ta rasm · ko‘rish →`
-        counter.style.cssText = 'display:block;margin-top:5px;color:#9b7d86;font-size:11px;cursor:pointer'
-        avatar.parentElement?.appendChild(counter)
-        counter.addEventListener('click', renderGallery)
+        if (photos.length) attachPhotos(avatar, photos)
+        else avatar.dataset.photoEnhanced = '0'
       } catch {
         avatar.dataset.photoEnhanced = '0'
       }
     }
 
+    const enhanceOrderPhoto = async (icon: HTMLElement) => {
+      if (icon.dataset.photoEnhanced === '1') return
+      const drawer = icon.closest('.drawer')
+      if (!drawer) return
+      const heading = drawer.querySelector('.drawerHead h2')?.textContent || ''
+      const match = heading.match(/(?:№|#)\s*(GULI-\d{6})/i)
+      if (!match) return
+      icon.dataset.photoEnhanced = '1'
+      try {
+        const token = sessionStorage.getItem('guli_admin_token') || ''
+        const response = await originalFetch(`${apiBase}/api/admin/order/${encodeURIComponent(match[1])}/customer-photos`, { headers: { Authorization: `Bearer ${token}` } })
+        const json = await response.json()
+        const photos = Array.isArray(json?.data?.photos) ? json.data.photos.filter((p: any) => p?.url) : []
+        if (photos.length) attachPhotos(icon, photos)
+        else icon.dataset.photoEnhanced = '0'
+      } catch {
+        icon.dataset.photoEnhanced = '0'
+      }
+    }
+
     const observer = new MutationObserver(() => {
       document.querySelectorAll<HTMLElement>('.avatarLarge').forEach((avatar) => void enhanceCustomerAvatar(avatar))
+      document.querySelectorAll<HTMLElement>('.orderIcon').forEach((icon) => void enhanceOrderPhoto(icon))
     })
     observer.observe(document.body, { childList: true, subtree: true })
     window.addEventListener('keydown', (event) => {
