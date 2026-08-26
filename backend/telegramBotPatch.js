@@ -1,6 +1,6 @@
 // GULI Telegram bot UX + live order status notifications.
 (() => {
-  const WEB_APP_URL = "https://vite-react-guli3550.vercel.app/?tgapp=v20260826";
+  const WEB_APP_URL = process.env.MINI_APP_URL || "https://guli-lingerie-web.onrender.com/?tgapp=v20260826";
   const STORE_TEXT = "🛍 Do‘konni ochish";
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
   const removeReplyKeyboard = { remove_keyboard: true };
