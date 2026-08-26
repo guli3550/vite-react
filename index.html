@@ -13,30 +13,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script src="/telegram-auth-fetch-runtime.js?v=1"></script>
-    <script src="/catalog-runtime.js"></script>
-    <script src="/marketplace-enhancer.js?v=1"></script>
-    <script src="/reviews-enhancer.js"></script>
-    <script src="/card-payment-enhancer-v2.js?v=1"></script>
-    <script src="/checkout-payment-fix.js?v=1"></script>
-    <script src="/admin-payment-enhancer.js?v=1"></script>
-    <script src="/admin-receipt-profile-runtime.js?v=1"></script>
-    <script src="/order-status-runtime.js?v=1"></script>
-    <script src="/auth-profile-runtime.js?v=1"></script>
-    <script src="/guli-ui-runtime.js?v=4"></script>
-    <script src="/guli-ui-navigation-fix.js?v=1"></script>
-    <script src="/product-deeplink-runtime.js?v=1"></script>
-    <script src="/category-ui-runtime.js?v=3"></script>
-    <script src="/storefront-visual-polish.js?v=1"></script>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      (() => {
-        const API='https://guli-gateway.parizodabaxtiyorov.workers.dev';
-        let productsPromise=null;
-        const loadProducts=()=>productsPromise||(productsPromise=fetch(`${API}/api/products?limit=100`).then(r=>r.json()).then(j=>Array.isArray(j.data)?j.data:[]).catch(()=>[]));
-        const enhance=async(root)=>{const wrap=root.querySelector('.detailImageWrap');if(!wrap||wrap.dataset.galleryReady)return;const title=root.querySelector('.detailContent h1')?.textContent?.trim()||'';const code=(root.querySelector('.productCodeLabel')?.textContent||'').replace(/\D/g,'');if(!title&&!code)return;wrap.dataset.galleryReady='loading';const products=await loadProducts();const product=products.find(p=>(code&&String(p.product_code||'')===code)||(title&&String(p.name||'').trim()===title));if(!product){wrap.dataset.galleryReady='';return}const urls=[product.image,...(Array.isArray(product.images)?product.images:[])].filter(Boolean);const main=wrap.querySelector('img');if(!main||urls.length<1){wrap.dataset.galleryReady='';return}let index=0,startX=null;const shell=document.createElement('div');shell.className='guli-gallery-shell';shell.style.cssText='margin:0 12px 4px;position:relative;';const gallery=document.createElement('div');gallery.className='guli-mini-gallery';gallery.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:9px 2px 5px;scrollbar-width:none;touch-action:pan-x;';const dots=document.createElement('div');dots.style.cssText='display:flex;justify-content:center;gap:5px;margin:4px 0 1px;';const buttons=[],dotEls=[];const counter=document.createElement('span');counter.style.cssText='position:absolute;right:10px;top:-44px;padding:6px 9px;border-radius:999px;background:rgba(0,0,0,.52);color:#fff;font-size:11px;font-weight:800;z-index:4;';shell.append(gallery,dots,counter);wrap.insertAdjacentElement('afterend',shell);const nav=document.createElement('div');nav.style.cssText='display:flex;justify-content:center;align-items:center;gap:9px;margin:1px 0 4px;';const makeNav=text=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='width:36px;height:36px;border:1px solid #eadde0;border-radius:50%;background:#fff;color:#9f5267;box-shadow:0 3px 12px rgba(60,25,35,.08);font-size:22px;line-height:1;';return b};const prev=makeNav('‹'),next=makeNav('›');nav.append(prev,next);shell.append(nav);const setImage=i=>{index=(i+urls.length)%urls.length;main.src=urls[index];main.alt=`${product.name} — ${index+1}-rasm`;counter.textContent=`${index+1} / ${urls.length}`;buttons.forEach((b,n)=>{b.style.border=n===index?'2px solid #b95a70':'1px solid #eadde0';b.style.opacity=n===index?'1':'.72'});dotEls.forEach((d,n)=>{d.style.width=n===index?'18px':'6px';d.style.opacity=n===index?'1':'.35'})};urls.forEach((url,i)=>{const b=document.createElement('button');b.type='button';b.setAttribute('aria-label',`Rasm ${i+1}`);b.style.cssText='flex:0 0 68px;width:68px;height:82px;padding:0;border:1px solid #eadde0;border-radius:12px;overflow:hidden;background:#fff;transition:.18s;';const im=document.createElement('img');im.src=url;im.alt='';im.loading=i===0?'eager':'lazy';im.style.cssText='width:100%;height:100%;object-fit:cover;display:block;';im.onerror=()=>{b.style.display='none'};b.appendChild(im);b.addEventListener('click',()=>setImage(i));gallery.appendChild(b);buttons.push(b);const d=document.createElement('span');d.style.cssText='height:6px;width:6px;border-radius:999px;background:#b95a70;opacity:.35;transition:.18s;display:block;';dots.appendChild(d);dotEls.push(d)});prev.addEventListener('click',()=>setImage(index-1));next.addEventListener('click',()=>setImage(index+1));wrap.addEventListener('touchstart',e=>{startX=e.touches?.[0]?.clientX??null},{passive:true});wrap.addEventListener('touchend',e=>{if(startX==null)return;const endX=e.changedTouches?.[0]?.clientX??startX;const dx=endX-startX;if(Math.abs(dx)>45)setImage(index+(dx<0?1:-1));startX=null},{passive:true});wrap.style.overflow='hidden';main.style.touchAction='pan-y';const desc=root.querySelector('.detailContent .description');if(desc){desc.style.display='block';desc.style.whiteSpace='pre-wrap';desc.style.lineHeight='1.7';desc.style.marginTop='14px'}setImage(0);wrap.dataset.galleryReady='1'};
-        const scan=()=>{const root=document.querySelector('.productDetail');if(root)enhance(root)};new MutationObserver(scan).observe(document.body,{childList:true,subtree:true});setTimeout(scan,500);setTimeout(scan,1500);
-      })();
-    </script>
   </body>
 </html>
