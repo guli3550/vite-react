@@ -1,94 +1,19 @@
-// Render customer auth routes. This patch is injected by customerServer.js after index.js
-// has been materialized, so it uses direct app routes instead of Express prototype hooks.
+// Render customer auth routes. This patch is injected by customerServer.js after index.js.
 (() => {
   const authUrl = process.env.SUPABASE_URL || "";
   const authKey = process.env.SUPABASE_SECRET_KEY || "";
   const authClient = authUrl && authKey ? createClient(authUrl, authKey, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
-  const buckets = new Map();
-  const WINDOW_MS = 10 * 60 * 1000;
-  const MAX_ATTEMPTS = 8;
-  const emailOf = (v) => String(v || "").trim().toLowerCase();
-  const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-  const validPassword = (v) => typeof v === "string" && v.length >= 8 && v.length <= 128;
-  const fail = (res, code, message) => res.status(code).json({ success: false, message });
-  const ok = (res, data, message = "OK") => res.json({ success: true, message, data });
-  function allowed(req) {
-    const ip = String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim();
-    const now = Date.now();
-    const x = buckets.get(ip) || { start: now, count: 0 };
-    if (now - x.start > WINDOW_MS) { x.start = now; x.count = 0; }
-    x.count += 1;
-    buckets.set(ip, x);
-    return x.count <= MAX_ATTEMPTS;
-  }
-  async function sendOtp(email) {
-    const { error } = await authClient.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-    if (error) throw error;
-  }
-
-  app.post("/api/auth/password/signup", async (req, res) => {
-    if (!allowed(req)) return fail(res, 429, "Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");
-    if (!authClient) return fail(res, 503, "Email autentifikatsiyasi serverda sozlanmagan.");
-    const email = emailOf(req.body?.email);
-    const password = String(req.body?.password || "");
-    if (!validEmail(email)) return fail(res, 400, "Email manzilini to‘g‘ri kiriting.");
-    if (!validPassword(password)) return fail(res, 400, "Parol kamida 8 belgidan iborat bo‘lsin.");
-    try {
-      const { data, error } = await authClient.auth.signUp({ email, password });
-      if (error) return fail(res, 400, error.message || "Ro‘yxatdan o‘tib bo‘lmadi.");
-      try { await sendOtp(email); } catch (error) { console.warn("Signup OTP failed:", error.message); }
-      return ok(res, { user: data.user, session: null, email, requiresCode: true }, "Hisob yaratildi. Emailingizga 6 xonali kod yuborildi.");
-    } catch { return fail(res, 500, "Ro‘yxatdan o‘tishda server xatosi."); }
-  });
-
-  app.post("/api/auth/password/login", async (req, res) => {
-    if (!allowed(req)) return fail(res, 429, "Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");
-    if (!authClient) return fail(res, 503, "Email autentifikatsiyasi serverda sozlanmagan.");
-    const email = emailOf(req.body?.email);
-    const password = String(req.body?.password || "");
-    if (!validEmail(email) || !password) return fail(res, 400, "Email va parolni kiriting.");
-    try {
-      const { data, error } = await authClient.auth.signInWithPassword({ email, password });
-      if (error) return fail(res, 401, "Email yoki parol noto‘g‘ri.");
-      await sendOtp(email);
-      return ok(res, { user: data.user, session: null, email, requiresCode: true }, "Parol to‘g‘ri. Emailingizga kirish kodi yuborildi.");
-    } catch (error) {
-      if (/email not confirmed/i.test(error.message || "")) return fail(res, 401, "Avval emailingizni tasdiqlang.");
-      return fail(res, 500, "Kirishda server xatosi.");
-    }
-  });
-
-  app.post("/api/auth/email/start", async (req, res) => {
-    if (!allowed(req)) return fail(res, 429, "Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");
-    if (!authClient) return fail(res, 503, "Email autentifikatsiyasi serverda sozlanmagan.");
-    const email = emailOf(req.body?.email);
-    if (!validEmail(email)) return fail(res, 400, "Email manzilini to‘g‘ri kiriting.");
-    try { await sendOtp(email); return ok(res, { email }, "Tasdiqlash kodi emailga yuborildi."); }
-    catch (error) { return fail(res, 400, error.message || "Email kodi yuborilmadi."); }
-  });
-
-  app.post("/api/auth/email/verify", async (req, res) => {
-    if (!allowed(req)) return fail(res, 429, "Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");
-    if (!authClient) return fail(res, 503, "Email autentifikatsiyasi serverda sozlanmagan.");
-    const email = emailOf(req.body?.email);
-    const token = String(req.body?.token || "").replace(/\s+/g, "");
-    if (!validEmail(email) || !/^\d{6}$/.test(token)) return fail(res, 400, "6 xonali email kodini kiriting.");
-    try {
-      const { data, error } = await authClient.auth.verifyOtp({ email, token, type: "email" });
-      if (error) return fail(res, 401, "Email kodi noto‘g‘ri yoki muddati tugagan.");
-      return ok(res, { user: data.user, session: data.session, email }, "Email tasdiqlandi. Tizimga kirdingiz.");
-    } catch { return fail(res, 500, "Email kodini tekshirishda server xatosi."); }
-  });
-
-  app.post("/api/auth/password/reset-start", async (req, res) => {
-    if (!allowed(req)) return fail(res, 429, "Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");
-    if (!authClient) return fail(res, 503, "Email autentifikatsiyasi serverda sozlanmagan.");
-    const email = emailOf(req.body?.email);
-    if (!validEmail(email)) return fail(res, 400, "Email manzilini to‘g‘ri kiriting.");
-    try {
-      const { error } = await authClient.auth.resetPasswordForEmail(email, { redirectTo: "https://vite-react-guli3550.vercel.app/" });
-      if (error) return fail(res, 400, error.message || "Reset email yuborilmadi.");
-      return ok(res, { email }, "Parolni tiklash emaili yuborildi.");
-    } catch { return fail(res, 500, "Parolni tiklashda server xatosi."); }
-  });
+  const buckets = new Map(); const WINDOW_MS = 10 * 60 * 1000; const MAX_ATTEMPTS = 8;
+  const emailOf = v => String(v || "").trim().toLowerCase();
+  const validEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const validPassword = v => typeof v === "string" && v.length >= 8 && v.length <= 128;
+  const fail = (res, code, message) => res.status(code).json({ success:false, message });
+  const ok = (res, data, message="OK") => res.json({ success:true, message, data });
+  const allowed = req => { const ip=String(req.headers["x-forwarded-for"]||req.ip||"unknown").split(",")[0].trim(); const now=Date.now(); const x=buckets.get(ip)||{start:now,count:0}; if(now-x.start>WINDOW_MS){x.start=now;x.count=0;} x.count+=1;buckets.set(ip,x);return x.count<=MAX_ATTEMPTS; };
+  const sendOtp = async email => { const { error } = await authClient.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } }); if(error) throw error; };
+  app.post("/api/auth/password/signup", async(req,res)=>{if(!allowed(req))return fail(res,429,"Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");if(!authClient)return fail(res,503,"Email autentifikatsiyasi serverda sozlanmagan.");const email=emailOf(req.body?.email),password=String(req.body?.password||"");if(!validEmail(email))return fail(res,400,"Email manzilini to‘g‘ri kiriting.");if(!validPassword(password))return fail(res,400,"Parol kamida 8 belgidan iborat bo‘lsin.");try{const {data,error}=await authClient.auth.signUp({email,password});if(error)return fail(res,400,error.message||"Ro‘yxatdan o‘tib bo‘lmadi.");try{await sendOtp(email)}catch(error){console.warn("Signup OTP failed:",error.message)}return ok(res,{user:data.user,session:null,email,requiresCode:true},"Hisob yaratildi. Emailingizga 6 xonali kod yuborildi.")}catch{return fail(res,500,"Ro‘yxatdan o‘tishda server xatosi.")}});
+  app.post("/api/auth/password/login", async(req,res)=>{if(!allowed(req))return fail(res,429,"Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");if(!authClient)return fail(res,503,"Email autentifikatsiyasi serverda sozlanmagan.");const email=emailOf(req.body?.email),password=String(req.body?.password||"");if(!validEmail(email)||!password)return fail(res,400,"Email va parolni kiriting.");try{const {data,error}=await authClient.auth.signInWithPassword({email,password});if(error)return fail(res,401,"Email yoki parol noto‘g‘ri.");await sendOtp(email);return ok(res,{user:data.user,session:null,email,requiresCode:true},"Parol to‘g‘ri. Emailingizga kirish kodi yuborildi.")}catch(error){if(/email not confirmed/i.test(error.message||""))return fail(res,401,"Avval emailingizni tasdiqlang.");return fail(res,500,"Kirishda server xatosi.")}});
+  app.post("/api/auth/email/start", async(req,res)=>{if(!allowed(req))return fail(res,429,"Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");if(!authClient)return fail(res,503,"Email autentifikatsiyasi serverda sozlanmagan.");const email=emailOf(req.body?.email);if(!validEmail(email))return fail(res,400,"Email manzilini to‘g‘ri kiriting.");try{await sendOtp(email);return ok(res,{email},"Tasdiqlash kodi emailga yuborildi.")}catch(error){return fail(res,400,error.message||"Email kodi yuborilmadi.")}});
+  app.post("/api/auth/email/verify", async(req,res)=>{if(!allowed(req))return fail(res,429,"Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");if(!authClient)return fail(res,503,"Email autentifikatsiyasi serverda sozlanmagan.");const email=emailOf(req.body?.email),token=String(req.body?.token||"").replace(/\s+/g,"");if(!validEmail(email)||!/^[0-9]{6}$/.test(token))return fail(res,400,"6 xonali email kodini kiriting.");try{const {data,error}=await authClient.auth.verifyOtp({email,token,type:"email"});if(error)return fail(res,401,"Email kodi noto‘g‘ri yoki muddati tugagan.");return ok(res,{user:data.user,session:data.session,email},"Email tasdiqlandi. Tizimga kirdingiz.")}catch{return fail(res,500,"Email kodini tekshirishda server xatosi.")}});
+  app.post("/api/auth/password/reset-start", async(req,res)=>{if(!allowed(req))return fail(res,429,"Juda ko‘p urinish. Bir necha daqiqadan keyin qayta urinib ko‘ring.");if(!authClient)return fail(res,503,"Email autentifikatsiyasi serverda sozlanmagan.");const email=emailOf(req.body?.email);if(!validEmail(email))return fail(res,400,"Email manzilini to‘g‘ri kiriting.");try{const {error}=await authClient.auth.resetPasswordForEmail(email,{redirectTo:(process.env.MINI_APP_URL||"https://guli-lingerie-web.onrender.com/").trim()});if(error)return fail(res,400,error.message||"Reset email yuborilmadi.");return ok(res,{email},"Parolni tiklash emaili yuborildi.")}catch{return fail(res,500,"Parolni tiklashda server xatosi.")}});
 })();
