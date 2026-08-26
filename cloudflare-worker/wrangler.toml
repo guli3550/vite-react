@@ -1,0 +1,8 @@
+name = "guli-gateway"
+main = "index.js"
+compatibility_date = "2026-08-26"
+
+[vars]
+BACKEND_URL = "https://guli-lingerie-api.onrender.com"
+
+# Set TELEGRAM_BOT_TOKEN as a secret in Cloudflare, never commit it here.
