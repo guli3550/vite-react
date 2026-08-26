@@ -38,4 +38,4 @@ if (!source.includes(marker)) throw new Error("customerServer: backend/index.js 
 source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
-runner(require, module, module.exports, indexPath, __filename, __dirname);
+runner(require, module, module.exports, indexPath, __dirname);
