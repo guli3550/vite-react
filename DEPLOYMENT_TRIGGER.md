@@ -1,1 +1,3 @@
-Production deployment trigger for the latest Telegram checkout, bot onboarding, payment and order-status updates.
+Premium storefront rebuild trigger.
+
+Latest visual fix: replace incorrect category imagery with lingerie photos.
