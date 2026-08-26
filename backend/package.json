@@ -4,7 +4,7 @@
   "description": "GULI LINGERIE Telegram Mini App Backend",
   "main": "index.js",
   "scripts": {
-    "start": "node -r ./orderSecurityPatch.js -r ./telegramProductPublisherRuntime.js -r ./telegramRuntimePatch.js -r ./authRuntimePatch.js -r ./manualCardPaymentRuntime.js -r ./paymentConfirmationRuntime.js -r ./reviewRuntime.js -r ./paymentReceiptGuardRuntime.js index.js"
+    "start": "node -r ./orderSecurityPatch.js -r ./telegramProductPublisherRuntime.js -r ./telegramRuntimePatch.js -r ./authRuntimePatch.js -r ./manualCardPaymentRuntime.js -r ./paymentConfirmationRuntime.js -r ./reviewRuntime.js -r ./paymentReceiptGuardRuntime.js -r ./category-settings-patch.js index.js"
   },
   "engines": { "node": ">=20" },
   "dependencies": {
