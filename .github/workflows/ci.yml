@@ -22,16 +22,19 @@ jobs:
         run: npm run build
       - name: Install backend dependencies
         run: npm install --prefix backend
-      - name: Validate backend syntax
+      - name: Validate all backend JavaScript syntax
+        shell: bash
         run: |
-          node --check backend/index.js
-          node --check backend/customerServer.js
-          node --check backend/customerIdentityPatch.js
-          node --check backend/reviewPatchV2.js
-          node --check backend/manualCardPaymentPatch.js
-      - name: Validate browser enhancers
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            node --check "$file"
+          done < <(find backend -maxdepth 1 -type f -name '*.js' -print0 | sort -z)
+      - name: Validate browser enhancer JavaScript syntax
+        shell: bash
         run: |
-          node --check card-payment-enhancer.js
-          node --check admin-payment-enhancer.js
-          node --check marketplace-enhancer.js
-          node --check reviews-enhancer.js
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            echo "Checking $file"
+            node --check "$file"
+          done < <(find . -maxdepth 1 -type f -name '*.js' -print0 | sort -z)
