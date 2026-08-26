@@ -26,13 +26,10 @@ async function telegramApi(method, body) {
   return result.result;
 }
 
-// Only the Telegram menu button remains as the store launcher. The reply-keyboard
-// store button is intentionally not sent, so users do not see two store launchers.
+// The persistent Telegram menu button is the single official Mini App launcher.
+// Order-status messages intentionally do not contain a second web_app/inline launcher.
 function storeMenuKeyboard() {
   return { remove_keyboard: true };
-}
-function storeInlineKeyboard() {
-  return { inline_keyboard: [[{ text: STORE_TEXT, web_app: { url: WEB_APP_URL } }]] };
 }
 
 function orderText(order) {
@@ -70,16 +67,28 @@ async function sendOrEditOrder(order) {
   const telegramId = Number(fullOrder?.telegram_id || 0);
   if (!telegramId || !fullOrder?.order_number) return;
   const text = orderText(fullOrder);
-  const markup = storeInlineKeyboard();
   const existingId = Number(fullOrder?.telegram_status_message_id || 0) || 0;
   if (existingId) {
     try {
-      await telegramApi("editMessageText", { chat_id: telegramId, message_id: existingId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+      // Explicitly clear any legacy inline launcher that may still be attached.
+      await telegramApi("editMessageText", {
+        chat_id: telegramId,
+        message_id: existingId,
+        text,
+        parse_mode: "HTML",
+        reply_markup: { inline_keyboard: [] },
+        disable_web_page_preview: true,
+      });
       return;
     } catch {}
   }
   try {
-    const sent = await telegramApi("sendMessage", { chat_id: telegramId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+    const sent = await telegramApi("sendMessage", {
+      chat_id: telegramId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    });
     const messageId = Number(sent?.message_id || 0);
     if (messageId && supabase) await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(fullOrder.order_number));
   } catch (error) { console.warn("Telegram order notification failed:", error.message); }
