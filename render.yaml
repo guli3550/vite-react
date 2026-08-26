@@ -3,8 +3,8 @@ services:
     name: guli-lingerie-api
     runtime: node
     rootDir: backend
-    buildCommand: npm install
-    startCommand: node customerServer.js
+    buildCommand: npm ci
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       - key: SUPABASE_URL
@@ -13,6 +13,8 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: MINI_APP_URL
+        value: https://guli-lingerie-web.onrender.com/
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD
