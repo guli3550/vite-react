@@ -21,33 +21,42 @@ async function cachedGet(request, env, ttl) {
   const cache = caches.default;
   const key = cacheKey(request);
   const hit = await cache.match(key);
-  if (hit) return new Response(hit.body, { status: hit.status, headers: new Headers(hit.headers) });
-  const target = new URL(request.url);
-  target.hostname = new URL(backend(env)).hostname;
-  target.protocol = new URL(backend(env)).protocol;
-  const upstreamUrl = `${backend(env)}${target.pathname}${target.search}`;
-  const upstream = await fetch(upstreamUrl, { method: "GET", headers: request.headers });
+  if (hit) {
+    const headers = new Headers(hit.headers);
+    headers.set("X-GULI-Cache", "HIT");
+    return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers });
+  }
+  const url = new URL(request.url);
+  const upstreamUrl = `${backend(env)}${url.pathname}${url.search}`;
+  const upstream = await fetch(upstreamUrl, { method: "GET", headers: request.headers, redirect: "follow" });
   const headers = new Headers(upstream.headers);
   headers.set("Cache-Control", `public, s-maxage=${ttl}, stale-while-revalidate=${ttl * 5}`);
   headers.set("X-GULI-Cache", "MISS");
-  const response = new Response(upstream.body, { status: upstream.status, headers });
+  const response = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
   if (upstream.ok) await cache.put(key, response.clone());
   return response;
-}
-async function purgeCatalogCache(env) {
-  // Cloudflare Cache API keys are URL-specific. We intentionally do not attempt
-  // wildcard purge here; short TTL keeps catalog data fresh without destructive operations.
-  return true;
 }
 async function proxy(request, env) {
   const url = new URL(request.url);
   const target = `${backend(env)}${url.pathname}${url.search}`;
   const headers = new Headers(request.headers);
   headers.delete("host");
-  const upstream = await fetch(target, { method: request.method, headers, body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body, redirect: "follow" });
+  const upstream = await fetch(target, {
+    method: request.method,
+    headers,
+    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+    redirect: "follow",
+  });
   const out = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: new Headers(upstream.headers) });
   out.headers.set("X-GULI-Gateway", "cloudflare-worker");
   return out;
+}
+async function warmBackend(env) {
+  const response = await fetch(`${backend(env)}/api/health`, {
+    method: "GET",
+    headers: { "User-Agent": "GULI-Cloudflare-Warmup/1.0" },
+  });
+  return response.ok;
 }
 async function handleTelegramWebhook(request, env) {
   if (request.method !== "POST" || !env.TELEGRAM_BOT_TOKEN) return new Response("OK", { status: 200 });
@@ -65,7 +74,6 @@ async function handleTelegramWebhook(request, env) {
     await tg("sendMessage", { chat_id: chatId, text: "🛍 Do‘konni Telegram menyusidagi tugma orqali oching." });
     return new Response("OK", { status: 200 });
   }
-  // Contact storage remains on the existing backend until the full webhook migration is verified.
   return proxy(request, env);
 }
 export default {
@@ -90,5 +98,8 @@ export default {
     const response = await proxy(request, env);
     response.headers.set("Access-Control-Allow-Origin", origin);
     return response;
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(warmBackend(env).catch((error) => console.error("GULI warmup failed:", error.message)));
   },
 };
