@@ -25,6 +25,7 @@ jobs:
           echo "Vercel production page OK"
 
       - name: Check Render API health
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -35,6 +36,7 @@ jobs:
           echo "Render health OK"
 
       - name: Check catalog API
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -45,6 +47,7 @@ jobs:
           echo "Catalog API OK"
 
       - name: Check browser guest session
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +58,7 @@ jobs:
           echo "Guest session API OK"
 
       - name: Check protected customer endpoints reject unauthenticated calls
+        if: ${{ always() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -62,3 +66,8 @@ jobs:
           cat /tmp/orders.json
           [[ "$code" == "401" ]]
           echo "Customer auth guard OK"
+
+      - name: Complete job
+        if: ${{ always() }}
+        shell: bash
+        run: echo "Production smoke checks completed; review any failed step above."
