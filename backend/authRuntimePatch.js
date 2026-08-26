@@ -2,7 +2,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const URL = process.env.SUPABASE_URL || "";
 const KEY = process.env.SUPABASE_SECRET_KEY || "";
-const MINI_APP_URL = (process.env.MINI_APP_URL || "https://vite-react-guli3550.vercel.app/").trim();
+const MINI_APP_URL = (process.env.MINI_APP_URL || "https://guli-lingerie-web.onrender.com/").trim();
 const authClient = URL && KEY ? createClient(URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 const buckets = new Map(); const WINDOW_MS = 10 * 60 * 1000; const MAX_ATTEMPTS = 8;
 function allowed(req) { const ip=String(req.headers["x-forwarded-for"]||req.ip||"unknown").split(",")[0].trim(); const now=Date.now(); const x=buckets.get(ip)||{start:now,count:0}; if(now-x.start>WINDOW_MS){x.start=now;x.count=0;} x.count+=1;buckets.set(ip,x);return x.count<=MAX_ATTEMPTS; }
