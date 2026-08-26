@@ -3,7 +3,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const MINI_APP_URL = (process.env.MINI_APP_URL || "https://vite-react-guli3550.vercel.app/?tgapp=v20260826").replace(/\/$/, "");
+const MINI_APP_URL = (process.env.MINI_APP_URL || "https://guli-lingerie-web.onrender.com/?tgapp=v20260826").replace(/\/$/, "");
 const PRODUCT_CHAT_IDS = String(process.env.TELEGRAM_PRODUCT_CHAT_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
 const BROADCAST_USERS = String(process.env.TELEGRAM_PRODUCT_BROADCAST || "1") !== "0";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
