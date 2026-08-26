@@ -1,21 +1,62 @@
-# React + TypeScript + Vite
+# GULI PREMIUM — Telegram Mini App / Online Market
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Production storefront for GULI PREMIUM. The repository is the source of truth for the Render storefront, Render API, Cloudflare gateway, Telegram bot integration and Supabase commerce data model.
 
-While this project uses React, Vite supports many popular JS frameworks. [See all the supported frameworks](https://vitejs.dev/guide/#scaffolding-your-first-vite-project).
+## Production architecture
 
-## Deploy Your Own
+`Telegram Mini App / Render Static Site → Cloudflare Worker → Render Node API → Supabase`
 
-Deploy your own Vite project with Vercel.
+- **Frontend:** Vite + React + TypeScript
+- **Storefront:** Render Static Site `guli-lingerie-web`
+- **Backend:** Render Web Service `guli-lingerie-api`
+- **Gateway:** Cloudflare Worker `guli-gateway`
+- **Database/storage/auth:** Supabase
+- **Bot:** Telegram Bot API + Mini App `initData`
+- **Payments:** cash + manual HUMO/UZCARD receipt workflow
+- **Admin:** `/admin`, HMAC-signed sessions, product/order/customer/promo/category management
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/vercel/examples/tree/main/framework-boilerplates/vite-react&template=vite-react)
+## Storefront design
 
-_Live Example: https://vite-react-example.vercel.app_
+The mobile UI uses the GULI premium pastel-pink reference design:
 
-### Deploying From Your Terminal
+- five categories: **Pinyuar, Pijama, Byusgalter, Mayka, Tursik**
+- category covers are loaded from Supabase `category_settings`
+- admins can replace category images from `/admin`
+- rounded product cards, discount badges and floating bottom navigation
 
-You can deploy your new Vite project with a single command from your terminal using [Vercel CLI](https://vercel.com/download):
+## Development
 
-```shell
-$ vercel
+```bash
+npm install
+npm run dev
 ```
+
+Build:
+
+```bash
+npm run build
+```
+
+Backend:
+
+```bash
+cd backend
+npm install
+npm start
+```
+
+## Environment
+
+Frontend production API is the Cloudflare gateway. Backend secrets belong on Render only.
+
+See `.env.example` and `ADMIN_SETUP.md`.
+
+## Database migrations
+
+Production SQL files are under `supabase/`. In particular, `repair_existing_schema.sql` repairs legacy commerce schemas and `checkout_runtime_repair.sql` installs the UUID/bigint-safe secure checkout RPC.
+
+## Deployment rule
+
+The production storefront is deployed on **Render**. Vercel is not used for the storefront deployment.
+
+GitHub Actions provides build/syntax validation and scheduled production smoke checks for Render, Cloudflare, catalog, category settings and customer auth guards.
