@@ -1,11 +1,9 @@
 // GULI Telegram bot UX + live order status notifications.
 (() => {
-  const WEB_APP_URL = "https://vite-react-guli3550.vercel.app/?tgapp=v20260825";
+  const WEB_APP_URL = "https://vite-react-guli3550.vercel.app/?tgapp=v20260826";
   const STORE_TEXT = "🛍 Do‘konni ochish";
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
-  const storeKeyboard = (inline = false) => inline
-    ? { inline_keyboard: [[{ text: STORE_TEXT, web_app: { url: WEB_APP_URL } }]] }
-    : { keyboard: [[{ text: STORE_TEXT, web_app: { url: WEB_APP_URL } }]], resize_keyboard: true, is_persistent: true };
+  const removeReplyKeyboard = { remove_keyboard: true };
 
   const orderText = (order) => {
     const items = Array.isArray(order?.items) ? order.items : [];
@@ -23,15 +21,15 @@
 
   async function sendOrEditOrderMessage(order, telegramId, existingMessageId = null) {
     if (!telegramId || !order?.order_number) return null;
-    const chatId = Number(telegramId), text = orderText(order), markup = storeKeyboard(true);
+    const chatId = Number(telegramId), text = orderText(order);
     try {
       if (existingMessageId) {
-        await telegramApi("editMessageText", { chat_id: chatId, message_id: Number(existingMessageId), text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+        await telegramApi("editMessageText", { chat_id: chatId, message_id: Number(existingMessageId), text, parse_mode: "HTML", reply_markup: { inline_keyboard: [] }, disable_web_page_preview: true });
         return Number(existingMessageId);
       }
     } catch {}
     try {
-      const sent = await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: true });
+      const sent = await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true });
       const messageId = Number(sent?.message_id || 0) || null;
       if (messageId) await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(order.order_number));
       return messageId;
@@ -54,17 +52,17 @@
       try {
         const message = req.body?.message, chatId = message?.chat?.id, text = String(message?.text || "").trim(), contact = message?.contact;
         if (chatId && /^\/start(?:@\w+)?/i.test(text)) {
-          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "🌷 <b>GULI_3550 Online Market</b> ga xush kelibsiz!\n\nAyollar uchun ichki kiyimlar, komplektlar, uy kiyimlari va boshqa mahsulotlarni onlayn buyurtma qilishingiz mumkin.\n\n📦 Mahsulot tanlang → buyurtma bering → HUMO/UZCARD orqali to‘lang → chekni shu oynadan yuboring.\n\nAvval telefon raqamingizni yuboring, keyin do‘konni oching.", parse_mode: "HTML", reply_markup: { keyboard: [[{ text: "📱 Telefon raqamimni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } });
+          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "🌷 <b>GULI_3550 Online Market</b> ga xush kelibsiz!\n\nAyollar uchun ichki kiyimlar, komplektlar, uy kiyimlari va boshqa mahsulotlarni onlayn buyurtma qilishingiz mumkin.\n\n📦 Mahsulot tanlang → buyurtma bering → HUMO/UZCARD orqali to‘lang → chekni shu oynadan yuboring.\n\nAvval telefon raqamingizni yuboring, keyin Telegram menyusidagi <b>Do‘konni ochish</b> tugmasidan foydalaning.", parse_mode: "HTML", reply_markup: { keyboard: [[{ text: "📱 Telefon raqamimni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } });
           return res.sendStatus(200);
         }
         if (chatId && /^\/(shop|store)(?:@\w+)?/i.test(text)) {
-          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "🛍 GULI PREMIUM do‘konini oching:", reply_markup: storeKeyboard(false) });
+          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "🛍 Do‘kon Telegram menyusidagi tugma orqali ochiladi.", reply_markup: removeReplyKeyboard });
           return res.sendStatus(200);
         }
         if (chatId && contact?.phone_number) {
           const telegramUser = message?.from || {}, ownerId = Number(contact.user_id || telegramUser.id || chatId);
           if (ownerId) await supabase.from("telegram_users").upsert({ telegram_id: ownerId, username: telegramUser.username || null, first_name: telegramUser.first_name || null, last_name: telegramUser.last_name || null, telegram_phone: String(contact.phone_number), updated_at: new Date().toISOString() }, { onConflict: "telegram_id" });
-          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "✅ Telefon raqamingiz saqlandi. Endi GULI do‘konini ochishingiz mumkin.", reply_markup: storeKeyboard(false) });
+          await telegramApi("sendMessage", { chat_id: Number(chatId), text: "✅ Telefon raqamingiz saqlandi. Endi Telegram menyusidagi <b>Do‘konni ochish</b> tugmasidan foydalaning.", parse_mode: "HTML", reply_markup: removeReplyKeyboard });
           return res.sendStatus(200);
         }
         return original(req, res, next);
