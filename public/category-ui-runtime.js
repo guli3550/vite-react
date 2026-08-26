@@ -155,7 +155,12 @@
   function boot() {
     injectStyles();
     if (location.pathname.replace(/\/$/,'') === '/admin') {
-      setTimeout(makeAdminButton, 800);
+      const timer = setInterval(() => {
+        if (sessionStorage.getItem('guli_admin_token')) {
+          clearInterval(timer);
+          makeAdminButton();
+        }
+      }, 500);
       return;
     }
     loadStoreData().then(() => { renderCategories(); setTimeout(renderCategories, 500); });
