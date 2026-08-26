@@ -5,4 +5,8 @@ compatibility_date = "2026-08-26"
 [vars]
 BACKEND_URL = "https://guli-lingerie-api.onrender.com"
 
+[triggers]
+# Keep the Render free service warm without any paid Cloudflare plan.
+crons = ["*/10 * * * *"]
+
 # Set TELEGRAM_BOT_TOKEN as a secret in Cloudflare, never commit it here.
