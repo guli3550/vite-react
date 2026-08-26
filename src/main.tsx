@@ -1,10 +1,55 @@
-import { StrictMode } from 'react'
+import { StrictMode, Component, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import Admin from './admin/AdminPro.tsx'
 import './index.css'
 import './admin/AdminNaming.css'
 import './admin/CustomerIdentity.css'
+
+type Props = { children: ReactNode }
+type State = { failed: boolean; message: string }
+
+class StorefrontErrorBoundary extends Component<Props, State> {
+  state: State = { failed: false, message: '' }
+
+  static getDerivedStateFromError(error: unknown): State {
+    return { failed: true, message: error instanceof Error ? error.message : String(error || 'Noma’lum xatolik') }
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error('GULI storefront boot/render error', error, info)
+    try {
+      const key = 'guli_storefront_recovery_v1'
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        // Clear only client-side storefront caches. Do not touch auth/admin data.
+        for (const name of ['guli_catalog_cache_v4', 'cart', 'wishlist', 'orders', 'guli_address', 'guli_phone']) {
+          localStorage.removeItem(name)
+        }
+        window.setTimeout(() => window.location.reload(), 50)
+      } else {
+        sessionStorage.removeItem(key)
+      }
+    } catch {
+      // Telegram WebView may restrict storage; the visible recovery screen below remains usable.
+    }
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#fff9fa', color: '#2b2024', fontFamily: 'system-ui, sans-serif' }}>
+        <section style={{ width: '100%', maxWidth: 420, textAlign: 'center', background: '#fff', border: '1px solid #f0dfe3', borderRadius: 24, padding: 24, boxShadow: '0 14px 40px rgba(70,35,45,.08)' }}>
+          <div style={{ fontSize: 42 }}>🌷</div>
+          <h1 style={{ margin: '10px 0 8px', fontSize: 22 }}>GULI vaqtincha yuklanmadi</h1>
+          <p style={{ margin: '0 0 16px', color: '#806f75', fontSize: 13, lineHeight: 1.5 }}>Ilovani qayta yuklab ko‘ring. Xatolik qaytarsa, diagnostika uchun quyidagi kod saqlanadi.</p>
+          <small style={{ display: 'block', marginBottom: 16, color: '#a04e64', wordBreak: 'break-word' }}>{this.state.message || 'STORE_FRONT_BOOT_ERROR'}</small>
+          <button onClick={() => window.location.reload()} style={{ width: '100%', padding: '14px 18px', border: 0, borderRadius: 14, background: '#c9526b', color: '#fff', fontWeight: 800 }}>Qayta yuklash</button>
+        </section>
+      </main>
+    )
+  }
+}
 
 if (typeof window !== 'undefined') {
   const webApp = window.Telegram?.WebApp
@@ -23,9 +68,6 @@ if (typeof window !== 'undefined') {
     return originalFetch(input, init)
   }
 
-  // Telegram exposes WebAppUser.photo_url to Mini Apps when the user's privacy
-  // settings allow it. The backend also queries getUserProfilePhotos, so CRM
-  // does not depend on a client-side-only URL being present.
   if (window.location.pathname.replace(/\/$/, '') !== '/admin' && webApp?.initData) {
     void originalFetch(`${apiBase}/api/profile/sync`, {
       method: 'POST',
@@ -34,9 +76,6 @@ if (typeof window !== 'undefined') {
     }).catch(() => {})
   }
 
-  // CRM photo bridge. Customer and order drawers are rendered by AdminPro,
-  // so this adapter upgrades their existing avatar/icon without duplicating the
-  // drawer implementation. Photo URLs are short-lived signed proxy URLs.
   if (window.location.pathname.replace(/\/$/, '') === '/admin') {
     let galleryPhotos: Array<{ url: string; current?: boolean }> = []
     let galleryIndex = 0
@@ -139,7 +178,6 @@ if (typeof window !== 'undefined') {
     })
   }
 
-  // Mobile keyboards may append digits to the initial `0` in controlled number inputs.
   document.addEventListener('input', (event) => {
     const target = event.target
     if (!(target instanceof HTMLInputElement) || target.type !== 'number') return
@@ -152,6 +190,6 @@ const isAdmin = typeof window !== 'undefined' && window.location.pathname.replac
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isAdmin ? <Admin /> : <App />}
+    {isAdmin ? <Admin /> : <StorefrontErrorBoundary><App /></StorefrontErrorBoundary>}
   </StrictMode>,
 )
