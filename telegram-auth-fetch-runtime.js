@@ -1,6 +1,13 @@
 (() => {
   const originalFetch = window.fetch.bind(window);
-  const apiHost = new URL((document.querySelector('meta[name="guli-api-url"]')?.content || 'https://guli-lingerie-api.onrender.com')).host;
+  const configuredApiHost = (() => {
+    try { return new URL(document.querySelector('meta[name="guli-api-url"]')?.content || '').host; } catch { return ''; }
+  })();
+  const apiHosts = new Set([
+    configuredApiHost,
+    'guli-lingerie-api.onrender.com',
+    'guli-gateway.parizodabaxtiyorov.workers.dev'
+  ].filter(Boolean));
   const protectedPaths = ['/api/orders', '/api/save-address', '/api/telegram-user'];
   window.fetch = (input, init = {}) => {
     let url = '';
@@ -8,7 +15,7 @@
     let isProtected = false;
     try {
       const parsed = new URL(url, location.href);
-      isProtected = parsed.host === apiHost && protectedPaths.some(path => parsed.pathname === path);
+      isProtected = apiHosts.has(parsed.host) && protectedPaths.some(path => parsed.pathname === path);
     } catch {}
     if (!isProtected) return originalFetch(input, init);
     const tg = window.Telegram?.WebApp;
