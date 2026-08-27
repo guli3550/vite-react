@@ -43,20 +43,62 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function publicStorageUrl(bucket, storagePath) {
+  const base = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const normalized = String(storagePath || "").replace(/^\/+/, "").replace(new RegExp(`^${bucket}/`), "");
+  return `${base}/storage/v1/object/public/${bucket}/${normalized}`;
+}
+
 async function readCategories() {
-  const { data, error } = await supabase.from("category_settings").select("slug,name,image_url,sort_order,active,updated_at").eq("active", true).order("sort_order", { ascending: true });
-  if (error) throw error;
-  return data || [];
+  const { data: settings, error: settingsError } = await supabase
+    .from("category_settings")
+    .select("slug,name,image_url,sort_order,active,updated_at")
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+
+  if (settingsError && !/does not exist|relation .* not found|schema cache/i.test(settingsError.message || "")) {
+    throw settingsError;
+  }
+
+  const { data: legacy, error: legacyError } = await supabase
+    .from("categories")
+    .select("id,slug,name,sort_order,is_active,updated_at,category_images(storage_path,version,created_at)")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true });
+
+  if (legacyError) throw legacyError;
+
+  const settingMap = new Map((settings || []).map(item => [item.slug, item]));
+  return (legacy || CATEGORIES).map(item => {
+    const setting = settingMap.get(item.slug);
+    const images = Array.isArray(item.category_images)
+      ? [...item.category_images].sort((a, b) => Number(b.version || 0) - Number(a.version || 0))
+      : [];
+    const latest = images[0];
+    const imageUrl = latest?.storage_path
+      ? `${publicStorageUrl("category-media", latest.storage_path)}?v=${encodeURIComponent(latest.version || latest.created_at || Date.now())}`
+      : String(setting?.image_url || "");
+    return {
+      slug: item.slug,
+      name: typeof item.name === "string"
+        ? item.name
+        : (setting?.name || CATEGORIES.find(c => c.slug === item.slug)?.name || item.slug),
+      image_url: imageUrl,
+      sort_order: Number(item.sort_order ?? setting?.sort_order ?? 0),
+      active: item.is_active !== false && setting?.active !== false,
+      updated_at: item.updated_at || setting?.updated_at || null,
+    };
+  }).filter(item => item.active).sort((a, b) => a.sort_order - b.sort_order).slice(0, 5);
 }
 
 function installRoutes(app) {
   if (installed) return;
   installed = true;
 
-  originalGet.call(app, "/api/categories", async (req, res) => {
+  originalGet.call(app, "/api/categories", async (_req, res) => {
     try {
       const data = await readCategories();
-      res.set("Cache-Control", "no-store");
+      res.set("Cache-Control", "no-store, max-age=0");
       res.json({ success: true, data });
     } catch (error) {
       console.error("Categories API error:", error);
@@ -64,11 +106,24 @@ function installRoutes(app) {
     }
   });
 
-  originalGet.call(app, "/api/admin/categories", requireAdmin, async (req, res) => {
+  originalGet.call(app, "/api/admin/categories", requireAdmin, async (_req, res) => {
     try {
-      const { data, error } = await supabase.from("category_settings").select("slug,name,image_url,sort_order,active,updated_at").order("sort_order", { ascending: true });
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id,slug,name,sort_order,is_active,updated_at,category_images(storage_path,version,created_at)")
+        .order("sort_order", { ascending: true });
       if (error) throw error;
-      res.json({ success: true, data: data || [] });
+      const rows = (data || []).map(item => {
+        const latest = [...(item.category_images || [])].sort((a, b) => Number(b.version || 0) - Number(a.version || 0))[0];
+        return {
+          ...item,
+          image_url: latest?.storage_path
+            ? `${publicStorageUrl("category-media", latest.storage_path)}?v=${encodeURIComponent(latest.version || latest.created_at || Date.now())}`
+            : "",
+        };
+      });
+      res.set("Cache-Control", "no-store, max-age=0");
+      res.json({ success: true, data: rows });
     } catch (error) {
       console.error("Admin categories API error:", error);
       res.status(500).json({ success: false, message: "Kategoriyalarni yuklashda xatolik" });
@@ -78,12 +133,16 @@ function installRoutes(app) {
   originalPut.call(app, "/api/admin/categories/:slug", requireAdmin, async (req, res) => {
     try {
       const slug = String(req.params.slug || "").trim().toLowerCase();
-      const current = CATEGORIES.find((item) => item.slug === slug);
+      const current = CATEGORIES.find(item => item.slug === slug);
       if (!current) return res.status(404).json({ success: false, message: "Kategoriya topilmadi" });
       const name = String(req.body?.name || current.name).trim().slice(0, 60);
       const imageUrl = String(req.body?.image_url || "").trim();
       if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) return res.status(400).json({ success: false, message: "Kategoriya rasmi uchun to‘g‘ri URL kerak" });
-      const { data, error } = await supabase.from("category_settings").upsert({ slug, name, image_url: imageUrl, sort_order: current.sort_order, active: true, updated_at: new Date().toISOString() }, { onConflict: "slug" }).select("slug,name,image_url,sort_order,active,updated_at").single();
+      const { data, error } = await supabase
+        .from("category_settings")
+        .upsert({ slug, name, image_url: imageUrl, sort_order: current.sort_order, active: true, updated_at: new Date().toISOString() }, { onConflict: "slug" })
+        .select("slug,name,image_url,sort_order,active,updated_at")
+        .single();
       if (error) throw error;
       res.json({ success: true, data });
     } catch (error) {
