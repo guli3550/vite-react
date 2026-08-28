@@ -27,7 +27,7 @@
     }
   };
 
-  window.fetch = async (input, init = {}) => {
+  const customFetch = async (input, init = {}) => {
     let rawUrl = '';
     try { rawUrl = typeof input === 'string' ? input : input?.url || ''; } catch {}
 
@@ -74,4 +74,12 @@
       throw error instanceof Error ? error : new Error('Storefront API unavailable');
     }
   };
+
+  try {
+    window.fetch = customFetch;
+  } catch {
+    try {
+      Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true });
+    } catch {}
+  }
 })();

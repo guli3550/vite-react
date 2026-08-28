@@ -14,7 +14,7 @@
     const raw = typeof input === "string" ? input : input?.url || "";
     return /\/api\/products(?:\?|$)/.test(String(raw));
   };
-  window.fetch = async (input, init) => {
+  const customFetch = async (input, init) => {
     if (!isProductsRequest(input)) return nativeFetch(input, init);
     let lastError;
     for (let attempt=0; attempt<3; attempt++) {
@@ -39,6 +39,14 @@
     } catch {}
     throw lastError || new Error("Mahsulotlar serveridan javob olinmadi");
   };
+
+  try {
+    window.fetch = customFetch;
+  } catch {
+    try {
+      Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true });
+    } catch {}
+  }
 
   const style = `
     :root{--guli:#c9526b;--guli-dark:#a94059;--guli-soft:#f8e3e8;--guli-ink:#21191c}

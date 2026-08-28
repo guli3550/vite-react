@@ -1,0 +1,6 @@
+{
+  "name": "GULI Premium Storefront",
+  "description": "GULI Premium lingerie and homewear storefront and admin portal",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

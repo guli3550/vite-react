@@ -58,7 +58,7 @@ if (typeof window !== 'undefined') {
 
   const originalFetch = window.fetch.bind(window)
   const apiBase = (import.meta.env.VITE_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '')
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.startsWith(apiBase) && webApp?.initData) {
       const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
@@ -66,6 +66,24 @@ if (typeof window !== 'undefined') {
       return originalFetch(input, { ...init, headers })
     }
     return originalFetch(input, init)
+  }
+
+  try {
+    window.fetch = customFetch
+  } catch {
+    try {
+      Object.defineProperty(window, 'fetch', {
+        value: customFetch,
+        writable: true,
+        configurable: true,
+      })
+    } catch {
+      try {
+        (globalThis as any).fetch = customFetch
+      } catch (err) {
+        console.warn('Could not intercept fetch:', err)
+      }
+    }
   }
 
   if (window.location.pathname.replace(/\/$/, '') !== '/admin' && webApp?.initData) {

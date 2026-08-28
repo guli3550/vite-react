@@ -82,7 +82,7 @@ function capturePromoEditType() {
 }
 
 const originalFetch = window.fetch.bind(window);
-window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+const customFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
   if (/\/api\/admin\/promos(?:\/\d+)?$/.test(url) && init?.body && promoType === "fixed") {
     try {
@@ -99,6 +99,24 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   return originalFetch(input, init);
 };
+
+try {
+  window.fetch = customFetch;
+} catch {
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    try {
+      (globalThis as any).fetch = customFetch;
+    } catch (err) {
+      console.warn('Could not intercept fetch:', err);
+    }
+  }
+}
 
 const observer = new MutationObserver(() => {
   bindNewPromoButton();

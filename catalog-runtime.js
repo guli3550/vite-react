@@ -31,7 +31,7 @@
       if (json?.success !== false && Array.isArray(json?.data) && json.data.length) saveCache(json.data);
     }).catch(() => {});
   };
-  window.fetch = async (input, init) => {
+  const customFetch = async (input, init) => {
     if (!isCatalog(input)) return nativeFetch(input, init);
     const cached = readCache();
     if (cached) {
@@ -57,4 +57,12 @@
       throw error instanceof Error ? error : new Error('Mahsulotlar serveri vaqtincha javob bermadi');
     }
   };
+
+  try {
+    window.fetch = customFetch;
+  } catch {
+    try {
+      Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true });
+    } catch {}
+  }
 })();
