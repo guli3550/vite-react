@@ -237,3 +237,176 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* =========================================================
+   PLATFORM-SPECIFIC ADAPTIVE SYSTEM
+   (Android, Telegram WebApp, Browser, TV, Windows)
+   ========================================================= */
+
+/* 1. TELEGRAM WEBAPP ADAPTATION */
+html[data-platform="telegram"],
+body[data-platform="telegram"] {
+  height: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html[data-platform="telegram"] .appShell {
+  min-height: var(--tg-viewport-height, 100vh);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-platform="telegram"] .topbar {
+  padding-top: max(8px, env(safe-area-inset-top, 0px));
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+html[data-platform="telegram"] .bottomNav {
+  height: calc(66px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -10px 32px rgba(40, 15, 25, 0.08);
+}
+
+html[data-platform="telegram"] .productGrid {
+  gap: 10px;
+}
+
+html[data-platform="telegram"] .productCard {
+  border-radius: 18px;
+}
+
+/* 2. ANDROID PHONE ADAPTATION */
+html[data-platform="android"],
+body[data-platform="android"] {
+  -webkit-text-size-adjust: 100%;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-y: contain;
+}
+
+html[data-platform="android"] .appShell {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+}
+
+html[data-platform="android"] button,
+html[data-platform="android"] .menuRow,
+html[data-platform="android"] .orderFilterTab,
+html[data-platform="android"] .primaryButton {
+  min-height: 44px;
+}
+
+html[data-platform="android"] .bottomNav {
+  height: calc(68px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+}
+
+/* 3. WINDOWS DESKTOP ADAPTATION */
+html[data-platform="windows"] body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(189, 82, 106, 0.4) transparent;
+}
+
+html[data-platform="windows"] body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html[data-platform="windows"] body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html[data-platform="windows"] body::-webkit-scrollbar-thumb {
+  background: rgba(189, 82, 106, 0.35);
+  border-radius: 99px;
+  border: 2px solid transparent;
+}
+
+html[data-platform="windows"] body::-webkit-scrollbar-thumb:hover {
+  background: rgba(189, 82, 106, 0.6);
+}
+
+html[data-platform="windows"] .appShell {
+  max-width: 1240px;
+  margin: 0 auto;
+  min-height: 100vh;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.04);
+}
+
+html[data-platform="windows"] .bottomNav {
+  max-width: 680px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  border-radius: 24px 24px 0 0;
+  border: 1px solid var(--border-color);
+  border-bottom: 0;
+}
+
+html[data-platform="windows"] .productCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 36px rgba(189, 82, 106, 0.16);
+}
+
+/* 4. STANDARD BROWSER (DYNAMIC VIEWPORT HEIGHT) */
+html[data-platform="browser"] .appShell {
+  min-height: 100dvh;
+}
+
+html[data-platform="browser"] .bottomNav {
+  max-width: 720px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+@media (min-width: 768px) {
+  html[data-platform="browser"] .bottomNav {
+    border-radius: 24px 24px 0 0;
+    border: 1px solid var(--border-color);
+    border-bottom: 0;
+  }
+}
+
+/* 5. SMART TV / LARGE DISPLAY (10-FOOT UI MODE) */
+html[data-platform="tv"] {
+  font-size: 18px;
+}
+
+html[data-platform="tv"] .appShell {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 40px 100px;
+}
+
+html[data-platform="tv"] .topbar {
+  height: 90px;
+  padding: 16px 40px;
+}
+
+html[data-platform="tv"] .productGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+}
+
+html[data-platform="tv"] .productCard {
+  border-radius: 26px;
+}
+
+html[data-platform="tv"] button:focus,
+html[data-platform="tv"] .productCard:focus-within,
+html[data-platform="tv"] .orderFilterTab:focus,
+html[data-platform="tv"] .menuRow:focus {
+  outline: 4px solid var(--primary) !important;
+  outline-offset: 4px !important;
+  transform: scale(1.04);
+}
+
+html[data-platform="tv"] .bottomNav {
+  height: 80px;
+  max-width: 900px;
+  border-radius: 28px 28px 0 0;
+}
+

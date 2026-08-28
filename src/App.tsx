@@ -47,6 +47,7 @@ import {
   markMessagesAsRead,
   subscribeToChat,
 } from "./utils/chatSync";
+import { initPlatformEnvironment } from "./utils/platformAdapter";
 
 declare global {
   interface Window {
@@ -361,6 +362,7 @@ export default function App() {
   const [profilePhotoError, setProfilePhotoError] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [showSpendingStats, setShowSpendingStats] = useState(false);
   const [toast, setToast] = useState("");
 
   // Theme & Settings & Chat states
@@ -398,6 +400,11 @@ export default function App() {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
+
+  // Initialize platform responsive environment
+  useEffect(() => {
+    initPlatformEnvironment();
+  }, []);
 
   // Apply theme to root
   useEffect(() => {
@@ -919,36 +926,88 @@ export default function App() {
         )
         .slice(0, 4)
     : [];
-  const card = (p: Product, compact = false) => (
-    <article
-      className={`productCard ${compact ? "compact" : ""}`}
-      key={p.id}
-      onClick={() => openProduct(p)}
-    >
-      <div className="productImage">
-        <ProductImageGallery product={p} onOpen={() => openProduct(p)} />
-        <button
-          className="heart"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleWishlist(p.id);
-          }}
-        >
-          {wishlist.includes(p.id) ? "♥" : "♡"}
-        </button>
-        {p.discount ? <span className="discount">-{p.discount}%</span> : null}
-      </div>
-      <div className="productBody">
-        <span>{p.category}</span>
-        <h3>{p.name}</h3>
-        {p.product_code ? <small>Kod: {p.product_code}</small> : null}
-        <div className="priceLine">
-          <b>{formatPrice(p.price)}</b>
-          {p.oldPrice ? <del>{formatPrice(p.oldPrice)}</del> : null}
+  const card = (p: Product, compact = false) => {
+    const isWishlisted = wishlist.includes(p.id);
+    const shortDesc = p.description
+      ? p.description.length > 55
+        ? p.description.slice(0, 55) + "…"
+        : p.description
+      : "";
+    return (
+      <article
+        className={`productCard ${compact ? "compact" : ""}`}
+        key={p.id}
+        id={`product-card-${p.id}`}
+        onClick={() => openProduct(p)}
+      >
+        <div className="productImage">
+          <ProductImageGallery product={p} onOpen={() => openProduct(p)} />
+          <button
+            className={`heart ${isWishlisted ? "active" : ""}`}
+            id={`heart-btn-${p.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleWishlist(p.id);
+            }}
+            title={isWishlisted ? "Saralangandan o‘chirish" : "Saralanganlarga qo‘shish"}
+          >
+            {isWishlisted ? "♥" : "♡"}
+          </button>
+          {p.discount ? <span className="discount">-{p.discount}%</span> : null}
+          {p.rating ? (
+            <div className="productRatingBadge">
+              <span className="ratingStar">★</span>
+              <span className="ratingVal">{p.rating.toFixed(1)}</span>
+            </div>
+          ) : null}
         </div>
-      </div>
-    </article>
-  );
+        <div className="productBody">
+          <div className="productMetaRow">
+            <span className="productCategoryTag">{p.category}</span>
+            {p.product_code ? (
+              <span className="productCodePill">№ {p.product_code}</span>
+            ) : null}
+          </div>
+          <h3 className="productTitle" title={p.name}>
+            {p.name}
+          </h3>
+          {shortDesc ? <p className="productShortDesc">{shortDesc}</p> : null}
+
+          <div className="productOptionDots">
+            {p.colors && p.colors.length > 0 ? (
+              <span className="productDotCount">{p.colors.length} ta rang</span>
+            ) : null}
+            {p.sizes && p.sizes.length > 0 ? (
+              <span className="productSizePill">
+                {p.sizes.slice(0, 3).join(" · ")}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="priceLine">
+            <div className="priceGroup">
+              <b className="currentPrice">{formatPrice(p.price)}</b>
+              {p.oldPrice ? (
+                <del className="oldPrice">{formatPrice(p.oldPrice)}</del>
+              ) : null}
+            </div>
+            <button
+              className="quickAddBtn"
+              id={`quick-add-btn-${p.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                addToCart(p);
+                showToast("✓ Savatga qo‘shildi");
+              }}
+              title="Savatga tez qo‘shish"
+            >
+              <span>+</span>
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  };
   const handleExportPdf = (targetOrders?: Order[], customLabel?: string) => {
     if (!orders.length) {
       showToast("Eksport qilish uchun buyurtmalar mavjud emas");
@@ -1095,14 +1154,14 @@ export default function App() {
           showToast("✓ Buyurtmalar yangilandi");
         }}
       >
-        <main className="page">
-          <div className="pageHeader">
+        <main className="page ordersPageContainer">
+          <div className="pageHeader ordersHeroHeader">
             <div className="pageHeaderTop">
               <div>
                 <span className="pageHeaderEyebrow">
                   {t("nav_orders").toUpperCase()}
                 </span>
-                <h1>{t("my_orders")}</h1>
+                <h1 className="ordersPageTitle">{t("my_orders")}</h1>
               </div>
               {orders.length > 0 ? (
                 <button
@@ -1117,21 +1176,32 @@ export default function App() {
                   disabled={exportingPdf}
                   title="Buyurtmalar tarixini PDF formatida yuklab olish"
                 >
-                  <span>📄</span>
+                  <span className="pdfIcon">📄</span>
                   <span>{exportingPdf ? "Yuklanmoqda..." : "PDF hisobot"}</span>
                 </button>
               ) : null}
             </div>
-            <p>{t("orders_desc")}</p>
-            <div className="searchBox">
-              ⌕
+            <p className="pageHeaderSubtitle">{t("orders_desc")}</p>
+            
+            <div className="searchBox ordersSearchBox">
+              <span className="searchIcon">⌕</span>
               <input
                 value={orderSearch}
                 onChange={(e) => setOrderSearch(e.target.value)}
-                placeholder="6 xonali mahsulot kodi yoki buyurtma №"
+                placeholder="6 xonali mahsulot kodi yoki buyurtma №..."
               />
+              {orderSearch && (
+                <button
+                  className="searchClearBtn"
+                  onClick={() => setOrderSearch("")}
+                  title="Qidiruvni tozalash"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
+
           <div className="orderFilterTabs" role="tablist">
             {filterTabs.map(([key, label, icon]) => (
               <button
@@ -1139,15 +1209,55 @@ export default function App() {
                 role="tab"
                 aria-selected={orderFilter === key}
                 className={`orderFilterTab ${orderFilter === key ? "active" : ""}`}
-                onClick={() => setOrderFilter(key)}
+                onClick={() => {
+                  try {
+                    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+                  } catch {}
+                  setOrderFilter(key);
+                }}
               >
                 <span className="filterTabIcon">{icon}</span>
-                <span>{label}</span>
+                <span className="filterTabLabel">{label}</span>
                 <span className="filterCount">{filterCounts[key]}</span>
               </button>
             ))}
           </div>
-          <MonthlySpendingChart orders={orders} />
+
+          <div className="statsToggleContainer" id="stats-toggle-section">
+            <button
+              id="toggle-spending-stats-btn"
+              type="button"
+              className={`statsToggleBtn ${showSpendingStats ? "active" : ""}`}
+              onClick={() => {
+                try {
+                  window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+                } catch {}
+                setShowSpendingStats((prev) => !prev);
+              }}
+              aria-expanded={showSpendingStats}
+            >
+              <div className="statsToggleLeft">
+                <span className="statsToggleIcon">📊</span>
+                <div className="statsToggleText">
+                  <span className="statsToggleTitle">{t("stats_and_spending")}</span>
+                  <span className="statsToggleSub">{t("stats_subtitle")}</span>
+                </div>
+              </div>
+              <div className="statsToggleRight">
+                <span className="statsToggleBadge">3D</span>
+                <span className={`statsToggleChevron ${showSpendingStats ? "open" : ""}`}>
+                  {showSpendingStats ? "▲" : "▼"}
+                </span>
+              </div>
+            </button>
+
+            {showSpendingStats && (
+              <div className="spendingChartWrapper">
+                <MonthlySpendingChart orders={orders} />
+              </div>
+            )}
+          </div>
+
           {ordersLoading ? (
             <OrdersListSkeleton count={3} />
           ) : visibleOrders.length ? (
@@ -1155,18 +1265,24 @@ export default function App() {
               {visibleOrders.map((o, index) => {
                 const recent = isRecentlyUpdated(o);
                 const isCompleted = o.status === "Yetkazildi";
+                const totalItemCount = (o.items || []).reduce(
+                  (sum, it) => sum + (it.quantity || 1),
+                  0,
+                );
                 return (
                   <article
                     className={`orderCard ${selectedOrderId === o.id ? "expanded" : ""} ${recent ? "recentlyUpdated" : ""}`}
                     key={o.id}
                     id={`order-card-${o.id}`}
-                    style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}
+                    style={{ animationDelay: `${Math.min(index * 50, 350)}ms` }}
                   >
                     <div className="orderTop">
                       <div className="orderNumberGroup">
-                        <b>№ {o.id}</b>
+                        <span className="orderNumberBadge">№ {o.id}</span>
                         {o.items?.[0]?.product?.product_code ? (
-                          <small>Kod: {o.items[0].product.product_code}</small>
+                          <span className="orderCodeTag">
+                            Kod: {o.items[0].product.product_code}
+                          </span>
                         ) : null}
                       </div>
                       <div className="orderTopMeta">
@@ -1185,6 +1301,7 @@ export default function App() {
                         </span>
                       </div>
                     </div>
+
                     <div
                       className="orderMain"
                       onClick={() => {
@@ -1192,28 +1309,42 @@ export default function App() {
                         if (item?.product) openProduct(item.product, "orders");
                       }}
                     >
-                      <div className="orderThumb">
-                        {o.items?.[0]?.product ? (
-                          <img
-                            src={imageUrl(o.items[0].product)}
-                            alt={o.items[0].product.name}
-                          />
+                      <div className="orderThumbGroup">
+                        <div className="orderThumb">
+                          {o.items?.[0]?.product ? (
+                            <img
+                              src={imageUrl(o.items[0].product)}
+                              alt={o.items[0].product.name}
+                            />
+                          ) : null}
+                        </div>
+                        {o.items && o.items.length > 1 ? (
+                          <span className="moreItemsPill">
+                            +{o.items.length - 1}
+                          </span>
                         ) : null}
                       </div>
-                      <div>
-                        <h3>{o.items?.[0]?.product?.name || "Buyurtma"}</h3>
-                        <p>
-                          {o.items?.[0]?.product?.product_code
-                            ? `Kod: ${o.items[0].product.product_code} · `
-                            : ""}
-                          {o.items?.length || 0} ta mahsulot ·{" "}
-                          {o.payment === "card" ? "Karta" : "Naqd"}
+
+                      <div className="orderInfoCol">
+                        <h3 className="orderItemTitle">
+                          {o.items?.[0]?.product?.name || "Buyurtma"}
+                        </h3>
+                        <p className="orderMetaSummary">
+                          {totalItemCount} ta mahsulot ·{" "}
+                          <span className="paymentMethodPill">
+                            {o.payment === "card" ? "💳 Karta" : "💵 Naqd"}
+                          </span>
                         </p>
-                        <strong>{formatPrice(o.total)}</strong>
+                        <strong className="orderTotalAmount">
+                          {formatPrice(o.total)}
+                        </strong>
                       </div>
                     </div>
+
                     <div className="orderBottom">
-                      <span className={`orderStatus ${recent ? "recent" : ""}`}>
+                      <span
+                        className={`orderStatus ${recent ? "recent" : ""} status-${(o.status || "").toLowerCase().replace(/\s+/g, "-")}`}
+                      >
                         <span
                           className={`statusDot ${recent ? "livePulse" : ""}`}
                         >
@@ -1242,6 +1373,7 @@ export default function App() {
                           </button>
                         ) : null}
                         <button
+                          className="detailsToggleBtn"
                           onClick={() =>
                             setSelectedOrderId(
                               selectedOrderId === o.id ? null : o.id,
@@ -1254,6 +1386,7 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
                     <div
                       className={`orderDetailsCollapse ${selectedOrderId === o.id ? "expanded" : ""}`}
                       id={`order-details-${o.id}`}

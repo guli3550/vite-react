@@ -112,6 +112,9 @@ export const translations = {
     order_close: "Yopish ↑",
     reorder: "Qayta buyurtma",
     pdf_report: "PDF hisobot",
+    stats_and_spending: "Statistika va xarajatlar",
+    stats_subtitle: "Oylik xaridlar dinamikasi va 3D tahlili",
+    hide_stats: "Statistikani yashirish",
 
     // Profile
     profile_title: "Profil",
@@ -280,6 +283,9 @@ export const translations = {
     order_close: "Закрыть ↑",
     reorder: "Повторить заказ",
     pdf_report: "PDF отчет",
+    stats_and_spending: "Статистика и расходы",
+    stats_subtitle: "Динамика покупок и 3D аналитика",
+    hide_stats: "Скрыть статистику",
 
     // Profile
     profile_title: "Профиль",
@@ -448,6 +454,9 @@ export const translations = {
     order_close: "Close ↑",
     reorder: "Reorder",
     pdf_report: "PDF Report",
+    stats_and_spending: "Statistics & Spending",
+    stats_subtitle: "Monthly purchase dynamics & 3D analytics",
+    hide_stats: "Hide Statistics",
 
     // Profile
     profile_title: "Profile",
