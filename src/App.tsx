@@ -1,140 +1,2472 @@
-import { useEffect, useMemo, useRef, useState, type TouchEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type TouchEvent,
+} from "react";
 import "./App.css";
 import { MonthlySpendingChart } from "./components/SpendingChart";
 import { exportOrdersToPDF } from "./utils/pdfExport";
-import { Home3DIcon, Search3DIcon, Heart3DIcon, Bag3DIcon, User3DIcon } from "./components/Nav3DIcons";
-import { ProductImageGallery, type Product } from "./components/ProductImageGallery";
-import { RotatingCategoriesSection, getSynchronizedCategories } from "./components/RotatingCategorySection";
+import {
+  Home3DIcon,
+  Search3DIcon,
+  Heart3DIcon,
+  Bag3DIcon,
+  User3DIcon,
+} from "./components/Nav3DIcons";
+import {
+  ProductImageGallery,
+  type Product,
+} from "./components/ProductImageGallery";
+import {
+  RotatingCategoriesSection,
+  getSynchronizedCategories,
+} from "./components/RotatingCategorySection";
+import { SettingsModal } from "./components/SettingsModal";
+import { HelpSupportModal } from "./components/HelpSupportModal";
+import { NotificationModal } from "./components/NotificationModal";
+import { OnlineChatView } from "./components/OnlineChatView";
+import { PullToRefresh } from "./components/PullToRefresh";
+import {
+  PromosModal,
+  DeliveryTermsModal,
+  SizeGuideModal,
+  AboutBrandModal,
+} from "./components/ProfileExtraModals";
+import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
+import {
+  type Language,
+  type TranslationKey,
+  getTranslation,
+} from "./utils/translations";
+import {
+  type ChatMessage,
+  getUnreadMessages,
+  markMessagesAsRead,
+  subscribeToChat,
+} from "./utils/chatSync";
 
-declare global { interface Window { Telegram?: { WebApp?: { ready: () => void; expand: () => void; initData?: string; version?: string; isVersionAtLeast?: (version: string) => boolean; requestContact?: (callback: (ok: boolean) => void) => void; onEvent?: (event: string, callback: (data?: any) => void) => void; offEvent?: (event: string, callback: (data?: any) => void) => void; initDataUnsafe?: { user?: { id: number; first_name?: string; last_name?: string; username?: string; photo_url?: string } }; HapticFeedback?: { impactOccurred: (style: "light" | "medium" | "heavy") => void; notificationOccurred?: (type: "error" | "success" | "warning") => void } } }; L?: any; } }
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        ready: () => void;
+        expand: () => void;
+        initData?: string;
+        version?: string;
+        isVersionAtLeast?: (version: string) => boolean;
+        requestContact?: (callback: (ok: boolean) => void) => void;
+        onEvent?: (event: string, callback: (data?: any) => void) => void;
+        offEvent?: (event: string, callback: (data?: any) => void) => void;
+        initDataUnsafe?: {
+          user?: {
+            id: number;
+            first_name?: string;
+            last_name?: string;
+            username?: string;
+            photo_url?: string;
+          };
+        };
+        HapticFeedback?: {
+          impactOccurred: (style: "light" | "medium" | "heavy") => void;
+          notificationOccurred?: (
+            type: "error" | "success" | "warning",
+          ) => void;
+        };
+      };
+    };
+    L?: any;
+  }
+}
 
-type CartItem={product:Product;size:string;color:string;quantity:number};
-type Address={latitude:number;longitude:number;region?:string;district?:string;street?:string;house?:string;apartment?:string;landmark?:string};
-type Order={id:string;items:CartItem[];subtotal:number;delivery:number;discount:number;total:number;address?:Address;phone:string;payment:string;status:string;createdAt:string;updatedAt?:string;statusUpdatedAt?:string};
-type Page="home"|"catalog"|"wishlist"|"cart"|"profile"|"checkout"|"orders"|"addresses"|"product";
+type CartItem = {
+  product: Product;
+  size: string;
+  color: string;
+  quantity: number;
+};
+type Address = {
+  latitude: number;
+  longitude: number;
+  region?: string;
+  district?: string;
+  street?: string;
+  house?: string;
+  apartment?: string;
+  landmark?: string;
+};
+type Order = {
+  id: string;
+  items: CartItem[];
+  subtotal: number;
+  delivery: number;
+  discount: number;
+  total: number;
+  address?: Address;
+  phone: string;
+  payment: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string;
+  statusUpdatedAt?: string;
+};
+type Page =
+  | "home"
+  | "catalog"
+  | "wishlist"
+  | "cart"
+  | "profile"
+  | "checkout"
+  | "orders"
+  | "addresses"
+  | "product"
+  | "chat";
 const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
-const API_URL=(import.meta.env.VITE_API_URL||"https://guli-lingerie-api.onrender.com").replace(/\/$/,"");
-const tg=()=>window.Telegram?.WebApp;
-const formatPrice=(n:number)=>`${Math.round(n).toLocaleString("uz-UZ")} so'm`;
-const formatDate=(v:string)=>{const d=new Date(v);return Number.isNaN(d.getTime())?"Sana noma'lum":d.toLocaleString("uz-UZ",{dateStyle:"medium",timeStyle:"short"})};
-const isRecentlyUpdated=(order:Order,hours=24)=>{const ts=order.statusUpdatedAt||order.updatedAt||order.createdAt;if(!ts)return false;const time=new Date(ts).getTime();if(Number.isNaN(time))return false;const diff=Date.now()-time;return diff>=0&&diff<=hours*60*60*1000};
-const getRecentUpdateLabel=(order:Order)=>{const ts=order.statusUpdatedAt||order.updatedAt||order.createdAt;if(!ts)return"Yaqinda";const time=new Date(ts).getTime();if(Number.isNaN(time))return"Yaqinda";const diffSec=Math.max(0,Math.floor((Date.now()-time)/1000));if(diffSec<60)return"hozirgina";const diffMin=Math.floor(diffSec/60);if(diffMin<60)return`${diffMin} daq oldin`;const diffHours=Math.floor(diffMin/60);if(diffHours<24)return`${diffHours} soat oldin`;return"24s ichida"};
-const orderNumber=()=>`GULI-${Math.floor(100000+Math.random()*900000)}`;
-const readStorage=<T,>(key:string,fallback:T):T=>{try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw) as T:fallback}catch{return fallback}};
-const placeholder=(name="GULI")=>`data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0,18)}</text></svg>`)}`;
-const imageUrl=(p:Product,index=0)=>{const list=[p.image,...(p.images||[])].filter(Boolean);const url=list[index]||list[0]||"";if(!url)return placeholder(p.name);try{const u=new URL(url);if(u.hostname.includes("images.unsplash.com")){u.searchParams.set("auto","format");u.searchParams.set("fit","crop");u.searchParams.set("w","900");u.searchParams.set("q","78")}return u.toString()}catch{return url}};
-function ProductGridSkeleton({count=4}:{count?:number}){return <div className="productGrid" role="status" aria-label="Mahsulotlar yuklanmoqda">{Array.from({length:count}).map((_,i)=><div className="skeletonProductCard" key={i}><div className="skeletonProductImage skeletonShimmer"/><div className="skeletonProductBody"><div className="skeletonLine skeletonCategory skeletonShimmer"/><div className="skeletonLine skeletonTitle skeletonShimmer"/><div className="skeletonLine skeletonCode skeletonShimmer"/><div className="skeletonPriceRow"><div className="skeletonLine skeletonPrice skeletonShimmer"/><div className="skeletonHeart skeletonShimmer"/></div></div></div>)}</div>}
-function OrdersListSkeleton({count=3}:{count?:number}){return <div className="ordersList" role="status" aria-label="Buyurtmalar yuklanmoqda">{Array.from({length:count}).map((_,i)=><div className="skeletonOrderCard" key={i}><div className="skeletonOrderTop"><div className="skeletonLine skeletonOrderNum skeletonShimmer"/><div className="skeletonLine skeletonOrderDate skeletonShimmer"/></div><div className="skeletonOrderMain"><div className="skeletonOrderThumb skeletonShimmer"/><div className="skeletonOrderInfo"><div className="skeletonLine skeletonOrderTitle skeletonShimmer"/><div className="skeletonLine skeletonOrderMeta skeletonShimmer"/><div className="skeletonLine skeletonOrderPrice skeletonShimmer"/></div></div><div className="skeletonOrderBottom"><div className="skeletonLine skeletonOrderStatus skeletonShimmer"/><div className="skeletonLine skeletonOrderButton skeletonShimmer"/></div></div>)}</div>}
-function LocationPicker({latitude,longitude,onChange}:{latitude:number;longitude:number;onChange:(lat:number,lon:number)=>void}){const el=useRef<HTMLDivElement|null>(null);const map=useRef<any>(null);const marker=useRef<any>(null);const [ready,setReady]=useState(Boolean(window.L));useEffect(()=>{if(window.L){setReady(true);return}const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(css);const script=document.createElement("script");script.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";script.async=true;script.onload=()=>setReady(true);document.body.appendChild(script);return()=>{script.remove();css.remove()}},[]);useEffect(()=>{if(!ready||!el.current||!window.L)return;const L=window.L;if(!map.current){map.current=L.map(el.current,{zoomControl:false}).setView([latitude,longitude],16);L.control.zoom({position:"bottomright"}).addTo(map.current);L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map.current);marker.current=L.marker([latitude,longitude],{draggable:true}).addTo(map.current);marker.current.on("dragend",()=>{const p=marker.current.getLatLng();onChange(p.lat,p.lng)});map.current.on("click",(e:any)=>{marker.current.setLatLng(e.latlng);onChange(e.latlng.lat,e.latlng.lng)})}else{marker.current?.setLatLng([latitude,longitude]);map.current.setView([latitude,longitude],16)}setTimeout(()=>map.current?.invalidateSize(),100)},[ready,latitude,longitude,onChange]);return <div className="mapPicker"><div ref={el} className="leafletMap"/>{!ready?<div className="mapLoading">Xarita yuklanmoqda…</div>:null}<div className="mapHint">📍 Pinni sudrang yoki xaritada kerakli joyga bosing</div></div>}
+const API_URL = (
+  import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com"
+).replace(/\/$/, "");
+const tg = () => window.Telegram?.WebApp;
+const formatPrice = (n: number) =>
+  `${Math.round(n).toLocaleString("uz-UZ")} so'm`;
+const formatDate = (v: string) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime())
+    ? "Sana noma'lum"
+    : d.toLocaleString("uz-UZ", { dateStyle: "medium", timeStyle: "short" });
+};
+const isRecentlyUpdated = (order: Order, hours = 24) => {
+  const ts = order.statusUpdatedAt || order.updatedAt || order.createdAt;
+  if (!ts) return false;
+  const time = new Date(ts).getTime();
+  if (Number.isNaN(time)) return false;
+  const diff = Date.now() - time;
+  return diff >= 0 && diff <= hours * 60 * 60 * 1000;
+};
+const getRecentUpdateLabel = (order: Order) => {
+  const ts = order.statusUpdatedAt || order.updatedAt || order.createdAt;
+  if (!ts) return "Yaqinda";
+  const time = new Date(ts).getTime();
+  if (Number.isNaN(time)) return "Yaqinda";
+  const diffSec = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (diffSec < 60) return "hozirgina";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} daq oldin`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} soat oldin`;
+  return "24s ichida";
+};
+const orderNumber = () => `GULI-${Math.floor(100000 + Math.random() * 900000)}`;
+const readStorage = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const placeholder = (name = "GULI") =>
+  `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0, 18)}</text></svg>`)}`;
+const imageUrl = (p: Product, index = 0) => {
+  const list = [p.image, ...(p.images || [])].filter(Boolean);
+  const url = list[index] || list[0] || "";
+  if (!url) return placeholder(p.name);
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("images.unsplash.com")) {
+      u.searchParams.set("auto", "format");
+      u.searchParams.set("fit", "crop");
+      u.searchParams.set("w", "900");
+      u.searchParams.set("q", "78");
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+};
+function ProductGridSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div
+      className="productGrid"
+      role="status"
+      aria-label="Mahsulotlar yuklanmoqda"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div className="skeletonProductCard" key={i}>
+          <div className="skeletonProductImage skeletonShimmer" />
+          <div className="skeletonProductBody">
+            <div className="skeletonLine skeletonCategory skeletonShimmer" />
+            <div className="skeletonLine skeletonTitle skeletonShimmer" />
+            <div className="skeletonLine skeletonCode skeletonShimmer" />
+            <div className="skeletonPriceRow">
+              <div className="skeletonLine skeletonPrice skeletonShimmer" />
+              <div className="skeletonHeart skeletonShimmer" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function OrdersListSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div
+      className="ordersList"
+      role="status"
+      aria-label="Buyurtmalar yuklanmoqda"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <div className="skeletonOrderCard" key={i}>
+          <div className="skeletonOrderTop">
+            <div className="skeletonLine skeletonOrderNum skeletonShimmer" />
+            <div className="skeletonLine skeletonOrderDate skeletonShimmer" />
+          </div>
+          <div className="skeletonOrderMain">
+            <div className="skeletonOrderThumb skeletonShimmer" />
+            <div className="skeletonOrderInfo">
+              <div className="skeletonLine skeletonOrderTitle skeletonShimmer" />
+              <div className="skeletonLine skeletonOrderMeta skeletonShimmer" />
+              <div className="skeletonLine skeletonOrderPrice skeletonShimmer" />
+            </div>
+          </div>
+          <div className="skeletonOrderBottom">
+            <div className="skeletonLine skeletonOrderStatus skeletonShimmer" />
+            <div className="skeletonLine skeletonOrderButton skeletonShimmer" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+function LocationPicker({
+  latitude,
+  longitude,
+  onChange,
+}: {
+  latitude: number;
+  longitude: number;
+  onChange: (lat: number, lon: number) => void;
+}) {
+  const el = useRef<HTMLDivElement | null>(null);
+  const map = useRef<any>(null);
+  const marker = useRef<any>(null);
+  const [ready, setReady] = useState(Boolean(window.L));
+  useEffect(() => {
+    if (window.L) {
+      setReady(true);
+      return;
+    }
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.async = true;
+    script.onload = () => setReady(true);
+    document.body.appendChild(script);
+    return () => {
+      script.remove();
+      css.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (!ready || !el.current || !window.L) return;
+    const L = window.L;
+    if (!map.current) {
+      map.current = L.map(el.current, { zoomControl: false }).setView(
+        [latitude, longitude],
+        16,
+      );
+      L.control.zoom({ position: "bottomright" }).addTo(map.current);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap",
+      }).addTo(map.current);
+      marker.current = L.marker([latitude, longitude], {
+        draggable: true,
+      }).addTo(map.current);
+      marker.current.on("dragend", () => {
+        const p = marker.current.getLatLng();
+        onChange(p.lat, p.lng);
+      });
+      map.current.on("click", (e: any) => {
+        marker.current.setLatLng(e.latlng);
+        onChange(e.latlng.lat, e.latlng.lng);
+      });
+    } else {
+      marker.current?.setLatLng([latitude, longitude]);
+      map.current.setView([latitude, longitude], 16);
+    }
+    setTimeout(() => map.current?.invalidateSize(), 100);
+  }, [ready, latitude, longitude, onChange]);
+  return (
+    <div className="mapPicker">
+      <div ref={el} className="leafletMap" />
+      {!ready ? <div className="mapLoading">Xarita yuklanmoqda…</div> : null}
+      <div className="mapHint">
+        📍 Pinni sudrang yoki xaritada kerakli joyga bosing
+      </div>
+    </div>
+  );
+}
 
-export default function App(){
- const [page,setPage]=useState<Page>("home");const [previousPage,setPreviousPage]=useState<Page>("home");const [products,setProducts]=useState<Product[]>([]);const [productsLoading,setProductsLoading]=useState(true);const [productsError,setProductsError]=useState("");const [selectedProduct,setSelectedProduct]=useState<Product|null>(null);const [selectedCategory,setSelectedCategory]=useState("Barchasi");const [search,setSearch]=useState("");
- const [cart,setCart]=useState<CartItem[]>(()=>readStorage("cart",[]));const [wishlist,setWishlist]=useState<number[]>(()=>readStorage("wishlist",[]));const [orders,setOrders]=useState<Order[]>(()=>readStorage("orders",[]));const [selectedOrderId,setSelectedOrderId]=useState<string|null>(null);const [orderSearch,setOrderSearch]=useState("");const [orderFilter,setOrderFilter]=useState<"all"|"recent"|"in_progress"|"completed"|"cancelled">("all");const [selectedSize,setSelectedSize]=useState("");const [selectedColor,setSelectedColor]=useState("");const [phone,setPhone]=useState(()=>localStorage.getItem("guli_phone")||"");const [phoneLoading,setPhoneLoading]=useState(false);const [payment,setPayment]=useState("cash");
- const [address,setAddress]=useState<Address>(()=>readStorage("guli_address",{latitude:0,longitude:0,region:"",district:"",street:"",house:"",apartment:"",landmark:""}));const [locationLoading,setLocationLoading]=useState(false);const [addressMessage,setAddressMessage]=useState("");
- const [promo,setPromo]=useState("");const [promoApplied,setPromoApplied]=useState(false);const [promoDiscount,setPromoDiscount]=useState(0);const [promoLoading,setPromoLoading]=useState(false);const [profilePhotoError,setProfilePhotoError]=useState(false);const [ordersLoading,setOrdersLoading]=useState(false);const [exportingPdf,setExportingPdf]=useState(false);const [toast,setToast]=useState("");
- const telegramUser=tg()?.initDataUnsafe?.user;const displayName=[telegramUser?.first_name,telegramUser?.last_name].filter(Boolean).join(" ")||"GULI mijozi";const avatar=telegramUser?.photo_url||"";
- const showToast=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(""),2600)};
+export default function App() {
+  const [page, setPage] = useState<Page>("home");
+  const [previousPage, setPreviousPage] = useState<Page>("home");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState("Barchasi");
+  const [search, setSearch] = useState("");
+  const [cart, setCart] = useState<CartItem[]>(() => readStorage("cart", []));
+  const [wishlist, setWishlist] = useState<number[]>(() =>
+    readStorage("wishlist", []),
+  );
+  const [orders, setOrders] = useState<Order[]>(() =>
+    readStorage("orders", []),
+  );
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderFilter, setOrderFilter] = useState<
+    "all" | "recent" | "in_progress" | "completed" | "cancelled"
+  >("all");
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
+  const [phone, setPhone] = useState(
+    () => localStorage.getItem("guli_phone") || "",
+  );
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [payment, setPayment] = useState("cash");
+  const [address, setAddress] = useState<Address>(() =>
+    readStorage("guli_address", {
+      latitude: 0,
+      longitude: 0,
+      region: "",
+      district: "",
+      street: "",
+      house: "",
+      apartment: "",
+      landmark: "",
+    }),
+  );
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [addressMessage, setAddressMessage] = useState("");
+  const [promo, setPromo] = useState("");
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [profilePhotoError, setProfilePhotoError] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [toast, setToast] = useState("");
 
- const tabTouchStartX=useRef<number>(0);
- const tabTouchStartY=useRef<number>(0);
- const tabTouchStartTime=useRef<number>(0);
- const isSwipingTab=useRef<boolean>(false);
+  // Theme & Settings & Chat states
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const saved = localStorage.getItem("guli_theme");
+    return saved === "dark" || saved === "light" ? saved : "light";
+  });
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem("guli_lang") as Language;
+    return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
+  });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isPromosOpen, setIsPromosOpen] = useState(false);
+  const [isDeliveryInfoOpen, setIsDeliveryInfoOpen] = useState(false);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
 
- const handleTabTouchStart=(e:TouchEvent<HTMLDivElement>)=>{
-   if(!MAIN_TABS.includes(page))return;
-   const target=e.target as HTMLElement;
-   if(
-     target.closest('.productGallerySwipe')||
-     target.closest('.leafletMap')||
-     target.closest('.categoryScroll')||
-     target.closest('.orderFilterTabs')||
-     target.closest('.categoryTabs')||
-     target.closest('input')||
-     target.closest('textarea')||
-     target.closest('button')||
-     target.closest('.galleryThumbnails')
-   ){
-     isSwipingTab.current=false;
-     return;
-   }
-   tabTouchStartX.current=e.touches[0].clientX;
-   tabTouchStartY.current=e.touches[0].clientY;
-   tabTouchStartTime.current=Date.now();
-   isSwipingTab.current=true;
- };
+  const telegramUser = tg()?.initDataUnsafe?.user;
+  const displayName =
+    [telegramUser?.first_name, telegramUser?.last_name]
+      .filter(Boolean)
+      .join(" ") || "GULI mijozi";
+  const avatar = telegramUser?.photo_url || "";
+  const currentUserId = telegramUser?.id
+    ? String(telegramUser.id)
+    : "guest-user";
+  const [unreadMessages, setUnreadMessages] = useState<ChatMessage[]>(() =>
+    getUnreadMessages(currentUserId),
+  );
 
- const handleTabTouchEnd=(e:TouchEvent<HTMLDivElement>)=>{
-   if(!isSwipingTab.current||!MAIN_TABS.includes(page))return;
-   isSwipingTab.current=false;
-   const endX=e.changedTouches[0].clientX;
-   const endY=e.changedTouches[0].clientY;
-   const diffX=endX-tabTouchStartX.current;
-   const diffY=endY-tabTouchStartY.current;
-   const timeDiff=Date.now()-tabTouchStartTime.current;
-   const absX=Math.abs(diffX);
-   const absY=Math.abs(diffY);
+  const t = (key: TranslationKey) => getTranslation(key, language);
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2600);
+  };
 
-   // Swipe threshold
-   if(absX>=48&&absX>absY*1.25&&timeDiff<750){
-     const currentIndex=MAIN_TABS.indexOf(page);
-     if(currentIndex!==-1){
-       if(diffX<0&&currentIndex<MAIN_TABS.length-1){
-         // Swiped left -> Next tab
-         go(MAIN_TABS[currentIndex+1]);
-       }else if(diffX>0&&currentIndex>0){
-         // Swiped right -> Previous tab
-         go(MAIN_TABS[currentIndex-1]);
-       }
-     }
-   }
- };
+  // Apply theme to root
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("guli_theme", theme);
+  }, [theme]);
 
- useEffect(()=>{try{tg()?.ready();tg()?.expand()}catch{}},[]);useEffect(()=>{localStorage.setItem("cart",JSON.stringify(cart))},[cart]);useEffect(()=>{localStorage.setItem("wishlist",JSON.stringify(wishlist))},[wishlist]);useEffect(()=>{localStorage.setItem("orders",JSON.stringify(orders))},[orders]);useEffect(()=>{localStorage.setItem("guli_phone",phone)},[phone]);useEffect(()=>{localStorage.setItem("guli_address",JSON.stringify(address))},[address]);
- useEffect(()=>{let dead=false;fetch(`${API_URL}/api/products?limit=100`).then(r=>r.json()).then(r=>{if(!r.success)throw new Error(r.message||"Catalog xatosi");if(!dead)setProducts(Array.isArray(r.data)?r.data:[])}).catch(e=>{if(!dead)setProductsError(e instanceof Error?e.message:"Mahsulotlarni yuklashda xatolik")}).finally(()=>{if(!dead)setProductsLoading(false)});return()=>{dead=true}},[]);
- useEffect(()=>{if(!telegramUser?.id)return;setOrdersLoading(true);fetch(`${API_URL}/api/orders?telegram_id=${telegramUser.id}`).then(r=>r.ok?r.json():Promise.reject(new Error())).then(r=>{if(!r.success||!Array.isArray(r.data))return;setOrders(r.data.map((row:any)=>({id:String(row.order_number||row.id||orderNumber()),items:Array.isArray(row.items)?row.items:[],subtotal:Number(row.subtotal||0),delivery:Number(row.delivery||0),discount:Number(row.discount||0),total:Number(row.total||0),address:row.address||undefined,phone:row.phone||"",payment:row.payment||"cash",status:row.status||"Qabul qilindi",createdAt:row.created_at||new Date().toISOString(),updatedAt:row.updated_at||undefined,statusUpdatedAt:row.status_updated_at||row.updated_at||undefined})))}).catch(()=>{}).finally(()=>setOrdersLoading(false))},[telegramUser?.id]);
- useEffect(()=>{const w=tg();if(!w?.onEvent||!telegramUser?.id)return;const isVersionOk=typeof w.isVersionAtLeast==="function"?w.isVersionAtLeast("6.9"):Boolean(w.version&&parseFloat(w.version)>=6.9);if(!isVersionOk)return;const handler=(data?:any)=>{if(data?.status==="sent")showToast("Raqam Telegramdan olindi ✓")};try{w.onEvent("contactRequested",handler);return()=>w.offEvent?.("contactRequested",handler)}catch{}},[telegramUser?.id]);
- const go=(next:Page)=>{try{tg()?.HapticFeedback?.impactOccurred?.("light")}catch{}setPage(next);window.scrollTo({top:0,behavior:"smooth"})};
- const openProduct=(product:Product,from:Page=page)=>{setPreviousPage(from);setSelectedProduct(product);setSelectedSize(product.sizes?.[0]||"");setSelectedColor(product.colors?.[0]||"");go("product")};
- const toggleWishlist=(id:number)=>{try{window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light")}catch{}setWishlist(x=>x.includes(id)?x.filter(v=>v!==id):[...x,id])};
- const addToCart=(product:Product,size=product.sizes?.[0]||"",color=product.colors?.[0]||"")=>{try{window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium")}catch{}setCart(x=>{const found=x.find(i=>i.product.id===product.id&&i.size===size&&i.color===color);return found?x.map(i=>i===found?{...i,quantity:i.quantity+1}:i):[...x,{product,size,color,quantity:1}]})};
- const changeQuantity=(index:number,amount:number)=>setCart(x=>x.map((i,n)=>n===index?{...i,quantity:i.quantity+amount}:i).filter(i=>i.quantity>0));
- const cartCount=cart.reduce((s,i)=>s+i.quantity,0);const subtotal=cart.reduce((s,i)=>s+i.product.price*i.quantity,0);const delivery=subtotal>=300000?0:20000;const discount=promoApplied?Math.min(subtotal,promoDiscount):0;const total=Math.max(0,subtotal+delivery-discount);
- const allCategories=useMemo(()=>getSynchronizedCategories(products),[products]);
- const filtered=useMemo(()=>products.filter(p=>(selectedCategory==="Barchasi"||p.category===selectedCategory)&&(!search.trim()||p.product_code?.includes(search.trim())||p.name.toLowerCase().includes(search.trim().toLowerCase())||p.category.toLowerCase().includes(search.trim().toLowerCase()))),[products,selectedCategory,search]);
- const applyPromo=async()=>{try{window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium")}catch{}const code=promo.trim().toUpperCase();if(!code){setPromoApplied(false);setPromoDiscount(0);showToast("Promo kodini kiriting");return}setPromoLoading(true);try{const r=await fetch(`${API_URL}/api/promo/validate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code,subtotal})});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.message||"Promo kodni tekshirishda xatolik");setPromo(j.data?.code||code);setPromoDiscount(Number(j.data?.discount||0));setPromoApplied(true);try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success")}catch{}showToast(`Promo qo‘llandi: −${formatPrice(Number(j.data?.discount||0))} ✓`)}catch(e){setPromoApplied(false);setPromoDiscount(0);try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("error")}catch{}showToast(e instanceof Error?e.message:"Promo kodni tekshirishda xatolik")}finally{setPromoLoading(false)}};
- const reverseGeocode=async(lat:number,lon:number)=>{try{const r=await fetch(`${API_URL}/api/reverse-geocode?lat=${lat}&lon=${lon}`);const j=await r.json();if(j.success&&j.data)setAddress(a=>({...a,latitude:lat,longitude:lon,region:j.data.region||a.region,district:j.data.district||a.district,street:j.data.street||a.street}));else setAddress(a=>({...a,latitude:lat,longitude:lon}))}catch{setAddress(a=>({...a,latitude:lat,longitude:lon}))}};
- const updateMapPosition=(lat:number,lon:number)=>{setAddress(a=>({...a,latitude:lat,longitude:lon}));reverseGeocode(lat,lon)};
- const requestLocation=()=>{if(!navigator.geolocation){setAddressMessage("Telefoningiz lokatsiyani qo‘llab-quvvatlamaydi.");return}setLocationLoading(true);setAddressMessage("");navigator.geolocation.getCurrentPosition(async p=>{await reverseGeocode(p.coords.latitude,p.coords.longitude);setLocationLoading(false)},()=>{setLocationLoading(false);setAddressMessage("Lokatsiya ruxsati berilmadi. Telefon sozlamalaridan ruxsat bering.")},{enableHighAccuracy:true,timeout:15000,maximumAge:10000})};
- const requestTelegramPhone=()=>{const w=tg();const supportsContact=Boolean(w&&typeof w.requestContact==="function"&&(typeof w.isVersionAtLeast==="function"?w.isVersionAtLeast("6.9"):Boolean(w.version&&parseFloat(w.version)>=6.9)));if(!supportsContact||!w?.requestContact){showToast("Telegram versiyangizda avtomatik raqam olish qo‘llab-quvvatlanmaydi. Telefoningizni qo‘lda kiriting.");return}setPhoneLoading(true);try{w.requestContact(async(ok:boolean)=>{try{if(!ok){setPhoneLoading(false);return}for(let i=0;i<8;i++){try{const r=await fetch(`${API_URL}/api/telegram-user`);const j=await r.json();if(j.success&&j.data?.telegram_phone){setPhone(j.data.telegram_phone);setPhoneLoading(false);showToast("✅ Telegram raqami kiritildi");return}}catch{}await new Promise(resolve=>setTimeout(resolve,900))}setPhoneLoading(false);showToast("Raqam yuborildi. Bir ozdan keyin qayta urinib ko‘ring.")}catch{setPhoneLoading(false)}})}catch{setPhoneLoading(false);showToast("Telegram raqamini olishda xatolik. Raqamni qo‘lda kiriting.")}};
- const setAddressField=(key:keyof Address,value:string)=>setAddress(a=>({...a,[key]:value}));
- const submitOrder=async()=>{if(!phone.trim()||!cart.length)return;try{window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium")}catch{}const id=orderNumber();const now=new Date().toISOString();const payload={order_number:id,telegram_id:telegramUser?.id,username:telegramUser?.username,first_name:telegramUser?.first_name,phone:phone.trim(),items:cart,subtotal,delivery,discount,total,address,payment,status:"Qabul qilindi",promo_code:promoApplied?promo.trim().toUpperCase():null};try{const r=await fetch(`${API_URL}/api/orders`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.message||"Buyurtma yuborilmadi");if(telegramUser?.id&&address.latitude)fetch(`${API_URL}/api/save-address`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...address,username:telegramUser.username,phone:phone.trim()})}).catch(()=>{});setOrders(x=>[{id:String(j.data?.order_number||id),items:cart,subtotal,delivery,discount,total,address,phone:phone.trim(),payment,status:"Qabul qilindi",createdAt:now,updatedAt:now,statusUpdatedAt:now},...x]);setCart([]);setPromo("");setPromoApplied(false);setPromoDiscount(0);try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success")}catch{}go("orders");showToast("Buyurtma qabul qilindi ✓")}catch(e){try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("error")}catch{}showToast(e instanceof Error?e.message:"Buyurtma yuborilmadi")}};
- const similar=selectedProduct?products.filter(p=>p.category===selectedProduct.category&&p.id!==selectedProduct.id).slice(0,4):[];
- const card=(p:Product,compact=false)=><article className={`productCard ${compact?"compact":""}`} key={p.id} onClick={()=>openProduct(p)}><div className="productImage"><ProductImageGallery product={p} onOpen={()=>openProduct(p)}/><button className="heart" onClick={e=>{e.stopPropagation();toggleWishlist(p.id)}}>{wishlist.includes(p.id)?"♥":"♡"}</button>{p.discount?<span className="discount">-{p.discount}%</span>:null}</div><div className="productBody"><span>{p.category}</span><h3>{p.name}</h3>{p.product_code?<small>Kod: {p.product_code}</small>:null}<div className="priceLine"><b>{formatPrice(p.price)}</b>{p.oldPrice?<del>{formatPrice(p.oldPrice)}</del>:null}</div></div></article>;
- const handleExportPdf=(targetOrders?:Order[],customLabel?:string)=>{if(!orders.length){showToast("Eksport qilish uchun buyurtmalar mavjud emas");return}setExportingPdf(true);try{const list=targetOrders&&targetOrders.length?targetOrders:orders;const ok=exportOrdersToPDF({orders:list,userName:displayName,userPhone:phone,userHandle:telegramUser?.username,filterLabel:customLabel||"Barchasi"});if(ok){showToast("✓ Buyurtmalar tarixi PDF shaklida yuklandi")}else{showToast("PDF yaratishda xatolik")}}catch(e){console.error(e);showToast("PDF yuklashda xatolik")}finally{setExportingPdf(false)}};
- const reorder=(order:Order)=>{if(!order.items||!order.items.length){showToast("Buyurtmada mahsulotlar topilmadi");return}try{window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium")}catch{}setCart(currentCart=>{const updated=[...currentCart];for(const item of order.items){if(!item?.product)continue;const size=item.size||item.product.sizes?.[0]||"";const color=item.color||item.product.colors?.[0]||"";const qty=item.quantity||1;const existingIndex=updated.findIndex(c=>c.product.id===item.product.id&&c.size===size&&c.color===color);if(existingIndex>=0){updated[existingIndex]={...updated[existingIndex],quantity:updated[existingIndex].quantity+qty}}else{updated.push({product:item.product,size,color,quantity:qty})}}return updated});try{window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success")}catch{}showToast("✓ Mahsulotlar savatga qo‘shildi!");go("cart")};
- const ordersPage=()=>{const q=orderSearch.trim().toLowerCase();const filteredByCategory=orders.filter(o=>{if(orderFilter==="all")return true;if(orderFilter==="recent")return isRecentlyUpdated(o);if(orderFilter==="completed")return o.status==="Yetkazildi";if(orderFilter==="cancelled")return o.status==="Bekor qilindi";if(orderFilter==="in_progress")return o.status!=="Yetkazildi"&&o.status!=="Bekor qilindi";return true});const visibleOrders=filteredByCategory.filter(o=>{if(!q)return true;const codes=(o.items||[]).map(it=>it?.product?.product_code||"").filter(Boolean).join(" ").toLowerCase();return codes.includes(q)||String(o.id).toLowerCase().includes(q)});const filterCounts={all:orders.length,recent:orders.filter(o=>isRecentlyUpdated(o)).length,in_progress:orders.filter(o=>o.status!=="Yetkazildi"&&o.status!=="Bekor qilindi").length,completed:orders.filter(o=>o.status==="Yetkazildi").length,cancelled:orders.filter(o=>o.status==="Bekor qilindi").length};const filterTabs:[("all"|"recent"|"in_progress"|"completed"|"cancelled"),string,string][]=[["all","Barchasi","📦"],["recent","Yangi (24s)","⚡"],["in_progress","Jarayonda","⏳"],["completed","Yetkazilgan","✓"],["cancelled","Bekor qilingan","✕"]];const currentTabName=filterTabs.find(([k])=>k===orderFilter)?.[1]||"Barchasi";return <main className="page"><div className="pageHeader"><div className="pageHeaderTop"><div><span className="pageHeaderEyebrow">BUYURTMALAR</span><h1>Mening buyurtmalarim</h1></div>{orders.length>0?<button id="export-orders-pdf-btn" className="exportPdfButton" onClick={()=>handleExportPdf(visibleOrders.length?visibleOrders:orders,q?`Qidiruv: "${q}"`:currentTabName)} disabled={exportingPdf} title="Buyurtmalar tarixini PDF formatida yuklab olish"><span>📄</span><span>{exportingPdf?"Yuklanmoqda...":"PDF hisobot"}</span></button>:null}</div><p>Buyurtma holati va tafsilotlarini shu yerda ko‘ring.</p><div className="searchBox">⌕<input value={orderSearch} onChange={e=>setOrderSearch(e.target.value)} placeholder="6 xonali mahsulot kodi yoki buyurtma №"/></div></div><div className="orderFilterTabs" role="tablist">{filterTabs.map(([key,label,icon])=><button key={key} role="tab" aria-selected={orderFilter===key} className={`orderFilterTab ${orderFilter===key?"active":""}`} onClick={()=>setOrderFilter(key)}><span className="filterTabIcon">{icon}</span><span>{label}</span><span className="filterCount">{filterCounts[key]}</span></button>)}</div><MonthlySpendingChart orders={orders}/>{ordersLoading?<OrdersListSkeleton count={3}/>:visibleOrders.length?<div className="ordersList">{visibleOrders.map((o,index)=>{const recent=isRecentlyUpdated(o);const isCompleted=o.status==="Yetkazildi";return <article className={`orderCard ${selectedOrderId===o.id?"expanded":""} ${recent?"recentlyUpdated":""}`} key={o.id} id={`order-card-${o.id}`} style={{animationDelay:`${Math.min(index*45,300)}ms`}}><div className="orderTop"><div className="orderNumberGroup"><b>№ {o.id}</b>{o.items?.[0]?.product?.product_code?<small>Kod: {o.items[0].product.product_code}</small>:null}</div><div className="orderTopMeta">{recent?<span className="recentBadge" id={`order-badge-${o.id}`} title={`Holati ${getRecentUpdateLabel(o)} yangilandi`}><span className="recentBadgePulse"/>24s Yangilandi</span>:null}<span className="orderDate">{formatDate(o.createdAt)}</span></div></div><div className="orderMain" onClick={()=>{const item=o.items?.[0];if(item?.product)openProduct(item.product,"orders")}}><div className="orderThumb">{o.items?.[0]?.product?<img src={imageUrl(o.items[0].product)} alt={o.items[0].product.name}/>:null}</div><div><h3>{o.items?.[0]?.product?.name||"Buyurtma"}</h3><p>{o.items?.[0]?.product?.product_code?`Kod: ${o.items[0].product.product_code} · `:""}{o.items?.length||0} ta mahsulot · {o.payment==="card"?"Karta":"Naqd"}</p><strong>{formatPrice(o.total)}</strong></div></div><div className="orderBottom"><span className={`orderStatus ${recent?"recent":""}`}><span className={`statusDot ${recent?"livePulse":""}`}>●</span> {o.status}{recent?<span className="recentStatusTime">({getRecentUpdateLabel(o)})</span>:null}</span><div className="orderActions">{isCompleted?<button className="reorderButton" id={`reorder-btn-${o.id}`} onClick={e=>{e.stopPropagation();reorder(o)}} title="Ushbu buyurtmadagi mahsulotlarni yana savatga qo‘shish"><span>🔄</span><span>Qayta buyurtma</span></button>:null}<button onClick={()=>setSelectedOrderId(selectedOrderId===o.id?null:o.id)}>{selectedOrderId===o.id?"Yopish ↑":"Tafsilotlar →"}</button></div></div><div className={`orderDetailsCollapse ${selectedOrderId===o.id?"expanded":""}`} id={`order-details-${o.id}`} aria-hidden={selectedOrderId!==o.id}><div className="orderDetailsInner"><div className="orderDetails">{recent?<div className="orderRecentNotice"><span className="noticeIcon">⚡</span><div><strong>Holati yaqinda yangilandi ({getRecentUpdateLabel(o)})</strong><p>Buyurtmangiz holati «{o.status}» bosqichida.</p></div></div>:null}<div className="statusTimeline">{["Qabul qilindi","Tayyorlanmoqda","Yo‘lda","Yetkazildi"].map((s,i)=><div className={o.status===s||["Qabul qilindi","Tayyorlanmoqda","Yo‘lda","Yetkazildi"].indexOf(o.status)>i?"done":""} key={s}><span>{i+1}</span><b>{s}</b></div>)}</div><div className="orderDetailGrid"><div><small>Mahsulot kodi</small><b>{(o.items||[]).map(it=>it?.product?.product_code).filter(Boolean).join(", ")||"—"}</b></div><div><small>Telefon</small><b>{o.phone||"—"}</b></div><div><small>To‘lov</small><b>{o.payment==="card"?"Karta":"Naqd"}</b></div><div><small>Mahsulotlar</small><b>{formatPrice(o.subtotal)}</b></div><div><small>Yetkazib berish</small><b>{o.delivery?formatPrice(o.delivery):"Bepul"}</b></div><div><small>Chegirma</small><b>{o.discount?`−${formatPrice(o.discount)}`:"—"}</b></div><div><small>Jami</small><b>{formatPrice(o.total)}</b></div></div>{o.address?<p className="orderAddress">📍 {[o.address.region,o.address.district,o.address.street,o.address.house,o.address.apartment].filter(Boolean).join(", ")||"Manzil saqlangan"}</p>:null}{isCompleted?<div className="orderReorderBar"><button className="orderReorderFullBtn" id={`reorder-full-btn-${o.id}`} onClick={()=>reorder(o)}><span>🔄</span><span>Qayta buyurtma berish (Savatga qo‘shish)</span></button></div>:null}</div></div></div></article>})}</div>:<div className="empty"><div>📦</div><h3>{q?"Qidiruv bo‘yicha buyurtma topilmadi":orderFilter!=="all"?"Ushbu toifada buyurtmalar yo‘q":"Buyurtmalar hali yo‘q"}</h3><p>{q?"Boshqa 6 xonali mahsulot kodi yoki buyurtma raqamini kiriting.":orderFilter!=="all"?"Boshqa toifani tanlang yoki filtrni «Barchasi»ga o‘tkazing.":"Birinchi buyurtmangiz shu yerda ko‘rinadi."}</p>{orderFilter!=="all"?<button className="primaryButton" onClick={()=>setOrderFilter("all")}>Barcha buyurtmalarni ko‘rish</button>:<button className="primaryButton" onClick={()=>go("catalog")}>Katalogga o‘tish</button>}</div>}</main>};
- const profilePage=()=> <main className="page"><div className="profileHero"><div className="profileAvatar">{avatar&&!profilePhotoError?<img src={avatar} alt={displayName} onError={()=>setProfilePhotoError(true)}/>:"🌷"}</div><div><h1>{displayName}</h1><p>{telegramUser?.username?`@${telegramUser.username}`:"GULI Premium mijozi"}</p><span className="verified">✓ Telegram</span></div></div><div className="profileStats"><button onClick={()=>go("orders")}><b>{orders.length}</b><span>Buyurtma</span></button><button onClick={()=>go("wishlist")}><b>{wishlist.length}</b><span>Sevimli</span></button><button onClick={()=>go("cart")}><b>{cartCount}</b><span>Savat</span></button></div><MonthlySpendingChart orders={orders} onViewOrders={()=>go("orders")}/><section className="profileSection"><h2>Hisobim</h2><button className="menuRow" onClick={()=>go("orders")}><span>📦</span><div><b>Buyurtmalarim</b><small>Tarix va buyurtma holati ({orders.length} ta)</small></div><i>›</i></button>{orders.length>0?<button className="menuRow" onClick={()=>handleExportPdf(orders,"Barchasi")}><span>📄</span><div><b>Buyurtmalar hisoboti (PDF)</b><small>Shaxsiy hisobotni PDF formatida yuklab olish</small></div><i>›</i></button>:null}<button className="menuRow" onClick={()=>go("wishlist")}><span>♡</span><div><b>Sevimlilar</b><small>Saqlangan mahsulotlar</small></div><i>›</i></button><button className="menuRow" onClick={()=>go("addresses")}><span>📍</span><div><b>Manzillarim</b><small>Yetkazib berish manzillari</small></div><i>›</i></button></section><section className="profileSection"><h2>Qulayliklar</h2><button className="menuRow"><span>↗</span><div><b>GULI'ni ulashish</b><small>Do‘stlaringizga yuboring</small></div><i>›</i></button></section></main>;
+  // Store language choice
+  useEffect(() => {
+    localStorage.setItem("guli_lang", language);
+  }, [language]);
 
- return (
-  <div className="appShell">
-   <header className="topbar"><button className="brand" onClick={()=>go("home")}><span className="brandIcon">🌷</span><span><b>GULI</b><small>PREMIUM</small></span></button><div className="headerActions"><button className="iconButton" onClick={()=>go("wishlist")}>♡<span className="badge">{wishlist.length}</span></button><button className="iconButton" onClick={()=>go("cart")}>🛍️<span className="badge">{cartCount}</span></button></div></header>
-   
-   <div 
-     className="tabSwipeArea pageAnimEnter" 
-     key={page}
-     onTouchStart={handleTabTouchStart}
-     onTouchEnd={handleTabTouchEnd}
-   >
-      {page==="home"&&<><section className="hero"><div className="heroOverlay"><span>PREMIUM COLLECTION</span><h1>Go‘zallik sizdan boshlanadi.</h1><p>Nafislik, qulaylik va o‘zingizga bo‘lgan ishonch.</p><button className="heroButton" onClick={()=>go("catalog")}>Kolleksiyani ko‘rish →</button></div></section><RotatingCategoriesSection categories={allCategories} products={products} onSelectCategory={(catName)=>{setSelectedCategory(catName);go("catalog")}} onOpenProduct={(p)=>openProduct(p,"home")} onViewAll={()=>{setSelectedCategory("Barchasi");go("catalog")}}/><section className="section"><div className="sectionTitle"><h2>Tanlanganlar</h2><button onClick={()=>go("catalog")}>Barchasi</button></div>{productsLoading?<ProductGridSkeleton count={4}/>:productsError?<div className="empty"><div>⚠️</div><h3>Catalog vaqtincha ochilmadi</h3><p>{productsError}</p></div>:<div className="productGrid">{products.filter(p=>p.featured).slice(0,4).map(p=>card(p))}</div>}</section><div className="deliveryBanner"><div><span>🚚</span><div><b>300 000 so‘mdan yuqori buyurtma — bepul yetkazib berish</b><p>O‘zbekiston bo‘ylab qulay yetkazib berish.</p></div></div></div></>}
-     {page==="catalog"&&<main className="page"><div className="pageHeader"><span>GULI PREMIUM</span><h1>Katalog</h1><p>O‘zingizga mosini toping.</p></div><div className="searchBox">⌕<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Mahsulot nomi, kategoriya yoki 6 xonali kod..."/></div><div className="categoryTabs">{allCategories.map(c=><button key={c.name} className={`tab ${selectedCategory===c.name?"active":""}`} onClick={()=>setSelectedCategory(c.name)}><span>{c.icon}</span> {c.name}</button>)}</div>{productsLoading?<ProductGridSkeleton count={6}/>:productsError?<div className="empty"><div>⚠️</div><h3>Yuklashda xatolik</h3><p>{productsError}</p></div>:filtered.length?<div className="productGrid">{filtered.map(p=>card(p))}</div>:<div className="empty"><div>⌕</div><h3>Mahsulot topilmadi</h3><p>Boshqa qidiruv yoki kategoriya tanlang.</p></div>}</main>}
-    {page==="product"&&selectedProduct&&<main className="productDetail"><button className="backButton" onClick={()=>go(previousPage)}>← Orqaga</button><div className="detailImageWrap"><ProductImageGallery product={selectedProduct} detail/><button className="detailHeart" onClick={()=>toggleWishlist(selectedProduct.id)}>{wishlist.includes(selectedProduct.id)?"♥":"♡"}</button></div><div className="detailContent"><span className="categoryLabel">{selectedProduct.category}</span><h1>{selectedProduct.name}</h1>{selectedProduct.product_code?<small className="productCodeLabel">Kod: {selectedProduct.product_code}</small>:null}<div className="rating">★ {selectedProduct.rating.toFixed(1)} <span>({selectedProduct.reviews} sharh)</span></div><div className="priceRow"><strong>{formatPrice(selectedProduct.price)}</strong>{selectedProduct.oldPrice?<del>{formatPrice(selectedProduct.oldPrice)}</del>:null}</div><p className="description">{selectedProduct.description}</p><h3>O‘lcham</h3><div className="options">{selectedProduct.sizes.map(s=><button key={s} className={`option ${selectedSize===s?"active":""}`} onClick={()=>setSelectedSize(s)}>{s}</button>)}</div><h3>Rang</h3><div className="options">{selectedProduct.colors.map(c=><button key={c} className={`option ${selectedColor===c?"active":""}`} onClick={()=>setSelectedColor(c)}>{c}</button>)}</div><div className="stock">{selectedProduct.stock>0?`✓ Mavjud: ${selectedProduct.stock} dona`:"Hozircha mavjud emas"}</div><button className="primaryButton large" disabled={selectedProduct.stock<=0} onClick={()=>{addToCart(selectedProduct,selectedSize,selectedColor);go("cart")}}>Savatga qo‘shish — {formatPrice(selectedProduct.price)}</button></div><section className="recommendSection"><div className="sectionTitle"><div><span>SIZGA HAM YOQISHI MUMKIN</span><h2>O‘xshash mahsulotlar</h2></div></div>{similar.length?<div className="productGrid">{similar.map(p=>card(p,true))}</div>:<p className="muted">Hozircha o‘xshash mahsulot topilmadi.</p>}</section></main>}
-    {page==="cart"&&<main className="page"><div className="pageHeader"><span>BUYURMA</span><h1>Savat</h1><p>{cartCount?`${cartCount} ta mahsulot tanlandi`:"Savatni to‘ldiring"}</p></div>{cart.length===0?<div className="empty"><div>🛍️</div><h3>Savat bo‘sh</h3><p>Mahsulot tanlang va xaridni boshlang.</p><button className="primaryButton" onClick={()=>go("catalog")}>Katalogga o‘tish</button></div>:<><div className="cartList">{cart.map((item,index)=><div className="cartItem" key={`${item.product.id}-${item.size}-${item.color}-${index}`}><img src={imageUrl(item.product)} alt={item.product.name}/><div className="cartInfo"><b>{item.product.name}</b><small>{item.product.product_code?`Kod: ${item.product.product_code} · `:""}{item.size||"O‘lcham tanlanmagan"} · {item.color||"Rang tanlanmagan"}</small><strong>{formatPrice(item.product.price*item.quantity)}</strong><div className="quantity"><button onClick={()=>changeQuantity(index,-1)}>−</button><span>{item.quantity}</span><button onClick={()=>changeQuantity(index,1)}>+</button></div></div></div>)}</div><div className="promoBox"><input value={promo} onChange={e=>{setPromo(e.target.value.toUpperCase());if(promoApplied){setPromoApplied(false);setPromoDiscount(0)}}} placeholder="Promo kod" maxLength={40}/><button onClick={applyPromo} disabled={promoLoading}>{promoLoading?"Tekshirilmoqda…":promoApplied?"✓ Qo‘llandi":"Qo‘llash"}</button></div>{promoApplied?<div className="promoSuccess">✓ {promo} promo kodi qo‘llandi · −{formatPrice(promoDiscount)}</div>:null}<div className="summary"><div><span>Mahsulotlar</span><b>{formatPrice(subtotal)}</b></div><div><span>Yetkazib berish</span><b>{delivery?formatPrice(delivery):"Bepul"}</b></div>{discount>0?<div className="discountLine"><span>Chegirma</span><b>−{formatPrice(discount)}</b></div>:null}<hr/><div className="total"><span>Jami</span><b>{formatPrice(total)}</b></div></div><button className="primaryButton large" onClick={()=>go("checkout")}>Buyurtma berish — {formatPrice(total)}</button></>}</main>}
-    {page==="checkout"&&<main className="page checkoutPage"><div className="pageHeader"><span>CHECKOUT</span><h1>Buyurtmani rasmiylashtirish</h1><p>Ma’lumotlarni tekshiring va buyurtmani tasdiqlang.</p></div><div className="checkoutCard"><div className="cardTitle"><span className="step">1</span><div><h3>Telefon raqami</h3><p>Buyurtma bo‘yicha bog‘lanish uchun</p></div></div><input className="input full" value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+998 90 123 45 67" type="tel"/><button className={`phoneAutoButton ${phoneLoading?"loading":""}`} onClick={requestTelegramPhone} disabled={phoneLoading}>{phoneLoading?"⏳ Telegramdan olinmoqda…":phone?"✓ Telegram raqamini yangilash":"📱 Telegram raqamimni avtomatik olish"}</button></div><div className="checkoutCard"><div className="cardTitle"><span className="step">2</span><div><h3>Yetkazib berish manzili</h3><p>GPS yoki xaritadan aniq joyni belgilang</p></div></div><button className="locationButton" onClick={requestLocation}>{locationLoading?"⌛ Aniqlanmoqda...":address.latitude?"↻ Joylashuvni qayta aniqlash":"📍 Joylashuvimni aniqlash"}</button>{address.latitude?<><LocationPicker latitude={address.latitude} longitude={address.longitude} onChange={updateMapPosition}/><div className="mapCaption">✓ Belgilangan joy: {address.latitude.toFixed(5)}, {address.longitude.toFixed(5)}</div></>:null}{addressMessage?<div className="addressError">{addressMessage}</div>:null}<div className="twoInputs"><input className="input" value={address.region||""} onChange={e=>setAddressField("region",e.target.value)} placeholder="Viloyat"/><input className="input" value={address.district||""} onChange={e=>setAddressField("district",e.target.value)} placeholder="Tuman"/></div><input className="input full" value={address.street||""} onChange={e=>setAddressField("street",e.target.value)} placeholder="Ko‘cha"/><div className="twoInputs"><input className="input" value={address.house||""} onChange={e=>setAddressField("house",e.target.value)} placeholder="Dom / uy raqami"/><input className="input" value={address.apartment||""} onChange={e=>setAddressField("apartment",e.target.value)} placeholder="Padezd / xonadon"/></div><input className="input full" value={address.landmark||""} onChange={e=>setAddressField("landmark",e.target.value)} placeholder="Mo‘ljal (ixtiyoriy)"/></div><div className="checkoutCard"><div className="cardTitle"><span className="step">3</span><div><h3>To‘lov usuli</h3><p>O‘zingizga qulay usulni tanlang</p></div></div><label className={`paymentOption ${payment==="cash"?"selected":""}`}><input type="radio" checked={payment==="cash"} onChange={()=>setPayment("cash")}/>💵 <span><b>Naqd</b><small>Yetkazib berishda</small></span></label><label className={`paymentOption ${payment==="card"?"selected":""}`}><input type="radio" checked={payment==="card"} onChange={()=>setPayment("card")}/>💳 <span><b>Karta</b><small>To‘lov usuli</small></span></label></div><div className="checkoutTotal"><span>Jami to‘lov</span><b>{formatPrice(total)}</b></div><button className="primaryButton large" disabled={!phone.trim()||!cart.length} onClick={submitOrder}>Buyurtmani tasdiqlash — {formatPrice(total)}</button></main>}
-    {page==="wishlist"&&<main className="page"><div className="pageHeader"><span>GULI PREMIUM</span><h1>Sevimlilar</h1><p>Siz saqlagan mahsulotlar.</p></div>{wishlist.length?<div className="productGrid">{products.filter(p=>wishlist.includes(p.id)).map(p=>card(p))}</div>:<div className="wishlistEmptyWrap"><div className="empty"><div>♡</div><h3>Sevimlilar bo‘sh</h3><p>Yoqtirgan mahsulotlaringizni shu yerda saqlang.</p><button className="primaryButton" onClick={()=>go("catalog")}>Katalogga o‘tish</button></div>{productsLoading?<div className="wishlistPopularSection"><div className="sectionTitle"><div><span className="sectionEyebrow">TAVSIYA ETILADI</span><h2>Ommabop mahsulotlar</h2></div></div><ProductGridSkeleton count={4}/></div>:products.length?<section className="wishlistPopularSection"><div className="sectionTitle"><div><span className="sectionEyebrow">TAVSIYA ETILADI</span><h2>Ommabop mahsulotlar</h2></div><button onClick={()=>go("catalog")}>Barchasi →</button></div><div className="productGrid">{(products.filter(p=>p.featured).length?products.filter(p=>p.featured):products).slice(0,4).map(p=>card(p))}</div></section>:null}</div>}</main>}
-    {page==="orders"&&ordersPage()}{page==="profile"&&profilePage()}{page==="addresses"&&<main className="page"><div className="pageHeader"><span>PROFIL</span><h1>Manzillarim</h1><p>Yetkazib berish uchun saqlangan manzil.</p></div>{address.latitude?<div className="savedAddressCard"><div className="savedAddressIcon">📍</div><div><b>{address.region||"Joylashuv"}</b><p>{[address.district,address.street,address.house,address.apartment].filter(Boolean).join(", ")||"Lokatsiya saqlandi"}</p><small>{address.latitude.toFixed(5)}, {address.longitude.toFixed(5)}</small><button className="smallAction" onClick={()=>go("checkout")}>Manzilni tahrirlash</button></div></div>:<div className="empty"><div>📍</div><h3>Manzil hali saqlanmagan</h3><p>Checkoutda joylashuvingizni aniqlang.</p><button className="primaryButton" onClick={()=>go("checkout")}>Manzil qo‘shish</button></div>}</main>}
-   </div>
+  // Subscribe to real-time chat updates & unread message count
+  useEffect(() => {
+    const refreshUnread = () => {
+      setUnreadMessages(getUnreadMessages(currentUserId));
+    };
 
-   <nav className="bottomNav" aria-label="Asosiy navigatsiya"><button className={page==="home"?"active":""} onClick={()=>go("home")} aria-label="Asosiy" title="Asosiy"><span className="navIcon"><Home3DIcon active={page==="home"}/></span></button><button className={page==="catalog"?"active":""} onClick={()=>go("catalog")} aria-label="Katalog" title="Katalog"><span className="navIcon"><Search3DIcon active={page==="catalog"}/></span></button><button className={page==="wishlist"?"active":""} onClick={()=>go("wishlist")} aria-label="Sevimlilar" title="Sevimlilar"><span className="navIcon"><Heart3DIcon active={page==="wishlist"}/></span>{wishlist.length>0?<em className="wishlistBadge">{wishlist.length}</em>:null}</button><button className={page==="cart"?"active":""} onClick={()=>go("cart")} aria-label="Savat" title="Savat"><span className="navIcon"><Bag3DIcon active={page==="cart"}/></span>{cartCount>0?<em>{cartCount}</em>:null}</button><button className={page==="profile"||page==="orders"||page==="addresses"?"active":""} onClick={()=>go("profile")} aria-label="Profil" title="Profil"><span className="navIcon"><User3DIcon active={page==="profile"||page==="orders"||page==="addresses"}/></span></button></nav>{toast?<div className="toast">{toast}</div>:null}
-  </div>
- );
+    const handleNewAdminMsg = (e: Event) => {
+      const msg = (e as CustomEvent).detail as ChatMessage;
+      if (!msg) return;
+      if (!msg.userId || String(msg.userId) === String(currentUserId)) {
+        refreshUnread();
+        if (page !== "chat") {
+          try {
+            window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+              "warning",
+            );
+          } catch {}
+          const snippet =
+            msg.text.length > 40 ? msg.text.slice(0, 40) + "…" : msg.text;
+          showToast(`💬 GULI Admin: ${snippet}`);
+        }
+      }
+    };
+
+    refreshUnread();
+    const unsubscribe = subscribeToChat(refreshUnread);
+    window.addEventListener("guli_new_admin_message", handleNewAdminMsg);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("guli_new_admin_message", handleNewAdminMsg);
+    };
+  }, [currentUserId, page]);
+
+  // When user is viewing the chat page, automatically mark incoming messages as read
+  useEffect(() => {
+    if (page === "chat") {
+      markMessagesAsRead(currentUserId);
+      setUnreadMessages([]);
+    }
+  }, [page, currentUserId]);
+
+  const tabTouchStartX = useRef<number>(0);
+  const tabTouchStartY = useRef<number>(0);
+  const tabTouchStartTime = useRef<number>(0);
+  const isSwipingTab = useRef<boolean>(false);
+
+  const handleTabTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    if (!MAIN_TABS.includes(page)) return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(".productGallerySwipe") ||
+      target.closest(".leafletMap") ||
+      target.closest(".categoryScroll") ||
+      target.closest(".orderFilterTabs") ||
+      target.closest(".categoryTabs") ||
+      target.closest("input") ||
+      target.closest("textarea") ||
+      target.closest("button") ||
+      target.closest(".galleryThumbnails")
+    ) {
+      isSwipingTab.current = false;
+      return;
+    }
+    tabTouchStartX.current = e.touches[0].clientX;
+    tabTouchStartY.current = e.touches[0].clientY;
+    tabTouchStartTime.current = Date.now();
+    isSwipingTab.current = true;
+  };
+
+  const handleTabTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (!isSwipingTab.current || !MAIN_TABS.includes(page)) return;
+    isSwipingTab.current = false;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const diffX = endX - tabTouchStartX.current;
+    const diffY = endY - tabTouchStartY.current;
+    const timeDiff = Date.now() - tabTouchStartTime.current;
+    const absX = Math.abs(diffX);
+    const absY = Math.abs(diffY);
+
+    // Swipe threshold
+    if (absX >= 48 && absX > absY * 1.25 && timeDiff < 750) {
+      const currentIndex = MAIN_TABS.indexOf(page);
+      if (currentIndex !== -1) {
+        if (diffX < 0 && currentIndex < MAIN_TABS.length - 1) {
+          // Swiped left -> Next tab
+          go(MAIN_TABS[currentIndex + 1]);
+        } else if (diffX > 0 && currentIndex > 0) {
+          // Swiped right -> Previous tab
+          go(MAIN_TABS[currentIndex - 1]);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    try {
+      tg()?.ready();
+      tg()?.expand();
+    } catch {}
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("cart", JSON.stringify(cart));
+  }, [cart]);
+  useEffect(() => {
+    localStorage.setItem("wishlist", JSON.stringify(wishlist));
+  }, [wishlist]);
+  useEffect(() => {
+    localStorage.setItem("orders", JSON.stringify(orders));
+  }, [orders]);
+  useEffect(() => {
+    localStorage.setItem("guli_phone", phone);
+  }, [phone]);
+  useEffect(() => {
+    localStorage.setItem("guli_address", JSON.stringify(address));
+  }, [address]);
+  const loadProducts = useCallback(async (silent = false) => {
+    if (!silent) setProductsLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/api/products?limit=100`);
+      if (!r.ok) throw new Error(`Status: ${r.status}`);
+      const text = await r.text();
+      let j: any = null;
+      try {
+        j = JSON.parse(text);
+      } catch {
+        // Not JSON
+      }
+      const list =
+        j && j.success && Array.isArray(j.data) && j.data.length > 0
+          ? j.data
+          : DEFAULT_PRODUCTS;
+      setProducts(list);
+      setProductsError("");
+      return list;
+    } catch {
+      setProducts(DEFAULT_PRODUCTS);
+      setProductsError("");
+      return DEFAULT_PRODUCTS;
+    } finally {
+      if (!silent) setProductsLoading(false);
+    }
+  }, []);
+
+  const loadOrders = useCallback(
+    async (silent = false) => {
+      if (!telegramUser?.id) return [];
+      if (!silent) setOrdersLoading(true);
+      try {
+        const r = await fetch(
+          `${API_URL}/api/orders?telegram_id=${telegramUser.id}`,
+        );
+        if (!r.ok) throw new Error("Buyurtmalarni yuklashda xatolik");
+        const j = await r.json();
+        if (!j.success || !Array.isArray(j.data)) return [];
+        const list: Order[] = j.data.map((row: any) => ({
+          id: String(row.order_number || row.id || orderNumber()),
+          items: Array.isArray(row.items) ? row.items : [],
+          subtotal: Number(row.subtotal || 0),
+          delivery: Number(row.delivery || 0),
+          discount: Number(row.discount || 0),
+          total: Number(row.total || 0),
+          address: row.address || undefined,
+          phone: row.phone || "",
+          payment: row.payment || "cash",
+          status: row.status || "Qabul qilindi",
+          createdAt: row.created_at || new Date().toISOString(),
+          updatedAt: row.updated_at || undefined,
+          statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
+        }));
+        setOrders(list);
+        return list;
+      } catch (e) {
+        console.error("Failed to load orders", e);
+        throw e;
+      } finally {
+        if (!silent) setOrdersLoading(false);
+      }
+    },
+    [telegramUser?.id],
+  );
+
+  useEffect(() => {
+    loadProducts(false).catch(() => {});
+  }, [loadProducts]);
+
+  useEffect(() => {
+    if (telegramUser?.id) {
+      loadOrders(false).catch(() => {});
+    }
+  }, [telegramUser?.id, loadOrders]);
+  useEffect(() => {
+    const w = tg();
+    if (!w?.onEvent || !telegramUser?.id) return;
+    const isVersionOk =
+      typeof w.isVersionAtLeast === "function"
+        ? w.isVersionAtLeast("6.9")
+        : Boolean(w.version && parseFloat(w.version) >= 6.9);
+    if (!isVersionOk) return;
+    const handler = (data?: any) => {
+      if (data?.status === "sent") showToast("Raqam Telegramdan olindi ✓");
+    };
+    try {
+      w.onEvent("contactRequested", handler);
+      return () => w.offEvent?.("contactRequested", handler);
+    } catch {}
+  }, [telegramUser?.id]);
+  const go = (next: Page) => {
+    try {
+      tg()?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+    setPreviousPage(page);
+    setPage(next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const openProduct = (product: Product, from: Page = page) => {
+    setPreviousPage(from);
+    setSelectedProduct(product);
+    setSelectedSize(product.sizes?.[0] || "");
+    setSelectedColor(product.colors?.[0] || "");
+    go("product");
+  };
+  const toggleWishlist = (id: number) => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+    setWishlist((x) =>
+      x.includes(id) ? x.filter((v) => v !== id) : [...x, id],
+    );
+  };
+  const addToCart = (
+    product: Product,
+    size = product.sizes?.[0] || "",
+    color = product.colors?.[0] || "",
+  ) => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+    } catch {}
+    setCart((x) => {
+      const found = x.find(
+        (i) =>
+          i.product.id === product.id && i.size === size && i.color === color,
+      );
+      return found
+        ? x.map((i) => (i === found ? { ...i, quantity: i.quantity + 1 } : i))
+        : [...x, { product, size, color, quantity: 1 }];
+    });
+  };
+  const changeQuantity = (index: number, amount: number) =>
+    setCart((x) =>
+      x
+        .map((i, n) =>
+          n === index ? { ...i, quantity: i.quantity + amount } : i,
+        )
+        .filter((i) => i.quantity > 0),
+    );
+  const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
+  const subtotal = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
+  const delivery = subtotal >= 300000 ? 0 : 20000;
+  const discount = promoApplied ? Math.min(subtotal, promoDiscount) : 0;
+  const total = Math.max(0, subtotal + delivery - discount);
+  const allCategories = useMemo(
+    () => getSynchronizedCategories(products),
+    [products],
+  );
+  const filtered = useMemo(
+    () =>
+      products.filter(
+        (p) =>
+          (selectedCategory === "Barchasi" ||
+            p.category === selectedCategory) &&
+          (!search.trim() ||
+            p.product_code?.includes(search.trim()) ||
+            p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+            p.category.toLowerCase().includes(search.trim().toLowerCase())),
+      ),
+    [products, selectedCategory, search],
+  );
+  const applyPromo = async () => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+    } catch {}
+    const code = promo.trim().toUpperCase();
+    if (!code) {
+      setPromoApplied(false);
+      setPromoDiscount(0);
+      showToast(t("promo_placeholder"));
+      return;
+    }
+    setPromoLoading(true);
+    try {
+      const r = await fetch(`${API_URL}/api/promo/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success)
+        throw new Error(j.message || "Promo kodni tekshirishda xatolik");
+      setPromo(j.data?.code || code);
+      setPromoDiscount(Number(j.data?.discount || 0));
+      setPromoApplied(true);
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+          "success",
+        );
+      } catch {}
+      showToast(
+        `Promo qo‘llandi: −${formatPrice(Number(j.data?.discount || 0))} ✓`,
+      );
+    } catch (e) {
+      setPromoApplied(false);
+      setPromoDiscount(0);
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+          "error",
+        );
+      } catch {}
+      showToast(
+        e instanceof Error ? e.message : "Promo kodni tekshirishda xatolik",
+      );
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+  const reverseGeocode = async (lat: number, lon: number) => {
+    try {
+      const r = await fetch(
+        `${API_URL}/api/reverse-geocode?lat=${lat}&lon=${lon}`,
+      );
+      const j = await r.json();
+      if (j.success && j.data)
+        setAddress((a) => ({
+          ...a,
+          latitude: lat,
+          longitude: lon,
+          region: j.data.region || a.region,
+          district: j.data.district || a.district,
+          street: j.data.street || a.street,
+        }));
+      else setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
+    } catch {
+      setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
+    }
+  };
+  const updateMapPosition = (lat: number, lon: number) => {
+    setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
+    reverseGeocode(lat, lon);
+  };
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setAddressMessage("Telefoningiz lokatsiyani qo‘llab-quvvatlamaydi.");
+      return;
+    }
+    setLocationLoading(true);
+    setAddressMessage("");
+    navigator.geolocation.getCurrentPosition(
+      async (p) => {
+        await reverseGeocode(p.coords.latitude, p.coords.longitude);
+        setLocationLoading(false);
+      },
+      () => {
+        setLocationLoading(false);
+        setAddressMessage(
+          "Lokatsiya ruxsati berilmadi. Telefon sozlamalaridan ruxsat bering.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+    );
+  };
+  const requestTelegramPhone = () => {
+    const w = tg();
+    const supportsContact = Boolean(
+      w &&
+      typeof w.requestContact === "function" &&
+      (typeof w.isVersionAtLeast === "function"
+        ? w.isVersionAtLeast("6.9")
+        : Boolean(w.version && parseFloat(w.version) >= 6.9)),
+    );
+    if (!supportsContact || !w?.requestContact) {
+      showToast(
+        "Telegram versiyangizda avtomatik raqam olish qo‘llab-quvvatlanmaydi. Telefoningizni qo‘lda kiriting.",
+      );
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      w.requestContact(async (ok: boolean) => {
+        try {
+          if (!ok) {
+            setPhoneLoading(false);
+            return;
+          }
+          for (let i = 0; i < 8; i++) {
+            try {
+              const r = await fetch(`${API_URL}/api/telegram-user`);
+              const j = await r.json();
+              if (j.success && j.data?.telegram_phone) {
+                setPhone(j.data.telegram_phone);
+                setPhoneLoading(false);
+                showToast("✅ Telegram raqami kiritildi");
+                return;
+              }
+            } catch {}
+            await new Promise((resolve) => setTimeout(resolve, 900));
+          }
+          setPhoneLoading(false);
+          showToast("Raqam yuborildi. Bir ozdan keyin qayta urinib ko‘ring.");
+        } catch {
+          setPhoneLoading(false);
+        }
+      });
+    } catch {
+      setPhoneLoading(false);
+      showToast("Telegram raqamini olishda xatolik. Raqamni qo‘lda kiriting.");
+    }
+  };
+  const setAddressField = (key: keyof Address, value: string) =>
+    setAddress((a) => ({ ...a, [key]: value }));
+  const submitOrder = async () => {
+    if (!phone.trim() || !cart.length) return;
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+    } catch {}
+    const id = orderNumber();
+    const now = new Date().toISOString();
+    const payload = {
+      order_number: id,
+      telegram_id: telegramUser?.id,
+      username: telegramUser?.username,
+      first_name: telegramUser?.first_name,
+      phone: phone.trim(),
+      items: cart,
+      subtotal,
+      delivery,
+      discount,
+      total,
+      address,
+      payment,
+      status: "Qabul qilindi",
+      promo_code: promoApplied ? promo.trim().toUpperCase() : null,
+    };
+    try {
+      const r = await fetch(`${API_URL}/api/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success)
+        throw new Error(j.message || "Buyurtma yuborilmadi");
+      if (telegramUser?.id && address.latitude)
+        fetch(`${API_URL}/api/save-address`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...address,
+            username: telegramUser.username,
+            phone: phone.trim(),
+          }),
+        }).catch(() => {});
+      setOrders((x) => [
+        {
+          id: String(j.data?.order_number || id),
+          items: cart,
+          subtotal,
+          delivery,
+          discount,
+          total,
+          address,
+          phone: phone.trim(),
+          payment,
+          status: "Qabul qilindi",
+          createdAt: now,
+          updatedAt: now,
+          statusUpdatedAt: now,
+        },
+        ...x,
+      ]);
+      setCart([]);
+      setPromo("");
+      setPromoApplied(false);
+      setPromoDiscount(0);
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+          "success",
+        );
+      } catch {}
+      go("orders");
+      showToast("Buyurtma qabul qilindi ✓");
+    } catch (e) {
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+          "error",
+        );
+      } catch {}
+      showToast(e instanceof Error ? e.message : "Buyurtma yuborilmadi");
+    }
+  };
+  const similar = selectedProduct
+    ? products
+        .filter(
+          (p) =>
+            p.category === selectedProduct.category &&
+            p.id !== selectedProduct.id,
+        )
+        .slice(0, 4)
+    : [];
+  const card = (p: Product, compact = false) => (
+    <article
+      className={`productCard ${compact ? "compact" : ""}`}
+      key={p.id}
+      onClick={() => openProduct(p)}
+    >
+      <div className="productImage">
+        <ProductImageGallery product={p} onOpen={() => openProduct(p)} />
+        <button
+          className="heart"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleWishlist(p.id);
+          }}
+        >
+          {wishlist.includes(p.id) ? "♥" : "♡"}
+        </button>
+        {p.discount ? <span className="discount">-{p.discount}%</span> : null}
+      </div>
+      <div className="productBody">
+        <span>{p.category}</span>
+        <h3>{p.name}</h3>
+        {p.product_code ? <small>Kod: {p.product_code}</small> : null}
+        <div className="priceLine">
+          <b>{formatPrice(p.price)}</b>
+          {p.oldPrice ? <del>{formatPrice(p.oldPrice)}</del> : null}
+        </div>
+      </div>
+    </article>
+  );
+  const handleExportPdf = (targetOrders?: Order[], customLabel?: string) => {
+    if (!orders.length) {
+      showToast("Eksport qilish uchun buyurtmalar mavjud emas");
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const list = targetOrders && targetOrders.length ? targetOrders : orders;
+      const ok = exportOrdersToPDF({
+        orders: list,
+        userName: displayName,
+        userPhone: phone,
+        userHandle: telegramUser?.username,
+        filterLabel: customLabel || "Barchasi",
+      });
+      if (ok) {
+        showToast("✓ Buyurtmalar tarixi PDF shaklida yuklandi");
+      } else {
+        showToast("PDF yaratishda xatolik");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("PDF yuklashda xatolik");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+  const reorder = (order: Order) => {
+    if (!order.items || !order.items.length) {
+      showToast("Buyurtmada mahsulotlar topilmadi");
+      return;
+    }
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+    } catch {}
+    setCart((currentCart) => {
+      const updated = [...currentCart];
+      for (const item of order.items) {
+        if (!item?.product) continue;
+        const size = item.size || item.product.sizes?.[0] || "";
+        const color = item.color || item.product.colors?.[0] || "";
+        const qty = item.quantity || 1;
+        const existingIndex = updated.findIndex(
+          (c) =>
+            c.product.id === item.product.id &&
+            c.size === size &&
+            c.color === color,
+        );
+        if (existingIndex >= 0) {
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            quantity: updated[existingIndex].quantity + qty,
+          };
+        } else {
+          updated.push({ product: item.product, size, color, quantity: qty });
+        }
+      }
+      return updated;
+    });
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
+        "success",
+      );
+    } catch {}
+    showToast("✓ Mahsulotlar savatga qo‘shildi!");
+    go("cart");
+  };
+
+  const handleShare = () => {
+    const shareText =
+      "GULI Premium — Nafis va sifatli ayollar ichki kiyimlari to‘plami 🌷";
+    const shareUrl = "https://t.me/guli_lingerie_bot";
+    if (navigator.share) {
+      navigator
+        .share({ title: "GULI Premium", text: shareText, url: shareUrl })
+        .catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl);
+      showToast("✓ Havola nusxalandi!");
+    } else {
+      showToast(shareUrl);
+    }
+  };
+
+  const handleClearCache = () => {
+    const preservePhone = localStorage.getItem("guli_phone");
+    const preserveAddress = localStorage.getItem("guli_address");
+    localStorage.clear();
+    if (preservePhone) localStorage.setItem("guli_phone", preservePhone);
+    if (preserveAddress) localStorage.setItem("guli_address", preserveAddress);
+    localStorage.setItem("guli_theme", theme);
+    localStorage.setItem("guli_lang", language);
+    showToast("✓ Kesh muvaffaqiyatli tozalandi");
+    setIsSettingsOpen(false);
+  };
+
+  const ordersPage = () => {
+    const q = orderSearch.trim().toLowerCase();
+    const filteredByCategory = orders.filter((o) => {
+      if (orderFilter === "all") return true;
+      if (orderFilter === "recent") return isRecentlyUpdated(o);
+      if (orderFilter === "completed") return o.status === "Yetkazildi";
+      if (orderFilter === "cancelled") return o.status === "Bekor qilindi";
+      if (orderFilter === "in_progress")
+        return o.status !== "Yetkazildi" && o.status !== "Bekor qilindi";
+      return true;
+    });
+    const visibleOrders = filteredByCategory.filter((o) => {
+      if (!q) return true;
+      const codes = (o.items || [])
+        .map((it) => it?.product?.product_code || "")
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return codes.includes(q) || String(o.id).toLowerCase().includes(q);
+    });
+    const filterCounts = {
+      all: orders.length,
+      recent: orders.filter((o) => isRecentlyUpdated(o)).length,
+      in_progress: orders.filter(
+        (o) => o.status !== "Yetkazildi" && o.status !== "Bekor qilindi",
+      ).length,
+      completed: orders.filter((o) => o.status === "Yetkazildi").length,
+      cancelled: orders.filter((o) => o.status === "Bekor qilindi").length,
+    };
+    const filterTabs: [
+      "all" | "recent" | "in_progress" | "completed" | "cancelled",
+      string,
+      string,
+    ][] = [
+      ["all", t("filter_all"), "📦"],
+      ["recent", t("filter_recent"), "⚡"],
+      ["in_progress", t("filter_in_progress"), "⏳"],
+      ["completed", t("filter_completed"), "✓"],
+      ["cancelled", t("filter_cancelled"), "✕"],
+    ];
+    const currentTabName =
+      filterTabs.find(([k]) => k === orderFilter)?.[1] || t("filter_all");
+    return (
+      <PullToRefresh
+        language={language}
+        onRefresh={async () => {
+          await loadOrders(true);
+          showToast("✓ Buyurtmalar yangilandi");
+        }}
+      >
+        <main className="page">
+          <div className="pageHeader">
+            <div className="pageHeaderTop">
+              <div>
+                <span className="pageHeaderEyebrow">
+                  {t("nav_orders").toUpperCase()}
+                </span>
+                <h1>{t("my_orders")}</h1>
+              </div>
+              {orders.length > 0 ? (
+                <button
+                  id="export-orders-pdf-btn"
+                  className="exportPdfButton"
+                  onClick={() =>
+                    handleExportPdf(
+                      visibleOrders.length ? visibleOrders : orders,
+                      q ? `Qidiruv: "${q}"` : currentTabName,
+                    )
+                  }
+                  disabled={exportingPdf}
+                  title="Buyurtmalar tarixini PDF formatida yuklab olish"
+                >
+                  <span>📄</span>
+                  <span>{exportingPdf ? "Yuklanmoqda..." : "PDF hisobot"}</span>
+                </button>
+              ) : null}
+            </div>
+            <p>{t("orders_desc")}</p>
+            <div className="searchBox">
+              ⌕
+              <input
+                value={orderSearch}
+                onChange={(e) => setOrderSearch(e.target.value)}
+                placeholder="6 xonali mahsulot kodi yoki buyurtma №"
+              />
+            </div>
+          </div>
+          <div className="orderFilterTabs" role="tablist">
+            {filterTabs.map(([key, label, icon]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={orderFilter === key}
+                className={`orderFilterTab ${orderFilter === key ? "active" : ""}`}
+                onClick={() => setOrderFilter(key)}
+              >
+                <span className="filterTabIcon">{icon}</span>
+                <span>{label}</span>
+                <span className="filterCount">{filterCounts[key]}</span>
+              </button>
+            ))}
+          </div>
+          <MonthlySpendingChart orders={orders} />
+          {ordersLoading ? (
+            <OrdersListSkeleton count={3} />
+          ) : visibleOrders.length ? (
+            <div className="ordersList">
+              {visibleOrders.map((o, index) => {
+                const recent = isRecentlyUpdated(o);
+                const isCompleted = o.status === "Yetkazildi";
+                return (
+                  <article
+                    className={`orderCard ${selectedOrderId === o.id ? "expanded" : ""} ${recent ? "recentlyUpdated" : ""}`}
+                    key={o.id}
+                    id={`order-card-${o.id}`}
+                    style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}
+                  >
+                    <div className="orderTop">
+                      <div className="orderNumberGroup">
+                        <b>№ {o.id}</b>
+                        {o.items?.[0]?.product?.product_code ? (
+                          <small>Kod: {o.items[0].product.product_code}</small>
+                        ) : null}
+                      </div>
+                      <div className="orderTopMeta">
+                        {recent ? (
+                          <span
+                            className="recentBadge"
+                            id={`order-badge-${o.id}`}
+                            title={`Holati ${getRecentUpdateLabel(o)} yangilandi`}
+                          >
+                            <span className="recentBadgePulse" />
+                            24s Yangilandi
+                          </span>
+                        ) : null}
+                        <span className="orderDate">
+                          {formatDate(o.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      className="orderMain"
+                      onClick={() => {
+                        const item = o.items?.[0];
+                        if (item?.product) openProduct(item.product, "orders");
+                      }}
+                    >
+                      <div className="orderThumb">
+                        {o.items?.[0]?.product ? (
+                          <img
+                            src={imageUrl(o.items[0].product)}
+                            alt={o.items[0].product.name}
+                          />
+                        ) : null}
+                      </div>
+                      <div>
+                        <h3>{o.items?.[0]?.product?.name || "Buyurtma"}</h3>
+                        <p>
+                          {o.items?.[0]?.product?.product_code
+                            ? `Kod: ${o.items[0].product.product_code} · `
+                            : ""}
+                          {o.items?.length || 0} ta mahsulot ·{" "}
+                          {o.payment === "card" ? "Karta" : "Naqd"}
+                        </p>
+                        <strong>{formatPrice(o.total)}</strong>
+                      </div>
+                    </div>
+                    <div className="orderBottom">
+                      <span className={`orderStatus ${recent ? "recent" : ""}`}>
+                        <span
+                          className={`statusDot ${recent ? "livePulse" : ""}`}
+                        >
+                          ●
+                        </span>{" "}
+                        {o.status}
+                        {recent ? (
+                          <span className="recentStatusTime">
+                            ({getRecentUpdateLabel(o)})
+                          </span>
+                        ) : null}
+                      </span>
+                      <div className="orderActions">
+                        {isCompleted ? (
+                          <button
+                            className="reorderButton"
+                            id={`reorder-btn-${o.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reorder(o);
+                            }}
+                            title="Ushbu buyurtmadagi mahsulotlarni yana savatga qo‘shish"
+                          >
+                            <span>🔄</span>
+                            <span>Qayta buyurtma</span>
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() =>
+                            setSelectedOrderId(
+                              selectedOrderId === o.id ? null : o.id,
+                            )
+                          }
+                        >
+                          {selectedOrderId === o.id
+                            ? "Yopish ↑"
+                            : "Tafsilotlar →"}
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      className={`orderDetailsCollapse ${selectedOrderId === o.id ? "expanded" : ""}`}
+                      id={`order-details-${o.id}`}
+                      aria-hidden={selectedOrderId !== o.id}
+                    >
+                      <div className="orderDetailsInner">
+                        <div className="orderDetails">
+                          {recent ? (
+                            <div className="orderRecentNotice">
+                              <span className="noticeIcon">⚡</span>
+                              <div>
+                                <strong>
+                                  Holati yaqinda yangilandi (
+                                  {getRecentUpdateLabel(o)})
+                                </strong>
+                                <p>
+                                  Buyurtmangiz holati «{o.status}» bosqichida.
+                                </p>
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="statusTimeline">
+                            {[
+                              "Qabul qilindi",
+                              "Tayyorlanmoqda",
+                              "Yo‘lda",
+                              "Yetkazildi",
+                            ].map((s, i) => (
+                              <div
+                                className={
+                                  o.status === s ||
+                                  [
+                                    "Qabul qilindi",
+                                    "Tayyorlanmoqda",
+                                    "Yo‘lda",
+                                    "Yetkazildi",
+                                  ].indexOf(o.status) > i
+                                    ? "done"
+                                    : ""
+                                }
+                                key={s}
+                              >
+                                <span>{i + 1}</span>
+                                <b>{s}</b>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="orderDetailGrid">
+                            <div>
+                              <small>Mahsulot kodi</small>
+                              <b>
+                                {(o.items || [])
+                                  .map((it) => it?.product?.product_code)
+                                  .filter(Boolean)
+                                  .join(", ") || "—"}
+                              </b>
+                            </div>
+                            <div>
+                              <small>Telefon</small>
+                              <b>{o.phone || "—"}</b>
+                            </div>
+                            <div>
+                              <small>To‘lov</small>
+                              <b>{o.payment === "card" ? "Karta" : "Naqd"}</b>
+                            </div>
+                            <div>
+                              <small>Mahsulotlar</small>
+                              <b>{formatPrice(o.subtotal)}</b>
+                            </div>
+                            <div>
+                              <small>Yetkazib berish</small>
+                              <b>
+                                {o.delivery ? formatPrice(o.delivery) : "Bepul"}
+                              </b>
+                            </div>
+                            <div>
+                              <small>Chegirma</small>
+                              <b>
+                                {o.discount
+                                  ? `−${formatPrice(o.discount)}`
+                                  : "—"}
+                              </b>
+                            </div>
+                            <div>
+                              <small>Jami</small>
+                              <b>{formatPrice(o.total)}</b>
+                            </div>
+                          </div>
+                          {o.address ? (
+                            <p className="orderAddress">
+                              📍{" "}
+                              {[
+                                o.address.region,
+                                o.address.district,
+                                o.address.street,
+                                o.address.house,
+                                o.address.apartment,
+                              ]
+                                .filter(Boolean)
+                                .join(", ") || "Manzil saqlangan"}
+                            </p>
+                          ) : null}
+                          {isCompleted ? (
+                            <div className="orderReorderBar">
+                              <button
+                                className="orderReorderFullBtn"
+                                id={`reorder-full-btn-${o.id}`}
+                                onClick={() => reorder(o)}
+                              >
+                                <span>🔄</span>
+                                <span>
+                                  Qayta buyurtma berish (Savatga qo‘shish)
+                                </span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty">
+              <div>📦</div>
+              <h3>
+                {q
+                  ? "Qidiruv bo‘yicha buyurtma topilmadi"
+                  : orderFilter !== "all"
+                    ? "Ushbu toifada buyurtmalar yo‘q"
+                    : "Buyurtmalar hali yo‘q"}
+              </h3>
+              <p>
+                {q
+                  ? "Boshqa 6 xonali mahsulot kodi yoki buyurtma raqamini kiriting."
+                  : orderFilter !== "all"
+                    ? "Boshqa toifani tanlang yoki filtrni «Barchasi»ga o‘tkazing."
+                    : "Birinchi buyurtmangiz shu yerda ko‘rinadi."}
+              </p>
+              {orderFilter !== "all" ? (
+                <button
+                  className="primaryButton"
+                  onClick={() => setOrderFilter("all")}
+                >
+                  Barcha buyurtmalarni ko‘rish
+                </button>
+              ) : (
+                <button className="primaryButton" onClick={() => go("catalog")}>
+                  Katalogga o‘tish
+                </button>
+              )}
+            </div>
+          )}
+        </main>
+      </PullToRefresh>
+    );
+  };
+
+  const profilePage = () => (
+    <main className="page">
+      <div className="profileHero">
+        <div className="profileAvatar">
+          {avatar && !profilePhotoError ? (
+            <img
+              src={avatar}
+              alt={displayName}
+              onError={() => setProfilePhotoError(true)}
+            />
+          ) : (
+            "🌷"
+          )}
+        </div>
+        <div>
+          <h1>{displayName}</h1>
+          <p>
+            {telegramUser?.username
+              ? `@${telegramUser.username}`
+              : "GULI Premium mijozi"}
+          </p>
+          <span className="verified">✓ Telegram Verified</span>
+        </div>
+      </div>
+
+      <section className="profileSection">
+        <h2>{t("account_section")}</h2>
+        <button
+          className="menuRow"
+          id="profile-orders-btn"
+          onClick={() => go("orders")}
+        >
+          <span>📦</span>
+          <div>
+            <b>{t("my_orders")}</b>
+            <small>
+              {t("orders_desc")} ({orders.length} ta)
+            </small>
+          </div>
+          <i>›</i>
+        </button>
+        {orders.length > 0 ? (
+          <button
+            className="menuRow"
+            id="profile-pdf-btn"
+            onClick={() => handleExportPdf(orders, "Barchasi")}
+          >
+            <span>📄</span>
+            <div>
+              <b>{t("pdf_report")}</b>
+              <small>Shaxsiy hisobotni PDF formatida yuklab olish</small>
+            </div>
+            <i>›</i>
+          </button>
+        ) : null}
+        <button
+          className="menuRow"
+          id="profile-wishlist-btn"
+          onClick={() => go("wishlist")}
+        >
+          <span>♡</span>
+          <div>
+            <b>{t("my_wishlist")}</b>
+            <small>
+              {t("my_wishlist_desc")} ({wishlist.length} ta)
+            </small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-addresses-btn"
+          onClick={() => go("addresses")}
+        >
+          <span>📍</span>
+          <div>
+            <b>{t("my_addresses")}</b>
+            <small>{t("my_addresses_desc")}</small>
+          </div>
+          <i>›</i>
+        </button>
+      </section>
+
+      <section className="profileSection">
+        <h2>🎟️ Chegirmalar va Imtiyozlar</h2>
+        <button
+          className="menuRow"
+          id="profile-promos-btn"
+          onClick={() => setIsPromosOpen(true)}
+        >
+          <span>🎟️</span>
+          <div>
+            <b>Promokodlar va Kuponlar</b>
+            <small>GULI10, YANGI2026, BEPUL kabi faol chegirmalar</small>
+          </div>
+          <span className="badgePill">3 ta faol</span>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-loyalty-btn"
+          onClick={() => setIsPromosOpen(true)}
+        >
+          <span>💎</span>
+          <div>
+            <b>VIP Sodiqlik dasturi</b>
+            <small>Har bir xarid uchun keshbek va eksklyuziv sovg‘alar</small>
+          </div>
+          <i>›</i>
+        </button>
+      </section>
+
+      <section className="profileSection">
+        <h2>💬 Xizmat va Bog‘lanish</h2>
+        <button
+          className="menuRow"
+          id="profile-chat-btn"
+          onClick={() => go("chat")}
+        >
+          <span>💬</span>
+          <div>
+            <b>{t("online_chat")}</b>
+            {unreadMessages.length > 0 ? (
+              <span className="badgePill">{unreadMessages.length} yangi</span>
+            ) : null}
+            <small>{t("online_chat_desc")}</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-help-btn"
+          onClick={() => setIsHelpOpen(true)}
+        >
+          <span>📞</span>
+          <div>
+            <b>{t("help_support")}</b>
+            <small>Call Center (+998 90 581-11-17) & FAQ</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-notifications-btn"
+          onClick={() => setIsNotificationsOpen(true)}
+        >
+          <span>🔔</span>
+          <div>
+            <b>{t("notifications")}</b>
+            {unreadMessages.length > 0 ? (
+              <span className="badgePill">{unreadMessages.length} ta</span>
+            ) : null}
+            <small>Admin xabarlari va yangiliklar</small>
+          </div>
+          <i>›</i>
+        </button>
+      </section>
+
+      <section className="profileSection">
+        <h2>📋 Ma’lumotlar va Qo‘llanmalar</h2>
+        <button
+          className="menuRow"
+          id="profile-delivery-btn"
+          onClick={() => setIsDeliveryInfoOpen(true)}
+        >
+          <span>🚚</span>
+          <div>
+            <b>Yetkazib berish va To‘lov shartlari</b>
+            <small>O‘zbekiston bo‘ylab 24/7 tezkor xizmat va qoidalar</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-sizeguide-btn"
+          onClick={() => setIsSizeGuideOpen(true)}
+        >
+          <span>📐</span>
+          <div>
+            <b>O‘lchamlar jadvali (Size Guide)</b>
+            <small>Byustgalter va ichki kiyimlar uchun to‘g‘ri o‘lcham</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-about-btn"
+          onClick={() => setIsAboutOpen(true)}
+        >
+          <span>🌷</span>
+          <div>
+            <b>GULI brendi & 100% Maxfiylik</b>
+            <small>Maxfiy qadoqlash, sifat kafolati va premium xizmat</small>
+          </div>
+          <i>›</i>
+        </button>
+      </section>
+
+      <section className="profileSection">
+        <h2>{t("convenience_section")}</h2>
+        <button
+          className="menuRow"
+          id="profile-settings-btn"
+          onClick={() => setIsSettingsOpen(true)}
+        >
+          <span>⚙️</span>
+          <div>
+            <b>{t("settings")}</b>
+            <small>
+              {theme === "dark" ? "Tun rejimi" : "Kun rejimi"} ·{" "}
+              {language.toUpperCase()}
+            </small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-share-btn"
+          onClick={handleShare}
+        >
+          <span>↗</span>
+          <div>
+            <b>{t("share_guli")}</b>
+            <small>{t("share_guli_desc")}</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-clear-cache-btn"
+          onClick={handleClearCache}
+        >
+          <span>🗑️</span>
+          <div>
+            <b>Keshni tozalash</b>
+            <small>Vaqtinchalik xotira va ma’lumotlarni yangilash</small>
+          </div>
+          <i>›</i>
+        </button>
+      </section>
+    </main>
+  );
+
+  return (
+    <div className="appShell">
+      <header className="topbar">
+        <button className="brand" onClick={() => go("home")}>
+          <span className="brandIcon">🌷</span>
+          <span>
+            <b>GULI</b>
+            <small>{t("brand_sub")}</small>
+          </span>
+        </button>
+        <div className="headerActions">
+          <button
+            className={`iconButton notifBellBtn ${unreadMessages.length > 0 ? "hasUnread" : ""}`}
+            id="topbar-notifications-btn"
+            onClick={() => setIsNotificationsOpen(true)}
+            aria-label={t("notifications")}
+            title={t("notifications")}
+          >
+            <span className="bellIconSpan">🔔</span>
+            {unreadMessages.length > 0 ? (
+              <>
+                <span className="notifBadge">{unreadMessages.length}</span>
+                <span className="bellPulse" />
+              </>
+            ) : null}
+          </button>
+          <button
+            className="iconButton"
+            id="topbar-wishlist-btn"
+            onClick={() => go("wishlist")}
+            aria-label={t("nav_wishlist")}
+          >
+            ♡<span className="badge">{wishlist.length}</span>
+          </button>
+          <button
+            className="iconButton"
+            id="topbar-cart-btn"
+            onClick={() => go("cart")}
+            aria-label={t("nav_cart")}
+          >
+            🛍️<span className="badge">{cartCount}</span>
+          </button>
+        </div>
+      </header>
+
+      <div
+        className="tabSwipeArea pageAnimEnter"
+        key={page}
+        onTouchStart={handleTabTouchStart}
+        onTouchEnd={handleTabTouchEnd}
+      >
+        {page === "home" && (
+          <>
+            <section className="hero">
+              <div className="heroOverlay">
+                <span>{t("hero_eyebrow")}</span>
+                <h1>{t("hero_title")}</h1>
+                <p>{t("hero_desc")}</p>
+                <button className="heroButton" onClick={() => go("catalog")}>
+                  {t("hero_btn")}
+                </button>
+              </div>
+            </section>
+            <RotatingCategoriesSection
+              categories={allCategories}
+              products={products}
+              onSelectCategory={(catName) => {
+                setSelectedCategory(catName);
+                go("catalog");
+              }}
+              onOpenProduct={(p) => openProduct(p, "home")}
+              onViewAll={() => {
+                setSelectedCategory("Barchasi");
+                go("catalog");
+              }}
+            />
+            <section className="section">
+              <div className="sectionTitle">
+                <h2>{t("featured_title")}</h2>
+                <button onClick={() => go("catalog")}>{t("see_all")}</button>
+              </div>
+              {productsLoading ? (
+                <ProductGridSkeleton count={4} />
+              ) : productsError ? (
+                <div className="empty">
+                  <div>⚠️</div>
+                  <h3>Catalog vaqtincha ochilmadi</h3>
+                  <p>{productsError}</p>
+                </div>
+              ) : (
+                <div className="productGrid">
+                  {products
+                    .filter((p) => p.featured)
+                    .slice(0, 4)
+                    .map((p) => card(p))}
+                </div>
+              )}
+            </section>
+            <div className="deliveryBanner">
+              <div>
+                <span>🚚</span>
+                <div>
+                  <b>{t("delivery_banner_title")}</b>
+                  <p>{t("delivery_banner_desc")}</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+        {page === "catalog" && (
+          <PullToRefresh
+            language={language}
+            onRefresh={async () => {
+              await loadProducts(true);
+              showToast("✓ Katalog yangilandi");
+            }}
+          >
+            <main className="page">
+              <div className="pageHeader">
+                <span>GULI {t("brand_sub")}</span>
+                <h1>{t("catalog_title")}</h1>
+                <p>{t("catalog_sub")}</p>
+              </div>
+              <div className="searchBox">
+                ⌕
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t("search_placeholder")}
+                />
+              </div>
+              <div className="categoryTabs">
+                {allCategories.map((c) => (
+                  <button
+                    key={c.name}
+                    className={`tab ${selectedCategory === c.name ? "active" : ""}`}
+                    onClick={() => setSelectedCategory(c.name)}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+              {productsLoading ? (
+                <ProductGridSkeleton count={6} />
+              ) : productsError ? (
+                <div className="empty">
+                  <div>⚠️</div>
+                  <h3>Yuklashda xatolik</h3>
+                  <p>{productsError}</p>
+                </div>
+              ) : filtered.length ? (
+                <div className="productGrid">
+                  {filtered.map((p) => card(p))}
+                </div>
+              ) : (
+                <div className="empty">
+                  <div>⌕</div>
+                  <h3>{t("product_not_found")}</h3>
+                  <p>{t("product_not_found_desc")}</p>
+                </div>
+              )}
+            </main>
+          </PullToRefresh>
+        )}
+        {page === "product" && selectedProduct && (
+          <main className="productDetail">
+            <button className="backButton" onClick={() => go(previousPage)}>
+              ← {t("back")}
+            </button>
+            <div className="detailImageWrap">
+              <ProductImageGallery product={selectedProduct} detail />
+              <button
+                className="detailHeart"
+                onClick={() => toggleWishlist(selectedProduct.id)}
+              >
+                {wishlist.includes(selectedProduct.id) ? "♥" : "♡"}
+              </button>
+            </div>
+            <div className="detailContent">
+              <span className="categoryLabel">{selectedProduct.category}</span>
+              <h1>{selectedProduct.name}</h1>
+              {selectedProduct.product_code ? (
+                <small className="productCodeLabel">
+                  {t("product_code")}: {selectedProduct.product_code}
+                </small>
+              ) : null}
+              <div className="rating">
+                ★ {selectedProduct.rating.toFixed(1)}{" "}
+                <span>
+                  ({selectedProduct.reviews} {t("reviews_count")})
+                </span>
+              </div>
+              <div className="priceRow">
+                <strong>{formatPrice(selectedProduct.price)}</strong>
+                {selectedProduct.oldPrice ? (
+                  <del>{formatPrice(selectedProduct.oldPrice)}</del>
+                ) : null}
+              </div>
+              <p className="description">{selectedProduct.description}</p>
+              <h3>{t("size")}</h3>
+              <div className="options">
+                {selectedProduct.sizes.map((s) => (
+                  <button
+                    key={s}
+                    className={`option ${selectedSize === s ? "active" : ""}`}
+                    onClick={() => setSelectedSize(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <h3>{t("color")}</h3>
+              <div className="options">
+                {selectedProduct.colors.map((c) => (
+                  <button
+                    key={c}
+                    className={`option ${selectedColor === c ? "active" : ""}`}
+                    onClick={() => setSelectedColor(c)}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <div className="stock">
+                {selectedProduct.stock > 0
+                  ? `✓ ${t("in_stock")}: ${selectedProduct.stock} dona`
+                  : t("out_of_stock")}
+              </div>
+              <button
+                className="primaryButton large"
+                disabled={selectedProduct.stock <= 0}
+                onClick={() => {
+                  addToCart(selectedProduct, selectedSize, selectedColor);
+                  go("cart");
+                }}
+              >
+                {t("add_to_cart")} — {formatPrice(selectedProduct.price)}
+              </button>
+            </div>
+            <section className="recommendSection">
+              <div className="sectionTitle">
+                <div>
+                  <span>{t("you_may_also_like")}</span>
+                  <h2>{t("similar_products")}</h2>
+                </div>
+              </div>
+              {similar.length ? (
+                <div className="productGrid">
+                  {similar.map((p) => card(p, true))}
+                </div>
+              ) : (
+                <p className="muted">{t("no_similar_products")}</p>
+              )}
+            </section>
+          </main>
+        )}
+        {page === "cart" && (
+          <main className="page">
+            <div className="pageHeader">
+              <span>BUYURTMA</span>
+              <h1>{t("cart_title")}</h1>
+              <p>
+                {cartCount
+                  ? `${cartCount} ${t("cart_items_selected")}`
+                  : t("cart_empty_title")}
+              </p>
+            </div>
+            {cart.length === 0 ? (
+              <div className="empty">
+                <div>🛍️</div>
+                <h3>{t("cart_empty_title")}</h3>
+                <p>{t("cart_empty_desc")}</p>
+                <button className="primaryButton" onClick={() => go("catalog")}>
+                  {t("go_to_catalog")}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="cartList">
+                  {cart.map((item, index) => (
+                    <div
+                      className="cartItem"
+                      key={`${item.product.id}-${item.size}-${item.color}-${index}`}
+                    >
+                      <img
+                        src={imageUrl(item.product)}
+                        alt={item.product.name}
+                      />
+                      <div className="cartInfo">
+                        <b>{item.product.name}</b>
+                        <small>
+                          {item.product.product_code
+                            ? `Kod: ${item.product.product_code} · `
+                            : ""}
+                          {item.size || "O‘lcham tanlanmagan"} ·{" "}
+                          {item.color || "Rang tanlanmagan"}
+                        </small>
+                        <strong>
+                          {formatPrice(item.product.price * item.quantity)}
+                        </strong>
+                        <div className="quantity">
+                          <button onClick={() => changeQuantity(index, -1)}>
+                            −
+                          </button>
+                          <span>{item.quantity}</span>
+                          <button onClick={() => changeQuantity(index, 1)}>
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="promoBox">
+                  <input
+                    value={promo}
+                    onChange={(e) => {
+                      setPromo(e.target.value.toUpperCase());
+                      if (promoApplied) {
+                        setPromoApplied(false);
+                        setPromoDiscount(0);
+                      }
+                    }}
+                    placeholder="Promo kod"
+                    maxLength={40}
+                  />
+                  <button onClick={applyPromo} disabled={promoLoading}>
+                    {promoLoading
+                      ? "Tekshirilmoqda…"
+                      : promoApplied
+                        ? "✓ Qo‘llandi"
+                        : "Qo‘llash"}
+                  </button>
+                </div>
+                {promoApplied ? (
+                  <div className="promoSuccess">
+                    ✓ {promo} promo kodi qo‘llandi · −
+                    {formatPrice(promoDiscount)}
+                  </div>
+                ) : null}
+                <div className="summary">
+                  <div>
+                    <span>Mahsulotlar</span>
+                    <b>{formatPrice(subtotal)}</b>
+                  </div>
+                  <div>
+                    <span>Yetkazib berish</span>
+                    <b>{delivery ? formatPrice(delivery) : "Bepul"}</b>
+                  </div>
+                  {discount > 0 ? (
+                    <div className="discountLine">
+                      <span>Chegirma</span>
+                      <b>−{formatPrice(discount)}</b>
+                    </div>
+                  ) : null}
+                  <hr />
+                  <div className="total">
+                    <span>Jami</span>
+                    <b>{formatPrice(total)}</b>
+                  </div>
+                </div>
+                <button
+                  className="primaryButton large"
+                  onClick={() => go("checkout")}
+                >
+                  Buyurtma berish — {formatPrice(total)}
+                </button>
+              </>
+            )}
+          </main>
+        )}
+        {page === "checkout" && (
+          <main className="page checkoutPage">
+            <div className="pageHeader">
+              <span>CHECKOUT</span>
+              <h1>Buyurtmani rasmiylashtirish</h1>
+              <p>Ma’lumotlarni tekshiring va buyurtmani tasdiqlang.</p>
+            </div>
+            <div className="checkoutCard">
+              <div className="cardTitle">
+                <span className="step">1</span>
+                <div>
+                  <h3>Telefon raqami</h3>
+                  <p>Buyurtma bo‘yicha bog‘lanish uchun</p>
+                </div>
+              </div>
+              <input
+                className="input full"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+998 90 123 45 67"
+                type="tel"
+              />
+              <button
+                className={`phoneAutoButton ${phoneLoading ? "loading" : ""}`}
+                onClick={requestTelegramPhone}
+                disabled={phoneLoading}
+              >
+                {phoneLoading
+                  ? "⏳ Telegramdan olinmoqda…"
+                  : phone
+                    ? "✓ Telegram raqamini yangilash"
+                    : "📱 Telegram raqamimni avtomatik olish"}
+              </button>
+            </div>
+            <div className="checkoutCard">
+              <div className="cardTitle">
+                <span className="step">2</span>
+                <div>
+                  <h3>Yetkazib berish manzili</h3>
+                  <p>GPS yoki xaritadan aniq joyni belgilang</p>
+                </div>
+              </div>
+              <button className="locationButton" onClick={requestLocation}>
+                {locationLoading
+                  ? "⌛ Aniqlanmoqda..."
+                  : address.latitude
+                    ? "↻ Joylashuvni qayta aniqlash"
+                    : "📍 Joylashuvimni aniqlash"}
+              </button>
+              {address.latitude ? (
+                <>
+                  <LocationPicker
+                    latitude={address.latitude}
+                    longitude={address.longitude}
+                    onChange={updateMapPosition}
+                  />
+                  <div className="mapCaption">
+                    ✓ Belgilangan joy: {address.latitude.toFixed(5)},{" "}
+                    {address.longitude.toFixed(5)}
+                  </div>
+                </>
+              ) : null}
+              {addressMessage ? (
+                <div className="addressError">{addressMessage}</div>
+              ) : null}
+              <div className="twoInputs">
+                <input
+                  className="input"
+                  value={address.region || ""}
+                  onChange={(e) => setAddressField("region", e.target.value)}
+                  placeholder="Viloyat"
+                />
+                <input
+                  className="input"
+                  value={address.district || ""}
+                  onChange={(e) => setAddressField("district", e.target.value)}
+                  placeholder="Tuman"
+                />
+              </div>
+              <input
+                className="input full"
+                value={address.street || ""}
+                onChange={(e) => setAddressField("street", e.target.value)}
+                placeholder="Ko‘cha"
+              />
+              <div className="twoInputs">
+                <input
+                  className="input"
+                  value={address.house || ""}
+                  onChange={(e) => setAddressField("house", e.target.value)}
+                  placeholder="Dom / uy raqami"
+                />
+                <input
+                  className="input"
+                  value={address.apartment || ""}
+                  onChange={(e) => setAddressField("apartment", e.target.value)}
+                  placeholder="Padezd / xonadon"
+                />
+              </div>
+              <input
+                className="input full"
+                value={address.landmark || ""}
+                onChange={(e) => setAddressField("landmark", e.target.value)}
+                placeholder="Mo‘ljal (ixtiyoriy)"
+              />
+            </div>
+            <div className="checkoutCard">
+              <div className="cardTitle">
+                <span className="step">3</span>
+                <div>
+                  <h3>To‘lov usuli</h3>
+                  <p>O‘zingizga qulay usulni tanlang</p>
+                </div>
+              </div>
+              <label
+                className={`paymentOption ${payment === "cash" ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  checked={payment === "cash"}
+                  onChange={() => setPayment("cash")}
+                />
+                💵{" "}
+                <span>
+                  <b>Naqd</b>
+                  <small>Yetkazib berishda</small>
+                </span>
+              </label>
+              <label
+                className={`paymentOption ${payment === "card" ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  checked={payment === "card"}
+                  onChange={() => setPayment("card")}
+                />
+                💳{" "}
+                <span>
+                  <b>Karta</b>
+                  <small>To‘lov usuli</small>
+                </span>
+              </label>
+            </div>
+            <div className="checkoutTotal">
+              <span>Jami to‘lov</span>
+              <b>{formatPrice(total)}</b>
+            </div>
+            <button
+              className="primaryButton large"
+              disabled={!phone.trim() || !cart.length}
+              onClick={submitOrder}
+            >
+              Buyurtmani tasdiqlash — {formatPrice(total)}
+            </button>
+          </main>
+        )}
+        {page === "wishlist" && (
+          <main className="page">
+            <div className="pageHeader">
+              <span>GULI {t("brand_sub")}</span>
+              <h1>{t("my_wishlist")}</h1>
+              <p>{t("my_wishlist_desc")}</p>
+            </div>
+            {wishlist.length ? (
+              <div className="productGrid">
+                {products
+                  .filter((p) => wishlist.includes(p.id))
+                  .map((p) => card(p))}
+              </div>
+            ) : (
+              <div className="wishlistEmptyWrap">
+                <div className="empty">
+                  <div>♡</div>
+                  <h3>Sevimlilar bo‘sh</h3>
+                  <p>Yoqtirgan mahsulotlaringizni shu yerda saqlang.</p>
+                  <button
+                    className="primaryButton"
+                    onClick={() => go("catalog")}
+                  >
+                    {t("go_to_catalog")}
+                  </button>
+                </div>
+                {productsLoading ? (
+                  <div className="wishlistPopularSection">
+                    <div className="sectionTitle">
+                      <div>
+                        <span className="sectionEyebrow">TAVSIYA ETILADI</span>
+                        <h2>Ommabop mahsulotlar</h2>
+                      </div>
+                    </div>
+                    <ProductGridSkeleton count={4} />
+                  </div>
+                ) : products.length ? (
+                  <section className="wishlistPopularSection">
+                    <div className="sectionTitle">
+                      <div>
+                        <span className="sectionEyebrow">TAVSIYA ETILADI</span>
+                        <h2>Ommabop mahsulotlar</h2>
+                      </div>
+                      <button onClick={() => go("catalog")}>Barchasi →</button>
+                    </div>
+                    <div className="productGrid">
+                      {(products.filter((p) => p.featured).length
+                        ? products.filter((p) => p.featured)
+                        : products
+                      )
+                        .slice(0, 4)
+                        .map((p) => card(p))}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            )}
+          </main>
+        )}
+        {page === "orders" && ordersPage()}
+        {page === "profile" && profilePage()}
+        {page === "addresses" && (
+          <main className="page">
+            <div className="pageHeader">
+              <span>{t("nav_profile").toUpperCase()}</span>
+              <h1>{t("my_addresses")}</h1>
+              <p>{t("my_addresses_desc")}</p>
+            </div>
+            {address.latitude ? (
+              <div className="savedAddressCard">
+                <div className="savedAddressIcon">📍</div>
+                <div>
+                  <b>{address.region || "Joylashuv"}</b>
+                  <p>
+                    {[
+                      address.district,
+                      address.street,
+                      address.house,
+                      address.apartment,
+                    ]
+                      .filter(Boolean)
+                      .join(", ") || "Lokatsiya saqlandi"}
+                  </p>
+                  <small>
+                    {address.latitude.toFixed(5)},{" "}
+                    {address.longitude.toFixed(5)}
+                  </small>
+                  <button
+                    className="smallAction"
+                    onClick={() => go("checkout")}
+                  >
+                    Manzilni tahrirlash
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="empty">
+                <div>📍</div>
+                <h3>Manzil hali saqlanmagan</h3>
+                <p>Checkoutda joylashuvingizni aniqlang.</p>
+                <button
+                  className="primaryButton"
+                  onClick={() => go("checkout")}
+                >
+                  Manzil qo‘shish
+                </button>
+              </div>
+            )}
+          </main>
+        )}
+        {page === "chat" && (
+          <OnlineChatView
+            language={language}
+            onBack={() => go(previousPage || "profile")}
+            user={
+              telegramUser
+                ? {
+                    id: telegramUser.id,
+                    first_name: telegramUser.first_name,
+                    last_name: telegramUser.last_name,
+                    username: telegramUser.username,
+                    photo_url: telegramUser.photo_url,
+                  }
+                : undefined
+            }
+            onShowToast={showToast}
+          />
+        )}
+      </div>
+
+      <nav className="bottomNav" aria-label="Asosiy navigatsiya">
+        <button
+          className={page === "home" ? "active" : ""}
+          onClick={() => go("home")}
+          aria-label={t("nav_home")}
+          title={t("nav_home")}
+        >
+          <span className="navIcon">
+            <Home3DIcon active={page === "home"} />
+          </span>
+        </button>
+        <button
+          className={page === "catalog" ? "active" : ""}
+          onClick={() => go("catalog")}
+          aria-label={t("nav_catalog")}
+          title={t("nav_catalog")}
+        >
+          <span className="navIcon">
+            <Search3DIcon active={page === "catalog"} />
+          </span>
+        </button>
+        <button
+          className={page === "wishlist" ? "active" : ""}
+          onClick={() => go("wishlist")}
+          aria-label={t("nav_wishlist")}
+          title={t("nav_wishlist")}
+        >
+          <span className="navIcon">
+            <Heart3DIcon active={page === "wishlist"} />
+          </span>
+          {wishlist.length > 0 ? (
+            <em className="wishlistBadge">{wishlist.length}</em>
+          ) : null}
+        </button>
+        <button
+          className={page === "cart" ? "active" : ""}
+          onClick={() => go("cart")}
+          aria-label={t("nav_cart")}
+          title={t("nav_cart")}
+        >
+          <span className="navIcon">
+            <Bag3DIcon active={page === "cart"} />
+          </span>
+          {cartCount > 0 ? <em>{cartCount}</em> : null}
+        </button>
+        <button
+          className={
+            page === "profile" ||
+            page === "orders" ||
+            page === "addresses" ||
+            page === "chat"
+              ? "active"
+              : ""
+          }
+          onClick={() => go("profile")}
+          aria-label={t("nav_profile")}
+          title={t("nav_profile")}
+        >
+          <span className="navIcon">
+            <User3DIcon
+              active={
+                page === "profile" ||
+                page === "orders" ||
+                page === "addresses" ||
+                page === "chat"
+              }
+            />
+          </span>
+        </button>
+      </nav>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <SettingsModal
+          theme={theme}
+          onThemeChange={setTheme}
+          language={language}
+          onLanguageChange={setLanguage}
+          onClose={() => setIsSettingsOpen(false)}
+          onClearCache={handleClearCache}
+        />
+      )}
+
+      {/* Help & Support Modal */}
+      {isHelpOpen && (
+        <HelpSupportModal
+          language={language}
+          onClose={() => setIsHelpOpen(false)}
+          onOpenChat={() => {
+            setIsHelpOpen(false);
+            go("chat");
+          }}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Notifications Modal */}
+      {isNotificationsOpen && (
+        <NotificationModal
+          language={language}
+          unreadMessages={unreadMessages}
+          userId={currentUserId}
+          onClose={() => setIsNotificationsOpen(false)}
+          onOpenChat={() => {
+            setIsNotificationsOpen(false);
+            go("chat");
+          }}
+          onOpenOrders={() => {
+            setIsNotificationsOpen(false);
+            go("orders");
+          }}
+        />
+      )}
+
+      {/* Promos & Discounts Modal */}
+      {isPromosOpen && (
+        <PromosModal
+          language={language}
+          onClose={() => setIsPromosOpen(false)}
+          onApplyPromo={(code) => {
+            setPromo(code);
+            setIsPromosOpen(false);
+            showToast(`✓ Promo kod kiritildi: ${code}`);
+            go("cart");
+          }}
+          onShowToast={showToast}
+        />
+      )}
+
+      {/* Delivery & Payment Terms Modal */}
+      {isDeliveryInfoOpen && (
+        <DeliveryTermsModal
+          language={language}
+          onClose={() => setIsDeliveryInfoOpen(false)}
+        />
+      )}
+
+      {/* Size Guide Modal */}
+      {isSizeGuideOpen && (
+        <SizeGuideModal
+          language={language}
+          onClose={() => setIsSizeGuideOpen(false)}
+        />
+      )}
+
+      {/* About Brand & Privacy Modal */}
+      {isAboutOpen && (
+        <AboutBrandModal
+          language={language}
+          onClose={() => setIsAboutOpen(false)}
+        />
+      )}
+
+      {toast ? <div className="toast">{toast}</div> : null}
+    </div>
+  );
 }

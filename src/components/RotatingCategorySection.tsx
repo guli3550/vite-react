@@ -3,34 +3,17 @@ import type { Product } from "./ProductImageGallery";
 
 export interface CategoryInfo {
   name: string;
-  icon: string;
+  icon?: string;
 }
 
-export const DEFAULT_CATEGORY_ICONS: Record<string, string> = {
-  "Barchasi": "✦",
-  "Byustgalter": "♡",
-  "Trusik": "◇",
-  "Komplektlar": "✧",
-  "Uy kiyimlari": "☾",
-  "Sexy lingerie": "♢",
-  "Pijamalar": "🥻",
-  "Aksessuarlar": "🎀",
-  "Korsetlar": "⌛",
-  "Kupeylar": "⚜️"
-};
-
-export const getCategoryIcon = (categoryName: string): string => {
-  return DEFAULT_CATEGORY_ICONS[categoryName] || "✦";
-};
-
 export function getSynchronizedCategories(products: Product[]): CategoryInfo[] {
-  const baseCategories = [
-    { name: "Barchasi", icon: "✦" },
-    { name: "Byustgalter", icon: "♡" },
-    { name: "Trusik", icon: "◇" },
-    { name: "Komplektlar", icon: "✧" },
-    { name: "Uy kiyimlari", icon: "☾" },
-    { name: "Sexy lingerie", icon: "♢" }
+  const baseCategories: CategoryInfo[] = [
+    { name: "Barchasi" },
+    { name: "Byustgalter" },
+    { name: "Trusik" },
+    { name: "Komplektlar" },
+    { name: "Uy kiyimlari" },
+    { name: "Sexy lingerie" }
   ];
 
   const seen = new Set(baseCategories.map(c => c.name));
@@ -40,8 +23,7 @@ export function getSynchronizedCategories(products: Product[]): CategoryInfo[] {
     if (p.category && !seen.has(p.category)) {
       seen.add(p.category);
       dynamicCategories.push({
-        name: p.category,
-        icon: getCategoryIcon(p.category)
+        name: p.category
       });
     }
   });
@@ -177,7 +159,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           />
         ) : (
           <div className="catCardFallback">
-            <span className="catFallbackIcon">{category.icon}</span>
+            <span className="catFallbackIcon">🌷</span>
           </div>
         )}
         <div className="catCardOverlay" />
@@ -185,14 +167,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
       {/* Top Header Badge */}
       <div className="catCardTop">
-        <button
-          type="button"
-          className="catIconBadgeBtn"
-          onClick={handleCategoryBadgeClick}
-          title={`${category.name} katalogiga o'tish`}
-        >
-          <span className="catIconBadge">{category.icon}</span>
-        </button>
+        <span className="catBrandPill">GULI</span>
         {count > 0 ? (
           <span
             className="catCountBadge"
@@ -202,7 +177,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
             {count} xil ›
           </span>
         ) : (
-          <span className="catCountBadge empty">Yangi</span>
+          <span className="catCountBadge empty">Katalog ›</span>
         )}
       </div>
 
