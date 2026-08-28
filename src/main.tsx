@@ -53,8 +53,10 @@ class StorefrontErrorBoundary extends Component<Props, State> {
 
 if (typeof window !== 'undefined') {
   const webApp = window.Telegram?.WebApp
-  webApp?.ready()
-  webApp?.expand()
+  try {
+    webApp?.ready()
+    webApp?.expand()
+  } catch {}
 
   const originalFetch = window.fetch.bind(window)
   const apiBase = (import.meta.env.VITE_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '')
