@@ -30,10 +30,7 @@
       .guli-category-card .guli-cat-image{display:block!important;position:static!important;width:100%!important;height:auto!important;aspect-ratio:.82!important;object-fit:cover!important;flex:none!important}
       .guli-category-card .guli-cat-label{display:block!important;position:static!important;width:100%!important;box-sizing:border-box!important;padding:9px 3px 11px!important;background:#fff8fa!important;color:#9f4057!important;text-align:center!important;font-size:11px!important;font-weight:850!important;line-height:1.08!important;text-shadow:none!important}
       .guli-category-card .guli-cat-shade{display:none!important}
-      .bottomNav button .guli-sticker{display:block!important;font-size:24px!important;line-height:1!important;filter:drop-shadow(0 3px 2px rgba(70,35,45,.16))!important;margin-bottom:2px!important}
-      .bottomNav button>svg{display:none!important}
-      .bottomNav button{gap:0!important}
-      @media(max-width:480px){.guli-category-card .guli-cat-label{font-size:10px!important;padding:8px 2px 10px!important}.bottomNav button .guli-sticker{font-size:23px!important}}
+      @media(max-width:480px){.guli-category-card .guli-cat-label{font-size:10px!important;padding:8px 2px 10px!important}}
     `;
     document.head.appendChild(s);
   }
@@ -61,18 +58,9 @@
     });
   }
 
-  function nav(){
-    const wrap=document.querySelector('.bottomNav'); if(!wrap)return;
-    [...wrap.querySelectorAll('button')].slice(0,5).forEach((b,i)=>{
-      let sticker=b.querySelector('.guli-sticker');
-      if(!sticker){sticker=document.createElement('span'); sticker.className='guli-sticker'; b.prepend(sticker);}
-      sticker.textContent=STICKERS[i];
-    });
-  }
-
   function boot(){
-    css(); refresh(); nav();
-    const observer=new MutationObserver(()=>{renderCats();nav()});
+    css(); refresh();
+    const observer=new MutationObserver(()=>{renderCats()});
     observer.observe(document.body,{childList:true,subtree:true});
     window.addEventListener('focus',refresh);
     window.addEventListener('pageshow',refresh);
