@@ -12,11 +12,16 @@
 .catCardFallback{width:100%;height:100%;display:grid;place-items:center;background:linear-gradient(145deg,#48232e,#291219);color:#f4cbd5;font-size:36px}
 .catCardTop{position:relative;z-index:2;display:flex;justify-content:space-between;align-items:center}
 .catIconBadge{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:grid;place-items:center;color:#bd526a;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.95)}
-.catCountBadge{background:rgba(30,15,20,.68);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);color:#fce7ec;font-size:9px;font-weight:750;padding:2px 7px;border-radius:999px}
+.catIconBadgeBtn{background:transparent;border:0;padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.catIconBadgeBtn:active .catIconBadge{transform:scale(.92)}
+.catCountBadge{background:rgba(30,15,20,.68);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.18);color:#fce7ec;font-size:9px;font-weight:750;padding:2px 7px;border-radius:999px;cursor:pointer;transition:background .2s ease}
+.catCountBadge:hover{background:rgba(189,82,106,.8)}
 .catCardBottom{position:relative;z-index:2;display:flex;flex-direction:column;gap:1px}
 .catEyebrow{font-size:8px;letter-spacing:1.5px;color:#f9c6d1;font-weight:750;text-transform:uppercase}
 .catTitle{margin:1px 0 3px;font-size:13px;font-weight:850;line-height:1.2;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-.catLiveProduct{background:rgba(255,255,255,.16);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:5px 7px;margin-top:2px;transition:all .26s ease}
+.catLiveProduct{background:rgba(255,255,255,.16);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.22);border-radius:11px;padding:5px 7px;margin-top:2px;transition:all .26s ease;cursor:pointer}
+.catLiveProduct:hover{background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.4);transform:translateY(-1px)}
+.catLiveProduct:active{transform:scale(.97)}
 .catLiveProduct.fading{opacity:.2;transform:translateY(2px)}
 .catLiveProductHeader{display:flex;align-items:center;gap:4px}
 .catLivePulse{width:5px;height:5px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.7);animation:livePulseAnim 2s infinite;flex-shrink:0}
@@ -24,6 +29,7 @@
 .catLivePriceRow{display:flex;align-items:center;justify-content:space-between;margin-top:2px}
 .catLivePrice{font-size:9.5px;font-weight:800;color:#fed7e2}
 .catLiveDiscount{font-size:8px;font-weight:850;background:#e11d48;color:#fff;padding:1px 4px;border-radius:6px}
+.catViewProductTag{font-size:8.5px;font-weight:800;color:#fce7ec;background:rgba(255,255,255,.2);padding:1px 5px;border-radius:6px}
 .catExplorePrompt{font-size:9.5px;color:#fbcfe8;font-weight:700;margin-top:2px}
 .productGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.productCard{background:#fff;border-radius:21px;overflow:hidden;border:1px solid #f0e0e3;box-shadow:0 7px 24px rgba(86,45,56,.045);transition:transform .2s,box-shadow .2s}.productCard:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(86,45,56,.08)}.productCard.compact{border-radius:18px}.productImage{position:relative;aspect-ratio:.82;background:#f3e7e9;overflow:hidden;cursor:pointer}.productImage>img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}.productImage:hover>img{transform:scale(1.025)}.discountBadge,.discount{position:absolute;top:9px;left:9px;background:#d94f6a;color:#fff;padding:6px 9px;border-radius:20px;font-size:10px;font-weight:850;z-index:4;pointer-events:none}.heartButton,.heart,.detailHeart{position:absolute;top:9px;right:9px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.95);color:#bd526a;font-size:21px;z-index:5;box-shadow:0 5px 15px rgba(50,20,30,.09);display:grid;place-items:center}.productInfo{padding:12px}.productInfo>span,.categoryLabel{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:#a78088}.productInfo h3{font-size:13px;margin:5px 0;line-height:1.28;min-height:33px}.smallRating,.rating{font-size:10px;color:#bd526a}.smallRating span,.rating span{color:#9e8d91}.cardBottom{margin-top:10px;display:flex;align-items:center;justify-content:space-between}.cardBottom strong{display:block;font-size:13px}.cardBottom del{display:block;color:#a69a9d;font-size:9px;margin-top:2px}.addButton{width:36px;height:36px;border-radius:50%;background:#f5d9de;color:#b54760;font-size:23px}.deliveryBanner{margin:22px 14px;padding:17px;border-radius:20px;background:linear-gradient(135deg,#f8dfe4,#f5d3da)}.deliveryBanner>div{display:flex;align-items:center;gap:12px}.deliveryBanner span{font-size:28px}.deliveryBanner b{font-size:13px}.deliveryBanner p{margin:3px 0 0;font-size:10px;color:#765f65}
 .productGallerySwipe{position:relative;width:100%;height:100%;touch-action:pan-y;user-select:none;-webkit-user-select:none}

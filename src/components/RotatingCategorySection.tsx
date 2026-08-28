@@ -54,13 +54,15 @@ interface RotatingCategoryCardProps {
   products: Product[];
   index: number;
   onSelect: (categoryName: string) => void;
+  onOpenProduct: (product: Product) => void;
 }
 
 export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
   category,
   products,
   index,
-  onSelect
+  onSelect,
+  onOpenProduct
 }) => {
   // Ushbu kategoriyaga tegishli mahsulotlar
   const categoryProducts = useMemo(() => {
@@ -135,19 +137,32 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
   const currentItem = rotatingItems[activeItemIndex] || null;
   const count = categoryProducts.length;
 
+  const handleClickCard = () => {
+    if (currentItem?.product) {
+      onOpenProduct(currentItem.product);
+    } else {
+      onSelect(category.name);
+    }
+  };
+
+  const handleCategoryBadgeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelect(category.name);
+  };
+
   return (
     <div
       className="rotatingCategoryCard"
       id={`cat-card-${category.name.toLowerCase().replace(/\s+/g, "-")}`}
       role="button"
       tabIndex={0}
-      onClick={() => onSelect(category.name)}
+      onClick={handleClickCard}
       onKeyDown={e => {
         if (e.key === "Enter" || e.key === " ") {
-          onSelect(category.name);
+          handleClickCard();
         }
       }}
-      title={`${category.name} toifasidagi barcha mahsulotlarni ko'rish`}
+      title={currentItem ? `${currentItem.title} mahsulotini ko'rish` : `${category.name} toifasidagi barcha mahsulotlarni ko'rish`}
     >
       {/* Background Image Slideshow */}
       <div className="catCardMedia">
@@ -170,9 +185,22 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
       {/* Top Header Badge */}
       <div className="catCardTop">
-        <span className="catIconBadge">{category.icon}</span>
+        <button
+          type="button"
+          className="catIconBadgeBtn"
+          onClick={handleCategoryBadgeClick}
+          title={`${category.name} katalogiga o'tish`}
+        >
+          <span className="catIconBadge">{category.icon}</span>
+        </button>
         {count > 0 ? (
-          <span className="catCountBadge">{count} xil</span>
+          <span
+            className="catCountBadge"
+            onClick={handleCategoryBadgeClick}
+            title={`${category.name} toifasidagi barcha ${count} ta mahsulotni ko'rish`}
+          >
+            {count} xil ›
+          </span>
         ) : (
           <span className="catCountBadge empty">Yangi</span>
         )}
@@ -184,7 +212,14 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
         <h3 className="catTitle">{category.name}</h3>
 
         {currentItem ? (
-          <div className={`catLiveProduct ${isFading ? "fading" : ""}`}>
+          <div
+            className={`catLiveProduct ${isFading ? "fading" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenProduct(currentItem.product);
+            }}
+            title={`${currentItem.title} tovar sahifasiga o'tish`}
+          >
             <div className="catLiveProductHeader">
               <span className="catLivePulse" />
               <span className="catLiveName">{currentItem.title}</span>
@@ -195,7 +230,9 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
               </span>
               {currentItem.discount ? (
                 <span className="catLiveDiscount">-{currentItem.discount}%</span>
-              ) : null}
+              ) : (
+                <span className="catViewProductTag">Ko'rish ›</span>
+              )}
             </div>
           </div>
         ) : (
@@ -210,6 +247,7 @@ interface RotatingCategoriesSectionProps {
   categories: CategoryInfo[];
   products: Product[];
   onSelectCategory: (categoryName: string) => void;
+  onOpenProduct: (product: Product) => void;
   onViewAll: () => void;
 }
 
@@ -217,6 +255,7 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
   categories,
   products,
   onSelectCategory,
+  onOpenProduct,
   onViewAll
 }) => {
   // "Barchasi" dan tashqari asosiy toifalar
@@ -248,6 +287,7 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
             products={products}
             index={idx}
             onSelect={onSelectCategory}
+            onOpenProduct={onOpenProduct}
           />
         ))}
       </div>
