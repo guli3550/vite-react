@@ -1,19 +1,27 @@
 # GULI PREMIUM — Telegram Mini App / Online Market
 
-Production storefront for GULI PREMIUM. The repository is the source of truth for the Render storefront, Render API, Cloudflare gateway, Telegram bot integration and Supabase commerce data model.
+Production storefront for GULI PREMIUM.
 
-## Production architecture
+## Canonical production architecture
 
-`Telegram Mini App / Render Static Site → Cloudflare Worker → Render Node API → Supabase`
+`Telegram Mini App / Browser → Vercel storefront → Render API → Supabase`
 
-- **Frontend:** Vite + React + TypeScript
-- **Storefront:** Render Static Site `guli-lingerie-web`
-- **Backend:** Render Web Service `guli-lingerie-api`
-- **Gateway:** Cloudflare Worker `guli-gateway`
+- **Canonical frontend:** Vercel `vite-react-seven-inky-10.vercel.app`
+- **Storefront:** `/`
+- **Admin:** `/admin`
+- **Backend/API:** Render Web Service `guli-lingerie-api`
 - **Database/storage/auth:** Supabase
+- **Realtime:** Supabase Realtime → backend SSE bridge for chat events
 - **Bot:** Telegram Bot API + Mini App `initData`
 - **Payments:** cash + manual HUMO/UZCARD receipt workflow
-- **Admin:** `/admin`, HMAC-signed sessions, product/order/customer/promo/category management
+
+Vercel is the single frontend URL for Telegram Mini App and normal browser users. Render is backend-only and must not be used as the public storefront URL.
+
+## Unified chat architecture
+
+Telegram users, browser users and admins use the same backend chat service and the same `chat_messages` database table. Browser `localStorage`/`BroadcastChannel` are UI cache/synchronization helpers only; persistent chat data belongs to the backend database.
+
+The backend maintains one Supabase Realtime subscription and exposes authenticated SSE streams to clients. This avoids per-client polling loops and keeps server load lower while allowing new messages to reach the relevant customer and all admin sessions.
 
 ## Storefront design
 
@@ -47,16 +55,34 @@ npm start
 
 ## Environment
 
-Frontend production API is the Cloudflare gateway. Backend secrets belong on Render only.
+Frontend API:
+
+```text
+VITE_API_URL=https://guli-lingerie-api.onrender.com
+```
+
+Backend secrets belong on Render only. The backend uses `VERCEL_APP_URL` / `MINI_APP_URL` when generating Telegram Mini App and product links.
+
+Required Telegram notification configuration includes `TELEGRAM_ADMIN_CHAT_IDS` for admin chat alerts.
 
 See `.env.example` and `ADMIN_SETUP.md`.
 
-## Database migrations
+## Database
 
-Production SQL files are under `supabase/`. In particular, `repair_existing_schema.sql` repairs legacy commerce schemas and `checkout_runtime_repair.sql` installs the UUID/bigint-safe secure checkout RPC.
+Production SQL files are under `supabase/`. The existing `chat_messages.sql` creates the persistent chat table. Any additional chat security/realtime hardening SQL must be applied explicitly in Supabase before relying on those optional database-side changes.
 
 ## Deployment rule
 
-The production storefront is deployed on **Render**. Vercel is not used for the storefront deployment.
+The production storefront is deployed on **Vercel**. The canonical URL is:
 
-GitHub Actions provides build/syntax validation and scheduled production smoke checks for Render, Cloudflare, catalog, category settings and customer auth guards.
+`https://vite-react-seven-inky-10.vercel.app`
+
+Use:
+
+`https://vite-react-seven-inky-10.vercel.app/admin`
+
+for the admin panel.
+
+Telegram product broadcasts and Mini App buttons must use the Vercel URL. Render is backend-only.
+
+GitHub Actions provides build/syntax validation and scheduled production smoke checks.
