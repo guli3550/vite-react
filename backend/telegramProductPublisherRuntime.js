@@ -10,9 +10,6 @@ const MINI_APP_URL = /[?&]tgapp=/.test(configuredMiniAppUrl)
   : `${configuredMiniAppUrl}${configuredMiniAppUrl.includes("?") ? "&" : "?"}tgapp=v20260829`;
 const PRODUCT_CHAT_IDS = String(process.env.TELEGRAM_PRODUCT_CHAT_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
 const BROADCAST_USERS = String(process.env.TELEGRAM_PRODUCT_BROADCAST || "1") !== "0";
-// LoginUrl is enabled only after the storefront domain is linked to this bot in BotFather.
-// Keeping it off by default prevents Telegram from rejecting the entire product message.
-const TELEGRAM_LOGIN_URL_ENABLED = String(process.env.TELEGRAM_LOGIN_URL_ENABLED || "0") === "1";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
 const supabase = SUPABASE_URL && SUPABASE_SECRET_KEY ? createClient(SUPABASE_URL, SUPABASE_SECRET_KEY) : null;
@@ -31,14 +28,8 @@ function homeUrl() { return MINI_APP_URL; }
 function caption(product) { const name = String(product?.name || product?.title || "GULI mahsuloti").trim(); const code = product?.product_code ? `\n🔖 Kod: ${product.product_code}` : ""; const price = Number(product?.price || 0).toLocaleString("uz-UZ"); return `🌷 <b>${name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</b>${code}\n💰 ${price} so‘m`; }
 function productImage(product) { return String(product?.image || (Array.isArray(product?.images) ? product.images[0] : "") || "").trim(); }
 function replyMarkup(product) {
-  const exactProductUrl = productUrl(product);
-  const rows = [[{ text: "🛍️ Online Market", url: homeUrl() }, { text: "🤩 Sotib olish", url: exactProductUrl }]];
-  // Telegram requires the LoginUrl domain to be linked to the bot. Until that is configured,
-  // keep a normal browser link so product broadcasts are never blocked by an auth-button error.
-  rows.push([{ text: "🌐 Browser + Chat", ...(TELEGRAM_LOGIN_URL_ENABLED
-    ? { login_url: { url: exactProductUrl, bot_username: "guli3550bot", request_write_access: false } }
-    : { url: exactProductUrl }) }]);
-  return { inline_keyboard: rows };
+  // Keep the Telegram announcement intentionally simple: one public storefront button.
+  return { inline_keyboard: [[{ text: "🛍️ Online Market", url: productUrl(product) }]] };
 }
 async function sendProduct(chatId, product) {
   const image = productImage(product);
