@@ -22,7 +22,15 @@ function customer(req) { return verifyTelegram(req.headers["x-telegram-init-data
 function authorizedForUser(req, id) { const n = Number(id); const u = customer(req); return (!!u && Number(u.id) === n) || (n < 0 && verifyGuest(req, n)); }
 function sseSend(client, event, data) { try { client.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {} }
 function deliverToClients(message) { for (const c of clients) { if (c.admin || Number(c.chatId) === Number(message?.telegram_id)) sseSend(c, "message", message); } }
-async function publishRealtime(message) { if (!realtimeChannel || !message) return; try { await realtimeChannel.send({ type: "broadcast", event: "chat_message", payload: message }); } catch (error) { console.warn("[Chat realtime] broadcast failed:", error.message); } }
+async function publishRealtime(message) {
+  if (!message) return;
+  // Always deliver immediately to every connected client on this API instance.
+  // Supabase Broadcast remains the cross-instance transport without requiring extra SQL.
+  deliverToClients(message);
+  if (!realtimeChannel) return;
+  try { await realtimeChannel.send({ type: "broadcast", event: "chat_message", payload: message }); }
+  catch (error) { console.warn("[Chat realtime] broadcast failed:", error.message); }
+}
 async function telegramSend(chatId, text) { if (!BOT_TOKEN || !chatId) return; try { await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }) }); } catch (e) { console.warn("[Chat] Telegram admin notification failed:", e.message); } }
 async function notifyAdmins(message) { if (!ADMIN_CHAT_IDS.length || message?.sender !== "customer") return; const id = Number(message.telegram_id); const who = id < 0 ? `Browser guest ${Math.abs(id)}` : `Telegram ${id}`; const text = `💬 <b>Yangi mijoz xabari</b>\n\n👤 ${who}\n📝 ${String(message.text || "").slice(0, 300)}`; await Promise.all(ADMIN_CHAT_IDS.map(cid => telegramSend(cid, text))); }
 function startRealtime() { if (realtimeStarted || !supabase) return; realtimeStarted = true; realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } }); realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload)); realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`)); }
