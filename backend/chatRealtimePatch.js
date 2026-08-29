@@ -1,9 +1,7 @@
-// Realtime chat bridge. Loaded before backend/index.js so the existing chat routes
-// gain authentication, SSE delivery and Telegram admin notifications without polling.
+// Realtime chat bridge. Loaded before backend/index.js so the existing chat routes gain authentication, SSE delivery and Telegram admin notifications without polling.
 const express = require("express");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
-
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
@@ -12,7 +10,6 @@ const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPAB
 const ADMIN_CHAT_IDS = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
 const clients = new Set();
 let realtimeStarted = false;
-
 function safeEqual(a, b) { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function verifyTelegram(initData) { if (!BOT_TOKEN || !initData) return null; try { const p = new URLSearchParams(initData); const hash = p.get("hash"); const authDate = Number(p.get("auth_date")); if (!hash || !Number.isFinite(authDate) || Math.abs(Math.floor(Date.now() / 1000) - authDate) > 86400) return null; const pairs = []; p.forEach((v, k) => { if (k !== "hash") pairs.push(`${k}=${v}`); }); pairs.sort(); const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest(); const calc = crypto.createHmac("sha256", secret).update(pairs.join("\n")).digest("hex"); if (!safeEqual(calc, hash)) return null; const u = JSON.parse(p.get("user") || "null"); return u?.id ? { id: Number(u.id), username: u.username || null, first_name: u.first_name || null } : null; } catch { return null; } }
 function verifyAdmin(req) { const h = req.headers.authorization || ""; if (!h.startsWith("Bearer ") || !ADMIN_SECRET) return false; try { const [body, sig] = h.slice(7).split("."); if (!body || !sig) return false; const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url"); if (!safeEqual(sig, expected)) return false; const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8")); return p.role === "admin" && Number(p.exp) > Date.now(); } catch { return false; } }
@@ -23,49 +20,12 @@ function broadcast(message) { for (const c of clients) { if (c.admin || Number(c
 async function telegramSend(chatId, text) { if (!BOT_TOKEN || !chatId) return; try { await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }) }); } catch (e) { console.warn("[Chat] Telegram admin notification failed:", e.message); } }
 async function notifyAdmins(message) { if (!ADMIN_CHAT_IDS.length || message?.sender !== "customer") return; const who = message.telegram_id ? String(message.telegram_id) : "noma’lum"; const text = `💬 <b>Yangi mijoz xabari</b>\n\n👤 Telegram ID: <code>${who}</code>\n📝 ${String(message.text || "").slice(0, 300)}`; await Promise.all(ADMIN_CHAT_IDS.map(id => telegramSend(id, text))); }
 function startRealtime() { if (realtimeStarted || !supabase) return; realtimeStarted = true; supabase.channel("guli-chat-realtime").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, payload => broadcast(payload.new)).subscribe(status => console.log(`[Chat realtime] ${status}`)); }
-function patchGet() {
-  const original = express.application.get;
-  express.application.get = function patchedGet(routePath, ...handlers) {
-    if (routePath === "/api/chat/messages/:telegram_id") {
-      return original.call(this, routePath, (req, res) => {
-        const rawId = String(req.params.telegram_id || "");
-        const isAdmin = rawId === "all" && verifyAdmin(req);
-        if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
-        return supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }).then(({ data, error }) => {
-          if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
-          return res.json({ success: true, data: data || [] });
-        });
-      });
-    }
-    if (routePath === "/api/chat/stream/:telegram_id") {
-      return original.call(this, routePath, (req, res) => {
-        const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req);
-        if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
-        res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.();
-        const client = { res, telegramId: isAdmin ? null : Number(rawId), admin: isAdmin }; clients.add(client); sseSend(client, "ready", { ok: true });
-        const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000);
-        req.on("close", () => { clearInterval(heartbeat); clients.delete(client); });
-      });
-    }
-    return original.call(this, routePath, ...handlers);
-  };
-}
-function patchChatPost() {
-  const original = express.application.post;
-  express.application.post = function patchedPost(routePath, ...handlers) {
-    if (routePath === "/api/chat/messages" && handlers.length) {
-      const index = handlers.length - 1; const handler = handlers[index];
-      handlers[index] = async function secureChatPost(req, res, next) {
-        const sender = String(req.body?.sender || "").toLowerCase(); const id = Number(req.body?.telegram_id || 0);
-        if (sender === "customer" || sender === "user") { const u = customer(req); if (!u || !id || Number(u.id) !== id) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" }); req.body.sender = "customer"; req.body.telegram_id = id; }
-        else if (sender === "admin") { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); }
-        else return res.status(400).json({ success: false, message: "Noto‘g‘ri chat jo‘natuvchisi" });
-        let payload = null; const originalJson = res.json.bind(res); res.json = body => { payload = body; return originalJson(body); };
-        const result = await handler(req, res, next); if (payload?.success && payload?.data) await notifyAdmins(payload.data); return result;
-      };
-    }
-    return original.call(this, routePath, ...handlers);
-  };
-}
+function patchGet() { const original = express.application.get; express.application.get = function patchedGet(routePath, ...handlers) {
+  if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, (req, res) => { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" }); return supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
+  if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); return supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
+  if (routePath === "/api/chat/stream/:telegram_id") return original.call(this, routePath, (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.(); const client = { res, telegramId: isAdmin ? null : Number(rawId), admin: isAdmin }; clients.add(client); sseSend(client, "ready", { ok: true }); const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000); req.on("close", () => { clearInterval(heartbeat); clients.delete(client); }); });
+  return original.call(this, routePath, ...handlers);
+}; }
+function patchChatPost() { const original = express.application.post; express.application.post = function patchedPost(routePath, ...handlers) { if (routePath === "/api/chat/messages" && handlers.length) { const index = handlers.length - 1; const handler = handlers[index]; handlers[index] = async function secureChatPost(req, res, next) { const sender = String(req.body?.sender || "").toLowerCase(); const id = Number(req.body?.telegram_id || 0); if (sender === "customer" || sender === "user") { const u = customer(req); if (!u || !id || Number(u.id) !== id) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" }); req.body.sender = "customer"; req.body.telegram_id = id; } else if (sender === "admin") { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); } else return res.status(400).json({ success: false, message: "Noto‘g‘ri chat jo‘natuvchisi" }); let payload = null; const originalJson = res.json.bind(res); res.json = body => { payload = body; return originalJson(body); }; const result = await handler(req, res, next); if (payload?.success && payload?.data) await notifyAdmins(payload.data); return result; }; } return original.call(this, routePath, ...handlers); }; }
 patchGet(); patchChatPost();
 setImmediate(startRealtime);
