@@ -3,7 +3,11 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const MINI_APP_URL = (process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829").trim().replace(/\/$/, "");
+const DEFAULT_MINI_APP_URL = "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829";
+const configuredMiniAppUrl = String(process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || DEFAULT_MINI_APP_URL).trim();
+const MINI_APP_URL = /[?&]tgapp=/.test(configuredMiniAppUrl)
+  ? configuredMiniAppUrl
+  : `${configuredMiniAppUrl}${configuredMiniAppUrl.includes("?") ? "&" : "?"}tgapp=v20260829`;
 const PRODUCT_CHAT_IDS = String(process.env.TELEGRAM_PRODUCT_CHAT_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
 const BROADCAST_USERS = String(process.env.TELEGRAM_PRODUCT_BROADCAST || "1") !== "0";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
