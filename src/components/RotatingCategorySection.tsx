@@ -1,41 +1,8 @@
 import { useEffect, useState, useMemo, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
+import { type CategoryInfo } from "../utils/categoryUtils";
 
-export interface CategoryInfo {
-  name: string;
-  icon?: string;
-}
-
-export const FIXED_CATEGORIES = [
-  "Penyuar",
-  "Pijama",
-  "Bezgalter",
-  "Mayka",
-  "Tursik",
-  "Komplektlar",
-  "Sexy ledy"
-] as const;
-
-export function getSynchronizedCategories(products: Product[]): CategoryInfo[] {
-  const baseCategories: CategoryInfo[] = [
-    { name: "Barchasi" },
-    ...FIXED_CATEGORIES.map(name => ({ name }))
-  ];
-
-  const seen = new Set(baseCategories.map(c => c.name));
-  const dynamicCategories: CategoryInfo[] = [...baseCategories];
-
-  products.forEach(p => {
-    if (p.category && !seen.has(p.category)) {
-      seen.add(p.category);
-      dynamicCategories.push({
-        name: p.category
-      });
-    }
-  });
-
-  return dynamicCategories;
-}
+export type { CategoryInfo };
 
 interface RotatingCategoryCardProps {
   category: CategoryInfo;

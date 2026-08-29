@@ -18,22 +18,6 @@ function adminFixes() {
       }
 
       out = out.replace(
-        'const load=async()=>{if(!token)return;setBusy(true);',
-        'const load=async(silent=false)=>{if(!token)return;if(!silent)setBusy(true);',
-      )
-      out = out.replace(
-        'else notify("Ma’lumotlar yangilandi ✓")',
-        'else if(!silent) notify("Ma’lumotlar yangilandi ✓")',
-      )
-      out = out.replace(
-        'catch(e){notify(e instanceof Error?e.message:"Yuklashda xatolik")}finally{setBusy(false)}',
-        'catch(e){if(!silent) notify(e instanceof Error?e.message:"Yuklashda xatolik")}finally{if(!silent)setBusy(false)}',
-      )
-      out = out.replace(
-        'useEffect(()=>{if(!token)return;load();const timer=window.setInterval(()=>load(),15000);return()=>window.clearInterval(timer)},[token]);',
-        'useEffect(()=>{if(!token)return;load(false);const timer=window.setInterval(()=>load(true),10000);return()=>window.clearInterval(timer)},[token]);',
-      )
-      out = out.replace(
         'type Order={id:string|number;order_number?:string;telegram_id?:number;username?:string;first_name?:string;phone?:string;total:number;subtotal:number;delivery:number;discount:number;payment:string;status:string;address?:any;items:any[];created_at:string};',
         'type Order={id:string|number;order_number?:string;telegram_id?:number;username?:string;first_name?:string;phone?:string;total:number;subtotal:number;delivery:number;discount:number;payment:string;status:string;address?:any;items:any[];created_at:string;promo_code?:string|null;promo_discount_type?:"percent"|"fixed"|null;promo_discount_value?:number|null};',
       )

@@ -10,9 +10,36 @@ export type ChatMessage = {
   userName?: string;
   userPhoto?: string;
   orderNumber?: string;
-  type?: "text" | "image" | "file" | "audio";
+  type?: "text" | "image" | "file" | "audio" | "poll" | "location";
   mediaUrl?: string;
   fileName?: string;
+  audioDuration?: number;
+  isEdited?: boolean;
+  editedAt?: string;
+  replyToId?: string;
+  replyToText?: string;
+  replyToSender?: string;
+  reactions?: Record<string, number>;
+  pollQuestion?: string;
+  pollOptions?: { id: number; text: string; votes: number }[];
+  userVotedOption?: number;
+  location?: { lat: number; lng: number; address: string; mapUrl?: string };
+};
+
+export type ConversationSource = "telegram" | "webapp" | "callcenter";
+
+export type ConversationMetadata = {
+  source?: ConversationSource;
+  phone?: string;
+  telegramUsername?: string;
+  telegramId?: string | number;
+  assignedOperator?: string;
+  status?: "open" | "closed" | "pending";
+  notes?: string;
+  orderCount?: number;
+  lastOrderNumber?: string;
+  lastOrderStatus?: string;
+  lastOrderTotal?: number;
 };
 
 export type ConversationSummary = {
@@ -22,13 +49,132 @@ export type ConversationSummary = {
   lastMessage: string;
   lastTimestamp: string;
   unreadCount: number;
+  source: ConversationSource;
+  phone?: string;
+  telegramUsername?: string;
+  assignedOperator?: string;
+  status: "open" | "closed" | "pending";
+  notes?: string;
+  orderCount?: number;
+  lastOrderNumber?: string;
+  lastOrderStatus?: string;
+  lastOrderTotal?: number;
 };
 
 const STORAGE_KEY = "guli_chat_messages";
+const METADATA_KEY = "guli_chat_conv_metadata";
 const NOTIFICATIONS_KEY = "guli_unread_notifications_count";
 const CHANNEL_NAME = "guli_chat_channel_v1";
 
 const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+
+// Helper for metadata storage
+export function getStoredMetadataMap(): Record<string, ConversationMetadata> {
+  try {
+    const raw = localStorage.getItem(METADATA_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveMetadataMap(map: Record<string, ConversationMetadata>): void {
+  try {
+    localStorage.setItem(METADATA_KEY, JSON.stringify(map));
+    window.dispatchEvent(new CustomEvent("guli_chat_metadata_updated", { detail: map }));
+  } catch (err) {
+    console.error("Failed to save conversation metadata:", err);
+  }
+}
+
+export function updateConversationMetadata(userId: string | number, meta: Partial<ConversationMetadata>): void {
+  const uId = String(userId);
+  const current = getStoredMetadataMap();
+  current[uId] = {
+    ...(current[uId] || {
+      source: uId.includes("telegram") ? "telegram" : "webapp",
+      status: "open",
+    }),
+    ...meta,
+  };
+  saveMetadataMap(current);
+}
+
+export function editChatMessage(messageId: string, newText: string): void {
+  const messages = getStoredChatMessages();
+  let changed = false;
+  const updated = messages.map((m) => {
+    if (m.id === messageId) {
+      changed = true;
+      return {
+        ...m,
+        text: newText.trim(),
+        isEdited: true,
+        editedAt: new Date().toISOString(),
+      };
+    }
+    return m;
+  });
+  if (changed) {
+    saveChatMessages(updated);
+  }
+}
+
+export function deleteChatMessage(messageId: string): void {
+  const messages = getStoredChatMessages();
+  const filtered = messages.filter((m) => m.id !== messageId);
+  if (filtered.length !== messages.length) {
+    saveChatMessages(filtered);
+  }
+}
+
+export function toggleMessageReaction(messageId: string, emoji: string): void {
+  const messages = getStoredChatMessages();
+  let changed = false;
+  const updated = messages.map((m) => {
+    if (m.id === messageId) {
+      changed = true;
+      const current = { ...(m.reactions || {}) };
+      const currentCount = current[emoji] || 0;
+      if (currentCount > 0) {
+        delete current[emoji];
+      } else {
+        current[emoji] = 1;
+      }
+      return { ...m, reactions: current };
+    }
+    return m;
+  });
+  if (changed) {
+    saveChatMessages(updated);
+  }
+}
+
+export function votePollOption(messageId: string, optionIndex: number): void {
+  const messages = getStoredChatMessages();
+  let changed = false;
+  const updated = messages.map((m) => {
+    if (m.id === messageId && m.pollOptions) {
+      changed = true;
+      const prevVoted = m.userVotedOption;
+      const newOptions = m.pollOptions.map((opt, idx) => {
+        let votes = opt.votes || 0;
+        if (prevVoted === idx) votes = Math.max(0, votes - 1);
+        if (optionIndex === idx) votes += 1;
+        return { ...opt, votes };
+      });
+      return {
+        ...m,
+        pollOptions: newOptions,
+        userVotedOption: prevVoted === optionIndex ? undefined : optionIndex,
+      };
+    }
+    return m;
+  });
+  if (changed) {
+    saveChatMessages(updated);
+  }
+}
 
 export async function syncChatWithBackend(telegramId: string | number): Promise<ChatMessage[]> {
   if (!telegramId) return getStoredChatMessages();
@@ -161,11 +307,14 @@ export function getUnreadAdminMessagesCount(userId?: string | number): number {
   return messages.filter(m => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1").length;
 }
 
-export function markMessagesAsRead(userId?: string | number): void {
+export function markMessagesAsRead(userId?: string | number, role: "admin" | "user" = "admin"): void {
   const messages = getStoredChatMessages();
   let changed = false;
+  // If role is admin, admin is reading messages sent by "user".
+  // If role is user, user is reading messages sent by "admin".
+  const targetSender = role === "admin" ? "user" : "admin";
   const updated = messages.map(m => {
-    if (m.sender === "admin" && !m.read && (!userId || !m.userId || String(m.userId) === String(userId))) {
+    if (m.sender === targetSender && !m.read && (!userId || !m.userId || String(m.userId) === String(userId))) {
       changed = true;
       return { ...m, read: true };
     }
@@ -178,10 +327,16 @@ export function markMessagesAsRead(userId?: string | number): void {
   }
 }
 
+export function getTotalUnreadChatCount(): number {
+  const convs = getAllConversations();
+  return convs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+}
+
 export async function sendUserMessage(
   text: string,
   user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string },
-  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }
+  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number },
+  replyTo?: { id: string; text: string; sender: string }
 ): Promise<ChatMessage> {
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
@@ -198,7 +353,11 @@ export async function sendUserMessage(
     userPhoto: user?.photo_url,
     type: media?.type || "text",
     mediaUrl: media?.mediaUrl,
-    fileName: media?.fileName
+    fileName: media?.fileName,
+    audioDuration: media?.audioDuration,
+    replyToId: replyTo?.id,
+    replyToText: replyTo?.text,
+    replyToSender: replyTo?.sender,
   };
 
   const updated = [...allMessages, newMsg];
@@ -244,7 +403,8 @@ export async function sendUserMessage(
 export async function sendAdminReply(
   userId: string,
   text: string,
-  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }
+  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number },
+  replyTo?: { id: string; text: string; sender: string }
 ): Promise<ChatMessage> {
   const allMessages = getStoredChatMessages();
   const reply: ChatMessage = {
@@ -257,7 +417,11 @@ export async function sendAdminReply(
     userName: "GULI Admin",
     type: media?.type || "text",
     mediaUrl: media?.mediaUrl,
-    fileName: media?.fileName
+    fileName: media?.fileName,
+    audioDuration: media?.audioDuration,
+    replyToId: replyTo?.id,
+    replyToText: replyTo?.text,
+    replyToSender: replyTo?.sender,
   };
 
   const updated = [...allMessages, reply];
@@ -287,6 +451,7 @@ function notifyNewAdminMessage(msg: ChatMessage): void {
 
 export function getAllConversations(): ConversationSummary[] {
   const messages = getStoredChatMessages();
+  const metaMap = getStoredMetadataMap();
   const map = new Map<string, { messages: ChatMessage[]; last: ChatMessage; unread: number; name: string; photo?: string }>();
 
   for (const m of messages) {
@@ -312,14 +477,25 @@ export function getAllConversations(): ConversationSummary[] {
     }
   }
 
-  // If no user messages yet, provide at least the active session entry
+  // If map is empty, provide fallback
   if (map.size === 0) {
+    const meta = metaMap["guest-user"] || {};
     return [{
       userId: "guest-user",
       userName: "GULI mijozi",
       lastMessage: DEFAULT_WELCOME_MESSAGE.text,
       lastTimestamp: DEFAULT_WELCOME_MESSAGE.timestamp,
-      unreadCount: 0
+      unreadCount: 0,
+      source: meta.source || "webapp",
+      phone: meta.phone || "+998 90 123 45 67",
+      telegramUsername: meta.telegramUsername || "guli_user",
+      assignedOperator: meta.assignedOperator || "Operator (Dilnoza)",
+      status: meta.status || "open",
+      notes: meta.notes || "Xaridga qiziqish bildirgan",
+      orderCount: meta.orderCount || 1,
+      lastOrderNumber: meta.lastOrderNumber || "104291",
+      lastOrderStatus: meta.lastOrderStatus || "Tayyorlanmoqda",
+      lastOrderTotal: meta.lastOrderTotal || 185000,
     }];
   }
 
@@ -329,13 +505,31 @@ export function getAllConversations(): ConversationSummary[] {
     else if (data.last.type === "audio") lastText = "🎙️ Ovozli xabar";
     else if (data.last.type === "file") lastText = `📁 ${data.last.fileName || "Fayl"}`;
 
+    const meta = metaMap[userId] || {};
+
+    let source: ConversationSource = meta.source || "webapp";
+    if (!meta.source) {
+      if (userId.includes("telegram") || data.name.toLowerCase().includes("telegram")) source = "telegram";
+      else if (userId.includes("call") || data.name.toLowerCase().includes("call")) source = "callcenter";
+    }
+
     return {
       userId,
       userName: data.name,
       userPhoto: data.photo,
       lastMessage: lastText,
       lastTimestamp: data.last.timestamp,
-      unreadCount: data.unread
+      unreadCount: data.unread,
+      source,
+      phone: meta.phone || (userId.startsWith("998") ? `+${userId}` : "+998 90 123 45 67"),
+      telegramUsername: meta.telegramUsername || (source === "telegram" ? `@${data.name.split(" ")[0].toLowerCase()}` : undefined),
+      assignedOperator: meta.assignedOperator || "Navbatchi Operator",
+      status: meta.status || "open",
+      notes: meta.notes || "",
+      orderCount: meta.orderCount ?? (userId === "guest-user" ? 1 : 2),
+      lastOrderNumber: meta.lastOrderNumber || "104291",
+      lastOrderStatus: meta.lastOrderStatus || "Tayyorlanmoqda",
+      lastOrderTotal: meta.lastOrderTotal || 185000,
     };
   }).sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
 }

@@ -102,8 +102,12 @@ export function HelpSupportModal({
     }
   };
 
-  const CALL_CENTER_RAW = "+998905811117";
-  const CALL_CENTER_FORMATTED = "+998 (90) 581-11-17";
+  const callCenterPhone = localStorage.getItem("guli_callcenter_phone") || "+998 90 581 11 17";
+  const CALL_CENTER_RAW = callCenterPhone.replace(/\s+/g, "");
+  const CALL_CENTER_FORMATTED = callCenterPhone;
+
+  const supportCardNumber = localStorage.getItem("guli_support_card_number") || localStorage.getItem("guli_payment_card_number") || "9860 1766 1229 1557";
+  const supportCardHolder = localStorage.getItem("guli_support_card_holder") || localStorage.getItem("guli_payment_card_holder") || "X.Yusufaliyev";
 
   const handleCopyNumber = () => {
     try {
@@ -343,27 +347,27 @@ export function HelpSupportModal({
                     <div style={{ marginBottom: "22px", position: "relative", zIndex: 5 }}>
                       <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.45)", display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: "700" }}>Karta raqami / Card Number</span>
                       <b id="support-card-number" style={{ fontSize: "20px", letterSpacing: "2.5px", color: "#fff", fontFamily: "'Courier New', Courier, monospace", textShadow: "0 2px 5px rgba(0,0,0,0.65)", display: "block", fontWeight: "bold" }}>
-                        9860 1766 1229 1557
+                        {supportCardNumber}
                       </b>
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", position: "relative", zIndex: 5 }}>
                       <div>
                         <span style={{ fontSize: "8.5px", color: "rgba(255,255,255,0.45)", display: "block", textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: "3px", fontWeight: "700" }}>Karta egasi / Holder</span>
-                        <strong style={{ fontSize: "14px", color: "#f9fafb", fontWeight: "800", textShadow: "0 2px 4px rgba(0,0,0,0.5)", letterSpacing: "0.5px" }}>X.Yusufaliyev</strong>
+                        <strong style={{ fontSize: "14px", color: "#f9fafb", fontWeight: "800", textShadow: "0 2px 4px rgba(0,0,0,0.5)", letterSpacing: "0.5px" }}>{supportCardHolder}</strong>
                       </div>
                       <button
                         type="button"
                         onClick={() => {
                           try {
                             if (navigator.clipboard && navigator.clipboard.writeText) {
-                              navigator.clipboard.writeText("9860176612291557");
+                              navigator.clipboard.writeText(supportCardNumber.replace(/\s+/g, ""));
                             }
                             onShowToast(language === "ru" ? "✓ Номер карты скопирован!" : "✓ Karta raqami nusxalandi!");
                             triggerHaptic();
                             playTapSound();
                           } catch {
-                            onShowToast("9860 1766 1229 1557");
+                            onShowToast(supportCardNumber);
                           }
                         }}
                         style={{

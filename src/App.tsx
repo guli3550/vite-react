@@ -20,10 +20,8 @@ import {
   ProductImageGallery,
   type Product,
 } from "./components/ProductImageGallery";
-import {
-  RotatingCategoriesSection,
-  getSynchronizedCategories,
-} from "./components/RotatingCategorySection";
+import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
+import { getSynchronizedCategories } from "./utils/categoryUtils";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
 import { NotificationModal } from "./components/NotificationModal";
@@ -3494,16 +3492,23 @@ export default function App() {
                     <div className="cardChip">💳 Uzcard / Humo</div>
                     <div className="cardHolderName">
                       <span className="cardLabel">Karta egasi:</span>
-                      <strong className="holderText">X.Yusufaliyev</strong>
+                      <strong className="holderText">
+                        {localStorage.getItem("guli_payment_card_holder") || "X.Yusufaliyev"}
+                      </strong>
                     </div>
                     <div className="cardNumberRow">
-                      <span className="cardNumber">9860 1766 1229 1557</span>
+                      <span className="cardNumber">
+                        {localStorage.getItem("guli_payment_card_number") || "9860 1766 1229 1557"}
+                      </span>
                       <button
                         className="copyCardBtn"
                         type="button"
                         onClick={() => {
+                          const num = (
+                            localStorage.getItem("guli_payment_card_number") || "9860 1766 1229 1557"
+                          ).replace(/\s+/g, "");
                           try {
-                            navigator.clipboard.writeText("9860176612291557");
+                            navigator.clipboard.writeText(num);
                           } catch {}
                           setCopiedCard(true);
                           showToast("✓ Karta raqami nusxalandi!");

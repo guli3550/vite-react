@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./ReviewsAdmin.css";
 
 type Review = {
@@ -53,22 +53,22 @@ export default function ReviewsAdmin({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<{ urls: string[]; index: number } | null>(null);
 
-  const request = async (path: string, options: RequestInit = {}) => {
+  const request = useCallback(async (path: string, options: RequestInit = {}) => {
     const response = await fetch(`${API}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
     const json = await response.json().catch(() => ({}));
     if (response.status === 401) throw new Error("Admin sessiyasi tugagan");
     if (!response.ok || json?.success === false) throw new Error(json?.message || `Server xatosi (${response.status})`);
     return json;
-  };
+  }, [token]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true); setError("");
     try { const json = await request("/api/admin/reviews"); setReviews(Array.isArray(json.data) ? json.data : []); }
     catch (e) { setError(e instanceof Error ? e.message : "Sharhlarni yuklashda xatolik"); }
     finally { setLoading(false); }
-  };
+  }, [request]);
 
-  useEffect(() => { void load(); }, [token]);
+  useEffect(() => { void load(); }, [token, load]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

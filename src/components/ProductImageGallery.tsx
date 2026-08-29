@@ -33,7 +33,7 @@ const placeholder = (name = "GULI") =>
     )}</text></svg>`
   )}`;
 
-export const formatImageUrl = (url: string) => {
+const formatImageUrl = (url: string) => {
   if (!url) return "";
   try {
     const u = new URL(url);
