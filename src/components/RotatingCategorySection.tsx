@@ -6,14 +6,20 @@ export interface CategoryInfo {
   icon?: string;
 }
 
+export const FIXED_CATEGORIES = [
+  "Penyuar",
+  "Pijama",
+  "Bezgalter",
+  "Mayka",
+  "Tursik",
+  "Komplektlar",
+  "Sexy ledy"
+] as const;
+
 export function getSynchronizedCategories(products: Product[]): CategoryInfo[] {
   const baseCategories: CategoryInfo[] = [
     { name: "Barchasi" },
-    { name: "Byustgalter" },
-    { name: "Trusik" },
-    { name: "Komplektlar" },
-    { name: "Uy kiyimlari" },
-    { name: "Sexy lingerie" }
+    ...FIXED_CATEGORIES.map(name => ({ name }))
   ];
 
   const seen = new Set(baseCategories.map(c => c.name));
@@ -159,7 +165,9 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           />
         ) : (
           <div className="catCardFallback">
-            <span className="catFallbackIcon">🌷</span>
+            <span className="catFallbackIcon" style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
+              <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </span>
           </div>
         )}
         <div className="catCardOverlay" />
@@ -167,7 +175,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
       {/* Top Header Badge */}
       <div className="catCardTop">
-        <span className="catBrandPill">GULI</span>
         {count > 0 ? (
           <span
             className="catCountBadge"
@@ -183,7 +190,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
       {/* Rotating Live Product Info or Category Title */}
       <div className="catCardBottom">
-        <span className="catEyebrow">KATEGORIYA</span>
         <h3 className="catTitle">{category.name}</h3>
 
         {currentItem ? (

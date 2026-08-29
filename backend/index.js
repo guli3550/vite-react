@@ -16,7 +16,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 const ADMIN_TOKEN_TTL = 8 * 60 * 60 * 1000;
 const TELEGRAM_INITDATA_TTL = 24 * 60 * 60;
-const ADMIN_STATUSES = ["Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
+const ADMIN_STATUSES = ["⏳ Buyurtma kutilmoqda", "Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
 
 async function telegramApi(method, body) {
   if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan");
@@ -104,8 +104,9 @@ app.post("/api/orders", requireTelegramUser, async (req, res) => {
       phone: phone.trim(),
       items,
       address: address || null,
-      payment: payment || "cash",
-      status: ADMIN_STATUSES.includes(String(status)) ? String(status) : "Qabul qilindi",
+      payment: payment || "card",
+      status: ADMIN_STATUSES.includes(String(status)) ? String(status) : "⏳ Buyurtma kutilmoqda",
+      receipt_url: req.body.receipt_url || null,
       created_at: created_at || new Date().toISOString(),
       promo_code: promo_code ? String(promo_code).trim().toUpperCase() : ""
     };
@@ -151,6 +152,28 @@ app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const payloa
 app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("products").update({active:false,updated_at:new Date().toISOString()}).eq("id",req.params.id).select("*").single();if(error)throw error;res.json({success:true,data})}catch(error){res.status(500).json({success:false,message:"Mahsulotni yashirishda xatolik"})}});
 app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("orders").select("*").order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Admin buyurtmalarini yuklashda xatolik"})}});
 app.put("/api/admin/orders/:id",requireAdmin,async(req,res)=>{try{const status=ADMIN_STATUSES.includes(String(req.body?.status))?String(req.body.status):"Qabul qilindi";const {data,error}=await supabase.from("orders").update({status,updated_at:new Date().toISOString()}).eq("id",req.params.id).select("*").single();if(error)throw error;res.json({success:true,data})}catch(error){res.status(500).json({success:false,message:"Buyurtma statusini yangilashda xatolik"})}});
+
+app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
+  try {
+    const { payment_status } = req.body;
+    if (!["verified", "rejected"].includes(payment_status)) {
+      return res.status(400).json({ success: false, message: "Noto‘g‘ri to‘lov statusi" });
+    }
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ 
+        payment_status, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq("id", req.params.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "To‘lov statusini yangilashda xatolik" });
+  }
+});
 app.get("/api/admin/users",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,updated_at").order("updated_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Mijozlarni yuklashda xatolik"})}});
 
 app.get("/api/admin/promos", requireAdmin, async (req,res) => {
@@ -207,6 +230,134 @@ app.put("/api/admin/promos/:id", requireAdmin, async (req,res) => {
   } catch(error) { const status=error.status||400; res.status(status).json({success:false,message:error.message||"Promo ma’lumotlari noto‘g‘ri"}); }
 });
 app.delete("/api/admin/promos/:id",requireAdmin,async(req,res)=>{try{const {error}=await supabase.from("promo_codes").delete().eq("id",req.params.id);if(error)throw error;res.json({success:true})}catch(error){res.status(500).json({success:false,message:"Promo kodni o‘chirishda xatolik"})}});
+
+// Contributions/Saxovat Storage & Endpoints
+const fs = require("fs");
+const path = require("path");
+const CONTRIBUTIONS_FILE = path.join(__dirname, "contributions.json");
+
+let contributionsList = [];
+try {
+  if (fs.existsSync(CONTRIBUTIONS_FILE)) {
+    contributionsList = JSON.parse(fs.readFileSync(CONTRIBUTIONS_FILE, "utf8"));
+  }
+} catch (e) {
+  console.error("Contributions file load error:", e);
+}
+if (!Array.isArray(contributionsList)) {
+  contributionsList = [];
+}
+
+app.post("/api/contributions", async (req, res) => {
+  try {
+    const { telegram_id, first_name, username, receipt_photo } = req.body;
+    const contribution = {
+      id: Date.now() + Math.random().toString(36).substr(2, 5),
+      telegram_id: telegram_id ? String(telegram_id) : "Noma’lum",
+      first_name: first_name || "Mijoz",
+      username: username || "",
+      receipt_photo: receipt_photo || null,
+      created_at: new Date().toISOString()
+    };
+    
+    contributionsList.unshift(contribution);
+    try {
+      fs.writeFileSync(CONTRIBUTIONS_FILE, JSON.stringify(contributionsList, null, 2), "utf8");
+    } catch (fsErr) {
+      console.error("Failed to save contributions to file:", fsErr);
+    }
+    
+    try {
+      await supabase.from("contributions").insert([{
+        telegram_id: contribution.telegram_id,
+        first_name: contribution.first_name,
+        username: contribution.username,
+        receipt_photo: contribution.receipt_photo,
+        created_at: contribution.created_at
+      }]);
+    } catch (dbErr) {
+      console.log("Supabase contributions insert skipped or failed:", dbErr.message);
+    }
+    
+    res.json({ success: true, message: "Rahmat! Saxovatingiz qabul qilindi." });
+  } catch (error) {
+    console.error("Contribution save error:", error);
+    res.status(500).json({ success: false, message: "Xatolik yuz berdi" });
+  }
+});
+
+app.get("/api/admin/contributions", requireAdmin, async (req, res) => {
+  try {
+    try {
+      const { data, error } = await supabase.from("contributions").select("*").order("created_at", { ascending: false });
+      if (!error && data && data.length > 0) {
+        return res.json({ success: true, data });
+      }
+    } catch (dbErr) {
+      console.log("Supabase fetch failed, returning local list");
+    }
+    res.json({ success: true, data: contributionsList });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Ma'lumotlarni yuklashda xatolik" });
+  }
+});
+
+
+// --- CHAT ENDPOINTS ---
+app.get("/api/chat/messages/:telegram_id", async (req, res) => {
+  try {
+    const { telegram_id } = req.params;
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("telegram_id", telegram_id)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    res.json({ success: true, data: data || [] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
+  }
+});
+
+app.post("/api/chat/messages", async (req, res) => {
+  try {
+    const { telegram_id, sender, text } = req.body;
+    if (!telegram_id || !sender || !text) {
+      return res.status(400).json({ success: false, message: "Ma'lumotlar to'liq emas" });
+    }
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .insert([{ telegram_id, sender, text }])
+      .select("*")
+      .single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Xabar yuborishda xatolik" });
+  }
+});
+
+app.get("/api/admin/chat/users", requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("telegram_id")
+      .order("created_at", { ascending: false });
+    
+    if (error) throw error;
+    
+    const uniqueIds = [...new Set(data.map(m => m.telegram_id))];
+    const { data: users, error: uError } = await supabase
+      .from("telegram_users")
+      .select("*")
+      .in("telegram_id", uniqueIds);
+      
+    if (uError) throw uError;
+    res.json({ success: true, data: users || [] });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Chat mijozlarini yuklashda xatolik" });
+  }
+});
 
 const PORT=process.env.PORT||10000;
 app.listen(PORT,()=>{console.log(`GULI API running on port ${PORT}`);setupTelegramWebhook();});

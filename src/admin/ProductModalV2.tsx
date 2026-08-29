@@ -4,7 +4,7 @@ import "./ProductModalV2.css";
 
 type Product={id?:number;product_code?:string;name:string;category:string;description:string;price:number;old_price?:number|null;image:string;images:string[];sizes:string[];colors:string[];rating:number;reviews:number;stock:number;featured:boolean;active?:boolean;sort_order?:number};
 
-const categories=["Byustgalter","Trusik","Komplektlar","Uy kiyimlari","Sexy lingerie","Boshqalar"];
+const categories=["Penyuar","Pijama","Bezgalter","Mayka","Tursik","Komplektlar","Sexy ledy"];
 const sizes=["XS","S","M","L","XL","XXL","3XL","75B","75C","80B","80C","85B","85C","90B","90C","Universal"];
 const colors=[["Qora","#111111"],["Oq","#ffffff"],["Qizil","#d91e36"],["Bordo","#800020"],["Pushti","#f4a6b8"],["Och pushti","#ffd6e0"],["Bej","#e8c9a8"],["Krem","#f5ead2"],["Jigarrang","#7a4b2a"],["To‘q ko‘k","#17365d"],["Ko‘k","#3b82c4"],["Yashil","#2f7d4a"],["Zaytun","#71823b"],["Sariq","#f1c40f"],["To‘q sariq","#e67e22"],["Binafsha","#7e57c2"],["Kulrang","#808080"]] as const;
 

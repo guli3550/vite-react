@@ -40,7 +40,7 @@ async function sendProduct(chatId, product) {
     photo: image,
     caption: caption(product),
     parse_mode: "HTML",
-    reply_markup: { inline_keyboard: [[{ text: "✨ Online market", url: homeUrl() }, { text: "🛍️ Sotib olish", url: productUrl(product) }]] },
+    reply_markup: { inline_keyboard: [[{ text: "🛍️ Online Market", url: homeUrl() }, { text: "🤩 Sotib olish", url: productUrl(product) }]] },
   });
   return true;
 }

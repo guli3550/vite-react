@@ -40,7 +40,7 @@ class StorefrontErrorBoundary extends Component<Props, State> {
     return (
       <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24, background: '#fff9fa', color: '#2b2024', fontFamily: 'system-ui, sans-serif' }}>
         <section style={{ width: '100%', maxWidth: 420, textAlign: 'center', background: '#fff', border: '1px solid #f0dfe3', borderRadius: 24, padding: 24, boxShadow: '0 14px 40px rgba(70,35,45,.08)' }}>
-          <div style={{ fontSize: 42 }}>🌷</div>
+          <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 10px', display: 'block', boxShadow: '0 6px 16px rgba(0,0,0,0.1)' }} />
           <h1 style={{ margin: '10px 0 8px', fontSize: 22 }}>GULI vaqtincha yuklanmadi</h1>
           <p style={{ margin: '0 0 16px', color: '#806f75', fontSize: 13, lineHeight: 1.5 }}>Ilovani qayta yuklab ko‘ring. Xatolik qaytarsa, diagnostika uchun quyidagi kod saqlanadi.</p>
           <small style={{ display: 'block', marginBottom: 16, color: '#a04e64', wordBreak: 'break-word' }}>{this.state.message || 'STORE_FRONT_BOOT_ERROR'}</small>

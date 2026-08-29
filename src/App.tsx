@@ -35,12 +35,14 @@ import {
   SizeGuideModal,
   AboutBrandModal,
 } from "./components/ProfileExtraModals";
+import { SocialLinksModal } from "./components/SocialLinksModal";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
   type Language,
   type TranslationKey,
   getTranslation,
 } from "./utils/translations";
+import { type Currency, formatCurrencyPrice } from "./utils/currency";
 import {
   type ChatMessage,
   getUnreadMessages,
@@ -100,6 +102,7 @@ type Address = {
 };
 type Order = {
   id: string;
+  order_number?: string;
   items: CartItem[];
   subtotal: number;
   delivery: number;
@@ -109,6 +112,7 @@ type Order = {
   phone: string;
   payment: string;
   status: string;
+  receipt_url?: string;
   createdAt: string;
   updatedAt?: string;
   statusUpdatedAt?: string;
@@ -128,9 +132,360 @@ const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
 const API_URL = (
   import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com"
 ).replace(/\/$/, "");
+
+const uzbekistanRegionsData: Record<string, string[]> = {
+  "Toshkent sh.": [
+    "Chilonzor tumani",
+    "Yunusobod tumani",
+    "Mirzo Ulug‘bek tumani",
+    "Yakkasaroy tumani",
+    "Shayxontohur tumani",
+    "Olmazor tumani",
+    "Uchtepa tumani",
+    "Mirobod tumani",
+    "Yashnobod tumani",
+    "Sergeli tumani",
+    "Yangihayot tumani",
+    "Bektemir tumani"
+  ],
+  "Toshkent vil.": [
+    "Chinoz tumani",
+    "Zangiota tumani",
+    "Qibray tumani",
+    "Toshkent tumani",
+    "Yangiyo‘l tumani",
+    "Oqqo‘rg‘on tumani",
+    "Bo‘ka tumani",
+    "Chirchiq sh.",
+    "Angren sh.",
+    "Olmaliq sh.",
+    "Bekobod sh.",
+    "Parkent tumani",
+    "Piskent tumani",
+    "Bo‘stonliq tumani",
+    "Quyichirchiq tumani",
+    "O‘rtachirchiq tumani"
+  ],
+  "Samarqand vil.": [
+    "Samarqand sh.",
+    "Samarqand tumani",
+    "Urgut tumani",
+    "Kattaqo‘rg‘on sh.",
+    "Kattaqo‘rg‘on tumani",
+    "Ishtixon tumani",
+    "Payariq tumani",
+    "Jomboy tumani",
+    "Bulung‘ur tumani",
+    "Narpay tumani",
+    "Paxtachi tumani",
+    "Nurobod tumani",
+    "Qo‘shrabot tumani",
+    "Tayloq tumani"
+  ],
+  "Buxoro vil.": [
+    "Buxoro sh.",
+    "Buxoro tumani",
+    "G‘ijduvon tumani",
+    "Vobkent tumani",
+    "Kogon sh.",
+    "Kogon tumani",
+    "Jondor tumani",
+    "Olot tumani",
+    "Qorako‘l tumani",
+    "Peshku tumani",
+    "Romitan tumani",
+    "Shofirkon tumani"
+  ],
+  "Farg‘ona vil.": [
+    "O‘zbekiston tumani",
+    "Farg‘ona sh.",
+    "Marg‘ilon sh.",
+    "Qo‘qon sh.",
+    "Quvasoy sh.",
+    "Farg‘ona tumani",
+    "Quva tumani",
+    "Rishton tumani",
+    "Oltiariq tumani",
+    "Bag‘dod tumani",
+    "Beshariq tumani",
+    "Dang‘ara tumani",
+    "Furqat tumani",
+    "Qo‘shtepa tumani",
+    "Uchko‘prik tumani",
+    "Yozyovon tumani",
+    "Toshloq tumani",
+    "So‘x tumani"
+  ],
+  "Andijon vil.": [
+    "Andijon sh.",
+    "Xonobod sh.",
+    "Andijon tumani",
+    "Asaka tumani",
+    "Baliqchi tumani",
+    "Buloqboshi tumani",
+    "Bo‘z tumani",
+    "Jalaquduq tumani",
+    "Izboskan tumani",
+    "Marhamat tumani",
+    "Oltinko‘l tumani",
+    "Paxtaobod tumani",
+    "Shahrixon tumani",
+    "Ulug‘nor tumani",
+    "Qo‘rg‘ontepa tumani"
+  ],
+  "Namangan vil.": [
+    "Namangan sh.",
+    "Namangan tumani",
+    "Chust tumani",
+    "Kosonsoy tumani",
+    "Mingbuloq tumani",
+    "Norin tumani",
+    "Pop tumani",
+    "To‘raqo‘rg‘on tumani",
+    "Uychi tumani",
+    "Uchqo‘rg‘on tumani",
+    "Yangiqo‘rg‘on tumani"
+  ],
+  "Qashqadaryo vil.": [
+    "Qarshi sh.",
+    "Shahrisabz sh.",
+    "Qarshi tumani",
+    "G‘uzor tumani",
+    "Dehqonobod tumani",
+    "Qamashi tumani",
+    "Kasbi tumani",
+    "Kitob tumani",
+    "Mirishkor tumani",
+    "Muborak tumani",
+    "Nishon tumani",
+    "Chiroqchi tumani",
+    "Yakkabog‘ tumani"
+  ],
+  "Surxondaryo vil.": [
+    "Termiz sh.",
+    "Denov tumani",
+    "Angor tumani",
+    "Boysun tumani",
+    "Bandixon tumani",
+    "Jarkurgon tumani",
+    "Muzrabot tumani",
+    "Oltinsoy tumani",
+    "Sariosiyo tumani",
+    "Termiz tumani",
+    "Uzun tumani",
+    "Sherobod tumani",
+    "Sho‘rchi tumani"
+  ],
+  "Xorazm vil.": [
+    "Urganch sh.",
+    "Xiva sh.",
+    "Bog‘ot tumani",
+    "Gurlan tumani",
+    "Qo‘shko‘pir tumani",
+    "Shovot tumani",
+    "Urganch tumani",
+    "Xazorasp tumani",
+    "Xiva tumani",
+    "Yangiariq tumani",
+    "Yangibozor tumani",
+    "Tuproqqal’a tumani"
+  ],
+  "Navoiy vil.": [
+    "Navoiy sh.",
+    "Zarafshon sh.",
+    "Konimex tumani",
+    "Karmana tumani",
+    "Qiziltepa tumani",
+    "Navbahor tumani",
+    "Nurota tumani",
+    "Tomdi tumani",
+    "Uchquduq tumani",
+    "Xatirchi tumani"
+  ],
+  "Jizzax vil.": [
+    "Jizzax sh.",
+    "Arnasoy tumani",
+    "Baxmal tumani",
+    "G‘allaorol tumani",
+    "Sharof Rashidov tumani",
+    "Do‘stlik tumani",
+    "Zafarobod tumani",
+    "Zarbdor tumani",
+    "Mirzacho‘l tumani",
+    "Paxtakor tumani",
+    "Forish tumani",
+    "Yangiobod tumani"
+  ],
+  "Sirdaryo vil.": [
+    "Guliston sh.",
+    "Yangiyer sh.",
+    "Shirin sh.",
+    "Oqoltin tumani",
+    "Boyovut tumani",
+    "Guliston tumani",
+    "Mirzaobod tumani",
+    "Sardoba tumani",
+    "Sayxunobod tumani",
+    "Sirdaryo tumani",
+    "Xovos tumani"
+  ],
+  "Qoraqalpog‘iston Respublikasi": [
+    "Nukus sh.",
+    "Amudaryo tumani",
+    "Beruniy tumani",
+    "Kegeyli tumani",
+    "Qonliko‘l tumani",
+    "Qorao‘zak tumani",
+    "Chimboy tumani",
+    "Shumanay tumani",
+    "Ellikqal’a tumani",
+    "Mo‘ynoq tumani",
+    "Nukus tumani",
+    "Taxtako‘pir tumani",
+    "To‘rtko‘l tumani",
+    "Xo‘jayli tumani"
+  ]
+};
+
+function matchUzbekistanRegionAndDistrict(
+  rawState: string,
+  rawCounty: string,
+  rawCity: string,
+  lat: number,
+  lon: number,
+): { region: string; district: string } {
+  const norm = (s: string) =>
+    (s || "")
+      .toLowerCase()
+      .replace(/['`‘’]/g, "")
+      .replace(/viloyat(i)?|vil\.?/g, "")
+      .replace(/tuman(i)?|tum\.?/g, "")
+      .replace(/shahar(i)?|sh\.?/g, "")
+      .replace(/district|region|city|state|county|area|republic|resp/g, "")
+      .trim();
+
+  const combined = `${norm(rawState)} ${norm(rawCounty)} ${norm(rawCity)}`;
+
+  let foundRegion = "";
+
+  // 1. Check coordinates for Tashkent city bounds explicitly
+  if (lat >= 41.15 && lat <= 41.42 && lon >= 69.10 && lon <= 69.45) {
+    foundRegion = "Toshkent sh.";
+  } else {
+    // 2. Text match against region keys
+    for (const rKey of Object.keys(uzbekistanRegionsData)) {
+      const nKey = norm(rKey);
+      if (!nKey) continue;
+      if (
+        combined.includes(nKey) ||
+        (nKey.includes("toshkent") && combined.includes("tashkent")) ||
+        (nKey.includes("samarqand") && combined.includes("samarkand")) ||
+        (nKey.includes("buxoro") && combined.includes("bukhara")) ||
+        (nKey.includes("farg") && combined.includes("fergana")) ||
+        (nKey.includes("andijon") && combined.includes("andijan")) ||
+        (nKey.includes("namangan") && combined.includes("namangan")) ||
+        (nKey.includes("qashqadaryo") && (combined.includes("kashkadarya") || combined.includes("qarshi"))) ||
+        (nKey.includes("surxondaryo") && (combined.includes("surkhandarya") || combined.includes("termiz"))) ||
+        (nKey.includes("xorazm") && (combined.includes("khorezm") || combined.includes("urganch"))) ||
+        (nKey.includes("navoiy") && combined.includes("navoi")) ||
+        (nKey.includes("jizzax") && combined.includes("jizzakh")) ||
+        (nKey.includes("sirdaryo") && (combined.includes("syrdarya") || combined.includes("guliston"))) ||
+        (nKey.includes("qoraqalp") && combined.includes("karakalpak"))
+      ) {
+        foundRegion = rKey;
+        break;
+      }
+    }
+  }
+
+  // 3. Fallback to coordinate bounding boxes if text match didn't yield a region
+  if (!foundRegion) {
+    if (lat >= 40.5 && lat <= 42.2 && lon >= 68.5 && lon <= 71.2) foundRegion = "Toshkent vil.";
+    else if (lat >= 39.1 && lat <= 40.2 && lon >= 65.5 && lon <= 67.5) foundRegion = "Samarqand vil.";
+    else if (lat >= 40.0 && lat <= 40.9 && lon >= 70.3 && lon <= 72.0) foundRegion = "Farg‘ona vil.";
+    else if (lat >= 40.4 && lat <= 41.0 && lon >= 71.9 && lon <= 73.2) foundRegion = "Andijon vil.";
+    else if (lat >= 40.7 && lat <= 41.5 && lon >= 70.4 && lon <= 72.2) foundRegion = "Namangan vil.";
+    else if (lat >= 38.8 && lat <= 41.1 && lon >= 62.1 && lon <= 65.2) foundRegion = "Buxoro vil.";
+    else if (lat >= 38.2 && lat <= 39.4 && lon >= 64.9 && lon <= 67.5) foundRegion = "Qashqadaryo vil.";
+    else if (lat >= 37.1 && lat <= 38.6 && lon >= 66.5 && lon <= 68.4) foundRegion = "Surxondaryo vil.";
+    else if (lat >= 41.0 && lat <= 42.0 && lon >= 60.0 && lon <= 61.5) foundRegion = "Xorazm vil.";
+    else if (lat >= 39.8 && lat <= 43.5 && lon >= 62.0 && lon <= 66.0) foundRegion = "Navoiy vil.";
+    else if (lat >= 39.8 && lat <= 41.5 && lon >= 67.0 && lon <= 68.9) foundRegion = "Jizzax vil.";
+    else if (lat >= 40.0 && lat <= 41.0 && lon >= 68.3 && lon <= 69.3) foundRegion = "Sirdaryo vil.";
+    else if (lat >= 41.0 && lat <= 45.6 && lon >= 56.0 && lon <= 62.5) foundRegion = "Qoraqalpog‘iston Respublikasi";
+    else foundRegion = "Toshkent sh.";
+  }
+
+  // 4. Find matching district in foundRegion
+  const distList = uzbekistanRegionsData[foundRegion] || [];
+  let foundDistrict = "";
+
+  const countyNorm = norm(rawCounty);
+  const cityNorm = norm(rawCity);
+
+  // Special district detection for Farg‘ona vil. (O‘zbekiston tumani / Yaypan)
+  if (foundRegion === "Farg‘ona vil.") {
+    if (
+      countyNorm.includes("ozbekiston") ||
+      countyNorm.includes("uzbekistan") ||
+      countyNorm.includes("yaypan") ||
+      cityNorm.includes("yaypan") ||
+      combined.includes("yaypan") ||
+      (lat >= 40.25 && lat <= 40.58 && lon >= 70.70 && lon <= 71.15)
+    ) {
+      foundDistrict = "O‘zbekiston tumani";
+    }
+  }
+
+  if (!foundDistrict) {
+    for (const d of distList) {
+      const nD = norm(d);
+      if (!nD) continue;
+
+      if (d === "O‘zbekiston tumani" || nD === "ozbekiston") {
+        if (
+          countyNorm.includes("ozbekiston") ||
+          countyNorm.includes("uzbekistan") ||
+          countyNorm.includes("yaypan") ||
+          combined.includes("yaypan")
+        ) {
+          foundDistrict = d;
+          break;
+        }
+        continue;
+      }
+
+      if (
+        combined.includes(nD) ||
+        (countyNorm && (nD.includes(countyNorm) || countyNorm.includes(nD))) ||
+        (cityNorm && (nD.includes(cityNorm) || cityNorm.includes(nD)))
+      ) {
+        foundDistrict = d;
+        break;
+      }
+    }
+  }
+
+  // Tashkent city sub-bounds for district detection
+  if (!foundDistrict && foundRegion === "Toshkent sh.") {
+    if (lat <= 41.28 && lon <= 69.23) foundDistrict = "Chilonzor tumani";
+    else if (lat >= 41.32 && lon >= 69.25) foundDistrict = "Yunusobod tumani";
+    else if (lat >= 41.30 && lon >= 69.30) foundDistrict = "Mirzo Ulug‘bek tumani";
+    else if (lat <= 41.27 && lon >= 69.28) foundDistrict = "Yashnobod tumani";
+    else if (lat <= 41.24 && lon <= 69.22) foundDistrict = "Sergeli tumani";
+    else if (lat >= 41.30 && lon <= 69.22) foundDistrict = "Uchtepa tumani";
+    else if (lat >= 41.32 && lon >= 69.24) foundDistrict = "Shayxontohur tumani";
+    else if (lat >= 41.34 && lon >= 69.24) foundDistrict = "Olmazor tumani";
+    else foundDistrict = "Chilonzor tumani";
+  }
+
+  if (!foundDistrict && distList.length > 0) {
+    foundDistrict = distList[0];
+  }
+
+  return { region: foundRegion, district: foundDistrict };
+}
 const tg = () => window.Telegram?.WebApp;
-const formatPrice = (n: number) =>
-  `${Math.round(n).toLocaleString("uz-UZ")} so'm`;
 const formatDate = (v: string) => {
   const d = new Date(v);
   return Number.isNaN(d.getTime())
@@ -252,7 +607,13 @@ function LocationPicker({
   const el = useRef<HTMLDivElement | null>(null);
   const map = useRef<any>(null);
   const marker = useRef<any>(null);
+  const onChangeRef = useRef(onChange);
   const [ready, setReady] = useState(Boolean(window.L));
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
   useEffect(() => {
     if (window.L) {
       setReady(true);
@@ -272,12 +633,16 @@ function LocationPicker({
       css.remove();
     };
   }, []);
+
   useEffect(() => {
     if (!ready || !el.current || !window.L) return;
     const L = window.L;
+    const lat = latitude || 41.2995;
+    const lon = longitude || 69.2401;
+
     if (!map.current) {
       map.current = L.map(el.current, { zoomControl: false }).setView(
-        [latitude, longitude],
+        [lat, lon],
         16,
       );
       L.control.zoom({ position: "bottomright" }).addTo(map.current);
@@ -285,29 +650,47 @@ function LocationPicker({
         maxZoom: 19,
         attribution: "© OpenStreetMap",
       }).addTo(map.current);
-      marker.current = L.marker([latitude, longitude], {
+      marker.current = L.marker([lat, lon], {
         draggable: true,
       }).addTo(map.current);
       marker.current.on("dragend", () => {
         const p = marker.current.getLatLng();
-        onChange(p.lat, p.lng);
+        onChangeRef.current(p.lat, p.lng);
       });
       map.current.on("click", (e: any) => {
         marker.current.setLatLng(e.latlng);
-        onChange(e.latlng.lat, e.latlng.lng);
+        onChangeRef.current(e.latlng.lat, e.latlng.lng);
       });
     } else {
-      marker.current?.setLatLng([latitude, longitude]);
-      map.current.setView([latitude, longitude], 16);
+      marker.current?.setLatLng([lat, lon]);
+      map.current.setView([lat, lon], 16);
     }
     setTimeout(() => map.current?.invalidateSize(), 100);
-  }, [ready, latitude, longitude, onChange]);
+  }, [ready, latitude, longitude]);
+
   return (
     <div className="mapPicker">
-      <div ref={el} className="leafletMap" />
+      <div className="mapModalCard3D" style={{ margin: "10px 0" }}>
+        <div className="mapModalHeader">
+          <h3>🗺️ 3D Aniq Joylashuv Xaritasi</h3>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>GPS Faol</span>
+        </div>
+        <div className="mapInteractiveStage">
+          <div ref={el} className="leafletMap" style={{ width: "100%", height: "100%" }} />
+          <div className="mapPinPulse">
+            <span className="mapPinIcon">📍</span>
+            <span className="mapPinLabel">Sizning turgan joyingiz</span>
+          </div>
+        </div>
+        <div className="mapCoordsBar">
+          <div className="coordsInfoText">
+            📍 Kenglik va uzunlik: <b>{latitude.toFixed(5)}, {longitude.toFixed(5)}</b>
+          </div>
+        </div>
+      </div>
       {!ready ? <div className="mapLoading">Xarita yuklanmoqda…</div> : null}
       <div className="mapHint">
-        📍 Pinni sudrang yoki xaritada kerakli joyga bosing
+        💡 Pinni xaritada istalgan joyga sudrang yoki bosing
       </div>
     </div>
   );
@@ -340,13 +723,21 @@ export default function App() {
     () => localStorage.getItem("guli_phone") || "",
   );
   const [phoneLoading, setPhoneLoading] = useState(false);
-  const [payment, setPayment] = useState("cash");
+  const [showCardPaymentModal, setShowCardPaymentModal] = useState(false);
+  const [paymentTimer, setPaymentTimer] = useState(600); // 10 minutes (600 seconds)
+  const [timerActive, setTimerActive] = useState(false);
+  const [uploadedReceipt, setUploadedReceipt] = useState<string | null>(null);
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [copiedCard, setCopiedCard] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStep, setProcessingStep] = useState(1);
   const [address, setAddress] = useState<Address>(() =>
     readStorage("guli_address", {
-      latitude: 0,
-      longitude: 0,
-      region: "",
-      district: "",
+      latitude: 41.2995,
+      longitude: 69.2401,
+      region: "Toshkent sh.",
+      district: "Chilonzor tumani",
       street: "",
       house: "",
       apartment: "",
@@ -354,7 +745,6 @@ export default function App() {
     }),
   );
   const [locationLoading, setLocationLoading] = useState(false);
-  const [addressMessage, setAddressMessage] = useState("");
   const [promo, setPromo] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
@@ -365,23 +755,6 @@ export default function App() {
   const [showSpendingStats, setShowSpendingStats] = useState(false);
   const [toast, setToast] = useState("");
 
-  // Theme & Settings & Chat states
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    const saved = localStorage.getItem("guli_theme");
-    return saved === "dark" || saved === "light" ? saved : "light";
-  });
-  const [language, setLanguage] = useState<Language>(() => {
-    const saved = localStorage.getItem("guli_lang") as Language;
-    return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
-  });
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isPromosOpen, setIsPromosOpen] = useState(false);
-  const [isDeliveryInfoOpen, setIsDeliveryInfoOpen] = useState(false);
-  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
-  const [isAboutOpen, setIsAboutOpen] = useState(false);
-
   const telegramUser = tg()?.initDataUnsafe?.user;
   const displayName =
     [telegramUser?.first_name, telegramUser?.last_name]
@@ -391,11 +764,83 @@ export default function App() {
   const currentUserId = telegramUser?.id
     ? String(telegramUser.id)
     : "guest-user";
+
+  // Theme & Settings & Chat states (Dynamic User-Specific Sessions)
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const saved = localStorage.getItem(`guli_theme_${currentUserId}`) || localStorage.getItem("guli_theme");
+    return saved === "dark" || saved === "light" ? saved : "light";
+  });
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = (localStorage.getItem(`guli_lang_${currentUserId}`) || localStorage.getItem("guli_lang")) as Language;
+    return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
+  });
+  const [currency, setCurrency] = useState<Currency>(() => {
+    const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
+    return saved === "UZS" || saved === "USD" || saved === "RUB" ? saved : "UZS";
+  });
+  const [hapticsEnabled, setHapticsEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`guli_haptics_${currentUserId}`);
+    return saved === "false" ? false : true;
+  });
+  const [density, setDensity] = useState<"normal" | "compact" | "large">(() => {
+    const saved = localStorage.getItem(`guli_density_${currentUserId}`) as any;
+    return saved === "compact" || saved === "normal" || saved === "large" ? saved : "normal";
+  });
+  const [orderAlerts, setOrderAlerts] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`guli_order_alerts_${currentUserId}`);
+    return saved === "false" ? false : true;
+  });
+  const [promoAlerts, setPromoAlerts] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`guli_promo_alerts_${currentUserId}`);
+    return saved === "false" ? false : true;
+  });
+
+  const [promoBannerUrl, setPromoBannerUrl] = useState<string>(
+    "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78"
+  );
+
+  useEffect(() => {
+    const fetchBanner = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/settings/banner`);
+        if (res.ok) {
+          const text = await res.text();
+          let j: any = null;
+          try {
+            j = JSON.parse(text);
+          } catch {
+            // Not valid JSON
+          }
+          if (j && j.success && j.url) {
+            setPromoBannerUrl(j.url);
+          }
+        }
+      } catch {
+        // Quietly fail to default banner
+      }
+    };
+    fetchBanner();
+  }, []);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [helpInitialStep, setHelpInitialStep] = useState<"none" | "details">("none");
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isSocialLinksOpen, setIsSocialLinksOpen] = useState(false);
+  const [isPromosOpen, setIsPromosOpen] = useState(false);
+  const [isDeliveryInfoOpen, setIsDeliveryInfoOpen] = useState(false);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+
   const [unreadMessages, setUnreadMessages] = useState<ChatMessage[]>(() =>
     getUnreadMessages(currentUserId),
   );
 
   const t = (key: TranslationKey) => getTranslation(key, language);
+  const formatPrice = (n: number) => {
+    return formatCurrencyPrice(n, currency, language);
+  };
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
@@ -406,16 +851,44 @@ export default function App() {
     initPlatformEnvironment();
   }, []);
 
-  // Apply theme to root
+  // Apply theme to root (User Specific)
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(`guli_theme_${currentUserId}`, theme);
     localStorage.setItem("guli_theme", theme);
-  }, [theme]);
+  }, [theme, currentUserId]);
 
-  // Store language choice
+  // Store language choice (User Specific)
   useEffect(() => {
+    localStorage.setItem(`guli_lang_${currentUserId}`, language);
     localStorage.setItem("guli_lang", language);
-  }, [language]);
+  }, [language, currentUserId]);
+
+  // Apply currency choice (User Specific)
+  useEffect(() => {
+    localStorage.setItem(`guli_currency_${currentUserId}`, currency);
+  }, [currency, currentUserId]);
+
+  // Apply haptics choice
+  useEffect(() => {
+    localStorage.setItem(`guli_haptics_${currentUserId}`, String(hapticsEnabled));
+  }, [hapticsEnabled, currentUserId]);
+
+  // Apply layout density (User Specific)
+  useEffect(() => {
+    document.documentElement.setAttribute("data-density", density);
+    localStorage.setItem(`guli_density_${currentUserId}`, density);
+  }, [density, currentUserId]);
+
+  // Apply order alerts settings
+  useEffect(() => {
+    localStorage.setItem(`guli_order_alerts_${currentUserId}`, String(orderAlerts));
+  }, [orderAlerts, currentUserId]);
+
+  // Apply promo alerts settings
+  useEffect(() => {
+    localStorage.setItem(`guli_promo_alerts_${currentUserId}`, String(promoAlerts));
+  }, [promoAlerts, currentUserId]);
 
   // Subscribe to real-time chat updates & unread message count
   useEffect(() => {
@@ -534,6 +1007,72 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("guli_address", JSON.stringify(address));
   }, [address]);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (timerActive && paymentTimer > 0) {
+      interval = setInterval(() => {
+        setPaymentTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setTimerActive(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [timerActive, paymentTimer]);
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Iltimos faqat rasm faylini yuklang");
+      return;
+    }
+    setIsUploadingReceipt(true);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const rawData = ev.target?.result as string;
+      const img = new Image();
+      img.src = rawData;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 1000;
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > maxDim) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL("image/jpeg", 0.78);
+        setUploadedReceipt(compressed);
+        setIsUploadingReceipt(false);
+        try {
+          window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+        } catch {}
+        showToast("To‘lov cheki muvaffaqiyatli yuklandi ☺️");
+      };
+    };
+    reader.readAsDataURL(file);
+  };
   const loadProducts = useCallback(async (silent = false) => {
     if (!silent) setProductsLoading(true);
     try {
@@ -607,6 +1146,10 @@ export default function App() {
   useEffect(() => {
     if (telegramUser?.id) {
       loadOrders(false).catch(() => {});
+      const interval = setInterval(() => {
+        loadOrders(true).catch(() => {});
+      }, 6000);
+      return () => clearInterval(interval);
     }
   }, [telegramUser?.id, loadOrders]);
   useEffect(() => {
@@ -744,51 +1287,89 @@ export default function App() {
     }
   };
   const reverseGeocode = async (lat: number, lon: number) => {
+    let rawState = "";
+    let rawCounty = "";
+    let rawCity = "";
+    let streetName = "";
+
     try {
-      const r = await fetch(
-        `${API_URL}/api/reverse-geocode?lat=${lat}&lon=${lon}`,
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=uz,ru,en`,
       );
-      const j = await r.json();
-      if (j.success && j.data)
-        setAddress((a) => ({
-          ...a,
-          latitude: lat,
-          longitude: lon,
-          region: j.data.region || a.region,
-          district: j.data.district || a.district,
-          street: j.data.street || a.street,
-        }));
-      else setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
-    } catch {
-      setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.address) {
+          const addr = data.address;
+          rawState = addr.state || addr.region || addr.city || "";
+          rawCounty =
+            addr.county ||
+            addr.district ||
+            addr.suburb ||
+            addr.city_district ||
+            addr.town ||
+            "";
+          rawCity = addr.city || addr.town || addr.village || "";
+          streetName = addr.road || addr.street || addr.pedestrian || "";
+        }
+      }
+    } catch (e) {
+      console.warn("Reverse geocode fetch failed:", e);
     }
+
+    const { region, district } = matchUzbekistanRegionAndDistrict(
+      rawState,
+      rawCounty,
+      rawCity,
+      lat,
+      lon,
+    );
+
+    setAddress((a) => ({
+      ...a,
+      latitude: lat,
+      longitude: lon,
+      region,
+      district,
+      street: streetName || a.street || "",
+    }));
+
+    showToast(`📍 Joylashuv va manzil aniqlandi: ${region}, ${district}`);
   };
+
   const updateMapPosition = (lat: number, lon: number) => {
     setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
     reverseGeocode(lat, lon);
   };
+
   const requestLocation = () => {
     if (!navigator.geolocation) {
-      setAddressMessage("Telefoningiz lokatsiyani qo‘llab-quvvatlamaydi.");
+      showToast("Telefoningiz lokatsiyani qo‘llab-quvvatlamaydi. Toshkent markazi belgilanmoqda.");
+      updateMapPosition(41.2995, 69.2401);
       return;
     }
     setLocationLoading(true);
-    setAddressMessage("");
     navigator.geolocation.getCurrentPosition(
       async (p) => {
-        await reverseGeocode(p.coords.latitude, p.coords.longitude);
+        const lat = p.coords.latitude;
+        const lon = p.coords.longitude;
+        await reverseGeocode(lat, lon);
         setLocationLoading(false);
       },
-      () => {
+      async () => {
         setLocationLoading(false);
-        setAddressMessage(
-          "Lokatsiya ruxsati berilmadi. Telefon sozlamalaridan ruxsat bering.",
+        showToast(
+          "Lokatsiya ruxsati berilmadi. Toshkent markazi avtomatik belgilandi.",
         );
+        await reverseGeocode(41.2995, 69.2401);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
     );
   };
   const requestTelegramPhone = () => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+    } catch {}
+
     const w = tg();
     const supportsContact = Boolean(
       w &&
@@ -797,51 +1378,91 @@ export default function App() {
         ? w.isVersionAtLeast("6.9")
         : Boolean(w.version && parseFloat(w.version) >= 6.9)),
     );
+
     if (!supportsContact || !w?.requestContact) {
+      // Check localStorage for saved phone
+      const saved = localStorage.getItem("guli_phone");
+      if (saved) {
+        setPhone(saved);
+        showToast("✅ Saqlangan telefon raqamingiz tiklandi");
+        return;
+      }
       showToast(
-        "Telegram versiyangizda avtomatik raqam olish qo‘llab-quvvatlanmaydi. Telefoningizni qo‘lda kiriting.",
+        "Telegram ilovasidan kirganingizda raqam avtomatik olinadi. Iltimos raqamni quyidagi qatorga yozing.",
       );
       return;
     }
+
     setPhoneLoading(true);
+    showToast("📱 Telegram raqamini so‘rash ochilmoqda...");
+
     try {
       w.requestContact(async (ok: boolean) => {
         try {
           if (!ok) {
             setPhoneLoading(false);
+            showToast("Telegram raqamini ulashish rad etildi.");
             return;
           }
-          for (let i = 0; i < 8; i++) {
+          // Poll backend for updated telegram_phone
+          for (let i = 0; i < 10; i++) {
             try {
               const r = await fetch(`${API_URL}/api/telegram-user`);
               const j = await r.json();
               if (j.success && j.data?.telegram_phone) {
-                setPhone(j.data.telegram_phone);
+                const fetchedPhone = j.data.telegram_phone;
+                setPhone(fetchedPhone);
+                localStorage.setItem("guli_phone", fetchedPhone);
                 setPhoneLoading(false);
-                showToast("✅ Telegram raqami kiritildi");
+                try {
+                  window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+                } catch {}
+                showToast("✅ Telegram raqamingiz muvaffaqiyatli kiritildi!");
                 return;
               }
             } catch {}
-            await new Promise((resolve) => setTimeout(resolve, 900));
+            await new Promise((resolve) => setTimeout(resolve, 800));
           }
           setPhoneLoading(false);
-          showToast("Raqam yuborildi. Bir ozdan keyin qayta urinib ko‘ring.");
+          showToast("Raqam yuborildi, lekin serverdan olishda kechikish bo‘ldi. Iltimos qayta urinib ko‘ring.");
         } catch {
           setPhoneLoading(false);
+          showToast("Telegram raqamini olishda xatolik yuz berdi.");
         }
       });
     } catch {
       setPhoneLoading(false);
-      showToast("Telegram raqamini olishda xatolik. Raqamni qo‘lda kiriting.");
+      showToast("Telegram raqamini olish imkoni bo‘lmadi. Raqamni qo‘lda kiriting.");
     }
   };
   const setAddressField = (key: keyof Address, value: string) =>
     setAddress((a) => ({ ...a, [key]: value }));
-  const submitOrder = async () => {
-    if (!phone.trim() || !cart.length) return;
+  const submitOrderWithCard = async () => {
+    if (!phone.trim()) {
+      showToast("Iltimos telefon raqamingizni kiriting");
+      return;
+    }
+    if (!cart.length) {
+      showToast("Savat bo‘sh");
+      return;
+    }
+    if (!uploadedReceipt) {
+      showToast("Iltimos to‘lov cheki rasmini yuklang");
+      return;
+    }
     try {
-      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("heavy");
     } catch {}
+
+    // Start 3D progress animation
+    setIsProcessingPayment(true);
+    setProcessingProgress(20);
+    setProcessingStep(1); // 1: Chek rasmi va kvitansiya tekshirilmoqda
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setProcessingProgress(50);
+    setProcessingStep(2); // 2: To'lov ma'lumotlari uzatilmoqda
+
     const id = orderNumber();
     const now = new Date().toISOString();
     const payload = {
@@ -856,8 +1477,9 @@ export default function App() {
       discount,
       total,
       address,
-      payment,
-      status: "Qabul qilindi",
+      payment: "Karta (Uzcard / Humo)",
+      status: "⏳ To'lovni tasdiqlash kutilmoqda",
+      receipt_url: uploadedReceipt,
       promo_code: promoApplied ? promo.trim().toUpperCase() : null,
     };
     try {
@@ -879,9 +1501,18 @@ export default function App() {
             phone: phone.trim(),
           }),
         }).catch(() => {});
+
+      setProcessingProgress(85);
+      setProcessingStep(3); // 3: Status "To'lovni tasdiqlash kutilmoqda" ga o'zgardi
+      await new Promise((resolve) => setTimeout(resolve, 750));
+
+      setProcessingProgress(100);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       setOrders((x) => [
         {
           id: String(j.data?.order_number || id),
+          order_number: id,
           items: cart,
           subtotal,
           delivery,
@@ -889,8 +1520,9 @@ export default function App() {
           total,
           address,
           phone: phone.trim(),
-          payment,
-          status: "Qabul qilindi",
+          payment: "Karta (Uzcard / Humo)",
+          status: "⏳ To'lovni tasdiqlash kutilmoqda",
+          receipt_url: uploadedReceipt,
           createdAt: now,
           updatedAt: now,
           statusUpdatedAt: now,
@@ -901,14 +1533,19 @@ export default function App() {
       setPromo("");
       setPromoApplied(false);
       setPromoDiscount(0);
+      setIsProcessingPayment(false);
+      setShowCardPaymentModal(false);
+      setTimerActive(false);
+      setUploadedReceipt(null);
       try {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
           "success",
         );
       } catch {}
       go("orders");
-      showToast("Buyurtma qabul qilindi ✓");
+      showToast("Buyurtmangiz yuborildi! Status: ⏳ To'lovni tasdiqlash kutilmoqda ✓");
     } catch (e) {
+      setIsProcessingPayment(false);
       try {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
           "error",
@@ -1410,6 +2047,7 @@ export default function App() {
                           ) : null}
                           <div className="statusTimeline">
                             {[
+                              "⏳ Buyurtma kutilmoqda",
                               "Qabul qilindi",
                               "Tayyorlanmoqda",
                               "Yo‘lda",
@@ -1419,11 +2057,12 @@ export default function App() {
                                 className={
                                   o.status === s ||
                                   [
+                                    "⏳ Buyurtma kutilmoqda",
                                     "Qabul qilindi",
                                     "Tayyorlanmoqda",
                                     "Yo‘lda",
                                     "Yetkazildi",
-                                  ].indexOf(o.status) > i
+                                  ].indexOf(o.status) >= i
                                     ? "done"
                                     : ""
                                 }
@@ -1450,7 +2089,7 @@ export default function App() {
                             </div>
                             <div>
                               <small>To‘lov</small>
-                              <b>{o.payment === "card" ? "Karta" : "Naqd"}</b>
+                              <b>{o.payment || "Karta (Uzcard / Humo)"}</b>
                             </div>
                             <div>
                               <small>Mahsulotlar</small>
@@ -1488,6 +2127,18 @@ export default function App() {
                                 .filter(Boolean)
                                 .join(", ") || "Manzil saqlangan"}
                             </p>
+                          ) : null}
+                          {o.receipt_url ? (
+                            <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "10px", background: "rgba(0,0,0,0.03)", borderRadius: "10px" }}>
+                              <small style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>🧾 Yuklangan to‘lov cheki (kvitansiya):</small>
+                              <img
+                                src={o.receipt_url}
+                                alt="To‘lov cheki"
+                                className="userReceiptThumb"
+                                onClick={() => window.open(o.receipt_url, '_blank')}
+                                style={{ maxWidth: "180px", maxHeight: "180px", borderRadius: "8px", border: "1px solid var(--border-color)", cursor: "pointer", objectFit: "cover" }}
+                              />
+                            </div>
                           ) : null}
                           {isCompleted ? (
                             <div className="orderReorderBar">
@@ -1557,7 +2208,11 @@ export default function App() {
               onError={() => setProfilePhotoError(true)}
             />
           ) : (
-            "🌷"
+            <img
+              src="/guli_logo.jpg"
+              alt="Guli Premium Logo"
+              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+            />
           )}
         </div>
         <div>
@@ -1578,7 +2233,7 @@ export default function App() {
           id="profile-orders-btn"
           onClick={() => go("orders")}
         >
-          <span>📦</span>
+          <span className="profileSticker3D">📦</span>
           <div>
             <b>{t("my_orders")}</b>
             <small>
@@ -1593,7 +2248,7 @@ export default function App() {
             id="profile-pdf-btn"
             onClick={() => handleExportPdf(orders, "Barchasi")}
           >
-            <span>📄</span>
+            <span className="profileSticker3D">📄</span>
             <div>
               <b>{t("pdf_report")}</b>
               <small>Shaxsiy hisobotni PDF formatida yuklab olish</small>
@@ -1606,7 +2261,7 @@ export default function App() {
           id="profile-wishlist-btn"
           onClick={() => go("wishlist")}
         >
-          <span>♡</span>
+          <span className="profileSticker3D">💖</span>
           <div>
             <b>{t("my_wishlist")}</b>
             <small>
@@ -1620,7 +2275,7 @@ export default function App() {
           id="profile-addresses-btn"
           onClick={() => go("addresses")}
         >
-          <span>📍</span>
+          <span className="profileSticker3D">📍</span>
           <div>
             <b>{t("my_addresses")}</b>
             <small>{t("my_addresses_desc")}</small>
@@ -1630,42 +2285,13 @@ export default function App() {
       </section>
 
       <section className="profileSection">
-        <h2>🎟️ Chegirmalar va Imtiyozlar</h2>
-        <button
-          className="menuRow"
-          id="profile-promos-btn"
-          onClick={() => setIsPromosOpen(true)}
-        >
-          <span>🎟️</span>
-          <div>
-            <b>Promokodlar va Kuponlar</b>
-            <small>GULI10, YANGI2026, BEPUL kabi faol chegirmalar</small>
-          </div>
-          <span className="badgePill">3 ta faol</span>
-          <i>›</i>
-        </button>
-        <button
-          className="menuRow"
-          id="profile-loyalty-btn"
-          onClick={() => setIsPromosOpen(true)}
-        >
-          <span>💎</span>
-          <div>
-            <b>VIP Sodiqlik dasturi</b>
-            <small>Har bir xarid uchun keshbek va eksklyuziv sovg‘alar</small>
-          </div>
-          <i>›</i>
-        </button>
-      </section>
-
-      <section className="profileSection">
-        <h2>💬 Xizmat va Bog‘lanish</h2>
+        <h2>Xizmat va Bog‘lanish</h2>
         <button
           className="menuRow"
           id="profile-chat-btn"
           onClick={() => go("chat")}
         >
-          <span>💬</span>
+          <span className="profileSticker3D">💬</span>
           <div>
             <b>{t("online_chat")}</b>
             {unreadMessages.length > 0 ? (
@@ -1678,9 +2304,12 @@ export default function App() {
         <button
           className="menuRow"
           id="profile-help-btn"
-          onClick={() => setIsHelpOpen(true)}
+          onClick={() => {
+            setHelpInitialStep("none");
+            setIsHelpOpen(true);
+          }}
         >
-          <span>📞</span>
+          <span className="profileSticker3D">📞</span>
           <div>
             <b>{t("help_support")}</b>
             <small>Call Center (+998 90 581-11-17) & FAQ</small>
@@ -1689,60 +2318,38 @@ export default function App() {
         </button>
         <button
           className="menuRow"
-          id="profile-notifications-btn"
-          onClick={() => setIsNotificationsOpen(true)}
+          id="profile-social-btn"
+          onClick={() => setIsSocialLinksOpen(true)}
         >
-          <span>🔔</span>
+          <span className="profileSticker3D">🌐</span>
           <div>
-            <b>{t("notifications")}</b>
-            {unreadMessages.length > 0 ? (
-              <span className="badgePill">{unreadMessages.length} ta</span>
-            ) : null}
-            <small>Admin xabarlari va yangiliklar</small>
+            <b>{t("social_media")}</b>
+            <small>{t("social_media_desc")}</small>
+          </div>
+          <i>›</i>
+        </button>
+        <button
+          className="menuRow"
+          id="profile-support-btn"
+          style={{ 
+            background: "linear-gradient(135deg, rgba(217, 119, 6, 0.08), rgba(217, 119, 6, 0.03))", 
+            borderLeft: "3.5px solid #d97706" 
+          }}
+          onClick={() => {
+            setHelpInitialStep("details");
+            setIsHelpOpen(true);
+          }}
+        >
+          <span className="profileSticker3D">🤗</span>
+          <div>
+            <b style={{ color: "var(--primary)" }}>Adminni qo'llab-quvvatlash</b>
+            <small>Loyihani rivojlantirishga o'z hissangizni qo'shing</small>
           </div>
           <i>›</i>
         </button>
       </section>
 
-      <section className="profileSection">
-        <h2>📋 Ma’lumotlar va Qo‘llanmalar</h2>
-        <button
-          className="menuRow"
-          id="profile-delivery-btn"
-          onClick={() => setIsDeliveryInfoOpen(true)}
-        >
-          <span>🚚</span>
-          <div>
-            <b>Yetkazib berish va To‘lov shartlari</b>
-            <small>O‘zbekiston bo‘ylab 24/7 tezkor xizmat va qoidalar</small>
-          </div>
-          <i>›</i>
-        </button>
-        <button
-          className="menuRow"
-          id="profile-sizeguide-btn"
-          onClick={() => setIsSizeGuideOpen(true)}
-        >
-          <span>📐</span>
-          <div>
-            <b>O‘lchamlar jadvali (Size Guide)</b>
-            <small>Byustgalter va ichki kiyimlar uchun to‘g‘ri o‘lcham</small>
-          </div>
-          <i>›</i>
-        </button>
-        <button
-          className="menuRow"
-          id="profile-about-btn"
-          onClick={() => setIsAboutOpen(true)}
-        >
-          <span>🌷</span>
-          <div>
-            <b>GULI brendi & 100% Maxfiylik</b>
-            <small>Maxfiy qadoqlash, sifat kafolati va premium xizmat</small>
-          </div>
-          <i>›</i>
-        </button>
-      </section>
+
 
       <section className="profileSection">
         <h2>{t("convenience_section")}</h2>
@@ -1755,8 +2362,8 @@ export default function App() {
           <div>
             <b>{t("settings")}</b>
             <small>
-              {theme === "dark" ? "Tun rejimi" : "Kun rejimi"} ·{" "}
-              {language.toUpperCase()}
+              {theme === "dark" ? t("theme_dark") : t("theme_light")} ·{" "}
+              {currency} · {language.toUpperCase()}
             </small>
           </div>
           <i>›</i>
@@ -1780,8 +2387,8 @@ export default function App() {
         >
           <span>🗑️</span>
           <div>
-            <b>Keshni tozalash</b>
-            <small>Vaqtinchalik xotira va ma’lumotlarni yangilash</small>
+            <b>{t("clear_cache")}</b>
+            <small>{t("clear_cache")}</small>
           </div>
           <i>›</i>
         </button>
@@ -1793,7 +2400,13 @@ export default function App() {
     <div className="appShell">
       <header className="topbar">
         <button className="brand" onClick={() => go("home")}>
-          <span className="brandIcon">🌷</span>
+          <span className="brandIcon">
+            <img
+              src="/guli_logo.jpg"
+              alt="Guli Premium"
+              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }}
+            />
+          </span>
           <span>
             <b>GULI</b>
             <small>{t("brand_sub")}</small>
@@ -1842,7 +2455,7 @@ export default function App() {
       >
         {page === "home" && (
           <>
-            <section className="hero">
+            <section className="hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(31, 15, 21, 0.76), rgba(31, 15, 21, 0.12)), url(${promoBannerUrl})` }}>
               <div className="heroOverlay">
                 <span>{t("hero_eyebrow")}</span>
                 <h1>{t("hero_title")}</h1>
@@ -2183,7 +2796,7 @@ export default function App() {
                 type="tel"
               />
               <button
-                className={`phoneAutoButton ${phoneLoading ? "loading" : ""}`}
+                className={`phoneAutoButton btn-3d ${phoneLoading ? "loading" : ""}`}
                 onClick={requestTelegramPhone}
                 disabled={phoneLoading}
               >
@@ -2199,10 +2812,10 @@ export default function App() {
                 <span className="step">2</span>
                 <div>
                   <h3>Yetkazib berish manzili</h3>
-                  <p>GPS yoki xaritadan aniq joyni belgilang</p>
+                  <p>GPS lokatsiya yoki qo‘lda to‘ldiring</p>
                 </div>
               </div>
-              <button className="locationButton" onClick={requestLocation}>
+              <button className="locationButton btn-3d" onClick={requestLocation}>
                 {locationLoading
                   ? "⌛ Aniqlanmoqda..."
                   : address.latitude
@@ -2210,60 +2823,131 @@ export default function App() {
                     : "📍 Joylashuvimni aniqlash"}
               </button>
               {address.latitude ? (
-                <>
-                  <LocationPicker
-                    latitude={address.latitude}
-                    longitude={address.longitude}
-                    onChange={updateMapPosition}
-                  />
-                  <div className="mapCaption">
-                    ✓ Belgilangan joy: {address.latitude.toFixed(5)},{" "}
-                    {address.longitude.toFixed(5)}
-                  </div>
-                </>
-              ) : null}
-              {addressMessage ? (
-                <div className="addressError">{addressMessage}</div>
-              ) : null}
-              <div className="twoInputs">
-                <input
-                  className="input"
-                  value={address.region || ""}
-                  onChange={(e) => setAddressField("region", e.target.value)}
-                  placeholder="Viloyat"
+                <LocationPicker
+                  latitude={address.latitude}
+                  longitude={address.longitude}
+                  onChange={updateMapPosition}
                 />
-                <input
-                  className="input"
-                  value={address.district || ""}
-                  onChange={(e) => setAddressField("district", e.target.value)}
-                  placeholder="Tuman"
-                />
-              </div>
+              ) : null}
+
+
+              {/* Region & District Selectors with Manual Fallback */}
+              {(() => {
+                const availableRegions = Object.keys(uzbekistanRegionsData);
+                const isCustomRegion = Boolean(address.region && !availableRegions.includes(address.region));
+                const currentDistricts = address.region && uzbekistanRegionsData[address.region] ? uzbekistanRegionsData[address.region] : [];
+                const isCustomDistrict = Boolean(address.district && currentDistricts.length > 0 && !currentDistricts.includes(address.district));
+
+                return (
+                  <>
+                    <div className="twoInputs" style={{ marginBottom: "12px" }}>
+                      <div>
+                        <label style={{ fontSize: "10.5px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>Viloyat / Shahar</label>
+                        <select
+                          className="input"
+                          style={{ width: "100%" }}
+                          value={isCustomRegion ? "Boshqa" : (address.region || "")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "Boshqa") {
+                              setAddressField("region", "");
+                              setAddressField("district", "");
+                            } else {
+                              setAddressField("region", val);
+                              const dists = uzbekistanRegionsData[val] || [];
+                              setAddressField("district", dists[0] || "");
+                            }
+                          }}
+                        >
+                          <option value="">Viloyatni tanlang...</option>
+                          {availableRegions.map((reg) => (
+                            <option key={reg} value={reg}>{reg}</option>
+                          ))}
+                          <option value="Boshqa">✍️ Boshqa (qo‘lda kiritish)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "10.5px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>Tuman / Shaharcha</label>
+                        {currentDistricts.length > 0 ? (
+                          <select
+                            className="input"
+                            style={{ width: "100%" }}
+                            value={isCustomDistrict ? "Boshqa" : (address.district || "")}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "Boshqa") {
+                                setAddressField("district", "");
+                              } else {
+                                setAddressField("district", val);
+                              }
+                            }}
+                          >
+                            <option value="">Tumanni tanlang...</option>
+                            {currentDistricts.map((dist) => (
+                              <option key={dist} value={dist}>{dist}</option>
+                            ))}
+                            <option value="Boshqa">✍️ Boshqa (qo‘lda kiritish)</option>
+                          </select>
+                        ) : (
+                          <input
+                            className="input"
+                            style={{ width: "100%" }}
+                            value={address.district || ""}
+                            onChange={(e) => setAddressField("district", e.target.value)}
+                            placeholder="Tuman nomi"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {(isCustomRegion || !address.region) && (
+                      <input
+                        className="input full"
+                        style={{ marginBottom: "10px" }}
+                        value={address.region || ""}
+                        onChange={(e) => setAddressField("region", e.target.value)}
+                        placeholder="Viloyatni qo‘lda kiriting (masalan: Toshkent)"
+                      />
+                    )}
+
+                    {(isCustomDistrict || (currentDistricts.length > 0 && address.district === "")) && (
+                      <input
+                        className="input full"
+                        style={{ marginBottom: "10px" }}
+                        value={address.district || ""}
+                        onChange={(e) => setAddressField("district", e.target.value)}
+                        placeholder="Tumanni qo‘lda kiriting (masalan: Chilonzor)"
+                      />
+                    )}
+                  </>
+                );
+              })()}
               <input
                 className="input full"
                 value={address.street || ""}
                 onChange={(e) => setAddressField("street", e.target.value)}
-                placeholder="Ko‘cha"
+                placeholder="Ko‘cha nomi va uyingiz manzili"
               />
               <div className="twoInputs">
                 <input
                   className="input"
                   value={address.house || ""}
                   onChange={(e) => setAddressField("house", e.target.value)}
-                  placeholder="Dom / uy raqami"
+                  placeholder="Uy raqami / Dom"
                 />
                 <input
                   className="input"
                   value={address.apartment || ""}
                   onChange={(e) => setAddressField("apartment", e.target.value)}
-                  placeholder="Padezd / xonadon"
+                  placeholder="Padezd / Xonadon"
                 />
               </div>
               <input
                 className="input full"
                 value={address.landmark || ""}
                 onChange={(e) => setAddressField("landmark", e.target.value)}
-                placeholder="Mo‘ljal (ixtiyoriy)"
+                placeholder="Mo‘ljal (masalan: Supermarket yonida)"
               />
             </div>
             <div className="checkoutCard">
@@ -2271,48 +2955,69 @@ export default function App() {
                 <span className="step">3</span>
                 <div>
                   <h3>To‘lov usuli</h3>
-                  <p>O‘zingizga qulay usulni tanlang</p>
                 </div>
               </div>
-              <label
-                className={`paymentOption ${payment === "cash" ? "selected" : ""}`}
+              <div
+                className={`paymentOptionVibrant ${!phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length ? "disabled" : ""}`}
+                onClick={() => {
+                  if (!phone.trim()) {
+                    showToast("Iltimos telefon raqamingizni kiriting");
+                    return;
+                  }
+                  if (!address.region?.trim() || !address.district?.trim() || !address.street?.trim()) {
+                    showToast("Iltimos manzilni (viloyat, tuman va ko‘cha) to‘liq kiriting");
+                    return;
+                  }
+                  if (!cart.length) {
+                    showToast("Savat bo‘sh");
+                    return;
+                  }
+                  setShowCardPaymentModal(true);
+                }}
+                style={{
+                  cursor: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed",
+                  opacity: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.65
+                }}
               >
-                <input
-                  type="radio"
-                  checked={payment === "cash"}
-                  onChange={() => setPayment("cash")}
-                />
-                💵{" "}
-                <span>
-                  <b>Naqd</b>
-                  <small>Yetkazib berishda</small>
-                </span>
-              </label>
-              <label
-                className={`paymentOption ${payment === "card" ? "selected" : ""}`}
-              >
-                <input
-                  type="radio"
-                  checked={payment === "card"}
-                  onChange={() => setPayment("card")}
-                />
-                💳{" "}
-                <span>
-                  <b>Karta</b>
-                  <small>To‘lov usuli</small>
-                </span>
-              </label>
+                <div className="vibrantCardIcon">💳</div>
+                <div className="vibrantCardInfo">
+                  <div className="vibrantCardTitleRow">
+                    <b className="vibrantCardTitle">Karta (Uzcard / Humo)</b>
+                    <span className="vibrantCardBadge">Tanlangan</span>
+                  </div>
+                  <small className="vibrantCardSub">Uzcard va Humo kartalari orqali tezkor to‘lov</small>
+                </div>
+                <div className="vibrantCheckMark">✓</div>
+              </div>
             </div>
             <div className="checkoutTotal">
               <span>Jami to‘lov</span>
               <b>{formatPrice(total)}</b>
             </div>
             <button
-              className="primaryButton large"
-              disabled={!phone.trim() || !cart.length}
-              onClick={submitOrder}
+              className="primaryButton large btn-3d"
+              disabled={!phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length}
+              onClick={() => {
+                if (!phone.trim()) {
+                  showToast("Iltimos telefon raqamingizni kiriting");
+                  return;
+                }
+                if (!address.region?.trim() || !address.district?.trim() || !address.street?.trim()) {
+                  showToast("Iltimos manzilni (viloyat, tuman va ko‘cha) to‘liq kiriting");
+                  return;
+                }
+                if (!cart.length) {
+                  showToast("Savat bo‘sh");
+                  return;
+                }
+                setShowCardPaymentModal(true);
+              }}
+              style={{
+                opacity: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.55,
+                cursor: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed"
+              }}
             >
-              Buyurtmani tasdiqlash — {formatPrice(total)}
+              💳 Karta orqali to‘lov qilish — {formatPrice(total)}
             </button>
           </main>
         )}
@@ -2524,8 +3229,28 @@ export default function App() {
           onThemeChange={setTheme}
           language={language}
           onLanguageChange={setLanguage}
+          currency={currency}
+          onCurrencyChange={setCurrency}
+          hapticsEnabled={hapticsEnabled}
+          onHapticsToggle={setHapticsEnabled}
+          density={density}
+          onDensityChange={setDensity}
+          orderAlerts={orderAlerts}
+          onOrderAlertsToggle={setOrderAlerts}
+          promoAlerts={promoAlerts}
+          onPromoAlertsToggle={setPromoAlerts}
           onClose={() => setIsSettingsOpen(false)}
           onClearCache={handleClearCache}
+          onResetSettings={() => {
+            setTheme("light");
+            setLanguage("uz");
+            setCurrency("UZS");
+            setHapticsEnabled(true);
+            setDensity("normal");
+            setOrderAlerts(true);
+            setPromoAlerts(true);
+            showToast(getTranslation("reset_settings_confirm", language));
+          }}
         />
       )}
 
@@ -2539,14 +3264,23 @@ export default function App() {
             go("chat");
           }}
           onShowToast={showToast}
+          initialStep={helpInitialStep}
+          telegramUser={telegramUser}
         />
       )}
+
+      {/* Social Links Modal */}
+      <SocialLinksModal
+        isOpen={isSocialLinksOpen}
+        onClose={() => setIsSocialLinksOpen(false)}
+      />
 
       {/* Notifications Modal */}
       {isNotificationsOpen && (
         <NotificationModal
           language={language}
           unreadMessages={unreadMessages}
+          orders={orders}
           userId={currentUserId}
           onClose={() => setIsNotificationsOpen(false)}
           onOpenChat={() => {
@@ -2597,6 +3331,210 @@ export default function App() {
           language={language}
           onClose={() => setIsAboutOpen(false)}
         />
+      )}
+
+      {/* Karta orqali to'lov modal (3D) */}
+      {showCardPaymentModal && (
+        <div
+          className="modalBackdrop modalBackdropCenter"
+          onClick={() => {
+            if (!timerActive) setShowCardPaymentModal(false);
+          }}
+        >
+          <div
+            className="modalCard cardPaymentModal3D"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "440px", width: "92%", padding: "20px" }}
+          >
+            <div className="modalHeader">
+              <h2>💳 Karta orqali to‘lov</h2>
+              <button
+                className="closeModalBtn"
+                onClick={() => {
+                  setShowCardPaymentModal(false);
+                  setTimerActive(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="cardDetailsContainer">
+              {isProcessingPayment ? (
+                <div className="paymentProcessing3D">
+                  <div className="hologram3DCube">
+                    <div className="cube3DRing"></div>
+                    <div className="cube3DRingOuter"></div>
+                    <div className="cube3DCore">
+                      {processingProgress < 100 ? "⚡" : "✅"}
+                    </div>
+                  </div>
+
+                  <h3 className="processingTitle3D">
+                    {processingProgress < 100
+                      ? "To‘lov va chek tasdiqlanmoqda..."
+                      : "Buyurtma rasmiylashtirildi!"}
+                  </h3>
+
+                  <div className="progressTrack3D">
+                    <div
+                      className="progressBar3D"
+                      style={{ width: `${processingProgress}%` }}
+                    >
+                      <span className="glowParticle"></span>
+                    </div>
+                  </div>
+
+                  <div className="progressPercent3D">{processingProgress}%</div>
+
+                  <div className="processingStepsList">
+                    <div
+                      className={`stepItem3D ${
+                        processingStep >= 1 ? "active" : ""
+                      } ${processingStep > 1 ? "completed" : ""}`}
+                    >
+                      <span className="stepIcon">
+                        {processingStep > 1 ? "✓" : "📷"}
+                      </span>
+                      <span className="stepText">
+                        Chek va kvitansiya fayli tekshirilmoqda
+                      </span>
+                    </div>
+
+                    <div
+                      className={`stepItem3D ${
+                        processingStep >= 2 ? "active" : ""
+                      } ${processingStep > 2 ? "completed" : ""}`}
+                    >
+                      <span className="stepIcon">
+                        {processingStep > 2 ? "✓" : "💳"}
+                      </span>
+                      <span className="stepText">
+                        To‘lov ma’lumotlari serverga uzatilmoqda
+                      </span>
+                    </div>
+
+                    <div
+                      className={`stepItem3D ${
+                        processingStep >= 3 ? "active" : ""
+                      } ${processingStep > 3 ? "completed" : ""}`}
+                    >
+                      <span className="stepIcon">
+                        {processingStep >= 3 ? "⏳" : "📝"}
+                      </span>
+                      <span className="stepText">
+                        Status:{" "}
+                        <strong>"⏳ To'lovni tasdiqlash kutilmoqda"</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : !timerActive ? (
+                <>
+                  <div className="paymentNoticeBox">
+                    <div className="noticeTitle">⚠️ Diqqat! To‘lov haqida ogohlantirish</div>
+                    <p>
+                      "💸 To‘lov qilish" tugmasini bosganingizdan so‘ng karta rekvizitlari ko‘rinadi. To‘lov muddati <b>10 minut</b> bo‘lib, ushbu muddat ichida to‘lovni amalga oshirib, chek rasmini yuklaysiz.
+                    </p>
+                  </div>
+
+                  <button
+                    className="primaryButton large btn-3d startPayment3DBtn"
+                    style={{ width: "100%", marginTop: "16px" }}
+                    onClick={() => {
+                      setTimerActive(true);
+                      setPaymentTimer(600);
+                      try {
+                        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("heavy");
+                      } catch {}
+                    }}
+                  >
+                    💸 To‘lov qilish
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="cardVisualBox">
+                    <div className="cardChip">💳 Uzcard / Humo</div>
+                    <div className="cardHolderName">
+                      <span className="cardLabel">Karta egasi:</span>
+                      <strong className="holderText">X.Yusufaliyev</strong>
+                    </div>
+                    <div className="cardNumberRow">
+                      <span className="cardNumber">9860 1766 1229 1557</span>
+                      <button
+                        className="copyCardBtn"
+                        type="button"
+                        onClick={() => {
+                          try {
+                            navigator.clipboard.writeText("9860176612291557");
+                          } catch {}
+                          setCopiedCard(true);
+                          showToast("✓ Karta raqami nusxalandi!");
+                          setTimeout(() => setCopiedCard(false), 2500);
+                        }}
+                      >
+                        {copiedCard ? "✓ Nusxalandi" : "📋 Nusxa olish"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="activePaymentSection">
+                    <div className="timerBox3D">
+                      <span className="sticker3D">⏳</span>
+                      <div className="timerTextWrap">
+                        <span className="timerLabel">To‘lov muddati:</span>
+                        <strong className={`timerDigits ${paymentTimer < 120 ? "urgent" : ""}`}>
+                          {formatTimer(paymentTimer)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="receiptUploadBox">
+                      <label className="receiptUploadLabel">
+                        <span>📷 Chek rasmini (kvitansiya) yuklash uchun bosing</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleReceiptFileChange}
+                          style={{ display: "none" }}
+                        />
+                      </label>
+
+                      {isUploadingReceipt && (
+                        <div className="uploadingSpinner">
+                          ⏳ Rasm ishlanmoqda...
+                        </div>
+                      )}
+
+                      {uploadedReceipt && (
+                        <div className="uploadedReceiptStatus">
+                          <div className="happyStickerHeader">
+                            <span className="sticker3DHappy">☺️</span>
+                            <span>Chek muvaffaqiyatli yuklandi!</span>
+                          </div>
+                          <img
+                            src={uploadedReceipt}
+                            alt="Yuklangan chek"
+                            className="receiptPreviewImg"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      className="primaryButton large btn-3d submitReceipt3DBtn"
+                      style={{ width: "100%", marginTop: "16px" }}
+                      onClick={submitOrderWithCard}
+                    >
+                      ☺️ To‘lov qildim
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {toast ? <div className="toast">{toast}</div> : null}

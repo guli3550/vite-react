@@ -150,6 +150,42 @@ function installRoutes(app) {
       res.status(500).json({ success: false, message: error.message || "Kategoriya saqlanmadi" });
     }
   });
+
+  originalGet.call(app, "/api/settings/banner", async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("category_settings")
+        .select("image_url")
+        .eq("slug", "promo_banner")
+        .maybeSingle();
+      if (error) throw error;
+      const defaultUrl = "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78";
+      res.set("Cache-Control", "no-store, max-age=0");
+      res.json({ success: true, url: data?.image_url || defaultUrl });
+    } catch (error) {
+      console.error("Get banner error:", error);
+      res.status(500).json({ success: false, message: "Banner rasmini yuklashda xatolik" });
+    }
+  });
+
+  originalPut.call(app, "/api/admin/settings/banner", requireAdmin, async (req, res) => {
+    try {
+      const imageUrl = String(req.body?.image_url || "").trim();
+      if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+        return res.status(400).json({ success: false, message: "To‘g‘ri rasm URL manzili kerak" });
+      }
+      const { data, error } = await supabase
+        .from("category_settings")
+        .upsert({ slug: "promo_banner", name: "Promo Banner", image_url: imageUrl, sort_order: 999, active: true, updated_at: new Date().toISOString() }, { onConflict: "slug" })
+        .select("image_url")
+        .single();
+      if (error) throw error;
+      res.json({ success: true, url: data?.image_url });
+    } catch (error) {
+      console.error("Update banner error:", error);
+      res.status(500).json({ success: false, message: "Banner rasmini yangilashda xatolik" });
+    }
+  });
 }
 
 if (!installed) {

@@ -10,6 +10,9 @@ export type ChatMessage = {
   userName?: string;
   userPhoto?: string;
   orderNumber?: string;
+  type?: "text" | "image" | "file" | "audio";
+  mediaUrl?: string;
+  fileName?: string;
 };
 
 export type ConversationSummary = {
@@ -25,6 +28,78 @@ const STORAGE_KEY = "guli_chat_messages";
 const NOTIFICATIONS_KEY = "guli_unread_notifications_count";
 const CHANNEL_NAME = "guli_chat_channel_v1";
 
+const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+
+export async function syncChatWithBackend(telegramId: string | number): Promise<ChatMessage[]> {
+  if (!telegramId) return getStoredChatMessages();
+  try {
+    const res = await fetch(`${API_URL}/api/chat/messages/${telegramId}`);
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data)) {
+      const backendMessages: ChatMessage[] = json.data.map((m: any) => ({
+        id: m.id,
+        sender: m.sender,
+        text: m.text,
+        timestamp: m.created_at,
+        read: true,
+        userId: m.telegram_id
+      }));
+      
+      // Merge with local (optional, but good for robust sync)
+      const local = getStoredChatMessages(telegramId);
+      const combined = [...local];
+      
+      backendMessages.forEach(bm => {
+        if (!combined.some(lm => lm.timestamp === bm.timestamp && lm.text === bm.text)) {
+          combined.push(bm);
+        }
+      });
+      
+      combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      saveChatMessages(combined);
+      return combined;
+    }
+  } catch (err) {
+    console.error("Backend sync failed:", err);
+  }
+  return getStoredChatMessages(telegramId);
+}
+
+export async function sendChatMessage(msg: Partial<ChatMessage>): Promise<ChatMessage | null> {
+  if (!msg.userId || !msg.text || !msg.sender) return null;
+  
+  try {
+    const res = await fetch(`${API_URL}/api/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        telegram_id: msg.userId,
+        sender: msg.sender,
+        text: msg.text
+      })
+    });
+    const json = await res.json();
+    if (json.success) {
+      const newMsg: ChatMessage = {
+        id: json.data.id,
+        sender: json.data.sender,
+        text: json.data.text,
+        timestamp: json.data.created_at,
+        read: true,
+        userId: json.data.telegram_id,
+        userName: msg.userName
+      };
+      
+      const all = getStoredChatMessages();
+      saveChatMessages([...all, newMsg]);
+      return newMsg;
+    }
+  } catch (err) {
+    console.error("Failed to send message to backend:", err);
+  }
+  return null;
+}
+
 let broadcastChannel: BroadcastChannel | null = null;
 try {
   if (typeof window !== "undefined" && "BroadcastChannel" in window) {
@@ -37,7 +112,7 @@ try {
 const DEFAULT_WELCOME_MESSAGE: ChatMessage = {
   id: "welcome-msg-1",
   sender: "admin",
-  text: "Assalomu alaykum! GULI Premium qo‘llab-quvvatlash xizmatiga xush kelibsiz 🌷 Sizga qanday yordam bera olamiz? Savollaringiz bo‘lsa bemalol yozing.",
+  text: "Assalomu alaykum! GULI Premium qo‘llab-quvvatlash xizmatiga xush kelibsiz ✨ Sizga qanday yordam bera olamiz? Savollaringiz bo‘lsa bemalol yozing.",
   timestamp: new Date().toISOString(),
   read: true,
   userName: "GULI Support"
@@ -103,7 +178,11 @@ export function markMessagesAsRead(userId?: string | number): void {
   }
 }
 
-export function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }): ChatMessage {
+export async function sendUserMessage(
+  text: string,
+  user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string },
+  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }
+): Promise<ChatMessage> {
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
   const userName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Mijoz";
@@ -116,11 +195,27 @@ export function sendUserMessage(text: string, user?: { id?: number | string; fir
     read: false,
     userId,
     userName,
-    userPhoto: user?.photo_url
+    userPhoto: user?.photo_url,
+    type: media?.type || "text",
+    mediaUrl: media?.mediaUrl,
+    fileName: media?.fileName
   };
 
   const updated = [...allMessages, newMsg];
   saveChatMessages(updated);
+
+  // Persistence to backend
+  if (user?.id) {
+    try {
+      fetch(`${API_URL}/api/chat/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.id, sender: 'customer', text: text.trim() })
+      }).catch(e => console.error("Chat backend sync failed:", e));
+    } catch {
+      // Ignore background sync errors
+    }
+  }
 
   // Optional: Auto-reply simulation if this is the user's first inquiry and admin isn't immediately replying
   if (allMessages.filter(m => m.sender === "user").length === 0) {
@@ -134,7 +229,8 @@ export function sendUserMessage(text: string, user?: { id?: number | string; fir
           timestamp: new Date().toISOString(),
           read: false,
           userId,
-          userName: "GULI Admin"
+          userName: "GULI Admin",
+          type: "text"
         };
         saveChatMessages([...getStoredChatMessages(), autoReply]);
         notifyNewAdminMessage(autoReply);
@@ -145,7 +241,11 @@ export function sendUserMessage(text: string, user?: { id?: number | string; fir
   return newMsg;
 }
 
-export function sendAdminReply(userId: string, text: string): ChatMessage {
+export async function sendAdminReply(
+  userId: string,
+  text: string,
+  media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }
+): Promise<ChatMessage> {
   const allMessages = getStoredChatMessages();
   const reply: ChatMessage = {
     id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -154,11 +254,26 @@ export function sendAdminReply(userId: string, text: string): ChatMessage {
     timestamp: new Date().toISOString(),
     read: false,
     userId: String(userId),
-    userName: "GULI Admin"
+    userName: "GULI Admin",
+    type: media?.type || "text",
+    mediaUrl: media?.mediaUrl,
+    fileName: media?.fileName
   };
 
   const updated = [...allMessages, reply];
   saveChatMessages(updated);
+
+  // Persistence to backend
+  try {
+    fetch(`${API_URL}/api/chat/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram_id: userId, sender: 'admin', text: text.trim() })
+    }).catch(e => console.error("Admin chat backend sync failed:", e));
+  } catch {
+    // Ignore background sync errors
+  }
+
   notifyNewAdminMessage(reply);
   return reply;
 }
@@ -208,14 +323,21 @@ export function getAllConversations(): ConversationSummary[] {
     }];
   }
 
-  return Array.from(map.entries()).map(([userId, data]) => ({
-    userId,
-    userName: data.name,
-    userPhoto: data.photo,
-    lastMessage: data.last.text,
-    lastTimestamp: data.last.timestamp,
-    unreadCount: data.unread
-  })).sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
+  return Array.from(map.entries()).map(([userId, data]) => {
+    let lastText = data.last.text || "";
+    if (data.last.type === "image") lastText = "📷 Rasm";
+    else if (data.last.type === "audio") lastText = "🎙️ Ovozli xabar";
+    else if (data.last.type === "file") lastText = `📁 ${data.last.fileName || "Fayl"}`;
+
+    return {
+      userId,
+      userName: data.name,
+      userPhoto: data.photo,
+      lastMessage: lastText,
+      lastTimestamp: data.last.timestamp,
+      unreadCount: data.unread
+    };
+  }).sort((a, b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
 }
 
 export function subscribeToChat(callback: (messages: ChatMessage[]) => void): () => void {

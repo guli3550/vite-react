@@ -10,7 +10,7 @@ body {
   width: 100%;
   min-width: 320px;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   background: #fff9fa;
 }
 
@@ -247,7 +247,7 @@ textarea:focus-visible {
 html[data-platform="telegram"],
 body[data-platform="telegram"] {
   height: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   overscroll-behavior-y: contain;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -255,7 +255,7 @@ body[data-platform="telegram"] {
 
 html[data-platform="telegram"] .appShell {
   min-height: var(--tg-viewport-height, 100vh);
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: 0;
   padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
 }
 

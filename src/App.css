@@ -44,9 +44,9 @@ button:active{transform:scale(.98)}
 button:disabled{cursor:not-allowed}
 img{max-width:100%}
 
-.appShell{min-height:100vh;padding-bottom:86px;background:var(--bg-main)}
-.topbar{height:70px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,250,251,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:60;border-bottom:1px solid var(--border-color)}
-[data-theme="dark"] .topbar{background:rgba(20,14,17,.95)}
+.appShell{min-height:100vh;padding-bottom:86px;background:var(--bg-main);position:relative}
+.topbar{height:70px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--bg-card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:1000;border-bottom:1px solid var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,0.03)}
+[data-theme="dark"] .topbar{background:var(--bg-card)}
 
 .brand{display:flex;align-items:center;gap:10px;background:transparent;color:var(--text-main);text-align:left}
 .brandIcon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#f9dfe5,#f4cbd5);color:#c34d68;font-size:22px;box-shadow:0 7px 18px rgba(181,76,100,.12)}
@@ -224,7 +224,7 @@ img{max-width:100%}
 .quantity button{width:29px;height:29px;border-radius:50%;background:var(--bg-card-sub);color:var(--text-main)}
 .quantity span{font-size:12px;font-weight:700;color:var(--text-main)}
 .promoBox{display:flex;gap:8px;margin-top:15px}
-.promoBox input,.input{border:1px solid var(--border-color);background:var(--bg-card);outline:none;border-radius:13px;padding:13px;color:var(--text-main)}
+.promoBox input,.input,select.input{border:1px solid var(--border-color);background:var(--bg-card);outline:none;border-radius:13px;padding:13px;color:var(--text-main)}
 .promoBox input{flex:1}
 .promoBox button{background:var(--bg-card-sub);color:var(--primary);border-radius:13px;padding:0 15px;font-weight:700}
 .summary{background:var(--bg-card);padding:16px;border-radius:18px;margin:14px 0;border:1px solid var(--border-color)}
@@ -499,6 +499,39 @@ img{max-width:100%}
 .socialLinkBtn:hover{border-color:var(--primary);color:var(--primary)}
 
 .vipBadgePill{display:inline-block;padding:2px 7px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-radius:999px;font-size:8.5px;font-weight:850;margin-left:6px;letter-spacing:.5px}
+
+/* Telegram Platform Adjustments for Full Browser-like Home View */
+html.platform-telegram body,
+html.platform-telegram #root {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html.platform-telegram .appShell {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html.platform-telegram .topbar {
+  border-radius: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+}
+
+html.platform-telegram .bottomNav {
+  left: 0 !important;
+  right: 0 !important;
+  transform: none !important;
+  width: 100% !important;
+  border-radius: 22px 22px 0 0 !important;
+}
 
 /* =========================================================
    3D SPENDING ANALYTICS & STATS (ANIMATED & HIGH QUALITY)
@@ -1654,6 +1687,1397 @@ img{max-width:100%}
   margin-top: 10px;
 }
 
+/* Chat Media & Recording Styles */
+.chatAttachBtn {
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.chatAttachBtn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.chatAttachBtn.recordingActive {
+  background: #dc2626 !important;
+  color: #fff !important;
+  border-color: #dc2626 !important;
+  animation: pulse 1.2s infinite;
+}
+
+.recordingStatusBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(220, 38, 38, 0.1);
+  border-top: 1px solid rgba(220, 38, 38, 0.2);
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.pulsingDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #dc2626;
+  animation: pulse 1s infinite;
+}
+
+.stopRecordBtn {
+  margin-left: auto;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chatMediaImage img {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 12px;
+  display: block;
+  margin-bottom: 4px;
+  object-fit: cover;
+}
+
+.chatMediaAudio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.audioLabel {
+  font-size: 9.5px;
+  opacity: 0.8;
+}
+
+.fileDownloadLink {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  font-size: 12px;
+}
+
 @media(max-width:360px){.heroOverlay h1{font-size:34px}.twoInputs{gap:7px}.productGrid{gap:9px}.page{padding-left:12px;padding-right:12px}}
 @media(min-width:700px){.appShell{max-width:920px;margin:0 auto}.bottomNav{left:50%;right:auto;transform:translateX(-50%);width:920px;border-radius:20px 20px 0 0}.hero{margin:0 18px}.productGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}.page{padding-left:22px;padding-right:22px}.detailImageWrap{max-width:650px;margin-left:auto;margin-right:auto}}
 @media(min-width:1100px){.appShell{max-width:1180px}.bottomNav{width:920px}.hero{min-height:460px}.heroOverlay{min-height:460px;padding-left:55px}.heroOverlay h1{font-size:52px}.productGrid{grid-template-columns:repeat(4,minmax(0,1fr))}.page{padding-left:34px;padding-right:34px}}
+
+/* =========================================================
+   3D BUTTONS & MODERN MAP STYLING
+   ========================================================= */
+
+/* 3D Tactile Buttons */
+.btn-3d {
+  position: relative;
+  border-radius: 16px;
+  font-weight: 850;
+  transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 6px 0 rgba(140, 50, 70, 0.35), 0 10px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(0);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.btn-3d:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 rgba(140, 50, 70, 0.35), 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 3D Primary Button (Checkout / Confirm) */
+.primaryButton.btn-3d,
+.checkoutBtn.btn-3d {
+  background: linear-gradient(145deg, #c74d6b, #9f3550);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* 3D Secondary Buttons (Phone, Location) */
+.phoneAutoButton.btn-3d,
+.locationButton.btn-3d {
+  background: linear-gradient(145deg, #ffffff, #f1e4e8);
+  color: #a63f58;
+  border: 1px solid rgba(189, 82, 106, 0.25);
+  box-shadow: 0 5px 0 #d9bcbf, 0 8px 18px rgba(0,0,0,0.08);
+}
+
+.phoneAutoButton.btn-3d:active,
+.locationButton.btn-3d:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #d9bcbf, 0 3px 8px rgba(0,0,0,0.06);
+}
+
+/* Modern 3D Map Modal Styling */
+.mapModalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 10, 13, 0.75);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: fadeIn 0.25s ease;
+}
+
+.mapModalCard3D {
+  width: 100%;
+  max-width: 520px;
+  background: var(--bg-card);
+  border-radius: 28px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35), 0 0 0 1px var(--border-color);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: perspective(1000px) rotateX(1deg);
+  animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mapModalHeader {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card-sub);
+}
+
+.mapModalHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mapCloseBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mapCloseBtn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.mapInteractiveStage {
+  height: 340px;
+  position: relative;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.mapPinPulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.mapPinIcon {
+  font-size: 38px;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,0.3));
+  animation: bouncePin 1.5s infinite ease-in-out;
+}
+
+.mapPinLabel {
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  white-space: nowrap;
+  margin-top: -4px;
+}
+
+.mapCoordsBar {
+  padding: 14px 20px;
+  background: var(--bg-card-sub);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coordsInfoText {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.coordsInfoText b {
+  color: var(--text-main);
+}
+
+@keyframes bouncePin {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.regionPillsScroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0 8px 0;
+  scrollbar-width: none;
+}
+
+.regionPillsScroll::-webkit-scrollbar {
+  display: none;
+}
+
+.regionPill {
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.regionPill:hover,
+.regionPill.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 3px 10px rgba(189, 82, 106, 0.25);
+}
+
+
+/* -------------------------------------------------------------
+   VIBRANT & GLOSSY 3D PAYMENT OPTION BUTTON (PURE RED)
+------------------------------------------------------------- */
+.paymentOptionVibrant {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ff2a4b 0%, #e11d48 45%, #be123c 100%);
+  color: #ffffff;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 0 #881337, 0 12px 28px rgba(225, 29, 72, 0.45), inset 0 2px 0 rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  overflow: hidden;
+  user-select: none;
+  transform: translateY(0);
+}
+
+.paymentOptionVibrant::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.3), transparent 60%);
+  pointer-events: none;
+}
+
+.paymentOptionVibrant:hover {
+  filter: brightness(1.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 0 #881337, 0 16px 32px rgba(225, 29, 72, 0.55), inset 0 2px 0 rgba(255, 255, 255, 0.5);
+}
+
+.paymentOptionVibrant:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #881337, 0 6px 16px rgba(225, 29, 72, 0.35);
+}
+
+.paymentOptionVibrant.disabled {
+  background: linear-gradient(180deg, #9ca3af 0%, #6b7280 100%);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 0 #4b5563, 0 6px 14px rgba(0, 0, 0, 0.15);
+  filter: grayscale(0.6);
+  opacity: 0.65;
+}
+
+.vibrantCardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.vibrantCardInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vibrantCardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vibrantCardTitle {
+  font-size: 15px;
+  font-weight: 850;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.vibrantCardBadge {
+  background: #fef08a;
+  color: #854d0e;
+  font-size: 9.5px;
+  font-weight: 850;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.vibrantCardSub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.vibrantCheckMark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #be123c;
+  font-weight: 900;
+  font-size: 14px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------
+   3D CARD PAYMENT MODAL STYLES (CENTERED & 3D ANIMATED)
+------------------------------------------------------------- */
+.modalBackdropCenter {
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  perspective: 1200px;
+}
+
+.cardPaymentModal3D {
+  background: var(--bg-card);
+  border-radius: 24px;
+  box-shadow: 
+    0 25px 60px -10px rgba(0, 0, 0, 0.45),
+    0 0 0 1.5px rgba(255, 255, 255, 0.25),
+    0 12px 35px rgba(225, 29, 72, 0.22);
+  overflow: hidden;
+  max-height: 92vh;
+  overflow-y: auto;
+  transform-style: preserve-3d;
+  animation: modal3DPopIn 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  border: 1.5px solid var(--border-color);
+  margin: auto;
+}
+
+@keyframes modal3DPopIn {
+  0% {
+    opacity: 0;
+    transform: perspective(1200px) rotateX(22deg) rotateY(-10deg) scale(0.8) translateY(30px) translateZ(-80px);
+    filter: blur(4px);
+  }
+  70% {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(-4deg) rotateY(2deg) scale(1.02) translateY(-4px) translateZ(10px);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(1200px) rotateX(0deg) rotateY(0deg) scale(1) translateY(0) translateZ(0);
+    filter: blur(0px);
+  }
+}
+
+.cardDetailsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.cardVisualBox {
+  background: linear-gradient(135deg, #2b1020 0%, #6e1c3b 50%, #9e2a52 100%);
+  border-radius: 18px;
+  padding: 20px;
+  color: #fff;
+  box-shadow: 
+    0 14px 30px rgba(110, 28, 59, 0.4), 
+    0 4px 0 #4a1026,
+    inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cardVisualBox:hover {
+  transform: translateY(-2px) rotateX(2deg) rotateY(-2deg);
+  box-shadow: 0 18px 36px rgba(110, 28, 59, 0.5), 0 6px 0 #4a1026, inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.cardVisualBox::after {
+  content: "";
+  position: absolute;
+  right: -30px;
+  bottom: -30px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.cardChip {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #f7d2db;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.cardHolderName {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.holderText {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.cardNumberRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+}
+
+.cardNumber {
+  font-family: monospace, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.copyCardBtn {
+  background: #fff;
+  color: #6e1c3b;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.copyCardBtn:hover {
+  transform: scale(1.05);
+  background: #fff0f3;
+}
+
+.paymentNoticeBox {
+  background: rgba(255, 179, 0, 0.12);
+  border: 1px solid rgba(255, 179, 0, 0.35);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text-main);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.noticeTitle {
+  font-weight: 800;
+  font-size: 13px;
+  color: #d97706;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-3d {
+  position: relative;
+  border: none;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  padding: 14px 20px;
+  background: linear-gradient(180deg, #d96b82 0%, #b95a70 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #8c3f50, 0 10px 20px rgba(185, 90, 112, 0.35);
+  transition: all 0.12s ease;
+  transform: translateY(0);
+}
+
+.btn-3d:hover {
+  filter: brightness(1.05);
+}
+
+.btn-3d:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #8c3f50, 0 4px 10px rgba(185, 90, 112, 0.25);
+}
+
+.activePaymentSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 6px;
+  animation: fadeIn 0.3s ease;
+}
+
+.timerBox3D {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card-sub);
+  border: 1.5px solid var(--border-color);
+  padding: 12px 16px;
+  border-radius: 14px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.03);
+}
+
+.sticker3D {
+  font-size: 32px;
+  animation: floatBounce 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+.sticker3DHappy {
+  font-size: 32px;
+  animation: popHappy 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: inline-block;
+}
+
+@keyframes floatBounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-4px) rotate(-6deg); }
+}
+
+@keyframes popHappy {
+  0% { transform: scale(0.5) rotate(-15deg); }
+  70% { transform: scale(1.2) rotate(10deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.timerTextWrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.timerLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.timerDigits {
+  font-family: monospace, monospace;
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--primary);
+  letter-spacing: 1px;
+}
+
+.timerDigits.urgent {
+  color: #dc2626;
+  animation: pulseUrgent 1s infinite;
+}
+
+@keyframes pulseUrgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.receiptUploadBox {
+  background: var(--bg-card-sub);
+  border: 2px dashed var(--primary);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.receiptUploadLabel {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.receiptUploadLabel:hover {
+  transform: scale(1.01);
+}
+
+.uploadingSpinner {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 10px;
+}
+
+.uploadedReceiptStatus {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.happyStickerHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.receiptPreviewImg {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 12px;
+  border: 2px solid #16a34a;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
+  object-fit: contain;
+}
+
+/* -------------------------------------------------------------
+   3D PAYMENT PROCESSING ANIMATION & PROGRESS INDICATOR
+------------------------------------------------------------- */
+.paymentProcessing3D {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0 20px;
+  perspective: 1000px;
+  text-align: center;
+}
+
+.hologram3DCube {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 10px auto 5px;
+  transform-style: preserve-3d;
+}
+
+.cube3DRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 4px solid transparent;
+  border-top-color: #be123c;
+  border-right-color: #f43f5e;
+  border-bottom-color: #fef08a;
+  box-shadow: 
+    0 0 25px rgba(225, 29, 72, 0.6),
+    inset 0 0 15px rgba(225, 29, 72, 0.4);
+  animation: spin3DRing 1.8s linear infinite;
+}
+
+.cube3DRingOuter {
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 2px dashed rgba(225, 29, 72, 0.5);
+  animation: spin3DRingReverse 3s linear infinite;
+}
+
+@keyframes spin3DRing {
+  0% { transform: rotateX(60deg) rotateZ(0deg); }
+  100% { transform: rotateX(60deg) rotateZ(360deg); }
+}
+
+@keyframes spin3DRingReverse {
+  0% { transform: rotateX(60deg) rotateZ(360deg); }
+  100% { transform: rotateX(60deg) rotateZ(0deg); }
+}
+
+.cube3DCore {
+  font-size: 38px;
+  animation: pulseCore 1s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 10px rgba(225, 29, 72, 0.7));
+  z-index: 2;
+}
+
+@keyframes pulseCore {
+  0% { transform: scale(0.9) translateZ(0); }
+  100% { transform: scale(1.15) translateZ(20px); }
+}
+
+.processingTitle3D {
+  font-size: 18px;
+  font-weight: 850;
+  color: var(--text-color);
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+/* 3D Glowing Progress Bar */
+.progressTrack3D {
+  width: 100%;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 999px;
+  padding: 3px;
+  border: 1.5px solid rgba(225, 29, 72, 0.3);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(225, 29, 72, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.progressBar3D {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #be123c 0%, #e11d48 50%, #f43f5e 100%);
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: width 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+.glowParticle {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  animation: scanGlow 1.2s infinite;
+}
+
+@keyframes scanGlow {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.progressPercent3D {
+  font-size: 22px;
+  font-weight: 900;
+  color: #e11d48;
+  letter-spacing: 0.5px;
+  margin-top: -6px;
+  text-shadow: 0 2px 8px rgba(225, 29, 72, 0.3);
+}
+
+/* Steps List */
+.processingStepsList {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.stepItem3D {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  color: var(--text-color);
+  opacity: 0.45;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.stepItem3D.active {
+  opacity: 1;
+  border-color: #e11d48;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.2);
+  transform: translateX(4px) scale(1.01);
+  background: rgba(225, 29, 72, 0.06);
+}
+
+.stepItem3D.completed {
+  opacity: 1;
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.stepIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--border-color);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.stepItem3D.active .stepIcon {
+  background: #e11d48;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(225, 29, 72, 0.5);
+  animation: pulseIcon 1s infinite alternate;
+}
+
+@keyframes pulseIcon {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.12); }
+}
+
+.stepItem3D.completed .stepIcon {
+  background: #16a34a;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(22, 163, 74, 0.4);
+}
+
+.stepText {
+  text-align: left;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* 3D Premium Settings Modal Styling */
+.settingsModalCard {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  animation: settingsPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes settingsPopIn {
+  0% {
+    transform: scale(0.9) translateY(20px);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Density / Scaling Rules */
+html[data-density="compact"] {
+  font-size: 14.5px;
+}
+html[data-density="compact"] .productCard,
+html[data-density="compact"] .lineItem,
+html[data-density="compact"] .menuRow {
+  padding: 8px 12px !important;
+}
+html[data-density="compact"] h1,
+html[data-density="compact"] h2 {
+  letter-spacing: -0.3px;
+}
+
+html[data-density="large"] {
+  font-size: 17.5px;
+}
+html[data-density="large"] .productCard,
+html[data-density="large"] .lineItem,
+html[data-density="large"] .menuRow {
+  padding: 16px 24px !important;
+}
+html[data-density="large"] h1,
+html[data-density="large"] h2 {
+  letter-spacing: 0.1px;
+}
+
+/* Haptic toggle hover state and button enhancements */
+.themeChoiceBtn:hover, .langChoiceRow:hover {
+  border-color: var(--primary) !important;
+  background: var(--bg-card-hover) !important;
+}
+
+/* Dark Theme Robust Overrides (Enforcing dark mode globally over hardcoded external light style overrides) */
+html[data-theme="dark"] {
+  background-color: var(--bg-main) !important;
+}
+
+html[data-theme="dark"] body {
+  background: var(--bg-main) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] #root,
+html[data-theme="dark"] .app,
+html[data-theme="dark"] .appShell,
+html[data-theme="dark"] .page {
+  background: var(--bg-main) !important;
+  color: var(--text-main) !important;
+}
+
+/* Topbar & Header */
+html[data-theme="dark"] .topbar {
+  background: rgba(28, 19, 23, 0.96) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+html[data-theme="dark"] .brand {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .brand b {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .brandIcon {
+  background: linear-gradient(145deg, #46202c, #31141e) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+html[data-theme="dark"] .brand small {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .headerActions .iconButton {
+  background: var(--bg-card) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+/* Bottom Navigation */
+html[data-theme="dark"] .guli-bottom-nav-modern,
+html[data-theme="dark"] .bottomNav {
+  background: rgba(28, 19, 23, 0.98) !important;
+  border-top: 1px solid var(--border-color) !important;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6) !important;
+}
+
+html[data-theme="dark"] .bottomNav button {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .bottomNav button.active {
+  color: var(--primary) !important;
+  background: transparent !important;
+}
+
+/* Typography, Headings and Text elements globally */
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6,
+html[data-theme="dark"] .pageHeader h1,
+html[data-theme="dark"] .pageHeader p,
+html[data-theme="dark"] .sectionTitle h2,
+html[data-theme="dark"] .detailContent h1 {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] p,
+html[data-theme="dark"] span,
+html[data-theme="dark"] b,
+html[data-theme="dark"] strong,
+html[data-theme="dark"] small,
+html[data-theme="dark"] label {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] .pageHeader p {
+  color: var(--text-muted) !important;
+}
+
+/* Category Cards */
+html[data-theme="dark"] .categoryCard {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+html[data-theme="dark"] .categoryCard span {
+  color: var(--primary) !important;
+}
+
+html[data-theme="dark"] .categoryCard b {
+  color: var(--text-main) !important;
+}
+
+/* Product Cards */
+html[data-theme="dark"] .productCard {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+html[data-theme="dark"] .productImage {
+  background: var(--bg-card-sub) !important;
+}
+
+html[data-theme="dark"] .productImageWrap {
+  background: var(--bg-card-sub) !important;
+}
+
+html[data-theme="dark"] .productImage .heart,
+html[data-theme="dark"] .heartButton {
+  background: rgba(38, 27, 32, 0.92) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+html[data-theme="dark"] .productBody {
+  background: var(--bg-card) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .productBody h3 {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .productBody>span {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .productBody>small {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .priceLine b {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .priceLine del {
+  color: var(--text-muted) !important;
+}
+
+/* Profile Section & Elements */
+html[data-theme="dark"] .profileHero {
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-card-sub)) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+html[data-theme="dark"] .profileHero h1 {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .profileHero p {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .profileAvatar {
+  background: var(--bg-card-sub) !important;
+  border: 3px solid var(--bg-card) !important;
+  color: var(--primary) !important;
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+html[data-theme="dark"] .verified {
+  background: #064e3b !important;
+  color: #a7f3d0 !important;
+}
+
+html[data-theme="dark"] .profileSection {
+  background: transparent !important;
+}
+
+html[data-theme="dark"] .profileSection>h2 {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .menuRow {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .menuRow:hover {
+  background: var(--bg-card-hover) !important;
+}
+
+html[data-theme="dark"] .menuRow:last-of-type {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+html[data-theme="dark"] .menuRow>span:first-child {
+  background: var(--bg-card-sub) !important;
+  color: var(--primary) !important;
+}
+
+html[data-theme="dark"] .menuRow b {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .menuRow small {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .menuRow i {
+  color: var(--text-muted) !important;
+}
+
+/* Profile Stats and Cards */
+html[data-theme="dark"] .profileStats button {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+html[data-theme="dark"] .profileStats b {
+  color: var(--primary) !important;
+}
+
+html[data-theme="dark"] .profileStats span {
+  color: var(--text-muted) !important;
+}
+
+/* Checkout and Order details */
+html[data-theme="dark"] .checkoutCard,
+html[data-theme="dark"] .savedAddressCard {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .orderCard {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .orderTop b {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .orderTop small {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="dark"] .orderMain h3 {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .orderMain strong {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .orderMain p {
+  color: var(--text-muted) !important;
+}
+
+/* Search Box and Input Fields */
+html[data-theme="dark"] .searchBox {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+html[data-theme="dark"] .searchBox input {
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .tab {
+  background: var(--bg-card) !important;
+  color: var(--text-muted) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+html[data-theme="dark"] .tab.active {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: var(--primary) !important;
+}
+
+/* Modals & Detail pages */
+html[data-theme="dark"] .detailMeta span {
+  background: var(--bg-card-sub) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .stock {
+  background: var(--bg-card-sub) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .detailImageWrap {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+html[data-theme="dark"] .empty>div {
+  background: var(--bg-card-sub) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+html[data-theme="dark"] .guli-catalog-retry {
+  background: var(--bg-card) !important;
+  color: var(--primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+html[data-theme="dark"] .option {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .option.active {
+  border-color: var(--primary) !important;
+  background: var(--bg-card-sub) !important;
+  color: var(--primary) !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* 3D Glossy Emoji Stickers for Profile Section */
+.profileSticker3D {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ffffff 0%, #fdf4f6 50%, #fce7eb 100%);
+  border: 1.5px solid rgba(240, 180, 195, 0.45);
+  box-shadow: 
+    inset 0 -3px 0 #fad3dc, 
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.9),
+    0 4px 10px rgba(184, 73, 98, 0.08), 
+    0 1px 2px rgba(0, 0, 0, 0.05);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-right: 14px;
+  flex-shrink: 0;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.28s ease, background 0.28s ease;
+  user-select: none;
+}
+
+[data-theme="dark"] .profileSticker3D {
+  background: linear-gradient(135deg, #2a1b20 0%, #1c1014 100%);
+  border-color: rgba(184, 73, 98, 0.3);
+  box-shadow: 
+    inset 0 -3px 0 #3b1721,
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.menuRow:hover .profileSticker3D {
+  transform: translateY(-4px) scale(1.1) rotate(4deg);
+  background: linear-gradient(135deg, #ffffff 0%, #fce2e7 100%);
+  box-shadow: 
+    inset 0 -3px 0 #f5b9c7, 
+    inset 0 1.5px 2px rgba(255, 255, 255, 1),
+    0 8px 20px rgba(184, 73, 98, 0.16), 
+    0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .menuRow:hover .profileSticker3D {
+  background: linear-gradient(135deg, #38242b 0%, #241419 100%);
+  box-shadow: 
+    inset 0 -3px 0 #4f1d2b,
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Prevent menuRow's default icon background from overriding sticker when styled */
+.menuRow > .profileSticker3D:first-child {
+  background: linear-gradient(135deg, #ffffff 0%, #fdf4f6 50%, #fce7eb 100%) !important;
+  color: inherit !important;
+  display: inline-flex !important;
+  box-sizing: border-box !important;
+}
+[data-theme="dark"] .menuRow > .profileSticker3D:first-child {
+  background: linear-gradient(135deg, #2a1b20 0%, #1c1014 100%) !important;
+}
+.menuRow:hover > .profileSticker3D:first-child {
+  background: linear-gradient(135deg, #ffffff 0%, #fce2e7 100%) !important;
+}
+[data-theme="dark"] .menuRow:hover > .profileSticker3D:first-child {
+  background: linear-gradient(135deg, #38242b 0%, #241419 100%) !important;
+}

@@ -353,7 +353,9 @@ export const AboutBrandModal: FC<{
 
         <div className="modalBodyContent brandAboutBody">
           <div className="brandHeroCard">
-            <span className="brandHeroIcon">🌷</span>
+            <span className="brandHeroIcon" style={{ overflow: "hidden", borderRadius: "50%", display: "inline-grid", placeItems: "center" }}>
+              <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </span>
             <h3>Go‘zallik va O‘zingizga bo‘lgan ishonch</h3>
             <p>
               GULI — har bir ayolning betakror go‘zalligi, nozikligi va qulayligini ta’minlashga bag‘ishlangan premium ichki kiyimlar brendi. Biz faqat yuqori sifatli, teriga yoqimli va gipoallergen matolardan foydalanamiz.

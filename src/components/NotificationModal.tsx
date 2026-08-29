@@ -4,6 +4,7 @@ import { type ChatMessage, markMessagesAsRead } from "../utils/chatSync";
 type NotificationModalProps = {
   language: Language;
   unreadMessages: ChatMessage[];
+  orders?: any[];
   userId?: string | number;
   onClose: () => void;
   onOpenChat: () => void;
@@ -13,6 +14,7 @@ type NotificationModalProps = {
 export function NotificationModal({
   language,
   unreadMessages,
+  orders = [],
   userId,
   onClose,
   onOpenChat,
@@ -21,18 +23,47 @@ export function NotificationModal({
   const t = (key: any) => getTranslation(key, language);
 
   const handleOpenChat = () => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
     markMessagesAsRead(userId);
     onClose();
     onOpenChat();
   };
 
+  const handleOpenOrders = () => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+    onClose();
+    onOpenOrders();
+  };
+
   const handleMarkAllRead = () => {
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+    } catch {}
     markMessagesAsRead(userId);
     onClose();
   };
 
+  const recentActiveOrders = orders.filter(
+    (o) => o.status === "Qabul qilindi" || o.status === "Tayyorlanmoqda" || o.status === "Yo‘lda"
+  ).slice(0, 3);
+
+  const hasContent = unreadMessages.length > 0 || recentActiveOrders.length > 0;
+
   return (
-    <div className="modalShade" onMouseDown={onClose} id="notification-modal-overlay">
+    <div
+      className="modalShade"
+      onMouseDown={() => {
+        try {
+          window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+        } catch {}
+        onClose();
+      }}
+      id="notification-modal-overlay"
+    >
       <div
         className="notificationModalCard"
         onMouseDown={(e) => e.stopPropagation()}
@@ -40,13 +71,18 @@ export function NotificationModal({
       >
         <div className="modalHead">
           <div>
-            <span className="proEyebrow">GULI ALERTS</span>
+            <span className="proEyebrow">GULI NOTIFICATIONS</span>
             <h2>{t("notifications")}</h2>
           </div>
           <button
             type="button"
             className="modalCloseBtn"
-            onClick={onClose}
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              onClose();
+            }}
             aria-label={t("close")}
             id="notif-close-btn"
           >
@@ -55,7 +91,7 @@ export function NotificationModal({
         </div>
 
         <div className="notificationBody">
-          {unreadMessages.length > 0 ? (
+          {hasContent ? (
             <div className="notifList">
               {unreadMessages.map((msg, index) => (
                 <div
@@ -82,6 +118,31 @@ export function NotificationModal({
                   </div>
                 </div>
               ))}
+
+              {recentActiveOrders.map((ord, idx) => (
+                <div
+                  key={ord.id || idx}
+                  className="notifItem clickable"
+                  onClick={handleOpenOrders}
+                  id={`notif-order-${ord.id || idx}`}
+                >
+                  <div className="notifIconBadge" style={{ background: "linear-gradient(135deg, #e0f2fe, #bae6fd)", color: "#0284c7" }}>
+                    <span>📦</span>
+                  </div>
+                  <div className="notifContent">
+                    <div className="notifTitleRow">
+                      <b>Buyurtma #{ord.id} • {ord.status}</b>
+                      <small>
+                        {ord.createdAt ? new Date(ord.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Yangi"}
+                      </small>
+                    </div>
+                    <p className="notifPreviewText">
+                      {ord.items?.length || 0} ta tovar • Jami: {Number(ord.total || 0).toLocaleString()} so‘m
+                    </p>
+                    <span className="notifActionLink">{t("my_orders")} →</span>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="emptyNotifBox">
@@ -105,10 +166,7 @@ export function NotificationModal({
             <button
               type="button"
               className="notifShortcutBtn"
-              onClick={() => {
-                onClose();
-                onOpenOrders();
-              }}
+              onClick={handleOpenOrders}
               id="notif-open-orders-btn"
             >
               <span>📦</span>
@@ -117,8 +175,8 @@ export function NotificationModal({
           </div>
         </div>
 
-        <div className="notificationFooter">
-          {unreadMessages.length > 0 && (
+        <div className="notificationFooter" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--border-color)" }}>
+          {unreadMessages.length > 0 ? (
             <button
               type="button"
               className="markAllReadBtn"
@@ -127,11 +185,17 @@ export function NotificationModal({
             >
               {t("mark_all_read")}
             </button>
-          )}
+          ) : <div />}
           <button
             type="button"
             className="primaryButton"
-            onClick={onClose}
+            style={{ padding: "10px 20px", borderRadius: "14px", fontSize: "12px", fontWeight: "800" }}
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              onClose();
+            }}
             id="notif-dismiss-btn"
           >
             {t("close")}
