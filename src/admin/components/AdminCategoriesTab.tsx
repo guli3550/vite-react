@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { EmptyState } from "./AdminUIComponents";
+import { normalizeCategory } from "../../utils/categoryUtils";
+import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
 
 export type Category = {
   id: number;
@@ -12,23 +14,48 @@ export type Category = {
 };
 
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: 1, name: "Byustgalter", slug: "byustgalter", icon: "👙", productCount: 42, sortOrder: 1, active: true },
-  { id: 2, name: "Trusiklar", slug: "trusiklar", icon: "🩲", productCount: 38, sortOrder: 2, active: true },
-  { id: 3, name: "Komplektlar", slug: "komplektlar", icon: "✨", productCount: 56, sortOrder: 3, active: true },
-  { id: 4, name: "Pijamalar & Xalatlar", slug: "pijamalar", icon: "🌙", productCount: 24, sortOrder: 4, active: true },
-  { id: 5, name: "Bodi & Korse", slug: "bodi", icon: "🌹", productCount: 19, sortOrder: 5, active: true },
-  { id: 6, name: "Aksessuarlar & Paypog‘", slug: "aksessuarlar", icon: "🎀", productCount: 15, sortOrder: 6, active: true },
+  { id: 1, name: "Penyuar", slug: "penyuar", icon: "🌸", productCount: 0, sortOrder: 1, active: true },
+  { id: 2, name: "Pijama", slug: "pijama", icon: "🌙", productCount: 0, sortOrder: 2, active: true },
+  { id: 3, name: "Byusgalter", slug: "byusgalter", icon: "👙", productCount: 0, sortOrder: 3, active: true },
+  { id: 4, name: "Mayka", slug: "mayka", icon: "🎽", productCount: 0, sortOrder: 4, active: true },
+  { id: 5, name: "Tursik", slug: "tursik", icon: "🩲", productCount: 0, sortOrder: 5, active: true },
 ];
 
 export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) {
   const [categories, setCategories] = useState<Category[]>(() => {
     try {
       const saved = localStorage.getItem("guli_admin_categories");
-      return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return DEFAULT_CATEGORIES;
     } catch {
       return DEFAULT_CATEGORIES;
     }
   });
+
+  // Calculate live product counts for each category
+  const categoriesWithLiveCounts = useMemo(() => {
+    let allProds = DEFAULT_PRODUCTS;
+    try {
+      const savedProds = localStorage.getItem("guli_products");
+      if (savedProds) {
+        const parsed = JSON.parse(savedProds);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          allProds = parsed;
+        }
+      }
+    } catch {}
+
+    return categories.map((cat) => {
+      const normalizedCatName = normalizeCategory(cat.name);
+      const count = allProds.filter(
+        (p) => normalizeCategory(p.category) === normalizedCatName
+      ).length;
+      return { ...cat, productCount: count };
+    });
+  }, [categories]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
@@ -123,7 +150,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
               </tr>
             </thead>
             <tbody>
-              {categories.map((cat) => (
+              {categoriesWithLiveCounts.map((cat) => (
                 <tr key={cat.id}>
                   <td>
                     <span className="catIconDisplay">{cat.icon}</span>

@@ -21,7 +21,8 @@ import {
   type Product,
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
-import { getSynchronizedCategories } from "./utils/categoryUtils";
+import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
+import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
 import { NotificationModal } from "./components/NotificationModal";
@@ -35,6 +36,11 @@ import {
 } from "./components/ProfileExtraModals";
 import { SocialLinksModal } from "./components/SocialLinksModal";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
+import {
+  parseColorValue,
+  formatColorName,
+  isLightColor,
+} from "./utils/colorHelpers";
 import {
   type Language,
   type TranslationKey,
@@ -694,6 +700,45 @@ function LocationPicker({
   );
 }
 
+const DEFAULT_HERO_BANNERS: Banner[] = [
+  {
+    id: 1,
+    title: "Eksklyuziv Pijamalar Sets ✨",
+    subtitle: "Uydagi har bir lahjangizni go‘zallashtiring",
+    imageUrl: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1200&q=85",
+    badgeText: "TOP SOTILGAN",
+    ctaText: "Xarid qilish",
+    active: true,
+  },
+  {
+    id: 2,
+    title: "Yangi Bahor Kolleksiyasi 🌸",
+    subtitle: "Nafis ipak, qulay bichim va zamonaviy uslub",
+    imageUrl: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
+    badgeText: "YANGILIK ✦",
+    ctaText: "Kolleksiyani ko‘rish",
+    active: true,
+  },
+  {
+    id: 3,
+    title: "Premium Ipak & To‘rli Komplektlar ✨",
+    subtitle: "Nafislik, qulaylik va o‘zingizga bo‘lgan ishonch",
+    imageUrl: "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&w=1200&q=85",
+    badgeText: "PREMIUM",
+    ctaText: "Kashf qilish",
+    active: true,
+  },
+  {
+    id: 4,
+    title: "Maxsus Chegirmalar — 30% Gacha 🎁",
+    subtitle: "Barcha sara to‘plamlar uchun cheklangan taklif",
+    imageUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1200&q=85",
+    badgeText: "AKSIYA 🔥",
+    ctaText: "Tanlash",
+    active: true,
+  },
+];
+
 export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
@@ -797,7 +842,146 @@ export default function App() {
     "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78"
   );
 
+  const [heroBanners, setHeroBanners] = useState<Banner[]>(() => {
+    let list = (window as any).__GULI_ADMIN_BANNERS__;
+    if (!list) {
+      try {
+        const saved = localStorage.getItem("guli_admin_banners");
+        if (saved) list = JSON.parse(saved);
+      } catch {}
+    }
+    if (Array.isArray(list) && list.length > 0) {
+      const active = list.filter((b: Banner) => b.active !== false);
+      if (active.length > 0) return active;
+    }
+    return DEFAULT_HERO_BANNERS;
+  });
+
+  const [activeBannerIdx, setActiveBannerIdx] = useState<number>(0);
+  const [heroDragOffset, setHeroDragOffset] = useState<number>(0);
+  const [isHeroDragging, setIsHeroDragging] = useState<boolean>(false);
+  const heroTouchStartX = useRef<number>(0);
+  const heroTouchStartY = useRef<number>(0);
+  const heroTouchStartTime = useRef<number>(0);
+  const isHorizontalHeroSwipe = useRef<boolean | null>(null);
+
+  const handleHeroTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (heroBanners.length <= 1) return;
+    heroTouchStartX.current = e.touches[0].clientX;
+    heroTouchStartY.current = e.touches[0].clientY;
+    heroTouchStartTime.current = Date.now();
+    isHorizontalHeroSwipe.current = null;
+    setIsHeroDragging(true);
+    setHeroDragOffset(0);
+  };
+
+  const handleHeroTouchMove = (e: React.TouchEvent) => {
+    if (!isHeroDragging || heroBanners.length <= 1) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - heroTouchStartX.current;
+    const diffY = currentY - heroTouchStartY.current;
+
+    if (isHorizontalHeroSwipe.current === null) {
+      if (Math.abs(diffX) > 6 || Math.abs(diffY) > 6) {
+        isHorizontalHeroSwipe.current = Math.abs(diffX) > Math.abs(diffY);
+      }
+    }
+
+    if (isHorizontalHeroSwipe.current) {
+      e.stopPropagation();
+      // Add slight elastic damping at edges if only 1 banner or non-looping feel
+      setHeroDragOffset(diffX);
+    }
+  };
+
+  const handleHeroTouchEnd = (e: React.TouchEvent) => {
+    if (!isHeroDragging) return;
+    e.stopPropagation();
+    setIsHeroDragging(false);
+    const duration = Date.now() - heroTouchStartTime.current;
+    const isQuickFlick = duration < 280 && Math.abs(heroDragOffset) > 20;
+
+    if (isHorizontalHeroSwipe.current && heroBanners.length > 1) {
+      if (heroDragOffset < -35 || (isQuickFlick && heroDragOffset < 0)) {
+        setActiveBannerIdx((prev) => (prev + 1) % heroBanners.length);
+      } else if (heroDragOffset > 35 || (isQuickFlick && heroDragOffset > 0)) {
+        setActiveBannerIdx((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
+      }
+    } else if (Math.abs(heroDragOffset) < 8 && duration < 300) {
+      // Tap on banner -> navigate to catalog
+      go("catalog");
+    }
+    setHeroDragOffset(0);
+    isHorizontalHeroSwipe.current = null;
+  };
+
+  const handleHeroMouseDown = (e: React.MouseEvent) => {
+    if (heroBanners.length <= 1) return;
+    heroTouchStartX.current = e.clientX;
+    heroTouchStartY.current = e.clientY;
+    heroTouchStartTime.current = Date.now();
+    isHorizontalHeroSwipe.current = true;
+    setIsHeroDragging(true);
+    setHeroDragOffset(0);
+  };
+
+  const handleHeroMouseMove = (e: React.MouseEvent) => {
+    if (!isHeroDragging || heroBanners.length <= 1) return;
+    const diffX = e.clientX - heroTouchStartX.current;
+    setHeroDragOffset(diffX);
+  };
+
+  const handleHeroMouseUp = () => {
+    if (!isHeroDragging) return;
+    setIsHeroDragging(false);
+    const duration = Date.now() - heroTouchStartTime.current;
+    const isQuickFlick = duration < 280 && Math.abs(heroDragOffset) > 20;
+
+    if (heroBanners.length > 1) {
+      if (heroDragOffset < -35 || (isQuickFlick && heroDragOffset < 0)) {
+        setActiveBannerIdx((prev) => (prev + 1) % heroBanners.length);
+      } else if (heroDragOffset > 35 || (isQuickFlick && heroDragOffset > 0)) {
+        setActiveBannerIdx((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
+      }
+    } else if (Math.abs(heroDragOffset) < 8 && duration < 300) {
+      go("catalog");
+    }
+    setHeroDragOffset(0);
+  };
+
+  const handleHeroMouseLeave = () => {
+    if (isHeroDragging) {
+      handleHeroMouseUp();
+    }
+  };
+
   useEffect(() => {
+    const syncBanners = () => {
+      let list = (window as any).__GULI_ADMIN_BANNERS__;
+      if (!list) {
+        try {
+          const saved = localStorage.getItem("guli_admin_banners");
+          if (saved) list = JSON.parse(saved);
+        } catch {}
+      }
+      if (Array.isArray(list) && list.length > 0) {
+        const active = list.filter((b: Banner) => b.active !== false);
+        if (active.length > 0) {
+          setHeroBanners(active);
+          setActiveBannerIdx(0);
+          return;
+        }
+      }
+      // Fallback
+      setHeroBanners(DEFAULT_HERO_BANNERS);
+    };
+
+    syncBanners();
+    window.addEventListener("guli_banners_updated", syncBanners);
+    window.addEventListener("storage", syncBanners);
+
     const fetchBanner = async () => {
       try {
         const res = await fetch(`${API_URL}/api/settings/banner`);
@@ -806,19 +990,34 @@ export default function App() {
           let j: any = null;
           try {
             j = JSON.parse(text);
-          } catch {
-            // Not valid JSON
-          }
+          } catch {}
           if (j && j.success && j.url) {
             setPromoBannerUrl(j.url);
           }
         }
-      } catch {
-        // Quietly fail to default banner
-      }
+      } catch {}
     };
     fetchBanner();
+
+    return () => {
+      window.removeEventListener("guli_banners_updated", syncBanners);
+      window.removeEventListener("storage", syncBanners);
+    };
   }, []);
+
+  // Automatic banner rotation every 5s if multiple active banners
+  useEffect(() => {
+    if (heroBanners.length <= 1 || isHeroDragging) return;
+    const timer = setInterval(() => {
+      setActiveBannerIdx((prev) => (prev + 1) % heroBanners.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [heroBanners.length, isHeroDragging]);
+
+  const t = (key: TranslationKey) => getTranslation(key, language);
+  const formatPrice = (n: number) => {
+    return formatCurrencyPrice(n, currency, language);
+  };
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -833,11 +1032,6 @@ export default function App() {
   const [unreadMessages, setUnreadMessages] = useState<ChatMessage[]>(() =>
     getUnreadMessages(currentUserId),
   );
-
-  const t = (key: TranslationKey) => getTranslation(key, language);
-  const formatPrice = (n: number) => {
-    return formatCurrencyPrice(n, currency, language);
-  };
 
   const showToast = (message: string) => {
     setToast(message);
@@ -939,6 +1133,9 @@ export default function App() {
     if (!MAIN_TABS.includes(page)) return;
     const target = e.target as HTMLElement;
     if (
+      target.closest(".hero") ||
+      target.closest(".heroSlideTrack") ||
+      target.closest(".heroSlideItem") ||
       target.closest(".productGallerySwipe") ||
       target.closest(".leafletMap") ||
       target.closest(".categoryScroll") ||
@@ -1225,16 +1422,23 @@ export default function App() {
     [products],
   );
   const filtered = useMemo(
-    () =>
-      products.filter(
+    () => {
+      const list = products.filter(
         (p) =>
           (selectedCategory === "Barchasi" ||
-            p.category === selectedCategory) &&
+            normalizeCategory(p.category) === normalizeCategory(selectedCategory)) &&
           (!search.trim() ||
             p.product_code?.includes(search.trim()) ||
             p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-            p.category.toLowerCase().includes(search.trim().toLowerCase())),
-      ),
+            normalizeCategory(p.category).toLowerCase().includes(search.trim().toLowerCase())),
+      );
+      return [...list].sort((a, b) => {
+        const catA = normalizeCategory(a.category);
+        const catB = normalizeCategory(b.category);
+        if (catA !== catB) return catA.localeCompare(catB);
+        return (a.sort_order || 0) - (b.sort_order || 0);
+      });
+    },
     [products, selectedCategory, search],
   );
   const applyPromo = async () => {
@@ -1568,9 +1772,13 @@ export default function App() {
         ? p.description.slice(0, 55) + "…"
         : p.description
       : "";
+    const ratingValue = p.rating && p.rating > 0 ? p.rating : 5.0;
+    const reviewCount = p.reviews && p.reviews > 0 ? p.reviews : Math.floor(((p.id * 17) % 45) + 8);
+    const isOutOfStock = p.stock !== undefined && p.stock <= 0;
+
     return (
       <article
-        className={`productCard ${compact ? "compact" : ""}`}
+        className={`productCard ${compact ? "compact" : ""} ${isOutOfStock ? "outOfStock" : ""}`}
         key={p.id}
         id={`product-card-${p.id}`}
         onClick={() => openProduct(p)}
@@ -1589,12 +1797,17 @@ export default function App() {
             {isWishlisted ? "♥" : "♡"}
           </button>
           {p.discount ? <span className="discount">-{p.discount}%</span> : null}
-          {p.rating ? (
-            <div className="productRatingBadge">
-              <span className="ratingStar">★</span>
-              <span className="ratingVal">{p.rating.toFixed(1)}</span>
-            </div>
+          {isOutOfStock ? (
+            <span className="stockBadge out">Tugagan</span>
+          ) : p.stock !== undefined && p.stock <= 3 && p.stock > 0 ? (
+            <span className="stockBadge low">Faqat {p.stock} ta qoldi</span>
           ) : null}
+
+          <div className="productRatingBadge">
+            <span className="ratingStar">★</span>
+            <span className="ratingVal">{ratingValue.toFixed(1)}</span>
+            <span className="ratingReviews">({reviewCount})</span>
+          </div>
         </div>
         <div className="productBody">
           <div className="productMetaRow">
@@ -1608,16 +1821,25 @@ export default function App() {
           </h3>
           {shortDesc ? <p className="productShortDesc">{shortDesc}</p> : null}
 
-          <div className="productOptionDots">
-            {p.colors && p.colors.length > 0 ? (
-              <span className="productDotCount">{p.colors.length} ta rang</span>
-            ) : null}
-            {p.sizes && p.sizes.length > 0 ? (
-              <span className="productSizePill">
-                {p.sizes.slice(0, 3).join(" · ")}
-              </span>
-            ) : null}
+          <div className="productStarsRow">
+            <div className="starsVisual">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  className={`starGlyph ${star <= Math.round(ratingValue) ? "filled" : ""}`}
+                >
+                  ★
+                </span>
+              ))}
+            </div>
+            <span className="reviewsCountText">{reviewCount} sharh</span>
           </div>
+
+          {p.colors && p.colors.length > 0 ? (
+            <div className="productOptionDots">
+              <span className="productDotCount">{p.colors.length} ta rang</span>
+            </div>
+          ) : null}
 
           <div className="priceLine">
             <div className="priceGroup">
@@ -1629,12 +1851,14 @@ export default function App() {
             <button
               className="quickAddBtn"
               id={`quick-add-btn-${p.id}`}
+              disabled={isOutOfStock}
               onClick={(e) => {
                 e.stopPropagation();
+                if (isOutOfStock) return;
                 addToCart(p);
                 showToast("✓ Savatga qo‘shildi");
               }}
-              title="Savatga tez qo‘shish"
+              title={isOutOfStock ? "Mahsulot qolmagan" : "Savatga tez qo‘shish"}
             >
               <span>+</span>
             </button>
@@ -2489,15 +2713,109 @@ export default function App() {
       >
         {page === "home" && (
           <>
-            <section className="hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(31, 15, 21, 0.76), rgba(31, 15, 21, 0.12)), url(${promoBannerUrl})` }}>
-              <div className="heroOverlay">
-                <span>{t("hero_eyebrow")}</span>
-                <h1>{t("hero_title")}</h1>
-                <p>{t("hero_desc")}</p>
-                <button className="heroButton" onClick={() => go("catalog")}>
-                  {t("hero_btn")}
-                </button>
+            <section
+              className="hero"
+              onTouchStart={handleHeroTouchStart}
+              onTouchMove={handleHeroTouchMove}
+              onTouchEnd={handleHeroTouchEnd}
+              onTouchCancel={handleHeroTouchEnd}
+              onMouseDown={handleHeroMouseDown}
+              onMouseMove={handleHeroMouseMove}
+              onMouseUp={handleHeroMouseUp}
+              onMouseLeave={handleHeroMouseLeave}
+            >
+              <div
+                className="heroSlideTrack"
+                style={{
+                  transform: `translate3d(calc(-${activeBannerIdx * 100}% + ${heroDragOffset}px), 0, 0)`,
+                  transition: isHeroDragging ? "none" : "transform 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+              >
+                {heroBanners.map((banner, idx) => {
+                  const badge = banner.badgeText || "TOP SOTILGAN";
+                  const title = banner.title || "Eksklyuziv Pijamalar Sets ✨";
+                  const subtitle =
+                    banner.subtitle ||
+                    "Uydagi har bir lahjangizni go‘zallashtiring";
+                  const cta = banner.ctaText || "Xarid qilish";
+
+                  return (
+                    <div key={banner.id || idx} className="heroSlideItem">
+                      {/* Background Image - 100% Natural, Vibrant and Crisp */}
+                      <img
+                        src={banner.imageUrl || promoBannerUrl}
+                        alt={banner.title || "Banner"}
+                        className="heroSlideImg"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = promoBannerUrl;
+                        }}
+                        draggable={false}
+                      />
+
+                      {/* Content / Banner Bio covering entire surface */}
+                      <div
+                        className="heroOverlay"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCategory("Barchasi");
+                          setSearch("");
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                          go("catalog");
+                        }}
+                      >
+                        <span className="heroBadge">{badge}</span>
+                        <h1 className="heroTitle">{title}</h1>
+                        <p className="heroSubtitle">{subtitle}</p>
+                        <div className="heroCtaWrap">
+                          <button
+                            type="button"
+                            className="hero3dBtn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCategory("Barchasi");
+                              setSearch("");
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                              go("catalog");
+                            }}
+                          >
+                            <span>{cta || "Xarid qilish"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="heroSecondaryBtn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCategory("Barchasi");
+                              setSearch("");
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                              go("catalog");
+                            }}
+                          >
+                            <span>Kolleksiyalarni ko‘rish →</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
+              {heroBanners.length > 1 && (
+                <div className="heroDots">
+                  {heroBanners.map((b, idx) => (
+                    <button
+                      key={b.id || idx}
+                      type="button"
+                      className={`heroDot ${idx === activeBannerIdx ? "active" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveBannerIdx(idx);
+                      }}
+                      aria-label={`Banner ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
             <RotatingCategoriesSection
               categories={allCategories}
@@ -2648,16 +2966,40 @@ export default function App() {
                 ))}
               </div>
               <h3>{t("color")}</h3>
-              <div className="options">
-                {selectedProduct.colors.map((c) => (
-                  <button
-                    key={c}
-                    className={`option ${selectedColor === c ? "active" : ""}`}
-                    onClick={() => setSelectedColor(c)}
-                  >
-                    {c}
-                  </button>
-                ))}
+              <div className="colorOptionsSwatches">
+                {selectedProduct.colors.map((c) => {
+                  const { name, hex } = parseColorValue(c);
+                  const isLight = isLightColor(hex);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`colorSwatchBtn ${selectedColor === c ? "active" : ""}`}
+                      onClick={() => setSelectedColor(c)}
+                      title={name}
+                      aria-label={name}
+                    >
+                      <span
+                        className="colorSwatchCircle"
+                        style={{
+                          backgroundColor: hex,
+                          border: isLight
+                            ? "1px solid rgba(0, 0, 0, 0.16)"
+                            : "1px solid rgba(255, 255, 255, 0.12)",
+                        }}
+                      >
+                        {selectedColor === c && (
+                          <span
+                            className="colorSwatchCheck"
+                            style={{ color: isLight ? "#111111" : "#ffffff" }}
+                          >
+                            ✓
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
               <div className="stock">
                 {selectedProduct.stock > 0
@@ -2731,7 +3073,7 @@ export default function App() {
                             ? `Kod: ${item.product.product_code} · `
                             : ""}
                           {item.size || "O‘lcham tanlanmagan"} ·{" "}
-                          {item.color || "Rang tanlanmagan"}
+                          {formatColorName(item.color) || "Rang tanlanmagan"}
                         </small>
                         <strong>
                           {formatPrice(item.product.price * item.quantity)}

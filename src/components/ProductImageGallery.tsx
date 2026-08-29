@@ -16,6 +16,8 @@ export interface Product {
   reviews: number;
   stock: number;
   featured?: boolean;
+  active?: boolean;
+  sort_order?: number;
   discount?: number;
 }
 

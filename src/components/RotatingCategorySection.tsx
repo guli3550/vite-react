@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
-import { type CategoryInfo } from "../utils/categoryUtils";
+import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
 
 export type { CategoryInfo };
 
@@ -21,7 +21,8 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 }) => {
   // Ushbu kategoriyaga tegishli mahsulotlar
   const categoryProducts = useMemo(() => {
-    return products.filter(p => p.category === category.name);
+    const targetNorm = normalizeCategory(category.name);
+    return products.filter(p => normalizeCategory(p.category) === targetNorm);
   }, [products, category.name]);
 
   // Barcha rasmlar va tovarlar ro'yxati (har bir tovarning rasmlari bilan)
@@ -90,7 +91,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
   }, [rotatingItems.length, index]);
 
   const currentItem = rotatingItems[activeItemIndex] || null;
-  const count = categoryProducts.length;
 
   const handleClickCard = () => {
     if (currentItem?.product) {
@@ -98,11 +98,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
     } else {
       onSelect(category.name);
     }
-  };
-
-  const handleCategoryBadgeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect(category.name);
   };
 
   return (
@@ -138,21 +133,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           </div>
         )}
         <div className="catCardOverlay" />
-      </div>
-
-      {/* Top Header Badge */}
-      <div className="catCardTop">
-        {count > 0 ? (
-          <span
-            className="catCountBadge"
-            onClick={handleCategoryBadgeClick}
-            title={`${category.name} toifasidagi barcha ${count} ta mahsulotni ko'rish`}
-          >
-            {count} xil ›
-          </span>
-        ) : (
-          <span className="catCountBadge empty">Katalog ›</span>
-        )}
       </div>
 
       {/* Rotating Live Product Info or Category Title */}

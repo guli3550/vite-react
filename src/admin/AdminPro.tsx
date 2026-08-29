@@ -16,6 +16,7 @@ import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import { AdminExtensionsTab } from "./components/AdminExtensionsTab";
 import { MetricCard } from "./components/AdminUIComponents";
+import { formatColorName } from "../utils/colorHelpers";
 
 import "./AdminPro.css";
 import "./ReviewsNav.css";
@@ -1535,7 +1536,7 @@ function OrderDrawer({
                     {it.product?.product_code
                       ? `Kod: ${it.product.product_code} · `
                       : ""}
-                    {it.size || "—"} · {it.color || "—"} ·{" "}
+                    {it.size || "—"} · {formatColorName(it.color) || "—"} ·{" "}
                     {it.quantity || 1} dona
                   </small>
                 </div>

@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatColorName } from "./colorHelpers";
 
 export interface OrderItemExport {
   product?: {
@@ -151,7 +152,7 @@ export function exportOrdersToPDF(options: ExportPdfOptions): boolean {
         const pName = it.product?.name || "Mahsulot";
         const pCode = it.product?.product_code ? `[Kod: ${it.product.product_code}]` : "";
         const pQty = it.quantity && it.quantity > 1 ? `x${it.quantity}` : "";
-        const pOpts = [it.size, it.color].filter(Boolean).join("/");
+        const pOpts = [it.size, formatColorName(it.color || "")].filter(Boolean).join("/");
         const optStr = pOpts ? `(${pOpts})` : "";
         return `${pName} ${pCode} ${optStr} ${pQty}`.trim();
       })
