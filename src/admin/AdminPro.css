@@ -55,7 +55,62 @@
 
 @media(max-width:800px){
   .adminChatContainer{grid-template-columns:1fr;height:auto}
-  .convSidebar{max-height:220px}
-  .adminChatMessagesScroll{height:360px}
+  .adminChatContainer.mobile-view-list .chatConversationWindow{display:none}
+  .adminChatContainer.mobile-view-chat .convSidebar{display:none}
+  .convSidebar{max-height:550px}
+  .adminChatMessagesScroll{height:380px}
 }
 @media(max-width:760px){.mainImagePicker{grid-template-columns:100px 1fr}.mainImagePreview,.mainImageEmpty{width:100px;height:125px}.imageUploadSection{padding:12px}.imageUploadTitle h3{font-size:15px}.uploadButton{width:100%}.extraImageHead{align-items:flex-start;flex-direction:column}}
+
+/* Platform Preview Bar */
+.platformPreviewBar{display:inline-flex;align-items:center;gap:4px;background:#f6eaed;border:1px solid #ebd4db;border-radius:14px;padding:3px 6px}
+.platformBarLabel{font-size:10px;font-weight:700;color:#9b7a84;padding:0 4px}
+.platformPreviewBar button{border:0;background:transparent;padding:6px 10px;border-radius:10px;font-size:11px;color:#6b575e;cursor:pointer;transition:all .15s ease;font-weight:600}
+.platformPreviewBar button:hover{background:#eed2d9;color:var(--rose)}
+.platformPreviewBar button.active{background:var(--rose);color:#fff;font-weight:700;box-shadow:0 4px 12px rgba(182,83,107,.25)}
+
+.mobileBackToConvBtn{display:none;border:1px solid var(--line);background:#fff;border-radius:10px;padding:6px 11px;font-size:12px;font-weight:700;color:var(--rose);cursor:pointer;margin-right:8px}
+
+@media(max-width:800px){
+  .mobileBackToConvBtn{display:inline-flex;align-items:center}
+}
+
+/* TV Mode Accessibility for Admin */
+html[data-platform="tv"] .proShell{font-size:17px}
+html[data-platform="tv"] .proSide{width:280px}
+html[data-platform="tv"] .proMain{margin-left:280px;width:calc(100% - 280px);padding:36px}
+html[data-platform="tv"] .convCard:focus,
+html[data-platform="tv"] .adminQuickChip:focus,
+html[data-platform="tv"] .sideNav button:focus,
+html[data-platform="tv"] .platformPreviewBar button:focus,
+html[data-platform="tv"] .adminChatInput:focus,
+html[data-platform="tv"] .adminSendBtn:focus{outline:4px solid var(--rose)!important;outline-offset:2px!important;transform:scale(1.02)}
+
+/* Exit to Web App Buttons */
+.exitToClientBtn, .exitWebAppTopBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rose);
+  background: #fdf0f3;
+  border: 1px solid #f7d2dc;
+  border-radius: 12px;
+  padding: 8px 14px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.exitToClientBtn:hover, .exitWebAppTopBtn:hover {
+  background: var(--rose);
+  color: #fff;
+  border-color: var(--rose);
+  box-shadow: 0 4px 14px rgba(182, 83, 107, 0.25);
+}
+.exitToClientBtn {
+  width: 100%;
+}
+

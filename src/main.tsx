@@ -206,7 +206,11 @@ if (typeof window !== 'undefined') {
   }, true)
 }
 
-const isAdmin = typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/admin'
+const isAdmin = typeof window !== 'undefined' && (
+  window.location.pathname.replace(/\/$/, '').endsWith('/admin') ||
+  window.location.search.includes('admin') ||
+  window.location.hash === '#admin'
+)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

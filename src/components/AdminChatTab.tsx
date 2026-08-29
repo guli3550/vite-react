@@ -6,27 +6,63 @@ import {
   getStoredChatMessages,
   sendAdminReply,
   subscribeToChat,
+  saveChatMessages,
 } from "../utils/chatSync";
 
 type AdminChatTabProps = {
   token?: string;
-  onShowToast?: (msg: string) => void;
 };
 
-export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) {
-  void token;
-  const [conversations, setConversations] = useState<ConversationSummary[]>(() => getAllConversations());
-  const [selectedUserId, setSelectedUserId] = useState<string>("guest-user");
-  const [replyText, setReplyText] = useState("");
-  const [allMessages, setAllMessages] = useState<ChatMessage[]>(() => getStoredChatMessages());
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordTimer, setRecordTimer] = useState(0);
-  const timerIntervalRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+// Pre-seed sample chats if empty for instant previewing
+function seedSampleChatsIfEmpty() {
+  const current = getStoredChatMessages();
+  if (current.length <= 1) {
+    const samples: ChatMessage[] = [
+      {
+        id: "msg-sample-1",
+        sender: "user",
+        text: "Assalomu alaykum! Yangi kolleksiya byustgalterlarining 75B o‘lchami bormi?",
+        timestamp: new Date(Date.now() - 3600000).toISOString(),
+        read: false,
+        userId: "998901234567",
+        userName: "Malika Rahimova",
+        userPhoto: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+      },
+      {
+        id: "msg-sample-2",
+        sender: "user",
+        text: "Salom admin, buyurtmam qachon yetkaziladi?",
+        timestamp: new Date(Date.now() - 1800000).toISOString(),
+        read: false,
+        userId: "telegram-88392",
+        userName: "Dilnoza (Telegram)",
+      },
+    ];
+    saveChatMessages([...current, ...samples]);
+  }
+}
 
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+export default function AdminChatTab({ token }: AdminChatTabProps) {
+  // token reserved for authenticated admin backend push
+  void token;
+
+  useEffect(() => {
+    seedSampleChatsIfEmpty();
+  }, []);
+
+  const [conversations, setConversations] = useState<ConversationSummary[]>(() =>
+    getAllConversations()
+  );
+  const [selectedUserId, setSelectedUserId] = useState<string>(() => {
+    const list = getAllConversations();
+    return list[0]?.userId || "998901234567";
+  });
+  const [replyText, setReplyText] = useState("");
+  const [allMessages, setAllMessages] = useState<ChatMessage[]>(() =>
+    getStoredChatMessages()
+  );
+  // Mobile UI view toggle: "list" or "chat"
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Real-time synchronization
@@ -50,128 +86,43 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentMessages]);
+  }, [currentMessages, mobileView]);
 
-  const handleSendReply = (
-    e?: FormEvent,
-    customText?: string,
-    media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }
-  ) => {
+  const handleSelectUser = (uId: string) => {
+    setSelectedUserId(uId);
+    setMobileView("chat");
+  };
+
+  const handleSendReply = (e?: FormEvent, customText?: string) => {
     if (e) e.preventDefault();
     const textToSend = (customText || replyText).trim();
-    if (!textToSend && !media) return;
-    if (!selectedUserId) return;
+    if (!textToSend || !selectedUserId) return;
 
-    sendAdminReply(
-      selectedUserId,
-      textToSend || (media?.type === "image" ? "📷 Rasm" : media?.type === "audio" ? "🎙️ Ovozli xabar" : "📁 Fayl"),
-      media
-    );
+    sendAdminReply(selectedUserId, textToSend);
     setReplyText("");
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      handleSendReply(undefined, "📷 Rasm", { type: "image", mediaUrl: base64, fileName: file.name });
-      onShowToast?.("Rasm yuborildi ✓");
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      handleSendReply(undefined, `📁 ${file.name}`, { type: "file", mediaUrl: base64, fileName: file.name });
-      onShowToast?.("Fayl yuborildi ✓");
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Audio = reader.result as string;
-          handleSendReply(undefined, "🎙️ Ovozli xabar", { type: "audio", mediaUrl: base64Audio, fileName: "voice.webm" });
-          onShowToast?.("Ovozli xabar yuborildi ✓");
-        };
-        reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setRecordTimer(0);
-      timerIntervalRef.current = setInterval(() => {
-        setRecordTimer((prev) => prev + 1);
-      }, 1000);
-    } catch {
-      onShowToast?.("Mikrofondan foydalanishga ruxsat berilmadi");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      clearInterval(timerIntervalRef.current);
-      setRecordTimer(0);
-    }
   };
 
   const quickReplies = [
     "Assalomu alaykum! GULI do‘koniga xush kelibsiz 🌷 Sizga qanday yordam bera olamiz?",
-    "Buyurtmangiz tekshirilmoqda, 5 daqiqa ichida operatorimiz tasdiqlaydi ⏳",
-    "Buyurtmangiz yo‘lda, kuryerimiz 1-2 soat ichida siz bilan bog‘lanadi 🚚",
+    "Buyurtmangiz tekshirilmoqda, 5 daqiqa ichida tasdiqlaymiz ⏳",
+    "Buyurtmangiz yo‘lda, kuryerimiz 1-2 soat ichida bog‘lanadi 🚚",
     "Mahsulot o‘lchami to‘liq mos keladi, qulaylik uchun 1 o‘lcham kattaroq tanlashni tavsiya qilamiz.",
     "Biz bilan bog‘langaningiz uchun rahmat! Yana qanday savollaringiz bor? 🌸",
   ];
 
   return (
     <section className="proPanel chatAdminPanel" id="admin-chat-panel">
-      {/* Hidden inputs */}
-      <input
-        type="file"
-        ref={imageInputRef}
-        style={{ display: "none" }}
-        accept="image/*"
-        onChange={handleImageSelect}
-      />
-      <input
-        type="file"
-        ref={fileInputRef}
-        style={{ display: "none" }}
-        onChange={handleFileSelect}
-      />
-
-      <div className="panelHead">
+      <div className="panelHead chatTabHeader">
         <div>
-          <span className="proEyebrow">REAL-TIME SUPPORT</span>
+          <span className="proEyebrow">REAL-TIME MULTI-PLATFORM CHAT</span>
           <h2>Mijozlar bilan onlayn chat ({conversations.length})</h2>
+        </div>
+        <div className="chatPlatformIndicator">
+          <span className="liveBadge">● LIVE SYNC</span>
         </div>
       </div>
 
-      <div className="adminChatContainer">
+      <div className={`adminChatContainer mobile-view-${mobileView}`}>
         {/* Left column: Conversation list */}
         <div className="convSidebar">
           <div className="convListHead">
@@ -184,10 +135,17 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
               return (
                 <div
                   key={conv.userId}
+                  tabIndex={0}
                   className={`convCard ${isSelected ? "active" : ""} ${
                     conv.unreadCount > 0 ? "hasUnread" : ""
                   }`}
-                  onClick={() => setSelectedUserId(conv.userId)}
+                  onClick={() => handleSelectUser(conv.userId)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSelectUser(conv.userId);
+                    }
+                  }}
                   id={`admin-conv-user-${conv.userId}`}
                 >
                   <div className="convAvatar">
@@ -223,6 +181,14 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
           {/* Header */}
           <div className="chatConvHeader">
             <div className="chatConvUser">
+              <button
+                type="button"
+                className="mobileBackToConvBtn"
+                onClick={() => setMobileView("list")}
+                title="Ro'yxatga qaytish"
+              >
+                ← Ro'yxat
+              </button>
               <div className="avatarLargeMini">
                 {selectedConv?.userPhoto ? (
                   <img src={selectedConv.userPhoto} alt="User" />
@@ -232,13 +198,14 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
               </div>
               <div>
                 <b>{selectedConv?.userName || "Mijoz"}</b>
-                <small>Telegram ID: {selectedUserId} · Onlayn</small>
+                <small>ID: {selectedUserId} · Onlayn</small>
               </div>
             </div>
             <a
               href="tel:+998905811117"
               className="chatPhoneShortcut"
-              title="Call Center"
+              title="Call Center bilan bog'lanish"
+              tabIndex={0}
             >
               📞 +998905811117
             </a>
@@ -260,26 +227,7 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
                       {isAdmin ? "Admin (Siz)" : msg.userName || "Mijoz"}
                     </div>
                     <div className="adminBubbleText">
-                      {msg.type === "image" && msg.mediaUrl ? (
-                        <div className="chatMediaImage">
-                          <img src={msg.mediaUrl} alt="Attachment" />
-                          {msg.text && msg.text !== "📷 Rasm" && <p>{msg.text}</p>}
-                        </div>
-                      ) : msg.type === "audio" && msg.mediaUrl ? (
-                        <div className="chatMediaAudio">
-                          <audio controls src={msg.mediaUrl} style={{ width: "100%", maxHeight: "40px" }} />
-                          <span>🎙️ Ovozli xabar</span>
-                        </div>
-                      ) : msg.type === "file" && msg.mediaUrl ? (
-                        <div className="chatMediaFile">
-                          <a href={msg.mediaUrl} download={msg.fileName || "file"}>
-                            📁 {msg.fileName || "Hujjat"}
-                          </a>
-                        </div>
-                      ) : (
-                        <p>{msg.text}</p>
-                      )}
-
+                      <p>{msg.text}</p>
                       <span className="adminBubbleTime">
                         {new Date(msg.timestamp).toLocaleTimeString([], {
                           hour: "2-digit",
@@ -300,6 +248,7 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
               <button
                 key={idx}
                 type="button"
+                tabIndex={0}
                 className="adminQuickChip"
                 onClick={() => handleSendReply(undefined, qr)}
                 title="Tezkor javobni yuborish"
@@ -309,44 +258,8 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
             ))}
           </div>
 
-          {/* Recording status bar */}
-          {isRecording && (
-            <div className="recordingStatusBar adminRecordingBar">
-              <span className="pulsingDot" />
-              <span>Ovoz yozilmoqda... 0:{recordTimer < 10 ? `0${recordTimer}` : recordTimer}</span>
-              <button type="button" className="stopRecordBtn" onClick={stopRecording}>
-                Tugatish va yuborish ✓
-              </button>
-            </div>
-          )}
-
           {/* Input form */}
-          <form className="adminChatInputForm" onSubmit={(e) => handleSendReply(e)}>
-            <button
-              type="button"
-              className="chatAttachBtn"
-              onClick={() => imageInputRef.current?.click()}
-              title="Rasm yuborish"
-            >
-              📷
-            </button>
-            <button
-              type="button"
-              className="chatAttachBtn"
-              onClick={() => fileInputRef.current?.click()}
-              title="Fayl yuborish"
-            >
-              📎
-            </button>
-            <button
-              type="button"
-              className={`chatAttachBtn ${isRecording ? "recordingActive" : ""}`}
-              onClick={isRecording ? stopRecording : startRecording}
-              title="Ovozli xabar"
-            >
-              🎙️
-            </button>
-
+          <form className="adminChatInputForm" onSubmit={handleSendReply}>
             <input
               type="text"
               className="adminChatInput"
@@ -360,6 +273,7 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
               className="proPrimary adminSendBtn"
               disabled={!replyText.trim()}
               id="admin-send-reply-btn"
+              tabIndex={0}
             >
               Yuborish ➤
             </button>
@@ -369,3 +283,4 @@ export default function AdminChatTab({ token, onShowToast }: AdminChatTabProps) 
     </section>
   );
 }
+

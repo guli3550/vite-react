@@ -2392,6 +2392,20 @@ export default function App() {
           </div>
           <i>›</i>
         </button>
+        <button
+          className="menuRow"
+          id="profile-admin-btn"
+          onClick={() => {
+            window.location.href = "/admin";
+          }}
+        >
+          <span>🔐</span>
+          <div>
+            <b>Admin paneli (GULI Admin)</b>
+            <small>Boshqaruv, mahsulotlar, buyurtmalar va chat</small>
+          </div>
+          <i>›</i>
+        </button>
       </section>
     </main>
   );
@@ -2413,6 +2427,28 @@ export default function App() {
           </span>
         </button>
         <div className="headerActions">
+          <a
+            href="/admin"
+            className="adminHeaderShortcut"
+            id="topbar-admin-shortcut"
+            title="Admin paneliga o'tish"
+            style={{
+              textDecoration: "none",
+              fontSize: "12px",
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "6px 12px",
+              background: "var(--rose-soft, #fdf0f3)",
+              border: "1px solid var(--rose-line, #f7d2dc)",
+              borderRadius: "14px",
+              color: "var(--rose, #b6536b)",
+              transition: "all 0.2s ease",
+            }}
+          >
+            🔐 Admin
+          </a>
           <button
             className={`iconButton notifBellBtn ${unreadMessages.length > 0 ? "hasUnread" : ""}`}
             id="topbar-notifications-btn"
