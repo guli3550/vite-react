@@ -2,6 +2,7 @@
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const DEFAULT_MINI_APP_URL = "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829";
 const configuredMiniAppUrl = String(process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || DEFAULT_MINI_APP_URL).trim();
 const MINI_APP_URL = /[?&]tgapp=/.test(configuredMiniAppUrl)
