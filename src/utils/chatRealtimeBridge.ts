@@ -1,3 +1,4 @@
+// Realtime chat bridge: normalize auth headers for TypeScript and keep BroadcastChannel wiring safe.
 const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 const CHANNEL_NAME = "guli_chat_channel_v1";
 const STORAGE_KEY = "guli_chat_messages";
