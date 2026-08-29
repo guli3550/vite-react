@@ -7,7 +7,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
 const supabase = SUPABASE_URL && SUPABASE_SECRET_KEY ? createClient(SUPABASE_URL, SUPABASE_SECRET_KEY) : null;
-const WEB_APP_URL = (process.env.MINI_APP_URL || "").trim() || "https://guli-lingerie-web.onrender.com/?tgapp=v20260826";
+const WEB_APP_URL = (process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829").trim();
 const STORE_TEXT = "🛍 Do‘konni ochish";
 const PAYMENT_LABELS = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
 async function telegramApi(method, body) { if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan"); const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); if (!result.ok) throw new Error(result.description || `Telegram ${method} xatosi`); return result.result; }

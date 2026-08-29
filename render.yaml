@@ -14,7 +14,7 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: MINI_APP_URL
-        value: https://guli-lingerie-web.onrender.com/
+        value: https://vite-react-seven-inky-10.vercel.app/
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD
