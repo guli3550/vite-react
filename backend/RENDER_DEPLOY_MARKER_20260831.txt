@@ -1,0 +1,1 @@
+Render deployment trigger: deploy latest main so Telegram admin settings API, secure bot diagnostics, and canonical Render URL are active in production.
