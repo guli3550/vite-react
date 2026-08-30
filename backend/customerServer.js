@@ -6,6 +6,8 @@ const identityPatchPath = path.join(__dirname, "customerIdentityPatch.js");
 const reviewPatchPath = path.join(__dirname, "reviewPatchV2.js");
 const manualPaymentPatchPath = path.join(__dirname, "manualCardPaymentPatch.js");
 const telegramBotPatchPath = path.join(__dirname, "telegramBotPatch.js");
+const telegramAdminConfigPatchPath = path.join(__dirname, "telegramAdminConfigPatch.js");
+const broadcastDirectRoutePatchPath = path.join(__dirname, "broadcastDirectRoutePatch.js");
 const customerAuthPatchPath = path.join(__dirname, "customerAuthPatch.js");
 const paymentConfirmationRuntimePath = path.join(__dirname, "paymentConfirmationRuntime.js");
 const reviewRuntimePath = path.join(__dirname, "reviewRuntime.js");
@@ -15,6 +17,8 @@ let source = fs.readFileSync(indexPath, "utf8");
 const patch = fs.readFileSync(identityPatchPath, "utf8") + "\n" + fs.readFileSync(reviewPatchPath, "utf8");
 const manualPaymentPatch = fs.readFileSync(manualPaymentPatchPath, "utf8");
 const telegramBotPatch = fs.readFileSync(telegramBotPatchPath, "utf8");
+const telegramAdminConfigPatch = fs.readFileSync(telegramAdminConfigPatchPath, "utf8");
+const broadcastDirectRoutePatch = fs.readFileSync(broadcastDirectRoutePatchPath, "utf8");
 const customerAuthPatch = fs.readFileSync(customerAuthPatchPath, "utf8");
 const paymentConfirmationRuntime = fs.readFileSync(paymentConfirmationRuntimePath, "utf8");
 const reviewRuntime = fs.readFileSync(reviewRuntimePath, "utf8");
@@ -34,10 +38,11 @@ source = source.replace(
   'return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null, photo_url: user.photo_url || null };'
 );
 source = source.replace('express.json({ limit: "4mb" })', 'express.json({ limit: "10mb" })');
+source = source.replace('await telegramApi("setWebhook", { url: webhookUrl });', 'await telegramApi("setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "my_chat_member", "chat_member"] });');
 
 const marker = '\nconst PORT=process.env.PORT||10000;';
 if (!source.includes(marker)) throw new Error("customerServer: backend/index.js marker not found");
-source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${paymentTelegramNotificationPatch}\n${marker}`);
+source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${telegramAdminConfigPatch}\n${broadcastDirectRoutePatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${paymentTelegramNotificationPatch}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
 runner(require, module, module.exports, indexPath, __dirname);
