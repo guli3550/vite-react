@@ -17,12 +17,7 @@ type TelegramChat = {
   active?: boolean;
 };
 
-// Production backend is the Render web service. Keep a compatibility guard so an
-// older Vercel VITE_API_URL pointing at the retired *-api service cannot produce 404s.
-const configuredApi = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
-const API = configuredApi && !configuredApi.includes("guli-lingerie-api.onrender.com")
-  ? configuredApi
-  : "https://guli-lingerie-web.onrender.com";
+const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 
 function adminHeaders() {
   const token = sessionStorage.getItem("guli_admin_token") || "";
@@ -81,7 +76,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
         setTelegramChats(chats);
         setBotConfigured(Boolean(json.data?.botConfigured));
         const primary = chats.find((c: TelegramChat) => c.active !== false);
-        if (primary) setTelegramChannelId(primary.username ? `@${primary.username}` : primary.chat_id || "");
+        if (primary) setTelegramChannelId(primary.chat_id || primary.username ? (primary.username ? `@${primary.username}` : primary.chat_id) : "");
       } catch (error) {
         if (!cancelled) notify(error instanceof Error ? `Telegram sozlamalari: ${error.message}` : "Telegram sozlamalarini yuklashda xatolik");
       } finally {
@@ -243,25 +238,61 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
     <div className="dash" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="proPanel" style={{ background: "linear-gradient(135deg,#1e0f18,#541d2e)", color: "#fff", padding: "24px 28px", borderRadius: 22 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
-          <div><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: "#fca5a5" }}>GULI PRO CONTROL CENTER</span><h1 style={{ margin: "6px 0 0", fontSize: 26 }}>⚙️ Tizim va Ilova Sozlamalari</h1><p style={{ margin: "6px 0 0", opacity: 0.8 }}>Telegram, to'lov, do'kon va interfeys sozlamalarini xavfsiz boshqaring.</p></div>
-          <div style={{ display: "flex", gap: 10 }}><button type="button" onClick={handleExportSettings}>📤 Eksport</button><button type="button" onClick={() => fileInputRef.current?.click()}>📥 Import</button><button type="button" onClick={handleSaveAllSettings}>💾 Saqlash</button><input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportSettings} style={{ display: "none" }} /></div>
+          <div><span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: "#fca5a5" }}>GULI PRO CONTROL CENTER</span><h1 style={{ margin: "6px 0 0", fontSize: 26 }}>⚙️ Tizim va Ilova Sozlamalari</h1><p style={{ margin: "6px 0 0", color: "#f3d2dc", fontSize: 13 }}>Telegram, to'lov, do'kon va interfeys sozlamalarini xavfsiz boshqaring.</p></div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={handleExportSettings} style={{ padding: "10px 16px", borderRadius: 12, fontWeight: 700 }}>📥 Eksport</button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} style={{ padding: "10px 16px", borderRadius: 12, fontWeight: 700 }}>📤 Import</button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportSettings} style={{ display: "none" }} />
+            <button type="button" onClick={() => handleSaveAllSettings()} style={{ padding: "11px 18px", borderRadius: 12, fontWeight: 800 }}>💾 Saqlash</button>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 2 }}>{tabs.map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} style={{ padding: "10px 16px", borderRadius: 14, border: activeTab === id ? "2px solid #b11d4a" : "1px solid #e2e8f0", background: activeTab === id ? "#fff0f4" : "#fff", fontWeight: 700, whiteSpace: "nowrap" }}>{label}</button>)}</div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        {tabs.map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} style={{ padding: "10px 16px", borderRadius: 14, whiteSpace: "nowrap", fontWeight: 700, border: activeTab === id ? "2px solid #be123c" : "1px solid #e2e8f0", background: activeTab === id ? "#fcecef" : "#fff", color: activeTab === id ? "#be123c" : "#334155" }}>{label}</button>)}
+      </div>
 
-      {(activeTab === "all" || activeTab === "appearance") && <section style={sectionStyle}><h2>🎨 Tashqi Ko'rinish</h2><div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={() => toggleTheme("light")}>☀️ Kun</button><button type="button" onClick={() => toggleTheme("dark")}>🌙 Tun</button><select value={language} onChange={(e) => changeLanguage(e.target.value as "uz" | "ru" | "en")}><option value="uz">🇺🇿 O'zbekcha</option><option value="ru">🇷🇺 Русский</option><option value="en">🇬🇧 English</option></select><label><input type="checkbox" checked={notifSoundEnabled} onChange={(e) => toggleSound(e.target.checked)} /> 🔔 Ovoz</label></div></section>}
+      <form onSubmit={handleSaveAllSettings} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {(activeTab === "all" || activeTab === "appearance") && <section style={sectionStyle}><h2>🎨 Tashqi Ko'rinish, Til va Ovoz</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
+          <div><b>🌗 Kun / Tun</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => toggleTheme("light")}>☀️ Kun</button><button type="button" onClick={() => toggleTheme("dark")}>🌙 Tun</button></div></div>
+          <div><b>🌐 Til</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => changeLanguage("uz")}>🇺🇿 O'zbek</button><button type="button" onClick={() => changeLanguage("ru")}>🇷🇺 Русский</button><button type="button" onClick={() => changeLanguage("en")}>🇬🇧 English</button></div></div>
+          <div><b>🔔 Chat bildirishnoma ovozi</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => toggleSound(true)}>🔊 Yoqilgan</button><button type="button" onClick={() => toggleSound(false)}>🔇 O'chirilgan</button></div></div>
+        </div><div style={{ marginTop: 18 }}><b>📱 Qurilma preview</b><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>{["android","telegram","windows","tv","browser"].map((p) => <button key={p} type="button" onClick={() => onPlatformChange?.(p as PlatformType)}>{p === activePlatform ? "✓ " : ""}{p}</button>)}</div></div></section>}
 
-      {(activeTab === "all" || activeTab === "finance") && <section style={sectionStyle}><h2>💳 To'lov va Support Kartalari</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}><label>Checkout karta<input style={inputStyle} value={paymentCardNumber} onChange={(e) => setPaymentCardNumber(formatCardDigits(e.target.value))} /></label><label>Karta egasi<input style={inputStyle} value={paymentCardHolder} onChange={(e) => setPaymentCardHolder(e.target.value)} /></label><label>Support karta<input style={inputStyle} value={supportCardNumber} onChange={(e) => setSupportCardNumber(formatCardDigits(e.target.value))} /></label><label>Support karta egasi<input style={inputStyle} value={supportCardHolder} onChange={(e) => setSupportCardHolder(e.target.value)} /></label></div></section>}
+        {(activeTab === "all" || activeTab === "finance") && <section style={sectionStyle}><h2>💳 To'lov va Support Kartalari</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}>
+          <label>Checkout karta<input style={inputStyle} value={paymentCardNumber} onChange={(e) => setPaymentCardNumber(formatCardDigits(e.target.value))} /></label>
+          <label>Karta egasi<input style={inputStyle} value={paymentCardHolder} onChange={(e) => setPaymentCardHolder(e.target.value)} /></label>
+          <label>Support karta<input style={inputStyle} value={supportCardNumber} onChange={(e) => setSupportCardNumber(formatCardDigits(e.target.value))} /></label>
+          <label>Support karta egasi<input style={inputStyle} value={supportCardHolder} onChange={(e) => setSupportCardHolder(e.target.value)} /></label>
+        </div></section>}
 
-      {(activeTab === "all" || activeTab === "store") && <section style={sectionStyle}><h2>📞 Do'kon va Yetkazib Berish</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}><label>Do'kon nomi<input style={inputStyle} value={storeName} onChange={(e) => setStoreName(e.target.value)} /></label><label>Call Center<input style={inputStyle} value={callCenterPhone} onChange={(e) => setCallCenterPhone(e.target.value)} /></label><label>Ish vaqti<input style={inputStyle} value={workHours} onChange={(e) => setWorkHours(e.target.value)} /></label><label>Bepul yetkazish chegarasi<input style={inputStyle} value={freeDeliveryThreshold} onChange={(e) => setFreeDeliveryThreshold(e.target.value)} /></label><label>Standart yetkazish<input style={inputStyle} value={standardDeliveryFee} onChange={(e) => setStandardDeliveryFee(e.target.value)} /></label><label>Do'kon manzili<input style={inputStyle} value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} /></label></div></section>}
+        {(activeTab === "all" || activeTab === "store") && <section style={sectionStyle}><h2>📞 Do'kon va Yetkazib Berish</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
+          <label>Do'kon nomi<input style={inputStyle} value={storeName} onChange={(e) => setStoreName(e.target.value)} /></label>
+          <label>Call Center<input style={inputStyle} value={callCenterPhone} onChange={(e) => setCallCenterPhone(e.target.value)} /></label>
+          <label>Ish vaqti<input style={inputStyle} value={workHours} onChange={(e) => setWorkHours(e.target.value)} /></label>
+          <label>Bepul yetkazish chegarasi<input type="number" style={inputStyle} value={freeDeliveryThreshold} onChange={(e) => setFreeDeliveryThreshold(e.target.value)} /></label>
+          <label>Standart yetkazish<input type="number" style={inputStyle} value={standardDeliveryFee} onChange={(e) => setStandardDeliveryFee(e.target.value)} /></label>
+          <label style={{ gridColumn: "1 / -1" }}>Do'kon manzili<input style={inputStyle} value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} /></label>
+        </div></section>}
 
-      {(activeTab === "all" || activeTab === "integrations") && <section style={sectionStyle}><h2>⚡ Click, Payme va Telegram</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}><label>Click Merchant ID<input style={inputStyle} value={clickMerchantId} onChange={(e) => setClickMerchantId(e.target.value)} /></label><label>Payme Merchant ID<input style={inputStyle} value={paymeMerchantId} onChange={(e) => setPaymeMerchantId(e.target.value)} /></label></div><div style={{ marginTop: 18, padding: 18, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}><h3>🔐 Telegram Bot Token</h3><p style={{ color: "#64748b" }}>Bot token brauzerda saqlanmaydi. U faqat Render Environment Variable: <b>TELEGRAM_BOT_TOKEN</b> orqali ishlaydi.</p><div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><strong style={{ color: botConfigured ? "#15803d" : "#b91c1c" }}>{botConfigured ? "🟢 Server bot tokeni sozlangan" : "🔴 Server bot tokeni sozlanmagan"}</strong><button type="button" onClick={testServerBot} disabled={botTest.loading}>{botTest.loading ? "Tekshirilmoqda..." : "🤖 Botni tekshirish"}</button>{botUsername && <span>@{botUsername}</span>}</div>{botTest.message && <div style={{ marginTop: 10 }}>{botTest.success ? "✅ " : "❌ "}{botTest.message}</div>}<hr style={{ margin: "18px 0", border: 0, borderTop: "1px solid #e2e8f0" }} /><label>📢 Asosiy Telegram kanal/guruh ID yoki username<input style={inputStyle} value={telegramChannelId} onChange={(e) => setTelegramChannelId(e.target.value)} placeholder="@guli_official yoki -1001234567890" /></label><button type="button" onClick={saveTelegramChat} disabled={telegramLoading} style={{ marginTop: 12 }}>🌐 Serverga global saqlash</button>{telegramChats.length > 0 ? <div style={{ marginTop: 16 }}><b>📡 Ro'yxatdan o'tgan Telegram chatlar</b>{telegramChats.map((chat) => <div key={chat.chat_id} style={{ marginTop: 8, padding: 10, borderRadius: 10, background: "#fff", border: "1px solid #e2e8f0" }}>{chat.title || chat.chat_id} — {chat.bot_status || "unknown"}</div>)}</div> : <div style={{ marginTop: 16, color: "#64748b" }}>Hali chat registri yo'q.</div>}</div></section>}
+        {(activeTab === "all" || activeTab === "integrations") && <section style={sectionStyle}><h2>⚡ Click, Payme va Telegram</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}>
+          <label>Click Merchant ID<input style={inputStyle} value={clickMerchantId} onChange={(e) => setClickMerchantId(e.target.value)} /></label>
+          <label>Payme Merchant ID<input style={inputStyle} value={paymeMerchantId} onChange={(e) => setPaymeMerchantId(e.target.value)} /></label>
+          <div style={{ gridColumn: "1 / -1", padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+            <b>🔐 Telegram Bot Token</b><p style={{ margin: "6px 0 12px", fontSize: 12, color: "#64748b" }}>Bot token endi brauzerda saqlanmaydi. U faqat Render Environment Variable: <code>TELEGRAM_BOT_TOKEN</code> orqali ishlaydi.</p>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}><span style={{ fontWeight: 800, color: botConfigured ? "#047857" : "#b91c1c" }}>{botConfigured ? "🟢 Server bot sozlangan" : "🔴 Server bot tokeni sozlanmagan"}</span>{botUsername && <span>@{botUsername}</span>}<button type="button" onClick={testServerBot} disabled={botTest.loading}>{botTest.loading ? "⏳ Tekshirilmoqda" : "🤖 Botni tekshirish"}</button></div>
+            {botTest.message && <div style={{ marginTop: 10, color: botTest.success ? "#047857" : "#b91c1c", fontWeight: 700 }}>{botTest.success ? "✅ " : "❌ "}{botTest.message}</div>}
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}><label>📣 Asosiy Telegram kanal/guruh ID yoki username<input style={inputStyle} value={telegramChannelId} onChange={(e) => setTelegramChannelId(e.target.value)} placeholder="@guli_official yoki -1001234567890" /></label><button type="button" onClick={saveTelegramChat} disabled={telegramLoading} style={{ marginTop: 10 }}>🌐 Serverga global saqlash</button></div>
+          <div style={{ gridColumn: "1 / -1" }}><b>📡 Ro'yxatdan o'tgan Telegram chatlar</b><div style={{ marginTop: 8, display: "grid", gap: 8 }}>{telegramChats.length ? telegramChats.map((chat) => <div key={chat.chat_id} style={{ padding: 10, borderRadius: 10, background: "#f8fafc", border: "1px solid #e2e8f0" }}><b>{chat.title || chat.chat_id}</b> — <code>{chat.chat_id}</code> <span style={{ color: chat.can_post_messages === false ? "#b91c1c" : "#047857" }}>{chat.can_post_messages === false ? "❌ post yo'q" : "✅ post mumkin"}</span></div>) : <span style={{ color: "#64748b" }}>Hali chat registry yo'q.</span>}</div></div>
+        </div></section>}
 
-      {(activeTab === "all" || activeTab === "system") && <section style={sectionStyle}><h2>⚙️ Tizim va Zaxira</h2><p style={{ color: "#64748b" }}>JSON backup ichiga bot token kiritilmaydi. Tokenni faqat Render Environment Variables boshqaradi.</p><div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={handleExportSettings}>📤 Xavfsiz JSON eksport</button><button type="button" onClick={() => fileInputRef.current?.click()}>📥 Import</button><button type="button" onClick={() => setShowResetConfirm(true)}>⚠️ Reset</button></div></section>}
+        {(activeTab === "all" || activeTab === "system") && <section style={sectionStyle}><h2>⚙️ Tizim va Zaxira</h2><p style={{ color: "#64748b", fontSize: 13 }}>JSON backup ichiga bot token kiritilmaydi. Tokenni faqat Render Environment Variables boshqaradi.</p><div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><button type="button" onClick={handleExportSettings}>📥 Xavfsiz JSON eksport</button><button type="button" onClick={() => fileInputRef.current?.click()}>📤 Import</button><button type="button" onClick={() => setShowResetConfirm(true)}>⚠️ Reset</button></div></section>}
 
-      <div style={{ display: "flex", justifyContent: "center" }}><button type="button" onClick={handleSaveAllSettings} style={{ padding: "14px 26px", borderRadius: 16, fontWeight: 800 }}>💾 Barcha sozlamalarni saqlash</button></div>
-      {showResetConfirm && <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "grid", placeItems: "center", zIndex: 1000 }}><div style={{ background: "#fff", padding: 24, borderRadius: 18, maxWidth: 360 }}><h3>Sozlamalarni reset qilasizmi?</h3><p>Faqat browserdagi sozlamalar boshlang'ich holatga qaytadi.</p><div style={{ display: "flex", gap: 10 }}><button type="button" onClick={resetSettings}>Ha, reset</button><button type="button" onClick={() => setShowResetConfirm(false)}>Bekor</button></div></div></div>}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}><button type="submit" style={{ padding: "14px 30px", borderRadius: 16, fontWeight: 800 }}>💾 Barcha sozlamalarni saqlash</button></div>
+      </form>
+
+      {showResetConfirm && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 99999, display: "grid", placeItems: "center", padding: 20 }}><div style={{ background: "#fff", padding: 28, borderRadius: 20, maxWidth: 420, width: "100%" }}><h3>⚠️ Dastlabki holatga qaytarilsinmi?</h3><p>Barcha lokal admin sozlamalari standart qiymatlarga qaytadi. Telegram bot tokeni serverda qoladi.</p><div style={{ display: "flex", gap: 10 }}><button type="button" onClick={() => setShowResetConfirm(false)}>Bekor qilish</button><button type="button" onClick={resetSettings}>Ha, qaytarish</button></div></div></div>}
     </div>
   );
 }
