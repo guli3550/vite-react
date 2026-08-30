@@ -1,12 +1,13 @@
 // Server-side Telegram configuration API.
-// A chat is only marked postable after Telegram confirms the bot's membership/permissions.
+// Telegram chat targets are discovered/verified dynamically; no per-group code or deployment is needed.
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
-const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+
+function getBotToken() { return String(process.env.TELEGRAM_BOT_TOKEN || "").trim(); }
 
 function verifyAdmin(req) {
   const h = String(req.headers.authorization || "");
@@ -28,8 +29,9 @@ function normalizeChatId(value) {
 }
 
 async function telegramApi(method, body) {
-  if (!BOT_TOKEN) throw new Error("Render serverida TELEGRAM_BOT_TOKEN sozlanmagan");
-  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+  const token = getBotToken();
+  if (!token) throw new Error("Render serverida TELEGRAM_BOT_TOKEN sozlanmagan");
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -43,8 +45,23 @@ function canPostFromMember(member, chat) {
   const status = String(member?.status || "");
   if (status === "creator") return true;
   if (status !== "administrator") return false;
+  // Channel admins use can_post_messages; group admins normally have
+  // can_send_messages or no restriction field at all.
   if (chat?.type === "channel") return member?.can_post_messages !== false;
   return member?.can_send_messages !== false;
+}
+
+function rowFromTelegramChat(chat, member) {
+  return {
+    chat_id: String(chat.id),
+    title: chat.title || chat.username || String(chat.id),
+    username: chat.username || null,
+    chat_type: ["group", "supergroup", "channel"].includes(chat.type) ? chat.type : "supergroup",
+    bot_status: String(member?.status || "administrator"),
+    can_post_messages: true,
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
 }
 
 async function resolveAndVerifyChat(raw) {
@@ -53,20 +70,45 @@ async function resolveAndVerifyChat(raw) {
   const chat = await telegramApi("getChat", { chat_id: input });
   const me = await telegramApi("getMe", {});
   const member = await telegramApi("getChatMember", { chat_id: chat.id, user_id: me.id });
-  const allowed = canPostFromMember(member, chat);
-  if (!allowed) {
+  if (!canPostFromMember(member, chat)) {
     throw new Error(`Bot bu chatda admin yoki post qilish huquqiga ega emas (status: ${member?.status || "unknown"})`);
   }
-  return {
-    chat_id: String(chat.id),
-    title: chat.title || chat.username || String(chat.id),
-    username: chat.username || null,
-    chat_type: ["group", "supergroup", "channel"].includes(chat.type) ? chat.type : "supergroup",
-    bot_status: member.status,
-    can_post_messages: true,
-    active: true,
-    updated_at: new Date().toISOString(),
-  };
+  return rowFromTelegramChat(chat, member);
+}
+
+async function upsertChatRow(row) {
+  if (!supabase || !row?.chat_id) return null;
+  const { data, error } = await supabase
+    .from("telegram_broadcast_chats")
+    .upsert(row, { onConflict: "chat_id" })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function autoRegisterFromWebhook(update) {
+  const change = update?.my_chat_member;
+  if (!change?.chat?.id || !change?.new_chat_member) return;
+  const chat = change.chat;
+  const member = change.new_chat_member;
+  const status = String(member.status || "");
+
+  // When the bot is added/promoted, immediately register the target.
+  if (status === "administrator" || status === "creator") {
+    if (!canPostFromMember(member, chat)) return;
+    await upsertChatRow(rowFromTelegramChat(chat, member));
+    return;
+  }
+
+  // If the bot leaves/is kicked, disable the target instead of deleting history.
+  if (status === "left" || status === "kicked") {
+    if (supabase) {
+      await supabase.from("telegram_broadcast_chats")
+        .update({ active: false, can_post_messages: false, bot_status: status, updated_at: new Date().toISOString() })
+        .eq("chat_id", String(chat.id));
+    }
+  }
 }
 
 async function getConfiguredChats() {
@@ -87,7 +129,7 @@ express.application.listen = function telegramConfigListen(...args) {
     if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
     try {
       const chats = await getConfiguredChats();
-      res.json({ success: true, data: { botConfigured: Boolean(BOT_TOKEN), miniAppUrl: process.env.MINI_APP_URL, chats } });
+      res.json({ success: true, data: { botConfigured: Boolean(getBotToken()), miniAppUrl: process.env.MINI_APP_URL, chats } });
     } catch (e) {
       res.status(500).json({ success: false, message: e.message || "Telegram sozlamalarini yuklashda xatolik" });
     }
@@ -98,22 +140,24 @@ express.application.listen = function telegramConfigListen(...args) {
     const raw = String(req.body?.chatId || "").trim();
     if (!raw) return res.status(400).json({ success: false, message: "Kanal/guruh ID kiritilmagan" });
     if (!supabase) return res.status(503).json({ success: false, message: "Supabase sozlanmagan" });
-    if (!BOT_TOKEN) return res.status(503).json({ success: false, message: "TELEGRAM_BOT_TOKEN sozlanmagan" });
+    if (!getBotToken()) return res.status(503).json({ success: false, message: "TELEGRAM_BOT_TOKEN sozlanmagan" });
 
     try {
-      // Resolve @username or numeric ID, then verify the actual bot membership/permissions.
-      // Never fabricate administrator/posting flags in the database.
       const row = await resolveAndVerifyChat(raw);
-      const { data, error } = await supabase
-        .from("telegram_broadcast_chats")
-        .upsert(row, { onConflict: "chat_id" })
-        .select("*")
-        .single();
-      if (error) return res.status(500).json({ success: false, message: error.message });
+      const data = await upsertChatRow(row);
       return res.json({ success: true, message: `${row.title} saqlandi — bot post qila oladi ✅`, data });
     } catch (e) {
       return res.status(400).json({ success: false, message: e.message || "Telegram chatni tekshirishda xatolik" });
     }
+  });
+
+  // Telegram sends my_chat_member updates when this bot is added, promoted,
+  // demoted or removed from a group/channel. Capture them before the normal
+  // webhook route so new admin targets appear automatically in Supabase.
+  app.use("/api/telegram/webhook", (req, res, next) => {
+    autoRegisterFromWebhook(req.body).catch((error) => {
+      console.error("[Telegram auto chat discovery]", error?.message || error);
+    }).finally(() => next());
   });
 
   return originalListen.apply(this, args);
