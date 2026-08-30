@@ -14,6 +14,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://guli-lingerie-api.onrender.com/api/:path*" },
     { "source": "/admin", "destination": "/index.html" },
     { "source": "/admin/(.*)", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
