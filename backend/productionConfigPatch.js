@@ -6,10 +6,10 @@ const CANONICAL_MINI_APP_URL = String(
 process.env.MINI_APP_URL = CANONICAL_MINI_APP_URL;
 
 // Canonical Render backend URL. index.js reads RENDER_EXTERNAL_URL after this
-// patch is loaded, so Telegram webhook registration never falls back to the
-// retired guli-lingerie-api service.
+// patch is loaded, so Telegram webhook registration always targets the active
+// guli-lingerie-api service.
 process.env.RENDER_EXTERNAL_URL = String(
-  process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-web.onrender.com"
+  process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com"
 ).trim().replace(/\/$/, "");
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
