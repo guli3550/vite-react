@@ -1084,6 +1084,14 @@ export default function App() {
     localStorage.setItem(`guli_promo_alerts_${currentUserId}`, String(promoAlerts));
   }, [promoAlerts, currentUserId]);
 
+  // Listen to admin settings updates
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  useEffect(() => {
+    const handleSettingsUpdate = () => setSettingsVersion((v) => v + 1);
+    window.addEventListener("guli_settings_updated", handleSettingsUpdate);
+    return () => window.removeEventListener("guli_settings_updated", handleSettingsUpdate);
+  }, []);
+
   // Subscribe to real-time chat updates & unread message count
   useEffect(() => {
     const refreshUnread = () => {
@@ -1433,7 +1441,19 @@ export default function App() {
     );
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const subtotal = cart.reduce((s, i) => s + i.product.price * i.quantity, 0);
-  const delivery = subtotal >= 300000 ? 0 : 20000;
+
+  // Dynamic delivery calculations from admin settings
+  const adminSettings = useMemo(() => {
+    void settingsVersion;
+    try {
+      return JSON.parse(localStorage.getItem("guli_admin_settings") || "{}");
+    } catch {
+      return {};
+    }
+  }, [settingsVersion]);
+  const freeDeliveryThreshold = Number(adminSettings.freeDeliveryThreshold) || 300000;
+  const standardDeliveryFee = adminSettings.standardDeliveryFee !== undefined ? Number(adminSettings.standardDeliveryFee) : 20000;
+  const delivery = subtotal >= freeDeliveryThreshold ? 0 : standardDeliveryFee;
   const discount = promoApplied ? Math.min(subtotal, promoDiscount) : 0;
   const total = Math.max(0, subtotal + delivery - discount);
   const allCategories = useMemo(
