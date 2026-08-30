@@ -150,23 +150,31 @@ async function sendSingleImage(chatId, image, caption, markup) {
 }
 
 async function sendAlbum(chatId, images, caption, markup) {
+  // Telegram does not allow an inline keyboard on a media-group item.
+  // Keep the album visually clean (no caption on the first photo), then send
+  // exactly one text/action message containing the campaign text and button.
   const media = images.map((image, index) => ({
     type: "photo",
     media: image.kind === "url" ? image.url : `attach://broadcast${index}`,
-    ...(index === 0 ? { caption, parse_mode: "HTML" } : {}),
   }));
-  const files = images.filter((image) => image.kind === "buffer").map((image, index) => ({
-    name: `broadcast${images.indexOf(image)}`,
-    buffer: image.buffer,
-    mime: image.mime,
-    filename: image.filename,
-  }));
+  const files = images.map((image, index) => image.kind === "buffer"
+    ? { name: `broadcast${index}`, buffer: image.buffer, mime: image.mime, filename: image.filename }
+    : null
+  ).filter(Boolean);
+
   const result = files.length
     ? await telegramMultipart("sendMediaGroup", { chat_id: chatId, media: JSON.stringify(media) }, files)
     : await telegramApi("sendMediaGroup", { chat_id: chatId, media });
-  // Telegram media groups cannot have an inline keyboard on each album item.
-  // Send the action button as a separate message after the album.
-  if (markup) await telegramApi("sendMessage", { chat_id: chatId, text: "🛍️ Online Market", reply_markup: markup });
+
+  // The text and CTA are intentionally one message, so there is no redundant
+  // "Online Market" message between the album and the actual CTA button.
+  await telegramApi("sendMessage", {
+    chat_id: chatId,
+    text: caption || "🛍️ Online Market",
+    parse_mode: "HTML",
+    reply_markup: markup,
+    disable_web_page_preview: true,
+  });
   return result;
 }
 
