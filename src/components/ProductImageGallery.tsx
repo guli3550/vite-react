@@ -173,21 +173,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
               </>
             )}
 
-            {/* Pagination Dots */}
-            <div className="galleryDots" onClick={(e) => e.stopPropagation()}>
-              {imageList.map((_, i) => (
-                <button
-                  type="button"
-                  key={i}
-                  className={`galleryDot ${i === index ? "active" : ""}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIndex(i);
-                  }}
-                  aria-label={`Rasm ${i + 1}`}
-                />
-              ))}
-            </div>
+
 
             {/* Counter badge (e.g. 1/3) in detail view */}
             {detail && (

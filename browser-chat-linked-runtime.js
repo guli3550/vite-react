@@ -29,7 +29,7 @@
   }
 
   const originalFetch = window.fetch.bind(window);
-  window.fetch = (input, init) => {
+  const customFetch = (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (url.startsWith(API) && url.endsWith('/api/chat/messages') && String(init?.method || 'GET').toUpperCase() === 'POST' && typeof init?.body === 'string') {
       try {
@@ -40,6 +40,18 @@
     }
     return originalFetch(input, init);
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    try {
+      window.fetch = customFetch;
+    } catch {}
+  }
 
   const sync = () => normalizeLocalMessages();
   window.addEventListener('guli_chat_updated', sync);

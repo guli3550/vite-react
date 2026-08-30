@@ -34,6 +34,8 @@ const toProduct = (row) => ({
   reviews: Number(row.reviews || 0),
   stock: Number(row.stock || 0),
   featured: Boolean(row.featured),
+  active: row.active !== false,
+  sort_order: Number(row.sort_order || 0),
   discount:
     row.old_price && Number(row.old_price) > Number(row.price)
       ? Math.round((1 - Number(row.price) / Number(row.old_price)) * 100)
@@ -44,7 +46,6 @@ async function listProducts({ category, search, featured, limit = 100 } = {}) {
   let query = supabase
     .from("products")
     .select("*")
-    .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(Number(limit) || 100, 1), 100));

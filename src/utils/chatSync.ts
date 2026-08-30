@@ -64,7 +64,41 @@ export function getStoredChatMessages(userId?: string | number): ChatMessage[] {
 export function saveChatMessages(messages: ChatMessage[]): void { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); broadcastChannel?.postMessage({ type: "SYNC_MESSAGES", messages }); window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: messages })); } catch (err) { console.error("Error saving chat messages:", err); } }
 export function getUnreadMessages(userId?: string | number): ChatMessage[] { return getStoredChatMessages(userId).filter(m => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1"); }
 export function getUnreadAdminMessagesCount(userId?: string | number): number { return getStoredChatMessages(userId).filter(m => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1").length; }
-export function markMessagesAsRead(userId?: string | number, role: "admin" | "user" = "admin"): void { const messages = getStoredChatMessages(); const target = role === "admin" ? "user" : "admin"; let changed = false; const updated = messages.map(m => { if (m.sender === target && !m.read && (!userId || !m.userId || String(m.userId) === String(userId))) { changed = true; return { ...m, read: true }; } return m; }); if (changed) { saveChatMessages(updated); localStorage.setItem(NOTIFICATIONS_KEY, "0"); window.dispatchEvent(new CustomEvent("guli_notifications_updated", { detail: 0 })); } }
+export function markMessagesAsRead(userId?: string | number, role: "admin" | "user" = "user"): void {
+  const messages = getStoredChatMessages();
+  const target = role === "admin" ? "user" : "admin";
+  let changed = false;
+  const updated = messages.map(m => {
+    if (m.sender === target && !m.read && (!userId || !m.userId || String(m.userId) === String(userId))) {
+      changed = true;
+      return { ...m, read: true };
+    }
+    return m;
+  });
+  if (changed) {
+    saveChatMessages(updated);
+    if (role === "user") {
+      localStorage.setItem(NOTIFICATIONS_KEY, "0");
+      window.dispatchEvent(new CustomEvent("guli_notifications_updated", { detail: 0 }));
+    }
+  }
+}
+
+export function markAllAdminChatRead(): void {
+  const messages = getStoredChatMessages();
+  let changed = false;
+  const updated = messages.map(m => {
+    if (m.sender === "user" && !m.read) {
+      changed = true;
+      return { ...m, read: true };
+    }
+    return m;
+  });
+  if (changed) {
+    saveChatMessages(updated);
+  }
+}
+
 export function getTotalUnreadChatCount(): number { return getAllConversations().reduce((sum, c) => sum + (c.unreadCount || 0), 0); }
 
 export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage> {

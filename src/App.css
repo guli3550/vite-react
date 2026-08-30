@@ -64,7 +64,7 @@ img{max-width:100%}
 .notifBellBtn{font-size:19px;color:var(--text-main);position:relative}
 .notifBellBtn.hasUnread{border-color:rgba(225,29,72,.5);background:var(--bg-card)}
 .notifBellBtn.hasUnread .bellIconSpan{display:inline-block;transform-origin:top center;animation:bellWiggle 2.2s infinite ease-in-out}
-.notifBadge{position:absolute;top:-3px;right:-3px;background:linear-gradient(135deg,#e11d48,#be123c);color:#fff;border-radius:999px;font-size:10px;font-weight:850;min-width:20px;height:20px;padding:0 5px;display:grid;place-items:center;border:2px solid var(--bg-card);box-shadow:0 3px 10px rgba(225,29,72,.45);z-index:2;animation:badgePop .3s ease-out}
+.notifBadge{position:absolute;top:-3px;right:-3px;background:linear-gradient(135deg,#e11d48,#be123c);color:#fff;border-radius:999px;font-size:10px;font-weight:850;min-transform: scale(1.3);height:20px;padding:0 5px;display:grid;place-items:center;border:2px solid var(--bg-card);box-shadow:0 3px 10px rgba(225,29,72,.45);z-index:2;animation:badgePop .3s ease-out}
 .bellPulse{position:absolute;inset:-5px;border-radius:50%;border:2px solid rgba(225,29,72,.7);pointer-events:none;animation:bellPulseAnim 2s cubic-bezier(.24,0,.38,1) infinite;z-index:0}
 .bellPulse::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid rgba(225,29,72,.4);animation:bellPulseAnim 2s cubic-bezier(.24,0,.38,1) infinite .6s}
 
@@ -123,6 +123,33 @@ img{max-width:100%}
   -webkit-backface-visibility:hidden;
   backface-visibility:hidden;
   transform:translateZ(0);
+}
+
+/* Telegram Bot Mini Web App banner ratio: 2.39:1 (browser and others stay in original 16:10 aspect ratio) */
+.telegramHeroBanner,
+.platform-telegram .hero,
+[data-platform="telegram"] .hero {
+  aspect-ratio: 2.39 / 1 !important;
+}
+
+.telegramHeroBanner .heroOverlay,
+.platform-telegram .heroOverlay,
+[data-platform="telegram"] .heroOverlay {
+  padding: clamp(10px, 3.2vw, 20px);
+}
+
+.telegramHeroBanner .heroTitle,
+.platform-telegram .heroTitle,
+[data-platform="telegram"] .heroTitle {
+  font-size: clamp(15px, 4vw, 28px);
+  margin-bottom: clamp(3px, 1vw, 6px);
+}
+
+.telegramHeroBanner .heroSubtitle,
+.platform-telegram .heroSubtitle,
+[data-platform="telegram"] .heroSubtitle {
+  font-size: clamp(10px, 2.2vw, 12.5px);
+  margin-bottom: clamp(6px, 1.5vw, 10px);
 }
 .hero:active{cursor:grabbing}
 .heroSlideTrack{
@@ -284,10 +311,10 @@ img{max-width:100%}
 
 .heroDots{
   position:absolute;
-  bottom:18px;
-  right:18px;
-  left:auto;
-  transform:none;
+  bottom:20px;
+  left:50%;
+  transform:translateX(-50%);
+  right:auto;
   display:flex;
   gap:5px;
   z-index:4;
@@ -345,7 +372,7 @@ img{max-width:100%}
 .catViewProductTag{font-size:8.5px;font-weight:700;color:#fbcfe8}
 .catExplorePrompt{font-size:9px;color:#fbcfe8;font-weight:600;margin-top:2px}
 
-.productGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.productGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start;}
 .productCard{background:var(--bg-card);border-radius:21px;overflow:hidden;border:1px solid var(--border-color);box-shadow:var(--shadow-sm);transition:transform .2s,box-shadow .2s;color:var(--text-main)}
 .productCard:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
 .productCard.compact{border-radius:18px}
@@ -410,7 +437,7 @@ img{max-width:100%}
 .options{display:flex;gap:8px;flex-wrap:wrap}
 .option{padding:9px 15px;border:1px solid var(--border-color);background:var(--bg-card);border-radius:12px;font-size:11px;color:var(--text-main)}
 .option.active{background:var(--primary);border-color:var(--primary);color:#fff}
-.colorOptionsSwatches{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 0}
+.colorOptionsSwatches{display:flex;gap:13px;row-gap:12px;flex-wrap:wrap;align-items:center;padding:6px 0}
 .colorSwatchBtn{width:38px;height:38px;border-radius:50%;border:2.5px solid transparent;padding:2px;background:transparent;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;position:relative}
 .colorSwatchBtn:hover{transform:scale(1.08)}
 .colorSwatchBtn.active{border-color:var(--primary,#b95a70);box-shadow:0 0 0 2px rgba(185,90,112,.22);transform:scale(1.06)}
@@ -639,7 +666,7 @@ img{max-width:100%}
 .bottomNav button:active .navIcon{transform:scale(.94)}
 .bottomNav button.active .navIcon{transform:scale(1.12) translateY(-4px);background:linear-gradient(145deg,#ffffff,#fff1f5);border:1.5px solid rgba(225,29,72,.20);box-shadow:0 12px 28px rgba(225,29,72,.22),0 4px 10px rgba(225,29,72,.12)}
 [data-theme="dark"] .bottomNav button.active .navIcon{background:linear-gradient(145deg,#361f28,#25131a);border:1.5px solid rgba(225,29,72,.4)}
-.bottomNav button.active:after{content:"";position:absolute;bottom:5px;width:20px;height:3px;border-radius:99px;background:linear-gradient(90deg,#ff6082,#e11d48);box-shadow:0 1px 6px rgba(225,29,72,.6)}
+.bottomNav button.active:after{content:"";position:absolute;bottom:5px;transform: scale(1.3);height:3px;border-radius:99px;background:linear-gradient(90deg,#ff6082,#e11d48);box-shadow:0 1px 6px rgba(225,29,72,.6)}
 .bottomNav em{position:absolute;top:4px;right:calc(50% - 24px);background:linear-gradient(135deg,#e11d48,#be123c);color:#fff;border-radius:999px;min-width:18px;height:18px;font-size:9.5px;font-weight:800;font-style:normal;display:grid;place-items:center;padding:0 4px;box-shadow:0 3px 9px rgba(225,29,72,.38);border:2px solid var(--bg-card);z-index:10;pointer-events:none}
 
 /* Profile Extra Modals */
@@ -1671,8 +1698,8 @@ html.platform-telegram .bottomNav {
 }
 
 .recentBadgePulse {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 4px;
   border-radius: 50%;
   background: #e11d48;
   animation: pulseDot 1.4s infinite;
@@ -3355,4 +3382,80 @@ html[data-theme="dark"] .option.active {
 }
 [data-theme="dark"] .menuRow:hover > .profileSticker3D:first-child {
   background: linear-gradient(135deg, #38242b 0%, #241419 100%) !important;
+}
+
+/* Product Image Gallery Styles */
+.productGallerySwipe {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.galleryImageContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.galleryMainImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+.galleryDots {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+  background: rgba(18, 8, 14, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 5px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.galleryDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.galleryDot.active {
+  width: 18px;
+  background: #ffffff;
+}
+.galleryArrowBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.7);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #333;
+  cursor: pointer;
+  z-index: 5;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  backdrop-filter: blur(4px);
+}
+.galleryArrowBtn.left {
+  left: 10px;
+}
+.galleryArrowBtn.right {
+  right: 10px;
 }

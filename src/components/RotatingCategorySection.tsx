@@ -22,7 +22,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
   // Ushbu kategoriyaga tegishli mahsulotlar
   const categoryProducts = useMemo(() => {
     const targetNorm = normalizeCategory(category.name);
-    return products.filter(p => normalizeCategory(p.category) === targetNorm);
+    return products.filter(p => p.active !== false && normalizeCategory(p.category) === targetNorm);
   }, [products, category.name]);
 
   // Barcha rasmlar va tovarlar ro'yxati (har bir tovarning rasmlari bilan)

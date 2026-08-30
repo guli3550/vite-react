@@ -21,6 +21,7 @@ import {
   type Product,
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
+import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
@@ -53,7 +54,7 @@ import {
   markMessagesAsRead,
   subscribeToChat,
 } from "./utils/chatSync";
-import { initPlatformEnvironment } from "./utils/platformAdapter";
+import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter";
 
 declare global {
   interface Window {
@@ -740,6 +741,7 @@ const DEFAULT_HERO_BANNERS: Banner[] = [
 ];
 
 export default function App() {
+  const isTelegramWebapp = useMemo(() => detectPlatform().isTelegram, []);
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [products, setProducts] = useState<Product[]>([]);
@@ -1099,6 +1101,23 @@ export default function App() {
               "warning",
             );
           } catch {}
+          try {
+            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioCtx) {
+              const ctx = new AudioCtx();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = "sine";
+              osc.frequency.setValueAtTime(660, ctx.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
+              gain.gain.setValueAtTime(0.2, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.45);
+            }
+          } catch {}
           const snippet =
             msg.text.length > 40 ? msg.text.slice(0, 40) + "…" : msg.text;
           showToast(`💬 GULI Admin: ${snippet}`);
@@ -1119,7 +1138,7 @@ export default function App() {
   // When user is viewing the chat page, automatically mark incoming messages as read
   useEffect(() => {
     if (page === "chat") {
-      markMessagesAsRead(currentUserId);
+      markMessagesAsRead(currentUserId, "user");
       setUnreadMessages([]);
     }
   }, [page, currentUserId]);
@@ -1425,6 +1444,7 @@ export default function App() {
     () => {
       const list = products.filter(
         (p) =>
+          p.active !== false &&
           (selectedCategory === "Barchasi" ||
             normalizeCategory(p.category) === normalizeCategory(selectedCategory)) &&
           (!search.trim() ||
@@ -2714,7 +2734,7 @@ export default function App() {
         {page === "home" && (
           <>
             <section
-              className="hero"
+              className={`hero ${isTelegramWebapp ? "telegramHeroBanner" : ""}`}
               onTouchStart={handleHeroTouchStart}
               onTouchMove={handleHeroTouchMove}
               onTouchEnd={handleHeroTouchEnd}
@@ -2780,19 +2800,6 @@ export default function App() {
                           >
                             <span>{cta || "Xarid qilish"}</span>
                           </button>
-                          <button
-                            type="button"
-                            className="heroSecondaryBtn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedCategory("Barchasi");
-                              setSearch("");
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                              go("catalog");
-                            }}
-                          >
-                            <span>Kolleksiyalarni ko‘rish →</span>
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -2800,22 +2807,7 @@ export default function App() {
                 })}
               </div>
 
-              {heroBanners.length > 1 && (
-                <div className="heroDots">
-                  {heroBanners.map((b, idx) => (
-                    <button
-                      key={b.id || idx}
-                      type="button"
-                      className={`heroDot ${idx === activeBannerIdx ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveBannerIdx(idx);
-                      }}
-                      aria-label={`Banner ${idx + 1}`}
-                    />
-                  ))}
-                </div>
-              )}
+
             </section>
             <RotatingCategoriesSection
               categories={allCategories}
@@ -2846,8 +2838,8 @@ export default function App() {
               ) : (
                 <div className="productGrid">
                   {products
-                    .filter((p) => p.featured)
-                    .slice(0, 4)
+                    .filter((p) => p.featured && p.active !== false)
+                    .slice(0, 8)
                     .map((p) => card(p))}
                 </div>
               )}
@@ -3017,6 +3009,23 @@ export default function App() {
                 {t("add_to_cart")} — {formatPrice(selectedProduct.price)}
               </button>
             </div>
+            <ProductReviewsSection
+              productCode={selectedProduct.product_code || String(selectedProduct.id)}
+              productName={selectedProduct.name}
+              productId={selectedProduct.id}
+              telegramUser={
+                telegramUser
+                  ? {
+                      id: telegramUser.id,
+                      first_name: telegramUser.first_name,
+                      last_name: telegramUser.last_name,
+                      username: telegramUser.username,
+                      photo_url: telegramUser.photo_url,
+                    }
+                  : undefined
+              }
+              onShowToast={showToast}
+            />
             <section className="recommendSection">
               <div className="sectionTitle">
                 <div>

@@ -31,5 +31,40 @@ installAuthFetch();
 setTimeout(() => void startForCurrentContext(), 250);
 setTimeout(() => void startForCurrentContext(), 1500);
 setInterval(() => { if (isAdmin()) { void startForCurrentContext(); } else if (!telegramInitData() && !linkedTelegramId()) void syncGuestMessages(); }, 10000);
-function installAuthFetch() { const currentFetch = window.fetch.bind(window); window.fetch = (input: RequestInfo | URL, init?: RequestInit) => { const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url; if (url.startsWith(API_URL)) { const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined)); const tg = telegramInitData(); const token = sessionStorage.getItem("guli_admin_token") || ""; const linkedToken = linkedTelegramToken(); const guestToken = localStorage.getItem(GUEST_TOKEN_KEY) || ""; if (tg && !headers.has("X-Telegram-Init-Data")) headers.set("X-Telegram-Init-Data", tg); if (isAdmin() && token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`); if (!isAdmin() && !tg && linkedToken && !headers.has("X-Guli-Linked-Token")) headers.set("X-Guli-Linked-Token", linkedToken); if (!isAdmin() && !tg && !linkedToken && guestToken && !headers.has("X-Guli-Guest-Token")) headers.set("X-Guli-Guest-Token", guestToken); return currentFetch(input, { ...init, headers }); } return currentFetch(input, init); }; }
+function installAuthFetch() {
+  if (typeof window === "undefined" || typeof window.fetch !== "function") return;
+  const currentFetch = window.fetch.bind(window);
+  const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith(API_URL)) {
+      const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
+      const tg = telegramInitData();
+      const token = sessionStorage.getItem("guli_admin_token") || "";
+      const linkedToken = linkedTelegramToken();
+      const guestToken = localStorage.getItem(GUEST_TOKEN_KEY) || "";
+      if (tg && !headers.has("X-Telegram-Init-Data")) headers.set("X-Telegram-Init-Data", tg);
+      if (isAdmin() && token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+      if (!isAdmin() && !tg && linkedToken && !headers.has("X-Guli-Linked-Token")) headers.set("X-Guli-Linked-Token", linkedToken);
+      if (!isAdmin() && !tg && !linkedToken && guestToken && !headers.has("X-Guli-Guest-Token")) headers.set("X-Guli-Guest-Token", guestToken);
+      return currentFetch(input, { ...init, headers });
+    }
+    return currentFetch(input, init);
+  };
+
+  try {
+    Object.defineProperty(window, "fetch", {
+      value: customFetch,
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    try {
+      (window as any).fetch = customFetch;
+    } catch {
+      try {
+        (globalThis as any).fetch = customFetch;
+      } catch {}
+    }
+  }
+}
 console.log("[GULI] unified chat realtime bridge loaded");

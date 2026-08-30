@@ -101,14 +101,14 @@ const customFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 };
 
 try {
-  window.fetch = customFetch;
+  Object.defineProperty(window, 'fetch', {
+    value: customFetch,
+    writable: true,
+    configurable: true,
+  });
 } catch {
   try {
-    Object.defineProperty(window, 'fetch', {
-      value: customFetch,
-      writable: true,
-      configurable: true,
-    });
+    (window as any).fetch = customFetch;
   } catch {
     try {
       (globalThis as any).fetch = customFetch;

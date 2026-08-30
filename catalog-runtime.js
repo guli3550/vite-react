@@ -59,10 +59,10 @@
   };
 
   try {
-    window.fetch = customFetch;
+    Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true });
   } catch {
     try {
-      Object.defineProperty(window, 'fetch', { value: customFetch, writable: true, configurable: true });
+      window.fetch = customFetch;
     } catch {}
   }
 })();

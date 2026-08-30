@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
 import { detectPlatform, type PlatformType } from "../utils/platformAdapter";
-import { sendAdminReply, updateConversationMetadata, getTotalUnreadChatCount, subscribeToChat } from "../utils/chatSync";
+import { sendAdminReply, updateConversationMetadata, getTotalUnreadChatCount, subscribeToChat, markAllAdminChatRead } from "../utils/chatSync";
 
 import { AdminSidebar } from "./components/AdminSidebar";
 import { SIDEBAR_NAV_ITEMS, type NavTabKey } from "./components/AdminSidebarData";
@@ -240,6 +240,15 @@ export default function AdminPro() {
 
     return () => unsubscribe();
   }, []);
+
+  // When admin opens the chat tab, immediately clear unread chat notifications & stop ringing
+  useEffect(() => {
+    if (tab === "chat") {
+      markAllAdminChatRead();
+      setUnreadChatCount(0);
+      setIsBellRinging(false);
+    }
+  }, [tab]);
 
   const [activePlatform, setActivePlatform] = useState<PlatformType>(
     () => detectPlatform().type

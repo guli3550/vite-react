@@ -13,10 +13,15 @@ export function detectPlatform(): PlatformInfo {
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
   const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
-  // 1. Telegram WebApp Check
+  // 1. Telegram WebApp Check (specifically when opened via Telegram Bot / App)
   const tg = typeof window !== "undefined" ? (window as any).Telegram?.WebApp : null;
+  const urlParams = typeof window !== "undefined" ? (window.location.search + window.location.hash) : "";
+  const hasTgUrlParam = Boolean(urlParams.includes("tgWebApp") || urlParams.includes("tgWebAppData"));
+  const isTgPlatform = Boolean(tg?.platform && tg.platform !== "unknown");
+  const hasInitData = Boolean(tg?.initData && tg.initData.length > 0) || Boolean(tg?.initDataUnsafe?.user);
+
   const isTelegram = Boolean(
-    tg && (tg.initData || tg.initDataUnsafe?.user || tg.platform || /Telegram/i.test(ua))
+    hasInitData || isTgPlatform || hasTgUrlParam || /Telegram/i.test(ua)
   );
 
   // 2. TV / Smart Display Check

@@ -26,7 +26,7 @@ export function NotificationModal({
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
-    markMessagesAsRead(userId);
+    markMessagesAsRead(userId, "user");
     onClose();
     onOpenChat();
   };
@@ -43,7 +43,7 @@ export function NotificationModal({
     try {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
     } catch {}
-    markMessagesAsRead(userId);
+    markMessagesAsRead(userId, "user");
     onClose();
   };
 
