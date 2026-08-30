@@ -1,6 +1,5 @@
-// Register Telegram broadcast routes immediately before the backend starts listening.
-// This avoids the Express prototype monkey-patch ordering that caused the admin
-// broadcast endpoints to return 404 in production.
+// Direct Telegram broadcast routes.
+// Supports one image or a Telegram media album, including browser data URLs.
 const express = require("express");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
@@ -38,6 +37,18 @@ function escapeHtml(value) {
   return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function parseImage(value, index) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const match = raw.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/s);
+  if (match) {
+    const mime = match[1] || "image/jpeg";
+    const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+    return { kind: "buffer", buffer: Buffer.from(match[2], "base64"), mime, filename: `broadcast-${index}.${ext}` };
+  }
+  return { kind: "url", url: raw };
+}
+
 async function telegramApi(method, body) {
   if (!BOT_TOKEN) throw new Error("Render serverida TELEGRAM_BOT_TOKEN sozlanmagan");
   const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
@@ -45,6 +56,17 @@ async function telegramApi(method, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json?.ok) throw new Error(json?.description || `Telegram API ${response.status}`);
+  return json.result;
+}
+
+async function telegramMultipart(method, fields, files = []) {
+  if (!BOT_TOKEN) throw new Error("Render serverida TELEGRAM_BOT_TOKEN sozlanmagan");
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields || {})) form.append(key, typeof value === "string" ? value : JSON.stringify(value));
+  for (const file of files) form.append(file.name, new Blob([file.buffer], { type: file.mime || "application/octet-stream" }), file.filename);
+  const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, { method: "POST", body: form });
   const json = await response.json().catch(() => null);
   if (!response.ok || !json?.ok) throw new Error(json?.description || `Telegram API ${response.status}`);
   return json.result;
@@ -116,13 +138,50 @@ async function handleRegisterChat(req, res) {
   return res.json({ success: true, message: `Telegram chat saqlandi (${title})`, data });
 }
 
+function buildMarkup(buttonText, buttonUrl) {
+  return { inline_keyboard: [[{ text: String(buttonText || "🛍️ Online Marketni Ochish").trim().slice(0, 64), url: String(buttonUrl || MINI_APP_URL).trim() }]] };
+}
+
+async function sendSingleImage(chatId, image, caption, markup) {
+  if (image.kind === "url") {
+    return telegramApi("sendPhoto", { chat_id: chatId, photo: image.url, caption, parse_mode: "HTML", reply_markup: markup });
+  }
+  return telegramMultipart("sendPhoto", { chat_id: chatId, caption, parse_mode: "HTML", reply_markup: markup }, [{ name: "photo", ...image }]);
+}
+
+async function sendAlbum(chatId, images, caption, markup) {
+  const media = images.map((image, index) => ({
+    type: "photo",
+    media: image.kind === "url" ? image.url : `attach://broadcast${index}`,
+    ...(index === 0 ? { caption, parse_mode: "HTML" } : {}),
+  }));
+  const files = images.filter((image) => image.kind === "buffer").map((image, index) => ({
+    name: `broadcast${images.indexOf(image)}`,
+    buffer: image.buffer,
+    mime: image.mime,
+    filename: image.filename,
+  }));
+  const result = files.length
+    ? await telegramMultipart("sendMediaGroup", { chat_id: chatId, media: JSON.stringify(media) }, files)
+    : await telegramApi("sendMediaGroup", { chat_id: chatId, media });
+  // Telegram media groups cannot have an inline keyboard on each album item.
+  // Send the action button as a separate message after the album.
+  if (markup) await telegramApi("sendMessage", { chat_id: chatId, text: "🛍️ Online Market", reply_markup: markup });
+  return result;
+}
+
 async function handleBroadcast(req, res) {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   try {
-    const { title, body, imageUrl, target, buttonText, buttonUrl, telegramChannelId, channelId } = req.body || {};
+    const { title, body, imageUrl, imageUrls, target, buttonText, buttonUrl, telegramChannelId, channelId } = req.body || {};
     const safeTitle = String(title || "").trim();
     const safeBody = String(body || "").trim();
     if (!safeTitle && !safeBody) return res.status(400).json({ success: false, message: "Reklama sarlavhasi yoki matni kiritilmagan" });
+
+    const rawImages = Array.isArray(imageUrls) && imageUrls.length ? imageUrls : [imageUrl].filter(Boolean);
+    const images = rawImages.slice(0, 10).map(parseImage).filter(Boolean);
+    if (images.length > 10) return res.status(400).json({ success: false, message: "Maksimal 10 ta rasm yuborish mumkin" });
+    if (images.some((image) => image.kind === "buffer" && !image.buffer.length)) return res.status(400).json({ success: false, message: "Rasm ma'lumotlari bo'sh" });
 
     const ids = new Set();
     if (target === "groups" || target === "all") {
@@ -130,7 +189,6 @@ async function handleBroadcast(req, res) {
         if (chat.active && (chat.can_post_messages || ["administrator", "creator"].includes(String(chat.bot_status || "")))) ids.add(String(chat.chat_id));
       }
     }
-
     const manualId = normalizeChatId(telegramChannelId || channelId);
     if (manualId && (target === "groups" || target === "all")) ids.add(manualId);
 
@@ -145,25 +203,30 @@ async function handleBroadcast(req, res) {
     if (!targets.length) return res.status(400).json({ success: false, message: "Yuborish uchun faol Telegram chat topilmadi" });
 
     const text = [safeTitle ? `<b>${escapeHtml(safeTitle)}</b>` : "", safeBody ? escapeHtml(safeBody) : ""].filter(Boolean).join("\n\n");
-    const markup = { inline_keyboard: [[{ text: String(buttonText || "🛍️ Online Marketni Ochish").trim().slice(0, 64), url: String(buttonUrl || MINI_APP_URL).trim() }]] };
+    const markup = buildMarkup(buttonText, buttonUrl);
     let sent = 0;
     const errors = [];
 
     for (const chatId of targets) {
       try {
-        const photo = String(imageUrl || "").trim();
-        if (photo) await telegramApi("sendPhoto", { chat_id: chatId, photo, caption: text, parse_mode: "HTML", reply_markup: markup });
-        else await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: false });
+        if (images.length === 1) {
+          await sendSingleImage(chatId, images[0], text, markup);
+        } else if (images.length > 1) {
+          await sendAlbum(chatId, images, text, markup);
+        } else {
+          await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", reply_markup: markup, disable_web_page_preview: false });
+        }
         sent++;
       } catch (error) {
         errors.push({ chatId, message: error?.message || "Telegram yuborish xatosi" });
       }
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await new Promise((resolve) => setTimeout(resolve, 80));
     }
 
     const failed = targets.length - sent;
-    if (!sent) return res.status(502).json({ success: false, message: errors[0]?.message || "Telegram hech bir chatga reklamani qabul qilmadi", data: { total: targets.length, sent: 0, failed, errors } });
-    return res.json({ success: true, message: `Reklama ${sent} ta chatga muvaffaqiyatli yuborildi${failed ? `, ${failed} ta chatda xatolik` : ""}.`, data: { total: targets.length, sent, failed, errors } });
+    const data = { total: targets.length, sent, failed, imageCount: images.length, errors };
+    if (!sent) return res.status(502).json({ success: false, message: errors[0]?.message || "Telegram hech bir chatga reklamani qabul qilmadi", data });
+    return res.json({ success: true, message: `Reklama ${sent} ta chatga muvaffaqiyatli yuborildi${failed ? `, ${failed} ta chatda xatolik` : ""}.`, data });
   } catch (error) {
     console.error("[Direct Telegram broadcast]", error);
     return res.status(500).json({ success: false, message: error?.message || "Reklama yuborishda server xatosi" });
