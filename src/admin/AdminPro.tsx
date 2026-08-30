@@ -15,6 +15,7 @@ import { AdminCallCenterTab } from "./components/AdminCallCenterTab";
 import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import { AdminExtensionsTab } from "./components/AdminExtensionsTab";
+import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
 
@@ -190,11 +191,18 @@ function playBellChimeSound() {
 }
 
 export default function AdminPro() {
+  const [customApiUrl, setCustomApiUrl] = useState<string>(
+    () => sessionStorage.getItem("guli_custom_api_url") || API
+  );
   const [token, setToken] = useState(
     () => sessionStorage.getItem("guli_admin_token") || ""
   );
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [directTokenInput, setDirectTokenInput] = useState("");
+  const [pingStatus, setPingStatus] = useState<string>("");
   const [loginError, setLoginError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -280,7 +288,8 @@ export default function AdminPro() {
   };
 
   const request = useCallback(async (path: string, options: RequestInit = {}) => {
-    const r = await fetch(`${API}${path}`, {
+    const base = (customApiUrl.trim() || API).replace(/\/$/, "");
+    const r = await fetch(`${base}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -301,7 +310,7 @@ export default function AdminPro() {
         j?.message || j?.detail || `Server xatosi (${r.status})`
       );
     return j;
-  }, [token]);
+  }, [token, customApiUrl]);
 
   const load = useCallback(async (silent = false) => {
     if (!token) return;
@@ -375,20 +384,66 @@ export default function AdminPro() {
     e.preventDefault();
     setBusy(true);
     setLoginError("");
+    const cleanLogin = login.trim();
+    const cleanPassword = password.trim();
+    const targetApi = (customApiUrl.trim() || API).replace(/\/$/, "");
     try {
-      const r = await fetch(`${API}/api/admin/login`, {
+      const r = await fetch(`${targetApi}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: login, password }),
+        body: JSON.stringify({ username: cleanLogin, password: cleanPassword }),
       });
-      const j = await r.json();
-      if (!r.ok || !j.success) throw Error(j.message || "Kirish rad etildi");
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        if (r.status === 401) {
+          throw Error(
+            `Kirish rad etildi (401): Login yoki parol Render serveridagi ADMIN_USERNAME va ADMIN_PASSWORD bilan to‘liq mos kelmadi.`
+          );
+        }
+        if (r.status === 503) {
+          throw Error(
+            `Server sozlanmagan (503): Render.com da ADMIN_USERNAME, ADMIN_PASSWORD yoki ADMIN_SECRET o‘rnatilmagan.`
+          );
+        }
+        throw Error(j?.message || `Server xatosi (${r.status})`);
+      }
+      sessionStorage.setItem("guli_custom_api_url", targetApi);
       sessionStorage.setItem("guli_admin_token", j.token);
       setToken(j.token);
     } catch (e) {
       setLoginError(e instanceof Error ? e.message : "Kirishda xatolik");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleDirectTokenLogin = () => {
+    const t = directTokenInput.trim();
+    if (!t) {
+      setLoginError("Iltimos, tokenni kiriting");
+      return;
+    }
+    const targetApi = (customApiUrl.trim() || API).replace(/\/$/, "");
+    sessionStorage.setItem("guli_custom_api_url", targetApi);
+    sessionStorage.setItem("guli_admin_token", t);
+    setToken(t);
+  };
+
+  const testServerPing = async () => {
+    setPingStatus("Tekshirilmoqda...");
+    const targetApi = (customApiUrl.trim() || API).replace(/\/$/, "");
+    try {
+      const start = Date.now();
+      const r = await fetch(`${targetApi}/api/health`, { method: "GET" });
+      const j = await r.json().catch(() => null);
+      const ms = Date.now() - start;
+      if (r.ok && j?.status === "online") {
+        setPingStatus(`🟢 Server online (${ms}ms)`);
+      } else {
+        setPingStatus(`🟡 Server javob berdi (${r.status})`);
+      }
+    } catch (err: any) {
+      setPingStatus(`🔴 Ulanib bo‘lmadi: ${err.message || "Xatolik"}`);
     }
   };
 
@@ -618,25 +673,145 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
             <input
               value={login}
               onChange={(e) => setLogin(e.target.value)}
+              placeholder="Admin login"
               autoComplete="username"
               required
             />
           </label>
           <label>
             Parol
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Admin parol"
+                autoComplete="current-password"
+                style={{ paddingRight: "44px" }}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: "absolute",
+                  right: "10px",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  padding: "4px 8px",
+                  color: "#887076",
+                }}
+                title={showPassword ? "Parolni yashirish" : "Parolni ko‘rsatish"}
+              >
+                {showPassword ? "🙈" : "👁️"}
+              </button>
+            </div>
           </label>
           {loginError && <div className="proError">{loginError}</div>}
           <button className="proPrimary" disabled={busy}>
             {busy ? "Tekshirilmoqda…" : "Kirish →"}
           </button>
-          <small>Admin tokeni faqat sessionStorage’da saqlanadi.</small>
+
+          <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px dashed #e8d7dc" }}>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#965b6e",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: "4px 0",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                width: "100%",
+                justifyContent: "space-between",
+              }}
+            >
+              <span>⚙️ Server & Token sozlamalari</span>
+              <span>{showAdvanced ? "▲" : "▼"}</span>
+            </button>
+
+            {showAdvanced && (
+              <div style={{ marginTop: "12px", display: "grid", gap: "10px", fontSize: "12px", textAlign: "left" }}>
+                <div>
+                  <label style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: 700, color: "#6d5e64" }}>
+                    Backend API manzili:
+                  </label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      value={customApiUrl}
+                      onChange={(e) => setCustomApiUrl(e.target.value)}
+                      placeholder="https://guli-lingerie-api.onrender.com"
+                      style={{ fontSize: "12px", padding: "8px 10px", flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={testServerPing}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #d4b2bc",
+                        background: "#fff",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Ping
+                    </button>
+                  </div>
+                  {pingStatus && (
+                    <small style={{ display: "block", marginTop: "4px", color: pingStatus.includes("🟢") ? "#166534" : "#991b1b" }}>
+                      {pingStatus}
+                    </small>
+                  )}
+                </div>
+
+                <div style={{ marginTop: "6px", paddingTop: "8px", borderTop: "1px solid #f0e2e6" }}>
+                  <label style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: 700, color: "#6d5e64" }}>
+                    Publish saytdan olingan Token (ixtiyoriy):
+                  </label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      value={directTokenInput}
+                      onChange={(e) => setDirectTokenInput(e.target.value)}
+                      placeholder="guli_admin_token (eyJ...)"
+                      style={{ fontSize: "12px", padding: "8px 10px", flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleDirectTokenLogin}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background: "#c9526b",
+                        color: "#fff",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Ulash
+                    </button>
+                  </div>
+                  <small style={{ color: "#a58e95", fontSize: "10px", display: "block", marginTop: "3px" }}>
+                    Publish qilingan panelda kirgan bo‘lsangiz, sessionStorage dagi tokenni qo‘yib to‘g‘ridan-to‘g‘ri kirishingiz mumkin.
+                  </small>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <small style={{ marginTop: "14px" }}>Admin tokeni xavfsiz holda sessionStorage’da saqlanadi.</small>
         </form>
       </div>
     );
@@ -1036,6 +1211,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
 
         {/* Tab 4: 🗂 Kategoriyalar */}
         {tab === "categories" && <AdminCategoriesTab notify={notify} />}
+
+        {/* Tab: ⭐ Sharhlar */}
+        {tab === "reviews" && <ReviewsAdmin token={token} />}
 
         {/* Tab 5: 👥 Mijozlar */}
         {tab === "customers" && (

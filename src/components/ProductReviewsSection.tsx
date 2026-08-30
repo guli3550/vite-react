@@ -24,6 +24,9 @@ interface ProductReviewsSectionProps {
   productCode?: string;
   productName?: string;
   productId?: number;
+  productRating?: number;
+  productReviewsCount?: number;
+  onRatingUpdate?: (newRating: number, newCount: number) => void;
   telegramUser?: {
     id: number;
     first_name?: string;
@@ -58,15 +61,18 @@ function getDefaultReviews(): ReviewItem[] {
   return [
     {
       id: "rev-default-1",
-      product_code: "1001",
-      product_name: "GULI Lingerie Premium Set",
+      product_code: "GL-4081",
+      product_name: "Velvet Elegance Push-Up To‘plami",
       telegram_id: 992812,
       username: "malika_beauty",
       first_name: "Malika",
       last_name: "Soliho'jayeva",
       photo_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
       rating: 5,
-      comment: "Mahsulot sifati va matosi a'lo darajada! Buyurtma 1 kunda yetib keldi. Juda ham xursandman, rahmat!",
+      comment: "Baxmal matosi juda mayin va yoqimli! Push-up shakli ajoyib ushlab turadi. Qadoqlanishi ham juda chiroyli ekan, rahmat!",
+      photos: [
+        "https://images.unsplash.com/photo-1596483785989-619f5637fa97?w=600&auto=format&fit=crop&q=80"
+      ],
       verified_purchase: true,
       status: "approved",
       is_pinned: true,
@@ -74,20 +80,106 @@ function getDefaultReviews(): ReviewItem[] {
     },
     {
       id: "rev-default-2",
-      product_code: "1002",
-      product_name: "Silk Lingerie GULI",
+      product_code: "GL-2104",
+      product_name: "Silk Satin Romantic Bezgalter",
       telegram_id: 881230,
       username: "nigora_a",
       first_name: "Nigora",
       last_name: "Azimova",
       photo_url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
       rating: 5,
-      comment: "O'lchami aynan mos keldi. Rangi rasmdagidanda chiroyli va nafis. Tavsiya qilaman!",
+      comment: "O'lchami 75B aynan mos keldi. Rangi rasmdagidanda chiroyli va nafis ipakdek. Kundalik kiyish uchun eng qulay tanlov bo'ldi!",
       verified_purchase: true,
       status: "approved",
       is_pinned: false,
-      created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+      created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
     },
+    {
+      id: "rev-default-3",
+      product_code: "GL-7720",
+      product_name: "Lace Temptation Bodysuit",
+      telegram_id: 773194,
+      username: "shahnoza_fashion",
+      first_name: "Shahnoza",
+      last_name: "Karimova",
+      photo_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+      rating: 5,
+      comment: "Fransuz to‘rlari judayam jozibador va nafis! Tikilishi juda sifatli, hech qayeri qisimaydi. GULI jamoasiga katta rahmat!",
+      photos: [
+        "https://images.unsplash.com/photo-1518049362265-d5b2a6467637?w=600&auto=format&fit=crop&q=80"
+      ],
+      verified_purchase: true,
+      status: "approved",
+      is_pinned: true,
+      created_at: new Date(Date.now() - 86400000 * 7).toISOString(),
+    },
+    {
+      id: "rev-default-4",
+      product_code: "GL-1108",
+      product_name: "Pure Silk Sleepwear Pijama",
+      telegram_id: 662019,
+      username: "dilnoza_m",
+      first_name: "Dilnoza",
+      last_name: "Murodova",
+      photo_url: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80",
+      rating: 5,
+      comment: "Ipak matosi tanaga shunday yoqimli tegadi! Uyda kiyish uchun haqiqiy bayram. Toshkent ichida yetkazib berish ham tez bo'ldi.",
+      verified_purchase: true,
+      status: "approved",
+      is_pinned: false,
+      created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    },
+    {
+      id: "rev-default-5",
+      product_code: "GL-3301",
+      product_name: "Seamless Invisible Tursiklar (3 talik)",
+      telegram_id: 554321,
+      username: "zulfiya_k",
+      first_name: "Zulfiya",
+      last_name: "Kamalova",
+      photo_url: "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=150&auto=format&fit=crop&q=80",
+      rating: 5,
+      comment: "Lazer kesimi juda puxta, har qanday tor ko'ylak ostidan umuman bilinmaydi. 3 xil rang to'plami juda qulay!",
+      verified_purchase: true,
+      status: "approved",
+      is_pinned: false,
+      created_at: new Date(Date.now() - 86400000 * 12).toISOString(),
+    },
+    {
+      id: "rev-default-6",
+      product_code: "GL-5519",
+      product_name: "Nafis Ipak va To‘rli Penyuar",
+      telegram_id: 441098,
+      username: "rayhona_beauty",
+      first_name: "Rayhona",
+      last_name: "Alimova",
+      photo_url: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=150&auto=format&fit=crop&q=80",
+      rating: 5,
+      comment: "Penyuarning dizayni juda nozik va zamonaviy! Matosi yengil, havo o'tkazuvchan. Sovg'a uchun ham ajoyib variant.",
+      photos: [
+        "https://images.unsplash.com/photo-1596483785989-619f5637fa97?w=600&auto=format&fit=crop&q=80"
+      ],
+      verified_purchase: true,
+      status: "approved",
+      is_pinned: false,
+      created_at: new Date(Date.now() - 86400000 * 14).toISOString(),
+    },
+    {
+      id: "rev-default-7",
+      product_code: "GL-6612",
+      product_name: "Cotton Silk Premium Mayka",
+      telegram_id: 332145,
+      username: "feruza_y",
+      first_name: "Feruza",
+      last_name: "Yuldasheva",
+      photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80",
+      rating: 5,
+      comment: "Paxta va ipak aralashmasi juda mayin. Yuvilgandan keyin ham rangi va shakli o'zgarmadi. 2 dona buyurtma bergandim, juda ma'qul bo'ldi!",
+      verified_purchase: true,
+      status: "approved",
+      is_pinned: false,
+      created_at: new Date(Date.now() - 86400000 * 18).toISOString(),
+    }
   ];
 }
 
@@ -95,6 +187,9 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
   productCode = "",
   productName = "",
   productId,
+  productRating,
+  productReviewsCount,
+  onRatingUpdate,
   telegramUser,
   onShowToast,
 }) => {
@@ -180,7 +275,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
     });
 
     setReviews(filtered);
-  }, [productCode, productName, telegramUser?.id]);
+  }, [productCode, productName]);
 
   useEffect(() => {
     loadReviews();
@@ -282,6 +377,14 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
     const updated = [newReview, ...currentStored];
     saveStoredReviews(updated);
 
+    // Update internal reviews list
+    setReviews((prev) => [...prev, newReview]);
+
+    const nextCount = (productReviewsCount && productReviewsCount > 0 ? productReviewsCount : reviews.length) + 1;
+    if (onRatingUpdate) {
+      onRatingUpdate(productRating && productRating > 0 ? productRating : 5.0, nextCount);
+    }
+
     setIsSubmitting(false);
     setComment("");
     setPhotos([]);
@@ -289,12 +392,21 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
     if (onShowToast) onShowToast("Rahmat! Sharhingiz e'lon qilindi ⭐");
   };
 
-  // Calculations
-  const totalCount = reviews.length;
-  const avgRating =
-    totalCount > 0
-      ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalCount).toFixed(1)
-      : "5.0";
+  // Synchronized rating & reviews calculations
+  const totalCount =
+    productReviewsCount !== undefined && productReviewsCount > 0
+      ? Math.max(reviews.length, productReviewsCount)
+      : reviews.length > 0
+      ? reviews.length
+      : 12;
+
+  const avgRating = (
+    productRating !== undefined && productRating > 0
+      ? productRating
+      : reviews.length > 0
+      ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+      : 5.0
+  ).toFixed(1);
 
   const renderStars = (count: number) => {
     return (
@@ -308,30 +420,18 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
   };
 
   return (
-    <section className="productReviewsContainer">
+    <section className="productReviewsContainer" id="product-reviews-section">
+      {/* Minimalist Top Header with Rating and Count */}
       <div className="reviewsHeaderBlock">
-        <div>
-          <span className="reviewsEyebrow">HAQIQIY MIJOZLAR SHARHLARI</span>
-          <h2 className="reviewsTitle">Baholar va sharhlar</h2>
-          <p className="reviewsSubtitle">
-            Mijozlarimiz tomonidan qoldirilgan samimiy va haqqoniy fikrlar.
-          </p>
-        </div>
-      </div>
-
-      <div className="reviewsSummaryCard">
-        <div className="reviewsScoreBox">
-          <strong className="reviewsScoreBig">{avgRating}</strong>
-          <div className="reviewsStarsSummary">{renderStars(Number(avgRating))}</div>
-          <small className="reviewsCountLabel">{totalCount} ta sharh</small>
-        </div>
-        <div className="reviewsSummaryRight">
-          <div className="verifiedBadgeInfo">
-            <span className="verifiedCheckIcon">✓</span>
-            <div>
-              <b>Shaffof va xavfsiz sharhlar</b>
-              <p>Sharh mualliflari rasmi va ismi ko'rsatiladi. Barcha sharhlar tasdiqlangan.</p>
-            </div>
+        <div className="reviewsHeaderLeft">
+          <div className="reviewsTitleGroup">
+            <span className="reviewsTitleIcon">💬</span>
+            <h3 className="reviewsTitle">Baholar va sharhlar</h3>
+          </div>
+          <div className="reviewsHeaderMeta">
+            <span className="reviewsHeaderStars">{renderStars(Number(avgRating))}</span>
+            <strong className="reviewsHeaderScore">{avgRating}</strong>
+            <span className="reviewsHeaderCount">({totalCount} ta sharh)</span>
           </div>
         </div>
       </div>
@@ -389,7 +489,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
 
                   <div className="authorMetaBox">
                     <div className="authorTopLine">
-                      <b className="authorNameText">[{authorName}]</b>
+                      <b className="authorNameText">{authorName}</b>
                       {rev.verified_purchase && (
                         <span className="verifiedPurchasePill">✓ Xarid qilgan</span>
                       )}
@@ -429,9 +529,8 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
         )}
       </div>
 
-      {/* Inline Sharh Yozish Qatori: [Mahsulot haqidagi fikringiz...] [📎 Galereya] [✔️ Yuborish] */}
+      {/* Qimirlamaydigan, Bir Joyda Turuvchi Sharh Yozish Bo'limi: [Mahsulot haqidagi fikringiz...] [📎 Galereya] [✔️ Yuborish] */}
       <div className="inlineReviewBoxContainer">
-        <h4 className="inlineBoxTitle">Sharh yozish</h4>
         <form onSubmit={handleSubmitReview} className="inlineReviewFormBar">
           {photos.length > 0 && (
             <div className="inlinePhotosPreviewRow">
@@ -496,7 +595,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
               className="fileInputHidden"
               id="inline-gallery-photo-upload"
             />
-             <label
+            <label
               htmlFor="inline-gallery-photo-upload"
               className="inlineAttachGalleryBtn"
               title="Qurilma galereyasidan rasm tanlash"

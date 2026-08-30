@@ -14,6 +14,7 @@ import {
   toggleMessageReaction,
   votePollOption,
 } from "../utils/chatSync";
+import { SwipeableChatBackground, SwipeableMessageRow } from "./SwipeChatHelpers";
 import "../chat2.css";
 
 type AdminChatTabProps = {
@@ -865,312 +866,326 @@ export default function AdminChatTab({
 
       {/* 2. MAIN ACTIVE CHAT WINDOW */}
       <main className={`chat2-main ${mobileView !== "chat" ? "chat2-mobile-hide" : ""}`}>
-        {/* Chat Header */}
-        <div className="chat2-header">
-          <div className="chat2-header-info">
-            <button
-              type="button"
-              className="chat2-action-btn"
-              style={{ display: mobileView === "chat" ? "inline-flex" : "none" }}
-              onClick={() => setMobileView("list")}
-            >
-              ← Orqaga
-            </button>
-            <div
-              className="chat2-avatar-wrap"
-              style={{ width: 42, height: 42, cursor: "pointer" }}
-              title="Mijoz chat oynasini to'liq ekranda ochish"
-              onClick={() => setFullProfileModalOpen(true)}
-            >
-              {currentConversation?.userPhoto ? (
-                <img className="chat2-avatar" style={{ width: 42, height: 42 }} src={currentConversation.userPhoto} alt="" />
-              ) : (
-                <div className="chat2-avatar" style={{ width: 42, height: 42, fontSize: 18 }}>
-                  {(currentConversation?.userName || "M").slice(0, 1).toUpperCase()}
-                </div>
-              )}
-              <span className="chat2-online-dot" />
-            </div>
-            <div
-              className="chat2-header-title"
-              style={{ cursor: "pointer" }}
-              onClick={() => setFullProfileModalOpen(true)}
-            >
-              <span className="chat2-header-name">
-                {currentConversation?.userName || "Mijoz"}
-                <span className={`chat2-platform-badge ${currentConversation?.source || "webapp"}`}>
-                  {currentConversation?.source === "telegram" ? "Telegram" : currentConversation?.source === "webapp" ? "Web App" : "Call Center"}
-                </span>
-              </span>
-              <span className="chat2-header-status" style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>
-                GULI Admin Web App - {currentConversation?.source === "telegram" ? "Telegram bot" : currentConversation?.source === "callcenter" ? "Call center" : "web app profilidagi"} online chatdan yozayotgan mijoz
-                <span style={{ marginLeft: 6, color: "#10b981", fontWeight: 700 }}>● Online</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="chat2-header-actions">
-            {currentConversation?.phone && (
-              <a href={`tel:${currentConversation.phone.replace(/\s+/g, "")}`} className="chat2-action-btn">
-                📞 Tel
-              </a>
-            )}
-            <button
-              type="button"
-              className="chat2-action-btn"
-              onClick={() => setAssignOperatorOpen(!assignOperatorOpen)}
-            >
-              👤 Operator
-            </button>
-            <button
-              type="button"
-              className="chat2-action-btn primary"
-              onClick={() => setMobileView("crm")}
-            >
-              ℹ️ CRM
-            </button>
-          </div>
-        </div>
-
-        {/* Operator Assignment Dropdown Modal */}
-        {assignOperatorOpen && (
-          <div
-            style={{
-              position: "absolute",
-              top: 64,
-              right: 16,
-              background: "#ffffff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 12,
-              padding: 12,
-              boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-              zIndex: 30,
-              width: 260,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
-              Operator biriktirish
-            </div>
-            {OPERATORS_LIST.map((op) => (
+        <SwipeableChatBackground
+          onExit={() => {
+            setMobileView("list");
+            if (onOpenSidebar) onOpenSidebar();
+          }}
+          id="admin-chat-swipe-bg"
+        >
+          {/* Chat Header */}
+          <div className="chat2-header">
+            <div className="chat2-header-info">
               <button
-                key={op}
                 type="button"
-                style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: currentConversation?.assignedOperator === op ? "#fcecef" : "transparent",
-                  color: currentConversation?.assignedOperator === op ? "#b6536b" : "#334155",
-                  fontSize: 12,
-                  fontWeight: currentConversation?.assignedOperator === op ? 600 : 400,
-                  cursor: "pointer",
-                  marginBottom: 2,
-                }}
-                onClick={() => handleAssignOperator(op)}
+                className="chat2-action-btn"
+                style={{ display: mobileView === "chat" ? "inline-flex" : "none" }}
+                onClick={() => setMobileView("list")}
               >
-                {op}
+                ← Orqaga
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* Messages Container */}
-        <div className="chat2-messages">
-          {activeChatMessages.map((msg, idx) => {
-            const prevMsg = activeChatMessages[idx - 1];
-            const currentDateGroup = formatDateGroup(msg.timestamp);
-            const prevDateGroup = prevMsg ? formatDateGroup(prevMsg.timestamp) : "";
-            const showDateSeparator = currentDateGroup !== prevDateGroup;
-
-            return (
-              <div key={msg.id} style={{ display: "contents" }}>
-                {showDateSeparator && (
-                  <div className="chat2-date-separator">
-                    <span className="chat2-date-pill">{currentDateGroup}</span>
+              <div
+                className="chat2-avatar-wrap"
+                style={{ width: 42, height: 42, cursor: "pointer" }}
+                title="Mijoz chat oynasini to'liq ekranda ochish"
+                onClick={() => setFullProfileModalOpen(true)}
+              >
+                {currentConversation?.userPhoto ? (
+                  <img className="chat2-avatar" style={{ width: 42, height: 42 }} src={currentConversation.userPhoto} alt="" />
+                ) : (
+                  <div className="chat2-avatar" style={{ width: 42, height: 42, fontSize: 18 }}>
+                    {(currentConversation?.userName || "M").slice(0, 1).toUpperCase()}
                   </div>
                 )}
-
-                <div className={`chat2-bubble-wrap ${msg.sender}`}>
-                  {/* Message Action Bar (Hover / Tap) */}
-                  <div className="chat2-bubble-actions">
-                    <div className="chat2-reaction-picker">
-                      {REACTION_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          className="chat2-action-icon"
-                          onClick={() => toggleMessageReaction(msg.id, emoji)}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      className="chat2-action-icon"
-                      title="Javob berish"
-                      onClick={() => setReplyingToMsg(msg)}
-                    >
-                      ↩️
-                    </button>
-                    <button
-                      type="button"
-                      className="chat2-action-icon"
-                      title="Nusxalash"
-                      onClick={() => handleCopyMessage(msg.text)}
-                    >
-                      📋
-                    </button>
-                    {msg.sender === "admin" && (
-                      <>
-                        <button
-                          type="button"
-                          className="chat2-action-icon"
-                          title="Tahrirlash"
-                          onClick={() => handleStartEditMessage(msg)}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          type="button"
-                          className="chat2-action-icon"
-                          title="O'chirish"
-                          onClick={() => handleDeleteMessage(msg.id)}
-                        >
-                          🗑️
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="chat2-bubble">
-                    {/* Quoted Reply if present */}
-                    {msg.replyToText && (
-                      <div className="chat2-reply-quote">
-                        <div className="chat2-reply-quote-sender">{msg.replyToSender || "Xabar"}</div>
-                        <div className="chat2-reply-quote-text">{msg.replyToText}</div>
-                      </div>
-                    )}
-
-                    {/* Image Attachment */}
-                    {msg.type === "image" && msg.mediaUrl && (
-                      <img
-                        className="chat2-media-img"
-                        src={msg.mediaUrl}
-                        alt="Rasm"
-                        onClick={() => setLightboxImageUrl(msg.mediaUrl!)}
-                      />
-                    )}
-
-                    {/* File Attachment */}
-                    {msg.type === "file" && msg.mediaUrl && (
-                      <a className="chat2-media-file" href={msg.mediaUrl} download={msg.fileName || "fayl"}>
-                        📄 {msg.fileName || "Biriktirilgan fayl"}
-                      </a>
-                    )}
-
-                    {/* Interactive Poll Card */}
-                    {(msg.type === "poll" || msg.pollOptions) && (
-                      <div className="chat2-poll-card">
-                        <div className="chat2-poll-title">📊 {msg.pollQuestion || msg.text}</div>
-                        <div className="chat2-poll-options">
-                          {(msg.pollOptions || []).map((opt, oIdx) => {
-                            const totalVotes = (msg.pollOptions || []).reduce((acc, curr) => acc + (curr.votes || 0), 0);
-                            const percentage = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
-                            const isVoted = msg.userVotedOption === oIdx;
-                            return (
-                              <button
-                                key={opt.id || oIdx}
-                                type="button"
-                                className={`chat2-poll-opt-btn ${isVoted ? "voted" : ""}`}
-                                onClick={() => {
-                                  votePollOption(msg.id, oIdx);
-                                  playTelegramSendSound();
-                                }}
-                              >
-                                <div className="chat2-poll-fill" style={{ width: `${percentage}%` }} />
-                                <div className="chat2-poll-opt-text">
-                                  <span>{isVoted ? "☑️" : "⚪"}</span>
-                                  <span>{opt.text}</span>
-                                </div>
-                                <div className="chat2-poll-opt-meta">
-                                  {percentage}% ({opt.votes || 0})
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Geolocation Card */}
-                    {(msg.type === "location" || msg.location) && (
-                      <div className="chat2-location-card">
-                        <div className="chat2-location-map-preview">
-                          <div className="chat2-map-pin-badge">
-                            📍 Pin Jo'natildi
-                          </div>
-                        </div>
-                        <div className="chat2-location-info">
-                          <div className="chat2-location-address">
-                            {msg.location?.address || msg.text}
-                          </div>
-                          <a
-                            href={msg.location?.mapUrl || `https://www.google.com/maps?q=${msg.location?.lat || 41.2825},${msg.location?.lng || 69.2155}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="chat2-location-btn"
-                          >
-                            🗺️ Kartada ochish (Google Maps)
-                          </a>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Voice Audio Message */}
-                    {msg.type === "audio" && msg.mediaUrl ? (
-                      <VoiceAudioPlayer mediaUrl={msg.mediaUrl} duration={msg.audioDuration} />
-                    ) : (
-                      !msg.pollOptions && !msg.location && <div>{msg.text}</div>
-                    )}
-
-                    {/* Bubble Footer Meta */}
-                    <div className="chat2-bubble-meta">
-                      {msg.isEdited && <span>(tahrirlandi)</span>}
-                      <span>
-                        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                      </span>
-                      {msg.sender === "admin" && (
-                        <span>{msg.read ? "✓✓" : "✓"}</span>
-                      )}
-                    </div>
-
-                    {/* Reactions Pill Counter */}
-                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                      <div className="chat2-reactions-bar">
-                        {Object.entries(msg.reactions).map(([emoji, count]) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            className="chat2-reaction-pill active"
-                            onClick={() => toggleMessageReaction(msg.id, emoji)}
-                          >
-                            <span>{emoji}</span>
-                            <span>{count}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <span className="chat2-online-dot" />
               </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
+              <div
+                className="chat2-header-title"
+                style={{ cursor: "pointer" }}
+                onClick={() => setFullProfileModalOpen(true)}
+              >
+                <span className="chat2-header-name">
+                  {currentConversation?.userName || "Mijoz"}
+                  <span className={`chat2-platform-badge ${currentConversation?.source || "webapp"}`}>
+                    {currentConversation?.source === "telegram" ? "Telegram" : currentConversation?.source === "webapp" ? "Web App" : "Call Center"}
+                  </span>
+                </span>
+                <span className="chat2-header-status" style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>
+                  GULI Admin Web App - {currentConversation?.source === "telegram" ? "Telegram bot" : currentConversation?.source === "callcenter" ? "Call center" : "web app profilidagi"} online chatdan yozayotgan mijoz
+                  <span style={{ marginLeft: 6, color: "#10b981", fontWeight: 700 }}>● Online</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="chat2-header-actions">
+              {currentConversation?.phone && (
+                <a href={`tel:${currentConversation.phone.replace(/\s+/g, "")}`} className="chat2-action-btn">
+                  📞 Tel
+                </a>
+              )}
+              <button
+                type="button"
+                className="chat2-action-btn"
+                onClick={() => setAssignOperatorOpen(!assignOperatorOpen)}
+              >
+                👤 Operator
+              </button>
+              <button
+                type="button"
+                className="chat2-action-btn primary"
+                onClick={() => setMobileView("crm")}
+              >
+                ℹ️ CRM
+              </button>
+            </div>
+          </div>
+
+          {/* Operator Assignment Dropdown Modal */}
+          {assignOperatorOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: 64,
+                right: 16,
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                padding: 12,
+                boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                zIndex: 30,
+                width: 260,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: "#0f172a" }}>
+                Operator biriktirish
+              </div>
+              {OPERATORS_LIST.map((op) => (
+                <button
+                  key={op}
+                  type="button"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "8px 10px",
+                    borderRadius: 6,
+                    border: "none",
+                    background: currentConversation?.assignedOperator === op ? "#fcecef" : "transparent",
+                    color: currentConversation?.assignedOperator === op ? "#b6536b" : "#334155",
+                    fontSize: 12,
+                    fontWeight: currentConversation?.assignedOperator === op ? 600 : 400,
+                    cursor: "pointer",
+                    marginBottom: 2,
+                  }}
+                  onClick={() => handleAssignOperator(op)}
+                >
+                  {op}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Messages Container */}
+          <div className="chat2-messages">
+            {activeChatMessages.map((msg, idx) => {
+              const prevMsg = activeChatMessages[idx - 1];
+              const currentDateGroup = formatDateGroup(msg.timestamp);
+              const prevDateGroup = prevMsg ? formatDateGroup(prevMsg.timestamp) : "";
+              const showDateSeparator = currentDateGroup !== prevDateGroup;
+
+              return (
+                <div key={msg.id} style={{ display: "contents" }}>
+                  {showDateSeparator && (
+                    <div className="chat2-date-separator">
+                      <span className="chat2-date-pill">{currentDateGroup}</span>
+                    </div>
+                  )}
+
+                  <SwipeableMessageRow
+                    align={msg.sender === "user" ? "left" : "right"}
+                    onReply={() => setReplyingToMsg(msg)}
+                    id={`admin-swipe-row-${msg.id}`}
+                  >
+                    <div className={`chat2-bubble-wrap ${msg.sender}`}>
+                      {/* Message Action Bar (Hover / Tap) */}
+                      <div className="chat2-bubble-actions">
+                        <div className="chat2-reaction-picker">
+                          {REACTION_EMOJIS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className="chat2-action-icon"
+                              onClick={() => toggleMessageReaction(msg.id, emoji)}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          className="chat2-action-icon"
+                          title="Javob berish"
+                          onClick={() => setReplyingToMsg(msg)}
+                        >
+                          ↩️
+                        </button>
+                        <button
+                          type="button"
+                          className="chat2-action-icon"
+                          title="Nusxalash"
+                          onClick={() => handleCopyMessage(msg.text)}
+                        >
+                          📋
+                        </button>
+                        {msg.sender === "admin" && (
+                          <>
+                            <button
+                              type="button"
+                              className="chat2-action-icon"
+                              title="Tahrirlash"
+                              onClick={() => handleStartEditMessage(msg)}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              className="chat2-action-icon"
+                              title="O'chirish"
+                              onClick={() => handleDeleteMessage(msg.id)}
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="chat2-bubble">
+                        {/* Quoted Reply if present */}
+                        {msg.replyToText && (
+                          <div className="chat2-reply-quote">
+                            <div className="chat2-reply-quote-sender">{msg.replyToSender || "Xabar"}</div>
+                            <div className="chat2-reply-quote-text">{msg.replyToText}</div>
+                          </div>
+                        )}
+
+                        {/* Image Attachment */}
+                        {msg.type === "image" && msg.mediaUrl && (
+                          <img
+                            className="chat2-media-img"
+                            src={msg.mediaUrl}
+                            alt="Rasm"
+                            onClick={() => setLightboxImageUrl(msg.mediaUrl!)}
+                          />
+                        )}
+
+                        {/* File Attachment */}
+                        {msg.type === "file" && msg.mediaUrl && (
+                          <a className="chat2-media-file" href={msg.mediaUrl} download={msg.fileName || "fayl"}>
+                            📄 {msg.fileName || "Biriktirilgan fayl"}
+                          </a>
+                        )}
+
+                        {/* Interactive Poll Card */}
+                        {(msg.type === "poll" || msg.pollOptions) && (
+                          <div className="chat2-poll-card">
+                            <div className="chat2-poll-title">📊 {msg.pollQuestion || msg.text}</div>
+                            <div className="chat2-poll-options">
+                              {(msg.pollOptions || []).map((opt, oIdx) => {
+                                const totalVotes = (msg.pollOptions || []).reduce((acc, curr) => acc + (curr.votes || 0), 0);
+                                const percentage = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
+                                const isVoted = msg.userVotedOption === oIdx;
+                                return (
+                                  <button
+                                    key={opt.id || oIdx}
+                                    type="button"
+                                    className={`chat2-poll-opt-btn ${isVoted ? "voted" : ""}`}
+                                    onClick={() => {
+                                      votePollOption(msg.id, oIdx);
+                                      playTelegramSendSound();
+                                    }}
+                                  >
+                                    <div className="chat2-poll-fill" style={{ width: `${percentage}%` }} />
+                                    <div className="chat2-poll-opt-text">
+                                      <span>{isVoted ? "☑️" : "⚪"}</span>
+                                      <span>{opt.text}</span>
+                                    </div>
+                                    <div className="chat2-poll-opt-meta">
+                                      {percentage}% ({opt.votes || 0})
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Geolocation Card */}
+                        {(msg.type === "location" || msg.location) && (
+                          <div className="chat2-location-card">
+                            <div className="chat2-location-map-preview">
+                              <div className="chat2-map-pin-badge">
+                                📍 Pin Jo'natildi
+                              </div>
+                            </div>
+                            <div className="chat2-location-info">
+                              <div className="chat2-location-address">
+                                {msg.location?.address || msg.text}
+                              </div>
+                              <a
+                                href={msg.location?.mapUrl || `https://www.google.com/maps?q=${msg.location?.lat || 41.2825},${msg.location?.lng || 69.2155}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="chat2-location-btn"
+                              >
+                                🗺️ Kartada ochish (Google Maps)
+                              </a>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Voice Audio Message */}
+                        {msg.type === "audio" && msg.mediaUrl ? (
+                          <VoiceAudioPlayer mediaUrl={msg.mediaUrl} duration={msg.audioDuration} />
+                        ) : (
+                          !msg.pollOptions && !msg.location && <div>{msg.text}</div>
+                        )}
+
+                        {/* Bubble Footer Meta */}
+                        <div className="chat2-bubble-meta">
+                          {msg.isEdited && <span>(tahrirlandi)</span>}
+                          <span>
+                            {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                          </span>
+                          {msg.sender === "admin" && (
+                            <span>{msg.read ? "✓✓" : "✓"}</span>
+                          )}
+                        </div>
+
+                        {/* Reactions Pill Counter */}
+                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                          <div className="chat2-reactions-bar">
+                            {Object.entries(msg.reactions).map(([emoji, count]) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className="chat2-reaction-pill active"
+                                onClick={() => toggleMessageReaction(msg.id, emoji)}
+                              >
+                                <span>{emoji}</span>
+                                <span>{count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </SwipeableMessageRow>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        </SwipeableChatBackground>
 
         {/* Quick Reply Template Chips */}
         <div className="chat2-quick-replies">

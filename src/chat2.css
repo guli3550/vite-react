@@ -395,10 +395,12 @@
 
 .chat2-bubble-wrap.user {
   align-self: flex-start;
+  margin-right: auto;
 }
 
 .chat2-bubble-wrap.admin {
   align-self: flex-end;
+  margin-left: auto;
 }
 
 .chat2-bubble {
@@ -602,7 +604,10 @@
   gap: 4px;
 }
 
-.chat2-bubble-wrap:hover .chat2-bubble-actions {
+.chat2-bubble-wrap:hover .chat2-bubble-actions,
+.chat2-bubble-wrap:active .chat2-bubble-actions,
+.chat2-bubble-wrap:focus-within .chat2-bubble-actions,
+.chat2-bubble-wrap.show-actions .chat2-bubble-actions {
   display: flex;
 }
 

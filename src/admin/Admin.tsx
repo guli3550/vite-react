@@ -28,7 +28,28 @@ export default function Admin() {
   const load = useCallback(async () => { if (!token) return; setBusy(true); try { const [d, p, o, u, pr] = await Promise.all([request("/api/admin/dashboard"), request("/api/admin/products?limit=200"), request("/api/admin/orders?limit=200"), request("/api/admin/users?limit=200"), request("/api/admin/promos?limit=200")]); setDashboard(d.data); setProducts(p.data || []); setOrders(o.data || []); setUsers(u.data || []); setPromos(pr.data || []); } catch (e) { notify(e instanceof Error ? e.message : "Yuklashda xatolik"); } finally { setBusy(false); } }, [token, request]);
   useEffect(() => { if (token) load(); }, [token, load]);
 
-  const login = async (e: React.FormEvent) => { e.preventDefault(); setBusy(true); setLoginError(""); try { const r = await fetch(`${API}/api/admin/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) }); const j = await r.json(); if (!r.ok || !j.success) throw new Error(j.message || "Kirish rad etildi"); sessionStorage.setItem("guli_admin_token", j.token); setToken(j.token); } catch (e) { setLoginError(e instanceof Error ? e.message : "Kirishda xatolik"); } finally { setBusy(false); } };
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setLoginError("");
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+    try {
+      const r = await fetch(`${API}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: cleanUsername, password: cleanPassword }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j.message || "Kirish rad etildi");
+      sessionStorage.setItem("guli_admin_token", j.token);
+      setToken(j.token);
+    } catch (e) {
+      setLoginError(e instanceof Error ? e.message : "Kirishda xatolik");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const filteredProducts = useMemo(() => products.filter((p) => !search || `${p.name} ${p.category}`.toLowerCase().includes(search.toLowerCase())), [products, search]);
   const filteredOrders = useMemo(() => orders.filter((o) => orderFilter === "all" || o.status === orderFilter), [orders, orderFilter]);

@@ -8,12 +8,16 @@ const app = express();
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "4mb" }));
 
+function cleanEnv(val) {
+  return String(val || "").trim().replace(/^['"]|['"]$/g, "");
+}
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com";
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+const ADMIN_USERNAME = cleanEnv(process.env.ADMIN_USERNAME);
+const ADMIN_PASSWORD = cleanEnv(process.env.ADMIN_PASSWORD);
+const ADMIN_SECRET = cleanEnv(process.env.ADMIN_SECRET);
 const ADMIN_TOKEN_TTL = 8 * 60 * 60 * 1000;
 const TELEGRAM_INITDATA_TTL = 24 * 60 * 60;
 const ADMIN_STATUSES = ["⏳ Buyurtma kutilmoqda", "Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];
@@ -32,7 +36,17 @@ async function setupTelegramWebhook() {
   catch (error) { console.error("Telegram webhook o'rnatilmadi:", error.message); }
 }
 
-function safeEqual(a, b) { const left = Buffer.from(String(a)); const right = Buffer.from(String(b)); return left.length === right.length && crypto.timingSafeEqual(left, right); }
+function safeEqual(a, b) {
+  const sA = String(a || "");
+  const sB = String(b || "");
+  const left = Buffer.from(sA);
+  const right = Buffer.from(sB);
+  if (left.length === right.length && crypto.timingSafeEqual(left, right)) return true;
+  const leftTrim = Buffer.from(sA.trim());
+  const rightTrim = Buffer.from(sB.trim());
+  if (leftTrim.length === rightTrim.length && crypto.timingSafeEqual(leftTrim, rightTrim)) return true;
+  return false;
+}
 function signAdminToken(payload) { const body = Buffer.from(JSON.stringify(payload)).toString("base64url"); const signature = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url"); return `${body}.${signature}`; }
 function verifyAdminToken(token) { try { if (!ADMIN_SECRET || !token) return false; const [body, signature] = String(token).split("."); if (!body || !signature) return false; const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url"); if (!safeEqual(signature, expected)) return false; const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")); return payload.role === "admin" && Number(payload.exp) > Date.now(); } catch { return false; } }
 function requireAdmin(req, res, next) { const header = req.headers.authorization || ""; const token = header.startsWith("Bearer ") ? header.slice(7) : ""; if (!verifyAdminToken(token)) return res.status(401).json({ success: false, message: "Admin sessiyasi yaroqsiz yoki tugagan" }); next(); }
@@ -144,7 +158,28 @@ app.post("/api/promo/validate", async (req, res) => {
 });
 
 app.post("/api/admin/upload-image", requireAdmin, async (req, res) => { try { const { data, mimeType, extension } = req.body || {}; if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" }); if (!String(mimeType || "").startsWith("image/")) return res.status(400).json({ success: false, message: "Faqat rasm fayli yuklash mumkin" }); if (data.length > 3200000) return res.status(413).json({ success: false, message: "Rasm hajmi juda katta" }); const bucket = "product-images"; const existing = await supabase.storage.getBucket(bucket); if (existing.error) { const created = await supabase.storage.createBucket(bucket, { public: true, allowedMimeTypes: ["image/*"], fileSizeLimit: "3MB" }); if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error; } const cleanExt = String(extension || "webp").replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp"; const path = `products/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`; const buffer = Buffer.from(data, "base64"); const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false }); if (error) throw error; const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path); res.json({ success: true, data: { path, url: publicData.publicUrl } }); } catch (error) { console.error("Admin image upload error:", error); res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" }); } });
-app.post("/api/admin/login", (req, res) => { if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) return res.status(503).json({ success: false, message: "Admin environment sozlanmagan: ADMIN_USERNAME, ADMIN_PASSWORD va ADMIN_SECRET kerak" }); const username = String(req.body?.username || ""); const password = String(req.body?.password || ""); if (!safeEqual(username, ADMIN_USERNAME) || !safeEqual(password, ADMIN_PASSWORD)) return res.status(401).json({ success: false, message: "Login yoki parol noto‘g‘ri" }); const token = signAdminToken({ role: "admin", sub: username, iat: Date.now(), exp: Date.now() + ADMIN_TOKEN_TTL }); res.json({ success: true, token, expiresIn: ADMIN_TOKEN_TTL }); });
+app.post("/api/admin/login", (req, res) => {
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) {
+    return res.status(503).json({
+      success: false,
+      message: "Admin environment sozlanmagan: Render.com da ADMIN_USERNAME, ADMIN_PASSWORD va ADMIN_SECRET o‘zgaruvchilarini kiriting."
+    });
+  }
+  const username = String(req.body?.username || "").trim();
+  const password = String(req.body?.password || "").trim();
+
+  const userMatches = safeEqual(username, ADMIN_USERNAME) || safeEqual(username.toLowerCase(), ADMIN_USERNAME.toLowerCase());
+  const passMatches = safeEqual(password, ADMIN_PASSWORD);
+
+  if (!userMatches || !passMatches) {
+    return res.status(401).json({
+      success: false,
+      message: "Login yoki parol noto‘g‘ri. Harflar katta-kichikligi va probellarni tekshiring."
+    });
+  }
+  const token = signAdminToken({ role: "admin", sub: username, iat: Date.now(), exp: Date.now() + ADMIN_TOKEN_TTL });
+  res.json({ success: true, token, expiresIn: ADMIN_TOKEN_TTL });
+});
 app.get("/api/admin/dashboard", requireAdmin, async (req, res) => { try { const [{ count: productsCount }, { count: ordersCount }, { count: usersCount }, revenueResult, todayResult, statusResult, lowStockResult, recentResult] = await Promise.all([supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),supabase.from("orders").select("id", { count: "exact", head: true }),supabase.from("telegram_users").select("telegram_id", { count: "exact", head: true }),supabase.from("orders").select("total"),supabase.from("orders").select("total").gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString()),supabase.from("orders").select("status"),supabase.from("products").select("id,name,stock").eq("active", true).lt("stock", 5).order("stock", { ascending: true }).limit(10),supabase.from("orders").select("id,order_number,first_name,username,total,status,created_at").order("created_at", { ascending: false }).limit(8)]); const sum=rows=>(rows||[]).reduce((n,r)=>n+Number(r.total||0),0); const statusCounts=(statusResult.data||[]).reduce((a,r)=>{a[r.status||"Noma’lum"]=(a[r.status||"Noma’lum"]||0)+1;return a},{}); res.json({success:true,data:{productsCount:productsCount||0,ordersCount:ordersCount||0,usersCount:usersCount||0,revenue:sum(revenueResult.data),todayRevenue:sum(todayResult.data),statusCounts,lowStock:lowStockResult.data||[],recentOrders:recentResult.data||[]}}); } catch(error){console.error("Admin dashboard error:",error);res.status(500).json({success:false,message:"Dashboardni yuklashda xatolik"})} });
 app.get("/api/admin/products", requireAdmin, async (req,res)=>{try{const {data,error}=await supabase.from("products").select("*").order("sort_order",{ascending:true}).order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Admin mahsulotlarini yuklashda xatolik"})}});
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const payload=productPayload(req.body);payload.product_code=await ensureProductCode(payload);if(!payload.name||payload.price<0)return res.status(400).json({success:false,message:"Mahsulot nomi va narxi noto‘g‘ri"});const {data,error}=await supabase.from("products").insert([payload]).select("*").single();if(error)throw error;res.status(201).json({success:true,data})}catch(error){console.error(error);res.status(500).json({success:false,message:"Mahsulot yaratishda xatolik"})}});

@@ -3,6 +3,7 @@ export type NavTabKey =
   | "orders"
   | "products"
   | "categories"
+  | "reviews"
   | "customers"
   | "payments"
   | "promos"
@@ -26,6 +27,7 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { key: "orders", icon: "🛒", label: "Buyurtmalar" },
   { key: "products", icon: "👗", label: "Mahsulotlar" },
   { key: "categories", icon: "🗂", label: "Kategoriyalar" },
+  { key: "reviews", icon: "⭐", label: "Sharhlar" },
   { key: "customers", icon: "👥", label: "Mijozlar" },
   { key: "payments", icon: "💳", label: "To‘lovlar" },
   { key: "promos", icon: "🎟", label: "Kuponlar" },

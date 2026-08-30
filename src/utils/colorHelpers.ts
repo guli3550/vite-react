@@ -67,6 +67,26 @@ export function parseColorValue(raw: string): { name: string; hex: string } {
     };
   }
 
+  // If format is multi-color e.g. "Bej / Qora / Nude"
+  if (str.includes("/")) {
+    const colorParts = str.split("/").map((p) => p.trim());
+    const hexes = colorParts.map((p) => {
+      const norm = p.toLowerCase().replace(/['`‘’]/g, "'").trim();
+      return COLOR_NAME_MAP[norm] || COLOR_NAME_MAP[p.toLowerCase()] || "#d4a373";
+    });
+    if (hexes.length === 2) {
+      return {
+        name: str,
+        hex: `linear-gradient(135deg, ${hexes[0]} 50%, ${hexes[1]} 50%)`,
+      };
+    } else if (hexes.length >= 3) {
+      return {
+        name: str,
+        hex: `linear-gradient(135deg, ${hexes[0]} 33.3%, ${hexes[1]} 33.3% 66.6%, ${hexes[2]} 66.6%)`,
+      };
+    }
+  }
+
   // If raw is just a hex code
   if (str.startsWith("#")) {
     return { name: str, hex: str };
