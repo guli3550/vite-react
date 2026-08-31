@@ -3,6 +3,8 @@ name: GULI Production Smoke
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17 * * * *"
@@ -12,18 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check Render storefront
+      - name: Check canonical Vercel storefront
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -L -sS -o /tmp/storefront.html -w '%{http_code}' --max-time 30 'https://guli-lingerie-web.onrender.com/?tgapp=smoke')"
+          code="$(curl -L -sS -o /tmp/storefront.html -w '%{http_code}' --max-time 30 'https://vite-react-seven-inky-10.vercel.app/?tgapp=smoke')"
           if [[ "$code" != "200" ]]; then
-            echo "Render storefront is not publicly reachable: HTTP $code"
+            echo "Vercel storefront is not publicly reachable: HTTP $code"
             head -c 1000 /tmp/storefront.html || true
             exit 1
           fi
           grep -q '<div id="root"></div>' /tmp/storefront.html
-          echo "Render storefront OK"
+          echo "Vercel storefront OK"
 
       - name: Check Render API health
         shell: bash
@@ -34,6 +36,16 @@ jobs:
           grep -q '"success":true' <<< "$body"
           grep -q '"status":"online"' <<< "$body"
           echo "Render health OK"
+
+      - name: Check Vercel API rewrite to Render
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl -sS --fail --max-time 30 https://vite-react-seven-inky-10.vercel.app/api/health)"
+          echo "$body"
+          grep -q '"success":true' <<< "$body"
+          grep -q '"status":"online"' <<< "$body"
+          echo "Vercel API rewrite OK"
 
       - name: Check Cloudflare gateway health
         shell: bash
@@ -77,4 +89,4 @@ jobs:
       - name: Complete job
         if: ${{ always() }}
         shell: bash
-        run: echo "Render/Gateway production smoke checks completed; review any failed step above."
+        run: echo "Vercel/Render/Gateway production smoke checks completed; review any failed step above."
