@@ -41,7 +41,7 @@ begin
     update products set stock=stock-qty,updated_at=now() where id=prod.id;
   end loop;
   if promo_code<>'' then
-    select * into promo from promo_codes where upper(code)=promo_code for update;
+    select * into promo from promo_codes pc where upper(pc.code)=promo_code for update;
     if not found or not promo.active then raise exception 'Promo kod topilmadi yoki faol emas'; end if;
     if promo.starts_at is not null and promo.starts_at>now() then raise exception 'Promo kod hali kuchga kirmagan'; end if;
     if promo.expires_at is not null and promo.expires_at<now() then raise exception 'Promo kod muddati tugagan'; end if;
@@ -83,7 +83,7 @@ begin
     end loop;
   end if;
   code:=upper(trim(coalesce(o.promo_code,'')));
-  if coalesce(o.promo_reserved,false) and code<>'' then update promo_codes set used_count=greatest(0,coalesce(used_count,0)-1) where upper(code)=code; promo_released:=found; end if;
+  if coalesce(o.promo_reserved,false) and code<>'' then update promo_codes pc set used_count=greatest(0,coalesce(pc.used_count,0)-1) where upper(pc.code)=code; promo_released:=found; end if;
   update orders set stock_reserved=false,promo_reserved=false,reservation_released_at=now(),updated_at=now() where id=p_order_id;
   return jsonb_build_object('released',true,'stock_items',released_items,'promo_released',promo_released);
 end; $$;
