@@ -7,20 +7,17 @@ const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPAB
 
 async function release(id) {
   if (!supabase || id == null) return null;
-  const { data, error } = await supabase.rpc('release_order_reservation', { p_order_id: Number(id) });
+  const { data, error } = await supabase.rpc('release_order_reservation', { p_order_id: String(id) });
   if (error) throw error;
   return data;
 }
 async function rereserve(id) {
   if (!supabase || id == null) return null;
-  const { data, error } = await supabase.rpc('rereserve_order_reservation', { p_order_id: Number(id) });
+  const { data, error } = await supabase.rpc('rereserve_order_reservation', { p_order_id: String(id) });
   if (error) throw error;
   return data;
 }
 
-// Run lifecycle work after the response is actually completed. This is important
-// when a route calls next(): the previous implementation could release too early,
-// before a downstream handler had produced the final response/status.
 function runAfterResponse(res, after) {
   let settled = false;
   const once = () => {
@@ -86,8 +83,8 @@ wrapBefore('post', '/api/orders/:orderNumber/receipt', async (req) => {
   return true;
 });
 wrapBefore('post', '/api/admin/orders/:id/payment-receipt', async (req) => {
-  const id = Number(req.params.id);
-  if (!Number.isSafeInteger(id) || id <= 0 || !supabase) return true;
+  const id = String(req.params.id || '').trim();
+  if (!id || !supabase) return true;
   const { data: order, error } = await supabase.from('orders').select('id,payment_status,reservation_released_at').eq('id', id).maybeSingle();
   if (error) throw error;
   if (order && String(order.payment_status || '') === 'rejected' && order.reservation_released_at) await rereserve(order.id);
