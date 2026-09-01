@@ -45,9 +45,15 @@ begin
     elsif old_status = 'receipt_uploaded' and new.payment_status not in ('receipt_uploaded','verified','rejected') then
       raise exception 'Noto‘g‘ri payment state transition: % -> %', old_status, new.payment_status;
     elsif old_status = 'verified' and new.payment_status not in ('verified','rejected') then
-      raise exception 'Noto‘g‘ri payment state transition: % -> %', old_status, new.payment_status;
-    elsif old_status = 'rejected' and new.payment_status not in ('rejected','receipt_uploaded','verified') then
-      raise exception 'Noto‘g‘ri payment state transition: % -> %', old_status, new.payment_status;
+      raise exception 'Tasdiqlangan to‘lovni qayta ochib bo‘lmaydi';
+    elsif old_status = 'rejected' and new.payment_status not in ('rejected','receipt_uploaded') then
+      raise exception 'Rad etilgan to‘lov faqat yangi chek bilan qayta tekshiriladi';
+    end if;
+
+    -- Rejected -> verified is never allowed directly. A replacement receipt must
+    -- first move the order to receipt_uploaded, then an admin can verify it.
+    if old_status = 'rejected' and new.payment_status = 'receipt_uploaded' and nullif(trim(coalesce(new.payment_receipt_path,'')),'') is null then
+      raise exception 'receipt_uploaded holati uchun yangi chek talab qilinadi';
     end if;
 
     if new.payment_status = 'verified' then
