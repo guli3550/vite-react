@@ -84,7 +84,7 @@
       const buffer = Buffer.from(data, "base64");
       const { error: uploadError } = await supabase.storage.from(RECEIPT_BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
       if (uploadError) throw uploadError;
-      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("telegram_id", req.customerUser.id).select("id,order_number,total,payment_status").single();
+      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("telegram_id", req.customerUser.id).select("id,order_number,total,payment_status,payment_receipt_path").single();
       if (updateError) throw updateError;
       res.json({ success: true, message: "Chek muvaffaqiyatli yuborildi. Admin tekshiradi.", data: updated });
     } catch (error) {
@@ -93,6 +93,7 @@
       res.status(500).json({ success: false, message: "Chekni yuborishda xatolik" });
     }
   });
+
   app.get("/api/admin/orders/:id/payment-receipt", requireAdmin, async (req, res) => {
     try {
       const { data: order, error } = await supabase.from("orders").select("id,order_number,total,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at").eq("id", req.params.id).maybeSingle();
@@ -105,6 +106,35 @@
       res.json({ success: true, data: { ...order, receipt_url: signed.signedUrl } });
     } catch (error) { console.error("Admin receipt view error:", error); res.status(500).json({ success: false, message: "Chekni ochishda xatolik" }); }
   });
+
+  // Admin can replace/attach a receipt and keep it in the same private Supabase bucket.
+  app.post("/api/admin/orders/:id/payment-receipt", requireAdmin, async (req, res) => {
+    try {
+      const { data, mimeType, extension } = req.body || {};
+      if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Chek rasmi topilmadi" });
+      if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") return res.status(400).json({ success: false, message: "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin" });
+      if (data.length > 8200000) return res.status(413).json({ success: false, message: "Chek hajmi juda katta" });
+      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,payment,payment_status").eq("id", req.params.id).maybeSingle();
+      if (orderError) throw orderError;
+      if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
+      await ensureReceiptBucket();
+      const cleanExt = String(extension || (mimeType === "application/pdf" ? "pdf" : "jpg")).replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
+      const path = `receipts/${order.id}/admin-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
+      const buffer = Buffer.from(data, "base64");
+      const { error: uploadError } = await supabase.storage.from(RECEIPT_BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).select("id,order_number,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at").single();
+      if (updateError) throw updateError;
+      const { data: signed, error: signedError } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path, 900);
+      if (signedError) throw signedError;
+      res.json({ success: true, message: "Chek admin tomonidan saqlandi", data: { ...updated, receipt_url: signed.signedUrl } });
+    } catch (error) {
+      console.error("Admin receipt upload error:", error);
+      if (/payment_receipt_path|payment_status|payment_receipt_uploaded_at/i.test(error.message || "")) return res.status(503).json({ success: false, message: "To‘lov chek ustunlari bazada hali tayyor emas." });
+      res.status(500).json({ success: false, message: "Chekni saqlashda xatolik" });
+    }
+  });
+
   app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
     try {
       const paymentStatus = ["pending", "receipt_uploaded", "verified", "rejected"].includes(String(req.body?.payment_status)) ? String(req.body.payment_status) : null;
