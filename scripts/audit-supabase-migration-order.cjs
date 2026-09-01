@@ -23,7 +23,7 @@ if (!/create or replace function public\.create_secure_order\(\s*p_order jsonb,\
 if (!/where id::text = product_id_key/i.test(canonical) || !/where id::text = prod\.id::text/i.test(canonical)) {
   fail('canonical checkout does not use text-safe product ID matching');
 }
-if (!/Migration preflight: fail closed/i.test(reservation)) {
+if (!/Reservation migration requires public\.orders/i.test(reservation) || !/create_secure_order.*jsonb.*bigint/i.test(reservation) || !/orders.*id.*uuid/i.test(reservation)) {
   fail('reservation migration is missing fail-closed preflight');
 }
 if (!/trg_guli_verified_payment_terminal/i.test(terminal)) {
