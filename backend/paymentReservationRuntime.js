@@ -1,5 +1,6 @@
 // GULI payment reservation runtime.
-// Bridges the DB reservation functions into the existing canonical payment routes.
+// Loaded BEFORE manualCardPaymentRuntime/paymentConfirmationRuntime so it can
+// wrap the canonical route registrations without replacing route implementations.
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -23,79 +24,73 @@ async function rereserve(id) {
   return data;
 }
 
-function wrapRegistration(method, path, after) {
+function wrapAfter(method, path, after) {
   const original = express.application[method];
   express.application[method] = function(routePath, ...handlers) {
     if (routePath !== path || !handlers.length) return original.call(this, routePath, ...handlers);
     const last = handlers[handlers.length - 1];
     handlers[handlers.length - 1] = async function(req, res, next) {
       await last(req, res, next);
-      try { await after(req, res); } catch (e) { console.error('Payment reservation lifecycle error:', e.message); }
+      if (res.headersSent && res.statusCode >= 200 && res.statusCode < 300) {
+        try { await after(req, res); }
+        catch (e) { console.error('Payment reservation lifecycle error:', e.message); }
+      }
     };
     return original.call(this, routePath, ...handlers);
   };
 }
 
-// Timeout route: canonical paymentConfirmationRuntime changes the order to rejected/
-// "To‘lov qilinmadi"; release is then performed exactly once by the DB function.
-wrapRegistration('post', '/api/orders/:orderNumber/payment-timeout', async (req) => {
-  if (!supabase || !resSucceeded(req)) return;
-  const order = await findCustomerOrder(req);
-  if (order) await release(order.id);
-});
-
-// Admin rejection releases the inventory/promo reservation. If the customer later
-// uploads a replacement receipt, the receipt wrapper below re-reserves first.
-wrapRegistration('put', '/api/admin/orders/:id/payment', async (req) => {
-  if (!supabase || String(req.body?.payment_status || '') !== 'rejected') return;
-  await release(req.params.id);
-});
-
-// Rejected receipts remain replaceable. Re-reserve before accepting a new receipt so
-// the replacement cannot be verified against inventory that has already been released.
-wrapRegistration('post', '/api/orders/:orderNumber/receipt', async (req) => {
-  // This hook runs after upload, so it cannot safely re-reserve before the upload.
-  // The actual preflight is installed below by wrapping the registration a second time.
-});
-
-// Replace the previous receipt wrapper with a preflight-aware registration.
-const originalPost = express.application.post;
-express.application.post = function(routePath, ...handlers) {
-  if (routePath !== '/api/orders/:orderNumber/receipt' || !handlers.length) return originalPost.call(this, routePath, ...handlers);
-  const last = handlers[handlers.length - 1];
-  handlers[handlers.length - 1] = async function(req, res, next) {
-    if (supabase) {
+function wrapBefore(method, path, before) {
+  const original = express.application[method];
+  express.application[method] = function(routePath, ...handlers) {
+    if (routePath !== path || !handlers.length) return original.call(this, routePath, ...handlers);
+    const last = handlers[handlers.length - 1];
+    handlers[handlers.length - 1] = async function(req, res, next) {
       try {
-        const order = await findCustomerOrder(req);
-        if (order && String(order.payment_status || '') === 'rejected' && order.reservation_released_at) {
-          await rereserve(order.id);
-        }
+        const allowed = await before(req, res);
+        if (allowed === false) return;
       } catch (e) {
-        console.error('Payment reservation re-reserve failed:', e.message);
+        console.error('Payment reservation preflight error:', e.message);
         return res.status(409).json({ success: false, message: e.message || 'Mahsulot rezervatsiyasini qayta tiklab bo‘lmadi' });
       }
-    }
-    return last(req, res, next);
+      return last(req, res, next);
+    };
+    return original.call(this, routePath, ...handlers);
   };
-  return originalPost.call(this, routePath, ...handlers);
-};
+}
 
-async function findCustomerOrder(req) {
+async function findOrderByNumber(orderNumber) {
   if (!supabase) return null;
-  const orderNumber = String(req.params.orderNumber || '').trim();
-  const telegramId = req.headers['x-telegram-init-data'] ? null : null;
-  // The canonical route already authenticates the customer. We only need a safe order
-  // lookup here; use order_number and, when available, the Telegram/guest identifier
-  // injected by the canonical handler stack is not guaranteed at this preload layer.
-  // Restrict by order number and use maybeSingle; lifecycle functions are service-role only.
-  const { data, error } = await supabase.from('orders').select('id,order_number,telegram_id,payment_status,reservation_released_at').eq('order_number', orderNumber).maybeSingle();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id,order_number,payment_status,reservation_released_at')
+    .eq('order_number', String(orderNumber || '').trim())
+    .maybeSingle();
   if (error) throw error;
   return data;
 }
 
-function resSucceeded(req) {
-  // The timeout endpoint is allowed to be called only after the canonical route has
-  // checked the 10-minute window. This hook therefore performs no client-controlled
-  // time calculation and simply releases the resulting order reservation.
+// Customer timeout: paymentConfirmationRuntime must first authenticate the customer
+// and confirm the 10-minute window. We only release after that route returns 2xx.
+wrapAfter('post', '/api/orders/:orderNumber/payment-timeout', async (req) => {
+  const order = await findOrderByNumber(req.params.orderNumber);
+  if (order) await release(order.id);
+});
+
+// Admin rejection: release only after the canonical admin route successfully changes
+// payment_status to rejected. Verified payments never enter this hook.
+wrapAfter('put', '/api/admin/orders/:id/payment', async (req) => {
+  if (String(req.body?.payment_status || '') !== 'rejected') return;
+  await release(req.params.id);
+});
+
+// A rejected receipt can be replaced. Re-reserve BEFORE upload so a later verification
+// cannot succeed against inventory that was already released.
+wrapBefore('post', '/api/orders/:orderNumber/receipt', async (req) => {
+  const order = await findOrderByNumber(req.params.orderNumber);
+  if (!order) return true;
+  if (String(order.payment_status || '') === 'rejected' && order.reservation_released_at) {
+    await rereserve(order.id);
+  }
   return true;
-}
+});
