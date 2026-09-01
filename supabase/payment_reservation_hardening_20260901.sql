@@ -8,30 +8,18 @@ begin;
 -- This prevents installing reservation metadata against an incompatible/legacy schema.
 do $$
 begin
-  if to_regclass('public.orders') is null then
-    raise exception 'Reservation migration requires public.orders';
-  end if;
-  if to_regclass('public.products') is null then
-    raise exception 'Reservation migration requires public.products';
-  end if;
-  if to_regclass('public.promo_codes') is null then
-    raise exception 'Reservation migration requires public.promo_codes';
-  end if;
+  if to_regclass('public.orders') is null then raise exception 'Reservation migration requires public.orders'; end if;
+  if to_regclass('public.products') is null then raise exception 'Reservation migration requires public.products'; end if;
+  if to_regclass('public.promo_codes') is null then raise exception 'Reservation migration requires public.promo_codes'; end if;
   if not exists (
-    select 1 from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname = 'create_secure_order'
-      and pg_get_function_identity_arguments(p.oid) = 'p_order jsonb, p_telegram_id bigint'
-  ) then
-    raise exception 'Reservation migration requires canonical create_secure_order(jsonb,bigint)';
-  end if;
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'create_secure_order'
+      and pg_get_function_identity_arguments(p.oid) = 'jsonb, bigint'
+  ) then raise exception 'Reservation migration requires canonical create_secure_order(jsonb,bigint)'; end if;
   if not exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'orders' and column_name = 'items'
-  ) then
-    raise exception 'Reservation migration requires orders.items jsonb';
-  end if;
+  ) then raise exception 'Reservation migration requires orders.items jsonb'; end if;
 end;
 $$;
 
@@ -45,119 +33,69 @@ create index if not exists orders_reservation_release_idx
   where payment_status in ('pending','receipt_uploaded','rejected');
 
 create or replace function public.guli_mark_new_order_reservation()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if lower(trim(coalesce(new.payment,''))) = 'card_manual' then
     new.stock_reserved := true;
     new.promo_reserved := nullif(trim(coalesce(new.promo_code,'')),'') is not null;
     new.reservation_released_at := null;
   else
-    new.stock_reserved := false;
-    new.promo_reserved := false;
-    new.reservation_released_at := null;
+    new.stock_reserved := false; new.promo_reserved := false; new.reservation_released_at := null;
   end if;
   return new;
 end;
 $$;
 
 drop trigger if exists guli_mark_new_order_reservation on public.orders;
-create trigger guli_mark_new_order_reservation
-before insert on public.orders
+create trigger guli_mark_new_order_reservation before insert on public.orders
 for each row execute function public.guli_mark_new_order_reservation();
 
 create or replace function public.release_order_reservation(p_order_id bigint)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  o record;
-  it jsonb;
-  qty integer;
-  product_id_key text;
-  released_stock integer := 0;
-  released_promo boolean := false;
-  promo record;
-  rows_affected integer := 0;
+  o record; it jsonb; qty integer; product_id_key text; released_stock integer := 0;
+  released_promo boolean := false; promo record; rows_affected integer := 0;
 begin
   select * into o from public.orders where id = p_order_id for update;
   if not found then raise exception 'Buyurtma topilmadi'; end if;
-
-  if o.payment_status not in ('rejected')
-     and coalesce(o.status,'') <> 'To‘lov qilinmadi' then
+  if o.payment_status not in ('rejected') and coalesce(o.status,'') <> 'To‘lov qilinmadi' then
     raise exception 'Faqat muddati tugagan yoki rad etilgan to‘lov rezervatsiyasi bo‘shatiladi';
   end if;
-
   if o.reservation_released_at is not null then
     return jsonb_build_object('released', false, 'already_released', true, 'order_id', o.id);
   end if;
-
-  if coalesce(o.stock_reserved,false) is not true
-     and coalesce(o.promo_reserved,false) is not true then
+  if coalesce(o.stock_reserved,false) is not true and coalesce(o.promo_reserved,false) is not true then
     update public.orders set reservation_released_at = now(), updated_at = now() where id = o.id;
     return jsonb_build_object('released', false, 'nothing_reserved', true, 'order_id', o.id);
   end if;
-
-  if coalesce(o.payment_status,'pending') = 'verified' then
-    raise exception 'Tasdiqlangan to‘lov rezervatsiyasini bo‘shatish mumkin emas';
-  end if;
-
+  if coalesce(o.payment_status,'pending') = 'verified' then raise exception 'Tasdiqlangan to‘lov rezervatsiyasini bo‘shatish mumkin emas'; end if;
   if coalesce(o.stock_reserved,false) is true then
     for it in select value from jsonb_array_elements(coalesce(o.items,'[]'::jsonb)) loop
       qty := coalesce(nullif(it->>'quantity','')::integer, nullif(it->>'qty','')::integer, 1);
       product_id_key := nullif(trim(coalesce(it->>'product_id', it->'product'->>'id','')),'');
       if qty < 1 or product_id_key is null then raise exception 'Buyurtma mahsuloti noto‘g‘ri'; end if;
-
-      update public.products
-         set stock = coalesce(stock,0) + qty, updated_at = now()
-       where id::text = product_id_key;
+      update public.products set stock = coalesce(stock,0) + qty, updated_at = now() where id::text = product_id_key;
       get diagnostics rows_affected = row_count;
-      if rows_affected = 0 then
-        raise exception 'Rezervatsiya mahsuloti topilmadi: %', product_id_key;
-      end if;
+      if rows_affected = 0 then raise exception 'Rezervatsiya mahsuloti topilmadi: %', product_id_key; end if;
       released_stock := released_stock + qty;
     end loop;
   end if;
-
-  if coalesce(o.promo_reserved,false) is true
-     and nullif(trim(coalesce(o.promo_code,'')),'') is not null then
-    select * into promo from public.promo_codes
-     where upper(code) = upper(trim(o.promo_code)) for update;
+  if coalesce(o.promo_reserved,false) is true and nullif(trim(coalesce(o.promo_code,'')),'') is not null then
+    select * into promo from public.promo_codes where upper(code) = upper(trim(o.promo_code)) for update;
     if not found then raise exception 'Rezervatsiya promo kodi topilmadi: %', o.promo_code; end if;
     update public.promo_codes set used_count = greatest(0, coalesce(used_count,0) - 1) where id = promo.id;
     released_promo := true;
   end if;
-
-  update public.orders
-     set stock_reserved = false, promo_reserved = false,
-         reservation_released_at = now(), updated_at = now()
-   where id = o.id;
-
-  return jsonb_build_object('released', true, 'order_id', o.id,
-    'stock_units', released_stock, 'promo_released', released_promo);
+  update public.orders set stock_reserved = false, promo_reserved = false, reservation_released_at = now(), updated_at = now() where id = o.id;
+  return jsonb_build_object('released', true, 'order_id', o.id, 'stock_units', released_stock, 'promo_released', released_promo);
 end;
 $$;
 
 create or replace function public.rereserve_order_reservation(p_order_id bigint)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
+returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  o record;
-  it jsonb;
-  prod record;
-  promo record;
-  qty integer;
-  product_id_key text;
-  reserved_stock integer := 0;
-  reserved_promo boolean := false;
+  o record; it jsonb; prod record; promo record; qty integer; product_id_key text;
+  reserved_stock integer := 0; reserved_promo boolean := false;
 begin
   select * into o from public.orders where id = p_order_id for update;
   if not found then raise exception 'Buyurtma topilmadi'; end if;
@@ -165,35 +103,26 @@ begin
   if coalesce(o.stock_reserved,false) is true and o.reservation_released_at is null then
     return jsonb_build_object('reserved', false, 'already_reserved', true, 'order_id', o.id);
   end if;
-
   for it in select value from jsonb_array_elements(coalesce(o.items,'[]'::jsonb)) loop
     qty := coalesce(nullif(it->>'quantity','')::integer, nullif(it->>'qty','')::integer, 1);
     product_id_key := nullif(trim(coalesce(it->>'product_id', it->'product'->>'id','')),'');
     if qty < 1 or product_id_key is null then raise exception 'Buyurtma mahsuloti noto‘g‘ri'; end if;
     select * into prod from public.products where id::text = product_id_key for update;
     if not found then raise exception 'Mahsulot topilmadi'; end if;
-    if coalesce(prod.stock,0) < qty then
-      raise exception '% uchun omborda yetarli qoldiq yo‘q', coalesce(prod.name,prod.title,'Mahsulot');
-    end if;
+    if coalesce(prod.stock,0) < qty then raise exception '% uchun omborda yetarli qoldiq yo‘q', coalesce(prod.name,prod.title,'Mahsulot'); end if;
     update public.products set stock = stock - qty, updated_at = now() where id::text = prod.id::text;
     reserved_stock := reserved_stock + qty;
   end loop;
-
   if nullif(trim(coalesce(o.promo_code,'')),'') is not null then
     select * into promo from public.promo_codes where upper(code)=upper(trim(o.promo_code)) for update;
     if not found or promo.active is not true then raise exception 'Promo kod topilmadi yoki faol emas'; end if;
     if promo.starts_at is not null and promo.starts_at > now() then raise exception 'Promo kod hali kuchga kirmagan'; end if;
     if promo.expires_at is not null and promo.expires_at < now() then raise exception 'Promo kod muddati tugagan'; end if;
     if promo.usage_limit is not null and coalesce(promo.used_count,0) >= promo.usage_limit then raise exception 'Promo koddan foydalanish limiti tugagan'; end if;
-    update public.promo_codes set used_count = coalesce(used_count,0) + 1 where id = promo.id;
-    reserved_promo := true;
+    update public.promo_codes set used_count = coalesce(used_count,0) + 1 where id = promo.id; reserved_promo := true;
   end if;
-
-  update public.orders set stock_reserved = true, promo_reserved = reserved_promo,
-    reservation_released_at = null, updated_at = now() where id = o.id;
-
-  return jsonb_build_object('reserved', true, 'order_id', o.id,
-    'stock_units', reserved_stock, 'promo_reserved', reserved_promo);
+  update public.orders set stock_reserved = true, promo_reserved = reserved_promo, reservation_released_at = null, updated_at = now() where id = o.id;
+  return jsonb_build_object('reserved', true, 'order_id', o.id, 'stock_units', reserved_stock, 'promo_reserved', reserved_promo);
 end;
 $$;
 
@@ -203,5 +132,4 @@ grant execute on function public.release_order_reservation(bigint) to service_ro
 grant execute on function public.rereserve_order_reservation(bigint) to service_role;
 
 commit;
-
 select 'GULI payment reservation hardening installed successfully' as result;
