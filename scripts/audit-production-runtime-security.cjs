@@ -30,7 +30,7 @@ for (const token of [
   'TELEGRAM_WEBHOOK_SECRET',
   'secret_token',
   'x-telegram-bot-api-secret-token',
-  'X-Telegram-Init-Data',
+  'x-telegram-init-data',
   'api/admin/login',
   'api/guest-session',
   'api/promo/validate',
