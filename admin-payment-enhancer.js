@@ -1,9 +1,9 @@
 (() => {
-  const API = (location.hostname.includes('vercel.app') ? 'https://guli-lingerie-api.onrender.com' : '').replace(/\/$/, '');
+  const API = (sessionStorage.getItem('guli_custom_api_url') || localStorage.getItem('guli_custom_api_url') || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
   let ordersCache = []; let loading = false;
   const token = () => sessionStorage.getItem('guli_admin_token') || '';
   const money = (n) => `${Math.round(Number(n) || 0).toLocaleString('uz-UZ')} so'm`;
-  const request = async (path, options = {}) => { const response = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}`, ...(options.headers || {}) } }); const json = await response.json(); if (!response.ok || json.success === false) throw new Error(json.message || 'Server xatosi'); return json; };
+  const request = async (path, options = {}) => { const response = await fetch(`${API}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}`, ...(options.headers || {}) }, cache: 'no-store' }); const json = await response.json(); if (!response.ok || json.success === false) throw new Error(json.message || 'Server xatosi'); return json; };
   const toast = (message) => { let el = document.querySelector('.guli-admin-pay-toast'); if (!el) { el = document.createElement('div'); el.className = 'guli-admin-pay-toast'; document.body.appendChild(el); } el.textContent = message; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2600); };
   async function loadOrders() { if (loading || !token()) return; loading = true; try { const r = await request('/api/admin/orders?limit=500'); ordersCache = r.data || []; } catch {} finally { loading = false; } }
   const findOrder = (text) => { const m = String(text || '').match(/GULI-\d{6}/); return m ? ordersCache.find((o) => String(o.order_number) === m[0]) : null; };

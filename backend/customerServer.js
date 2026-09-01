@@ -25,24 +25,64 @@ const reviewRuntime = fs.readFileSync(reviewRuntimePath, "utf8");
 const receiptWindowRuntime = fs.readFileSync(receiptWindowRuntimePath, "utf8");
 const paymentTelegramNotificationPatch = fs.readFileSync(paymentTelegramNotificationPatchPath, "utf8");
 
+// Production security hardening for the generated Express server.
+const securityBlock = `
+const GULI_RATE_BUCKETS = new Map();
+function guliClientIp(req) {
+  return String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
+}
+function guliRateLimit(name, limit, windowMs) {
+  return (req, res, next) => {
+    const now = Date.now();
+    const key = name + ":" + guliClientIp(req);
+    const old = GULI_RATE_BUCKETS.get(key);
+    if (!old || old.resetAt <= now) GULI_RATE_BUCKETS.set(key, { count: 1, resetAt: now + windowMs });
+    else if (old.count >= limit) return res.status(429).json({ success: false, message: "Juda ko‘p so‘rov. Birozdan keyin qayta urinib ko‘ring." });
+    else old.count += 1;
+    if (GULI_RATE_BUCKETS.size > 5000) {
+      for (const [k, v] of GULI_RATE_BUCKETS) if (v.resetAt <= now) GULI_RATE_BUCKETS.delete(k);
+    }
+    next();
+  };
+}
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
+  next();
+});
+app.use("/api/admin/login", guliRateLimit("admin-login", 10, 15 * 60 * 1000));
+app.use("/api/guest-session", guliRateLimit("guest-session", 20, 60 * 1000));
+app.use("/api/promo/validate", guliRateLimit("promo", 30, 60 * 1000));
+app.use("/api/telegram/webhook", guliRateLimit("telegram-webhook", 120, 60 * 1000));
+`;
+
+// The allowlist is declared once, before the generated source registers CORS.
+const corsPrelude = `
+const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [process.env.VERCEL_APP_URL, process.env.MINI_APP_URL, "https://vite-react-seven-inky-10.vercel.app", "https://vite-react-guli3550.vercel.app"].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
+const GULI_CORS_SET = new Set(GULI_CORS_ORIGINS);
+`;
 source = source.replace(
-  'const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at } = req.body;',
-  'const { order_number, phone, items, subtotal, delivery, discount, total, address, payment, status, created_at, promo_code } = req.body;'
+  'app.use(cors({ origin: true }));',
+  corsPrelude + 'app.use(cors({ origin(origin, callback) { if (!origin || GULI_CORS_SET.size === 0 || GULI_CORS_SET.has(String(origin).replace(/\\/$/, ""))) return callback(null, true); return callback(null, false); }, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "X-Telegram-Init-Data", "X-Guli-Guest-Token", "X-Telegram-Bot-Api-Secret-Token"] }));'
 );
 source = source.replace(
-  'const order = { order_number: sixDigitOrderNumber, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items: normalizedItems, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", status: status || "Qabul qilindi", created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };',
-  'let promoMeta = null; if (promo_code) { const { data: promoRow } = await supabase.from("promo_codes").select("code,discount_type,discount_value").eq("code",String(promo_code).trim().toUpperCase()).maybeSingle(); if (promoRow) promoMeta = promoRow; } const order = { order_number: sixDigitOrderNumber, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, telegram_phone, phone: phone.trim(), items: normalizedItems, subtotal: Number(subtotal) || 0, delivery: Number(delivery) || 0, discount: Number(discount) || 0, total: Number(total) || 0, address: address || null, payment: payment || "cash", payment_status: payment === "card_manual" ? "pending" : "pending", status: status || "Qabul qilindi", promo_code: promoMeta?.code || null, promo_discount_type: promoMeta?.discount_type || null, promo_discount_value: promoMeta ? Number(promoMeta.discount_value) : null, created_at: created_at || new Date().toISOString(), updated_at: new Date().toISOString() };'
+  'app.use(express.json({ limit: "4mb" }));',
+  'app.use(express.json({ limit: "10mb" }));' + securityBlock
 );
 source = source.replace(
-  'return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null };',
-  'return { id: Number(user.id), username: user.username || null, first_name: user.first_name || null, last_name: user.last_name || null, photo_url: user.photo_url || null };'
+  'await telegramApi("setWebhook", { url: webhookUrl });',
+  'await telegramApi("setWebhook", { url: webhookUrl, ...(process.env.TELEGRAM_WEBHOOK_SECRET ? { secret_token: String(process.env.TELEGRAM_WEBHOOK_SECRET).slice(0, 256) } : {}) });'
 );
-source = source.replace('express.json({ limit: "4mb" })', 'express.json({ limit: "10mb" })');
-source = source.replace('await telegramApi("setWebhook", { url: webhookUrl });', 'await telegramApi("setWebhook", { url: webhookUrl, allowed_updates: ["message", "callback_query", "my_chat_member", "chat_member"] });');
+source = source.replace(
+  'app.post("/api/telegram/webhook", async (req, res) => {',
+  'app.post("/api/telegram/webhook", (req, res, next) => { const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim(); if (expected && req.headers["x-telegram-bot-api-secret-token"] !== expected) return res.sendStatus(401); if (!expected && process.env.NODE_ENV === "production") console.warn("SECURITY WARNING: TELEGRAM_WEBHOOK_SECRET is not configured"); next(); }, async (req, res) => {'
+);
 
 const marker = '\nconst PORT=process.env.PORT||10000;';
 if (!source.includes(marker)) throw new Error("customerServer: backend/index.js marker not found");
 source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${telegramAdminConfigPatch}\n${broadcastDirectRoutePatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${paymentTelegramNotificationPatch}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
-runner(require, module, module.exports, indexPath, __dirname);
+runner(require, module, module.exports, indexPath, __filename, __dirname);
