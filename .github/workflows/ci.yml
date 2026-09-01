@@ -41,4 +41,4 @@ jobs:
       - name: Run payment security static audit
         run: node scripts/audit-payment-security.js
       - name: Run payment reservation static audit
-        run: node scripts/audit-payment-reservation.js
+        run: node scripts/audit-payment-reservation.cjs
