@@ -5,7 +5,8 @@
 begin;
 
 -- Migration preflight: fail closed if the canonical checkout contract is missing.
--- This prevents installing reservation metadata against an incompatible/legacy schema.
+-- PostgreSQL's pg_get_function_identity_arguments() includes argument names,
+-- so validate the actual argument type OIDs instead of comparing its display text.
 do $$
 begin
   if to_regclass('public.orders') is null then raise exception 'Reservation migration requires public.orders'; end if;
@@ -14,7 +15,9 @@ begin
   if not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'create_secure_order'
-      and pg_get_function_identity_arguments(p.oid) = 'jsonb, bigint'
+      and p.pronargs = 2
+      and p.proargtypes[0] = 'jsonb'::regtype
+      and p.proargtypes[1] = 'bigint'::regtype
   ) then raise exception 'Reservation migration requires canonical create_secure_order(jsonb,bigint)'; end if;
   if not exists (
     select 1 from information_schema.columns
