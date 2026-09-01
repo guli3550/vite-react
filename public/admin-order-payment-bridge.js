@@ -42,7 +42,9 @@
       o.receipt_url = existingReceipt;
     }
 
-    if (attachReceipt && !o.receiptUrl && o.id) {
+    // Private receipts use short-lived signed URLs. Always refresh the URL when
+    // a receipt path exists so an expired/stale URL cannot produce a broken image.
+    if (attachReceipt && o.id && (o.payment_receipt_path || !o.receiptUrl)) {
       try {
         const r = await originalFetch(`${API}/api/admin/orders/${encodeURIComponent(o.id)}/payment-receipt`, {
           method: 'GET',
@@ -50,11 +52,12 @@
           cache: 'no-store',
         });
         const j = await r.json().catch(() => ({}));
-        if (r.ok && j.success && j.data?.receipt_url) {
-          o.receiptUrl = j.data.receipt_url;
-          o.receipt_url = j.data.receipt_url;
-          o.payment_receipt_path = j.data.payment_receipt_path || o.payment_receipt_path || '';
-          o.payment_status = j.data.payment_status || o.payment_status || '';
+        if (r.ok && j.success) {
+          const receiptUrl = String(j.data?.receipt_url || '');
+          o.receiptUrl = receiptUrl;
+          o.receipt_url = receiptUrl;
+          o.payment_receipt_path = j.data?.payment_receipt_path || o.payment_receipt_path || '';
+          o.payment_status = j.data?.payment_status || o.payment_status || '';
         }
       } catch {}
     }
@@ -68,8 +71,6 @@
     const isOrderEndpoint = /\/api\/orders(?:\/|\?|$)/.test(url);
     if (!isAdmin && !isOrderEndpoint) return json;
 
-    // /api/admin/dashboard contains recentOrders; /api/admin/orders and
-    // /api/orders contain a direct array/object. Normalize every known shape.
     if (Array.isArray(data)) {
       json.data = await Promise.all(data.map((o) => normalizeOrder(o, headers, isAdmin)));
     } else if (data && typeof data === 'object') {
@@ -108,8 +109,6 @@
     }
   }
 
-  // Legacy localStorage order snapshots can otherwise re-introduce card_manual
-  // and make the customer order drawer show "Naqd" after a reload.
   function normalizeStoredOrders(value) {
     try {
       const parsed = JSON.parse(value || '[]');
