@@ -28,6 +28,7 @@ for (const token of [
   'CORS_ORIGINS',
   '10mb',
   'TELEGRAM_WEBHOOK_SECRET',
+  'secret_token',
   'X-Telegram-Bot-Api-Secret-Token',
   'X-Telegram-Init-Data',
   'api/admin/login',
@@ -41,8 +42,8 @@ for (const token of [
 }
 
 const index = fs.readFileSync(indexPath, 'utf8');
-if (!index.includes('app.use(cors({ origin: true }))')) pass('index CORS baseline is known and guarded by production runtime');
-else pass('index CORS baseline detected; production runtime guard is required');
+if (index.includes('app.use(cors({ origin: true }))')) pass('index CORS baseline detected; production runtime guard is required');
+else pass('index CORS baseline is already hardened');
 
 if (failed) process.exit(1);
 console.log('GULI production runtime security static audit: PASS');
