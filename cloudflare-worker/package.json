@@ -1,0 +1,9 @@
+{
+  "name": "guli-gateway-worker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GULI Cloudflare Worker gateway",
+  "scripts": {
+    "deploy": "npx wrangler deploy"
+  }
+}
