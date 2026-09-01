@@ -8,6 +8,7 @@ const TELEGRAM_INITDATA_MAX_AGE_SECONDS = 60 * 60;
 const buckets = new Map();
 const securedApps = new WeakSet();
 const originalUse = express.application.use;
+const originalFetch = global.fetch;
 
 function corsOrigins() {
   return new Set(
@@ -110,5 +111,28 @@ express.application.use = function productionSecurityUse(...args) {
   const nextArgs = args.map((arg) => (isJsonParser(arg) ? express.json({ limit: MAX_JSON_LIMIT }) : arg));
   return originalUse.apply(this, nextArgs);
 };
+
+// Ensure every Telegram setWebhook call carries the secret_token, including
+// legacy calls that still originate from backend/index.js.
+if (typeof originalFetch === 'function') {
+  global.fetch = async function productionSecurityFetch(input, init = {}) {
+    const url = typeof input === 'string' ? input : String(input?.url || '');
+    if (/^https:\/\/api\.telegram\.org\/bot[^/]+\/setWebhook(?:\?|$)/i.test(url)) {
+      const secret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+      if (secret) {
+        let body = init.body;
+        try {
+          const parsed = typeof body === 'string' ? JSON.parse(body) : null;
+          if (parsed && typeof parsed === 'object') {
+            parsed.secret_token = secret.slice(0, 256);
+            body = JSON.stringify(parsed);
+            init = { ...init, body };
+          }
+        } catch {}
+      }
+    }
+    return originalFetch(input, init);
+  };
+}
 
 console.log('[Production security] CORS allowlist, 10mb JSON, Telegram freshness, webhook secret and rate limits armed');
