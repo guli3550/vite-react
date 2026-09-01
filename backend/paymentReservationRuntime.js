@@ -91,12 +91,29 @@ wrapAfter('put', '/api/admin/orders/:id/payment', async (req) => {
   await release(req.params.id);
 }, [200, 201, 204]);
 
-// A rejected receipt can be replaced. Re-reserve BEFORE upload so later verification
-// cannot succeed against inventory that has already been released.
+// A rejected customer receipt can be replaced. Re-reserve BEFORE upload so later
+// verification cannot succeed against inventory that has already been released.
 wrapBefore('post', '/api/orders/:orderNumber/receipt', async (req) => {
   const order = await findOrderByNumber(req.params.orderNumber);
   if (!order) return true;
   if (String(order.payment_status || '') === 'rejected' && order.reservation_released_at) {
+    await rereserve(order.id);
+  }
+  return true;
+});
+
+// Admin may also replace a rejected receipt. This path must re-reserve too;
+// otherwise an admin-uploaded receipt could be verified against released stock.
+wrapBefore('post', '/api/admin/orders/:id/payment-receipt', async (req) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0 || !supabase) return true;
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select('id,payment_status,reservation_released_at')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (order && String(order.payment_status || '') === 'rejected' && order.reservation_released_at) {
     await rereserve(order.id);
   }
   return true;
