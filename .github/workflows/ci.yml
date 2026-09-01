@@ -46,3 +46,5 @@ jobs:
         run: node scripts/audit-payment-reservation-admin.cjs
       - name: Run verified payment terminal static audit
         run: node scripts/audit-payment-verified-terminal.cjs
+      - name: Run payment audit-log static audit
+        run: node scripts/audit-payment-audit-log.cjs
