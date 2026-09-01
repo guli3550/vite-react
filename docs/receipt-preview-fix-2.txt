@@ -1,0 +1,1 @@
+Receipt preview uses a signed URL from the admin backend for private storage objects.
