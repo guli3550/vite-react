@@ -59,7 +59,7 @@ function freshTelegramInitData(initData) {
 function securityMiddleware(req, res, next) {
   const origin = String(req.headers.origin || '').trim().replace(/\/$/, '');
   const origins = corsOrigins();
-  if (origin && origins.size && !origins.has(origin)) {
+  if (origin && (!origins.size || !origins.has(origin))) {
     return res.status(403).json({ success: false, message: 'Origin ruxsat etilmagan' });
   }
 
