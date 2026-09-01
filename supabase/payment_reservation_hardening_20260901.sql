@@ -4,9 +4,6 @@
 
 begin;
 
--- Migration preflight: fail closed if the canonical checkout contract is missing.
--- PostgreSQL's pg_get_function_identity_arguments() includes argument names,
--- so validate the actual argument type OIDs instead of comparing its display text.
 do $$
 begin
   if to_regclass('public.orders') is null then raise exception 'Reservation migration requires public.orders'; end if;
@@ -15,14 +12,14 @@ begin
   if not exists (
     select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname = 'create_secure_order'
-      and p.pronargs = 2
-      and p.proargtypes[0] = 'jsonb'::regtype
-      and p.proargtypes[1] = 'bigint'::regtype
+      and p.pronargs = 2 and p.proargtypes[0] = 'jsonb'::regtype and p.proargtypes[1] = 'bigint'::regtype
   ) then raise exception 'Reservation migration requires canonical create_secure_order(jsonb,bigint)'; end if;
   if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'orders' and column_name = 'items'
+    select 1 from information_schema.columns where table_schema = 'public' and table_name = 'orders' and column_name = 'items'
   ) then raise exception 'Reservation migration requires orders.items jsonb'; end if;
+  if not exists (
+    select 1 from information_schema.columns where table_schema = 'public' and table_name = 'orders' and column_name = 'id' and data_type = 'uuid'
+  ) then raise exception 'Reservation migration requires public.orders.id uuid'; end if;
 end;
 $$;
 
@@ -53,7 +50,12 @@ drop trigger if exists guli_mark_new_order_reservation on public.orders;
 create trigger guli_mark_new_order_reservation before insert on public.orders
 for each row execute function public.guli_mark_new_order_reservation();
 
-create or replace function public.release_order_reservation(p_order_id bigint)
+-- Production public.orders.id is UUID. The previous bigint signature was incompatible.
+-- Drop the incompatible overload if it was installed by an earlier failed attempt.
+drop function if exists public.release_order_reservation(bigint);
+drop function if exists public.rereserve_order_reservation(bigint);
+
+create or replace function public.release_order_reservation(p_order_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   o record; it jsonb; qty integer; product_id_key text; released_stock integer := 0;
@@ -94,7 +96,7 @@ begin
 end;
 $$;
 
-create or replace function public.rereserve_order_reservation(p_order_id bigint)
+create or replace function public.rereserve_order_reservation(p_order_id uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   o record; it jsonb; prod record; promo record; qty integer; product_id_key text;
@@ -122,17 +124,17 @@ begin
     if promo.starts_at is not null and promo.starts_at > now() then raise exception 'Promo kod hali kuchga kirmagan'; end if;
     if promo.expires_at is not null and promo.expires_at < now() then raise exception 'Promo kod muddati tugagan'; end if;
     if promo.usage_limit is not null and coalesce(promo.used_count,0) >= promo.usage_limit then raise exception 'Promo koddan foydalanish limiti tugagan'; end if;
-    update public.promo_codes set used_count = coalesce(used_count,0) + 1 where id = promo.id; reserved_promo := true;
+    update public.promo_codes set used_count = coalesce(promo.used_count,0) + 1 where id = promo.id; reserved_promo := true;
   end if;
   update public.orders set stock_reserved = true, promo_reserved = reserved_promo, reservation_released_at = null, updated_at = now() where id = o.id;
   return jsonb_build_object('reserved', true, 'order_id', o.id, 'stock_units', reserved_stock, 'promo_reserved', reserved_promo);
 end;
 $$;
 
-revoke all on function public.release_order_reservation(bigint) from public, anon, authenticated;
-revoke all on function public.rereserve_order_reservation(bigint) from public, anon, authenticated;
-grant execute on function public.release_order_reservation(bigint) to service_role;
-grant execute on function public.rereserve_order_reservation(bigint) to service_role;
+revoke all on function public.release_order_reservation(uuid) from public, anon, authenticated;
+revoke all on function public.rereserve_order_reservation(uuid) from public, anon, authenticated;
+grant execute on function public.release_order_reservation(uuid) to service_role;
+grant execute on function public.rereserve_order_reservation(uuid) to service_role;
 
 commit;
 select 'GULI payment reservation hardening installed successfully' as result;
