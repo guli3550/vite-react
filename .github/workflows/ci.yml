@@ -44,3 +44,5 @@ jobs:
         run: node scripts/audit-payment-reservation.cjs
       - name: Run rejected receipt replacement static audit
         run: node scripts/audit-payment-reservation-admin.cjs
+      - name: Run verified payment terminal static audit
+        run: node scripts/audit-payment-verified-terminal.cjs
