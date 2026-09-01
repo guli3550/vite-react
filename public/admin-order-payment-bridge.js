@@ -2,10 +2,15 @@
   'use strict';
 
   // GULI payment/order compatibility bridge.
-  // One canonical response shape is required by the admin drawer, payments tab,
-  // dashboard recent orders and customer order detail. Legacy card_manual data
-  // remains valid in the database but is exposed to the UI as a card payment.
-  const API = 'https://guli-lingerie-api.onrender.com';
+  // The bridge MUST use the same API selected by the admin session. A hardcoded
+  // Render URL creates split-brain data and can return stale/expired receipts.
+  const getApiBase = () => {
+    try {
+      const configured = sessionStorage.getItem('guli_custom_api_url') || '';
+      if (configured.trim()) return configured.trim().replace(/\/$/, '');
+    } catch {}
+    return (window.__GULI_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
+  };
   const originalFetch = window.fetch.bind(window);
   let installed = false;
   let localStoragePatched = false;
@@ -46,6 +51,7 @@
     // a receipt path exists so an expired/stale URL cannot produce a broken image.
     if (attachReceipt && o.id && (o.payment_receipt_path || !o.receiptUrl)) {
       try {
+        const API = getApiBase();
         const r = await originalFetch(`${API}/api/admin/orders/${encodeURIComponent(o.id)}/payment-receipt`, {
           method: 'GET',
           headers,
