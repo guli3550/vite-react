@@ -12,7 +12,9 @@ begin
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.proname = 'create_secure_order'
-      and pg_get_function_identity_arguments(p.oid) = 'jsonb, bigint'
+      and p.pronargs = 2
+      and p.proargtypes[0] = 'jsonb'::regtype
+      and p.proargtypes[1] = 'bigint'::regtype
   ) then
     raise exception 'Checkout concurrency migration requires canonical create_secure_order(jsonb,bigint)';
   end if;
