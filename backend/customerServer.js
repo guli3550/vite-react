@@ -26,15 +26,7 @@ const receiptWindowRuntime = fs.readFileSync(receiptWindowRuntimePath, "utf8");
 const paymentTelegramNotificationPatch = fs.readFileSync(paymentTelegramNotificationPatchPath, "utf8");
 
 // Production security hardening for the generated Express server.
-// Keep the source-of-truth backend/index.js intact while applying safe runtime controls.
 const securityBlock = `
-const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [
-  process.env.VERCEL_APP_URL,
-  process.env.MINI_APP_URL,
-  "https://vite-react-seven-inky-10.vercel.app",
-  "https://vite-react-guli3550.vercel.app",
-].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
-const GULI_CORS_SET = new Set(GULI_CORS_ORIGINS);
 const GULI_RATE_BUCKETS = new Map();
 function guliClientIp(req) {
   return String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
@@ -66,7 +58,7 @@ app.use("/api/promo/validate", guliRateLimit("promo", 30, 60 * 1000));
 app.use("/api/telegram/webhook", guliRateLimit("telegram-webhook", 120, 60 * 1000));
 `;
 
-// The allowlist must be available before the generated source registers CORS middleware.
+// The allowlist is declared once, before the generated source registers CORS.
 const corsPrelude = `
 const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [process.env.VERCEL_APP_URL, process.env.MINI_APP_URL, "https://vite-react-seven-inky-10.vercel.app", "https://vite-react-guli3550.vercel.app"].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
 const GULI_CORS_SET = new Set(GULI_CORS_ORIGINS);
@@ -93,4 +85,4 @@ if (!source.includes(marker)) throw new Error("customerServer: backend/index.js 
 source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${telegramAdminConfigPatch}\n${broadcastDirectRoutePatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${paymentTelegramNotificationPatch}\n${marker}`);
 
 const runner = new Function("require", "module", "exports", "__filename", "__dirname", source);
-runner(require, module, module.exports, indexPath, __dirname);
+runner(require, module, module.exports, indexPath, __filename, __dirname);
