@@ -52,3 +52,5 @@ jobs:
         run: node scripts/audit-supabase-migration-order.cjs
       - name: Run payment reservation runtime static audit
         run: node scripts/audit-payment-reservation-runtime.cjs
+      - name: Run checkout concurrency static audit
+        run: node scripts/audit-checkout-concurrency.cjs
