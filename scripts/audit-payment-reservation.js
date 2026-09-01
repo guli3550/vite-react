@@ -27,7 +27,7 @@ const checks = [
 let failed = 0;
 for (const [label, ok] of checks) {
   console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
-  if (failed) process.exit(1);
+  if (!ok) failed++;
 }
 if (failed) process.exit(1);
 console.log(`Payment reservation static audit passed (${checks.length} checks).`);
