@@ -1,1 +1,0 @@
-Private payment receipts are stored in the payment-receipts Supabase bucket. Browser admin screens resolve payment_receipt_path through /api/admin/orders/:id/payment-receipt to obtain a short-lived signed URL.
