@@ -17,13 +17,13 @@ const checks = [
   ['admin rejection hook exists', runtime.includes("wrapAfter('put', '/api/admin/orders/:id/payment'")],
   ['receipt replacement preflight uses the canonical receipt route', runtime.includes("wrapBefore('post', '/api/orders/:orderNumber/receipt'")],
   ['admin receipt replacement preflight exists', runtime.includes("wrapBefore('post', '/api/admin/orders/:id/payment-receipt'")],
-  ['reservation migration has fail-closed preflight', /Migration preflight: fail closed/i.test(sql) && /create_secure_order.*jsonb.*bigint/i.test(sql)],
+  ['reservation migration has fail-closed preflight', /Reservation migration requires public\.orders/i.test(sql) && /create_secure_order.*jsonb.*bigint/i.test(sql) && /orders.*id.*uuid/i.test(sql)],
   ['release RPC locks the order row', /from public\.orders where id = p_order_id for update/i.test(sql)],
   ['release RPC is idempotent', /reservation_released_at is not null/i.test(sql) && /already_released/i.test(sql)],
   ['release RPC restores stock by product id text', /id::text = product_id_key/i.test(sql)],
   ['release RPC decrements promo usage', /used_count = greatest\(0, coalesce\(used_count,0\) - 1\)/i.test(sql)],
   ['rereserve RPC exists', /create or replace function public\.rereserve_order_reservation/i.test(sql)],
-  ['reservation RPCs are service-role only', /revoke all on function public\.release_order_reservation\(bigint\) from public, anon, authenticated/i.test(sql) && /revoke all on function public\.rereserve_order_reservation\(bigint\) from public, anon, authenticated/i.test(sql)],
+  ['reservation RPCs are service-role only', /revoke all on function public\.release_order_reservation\(uuid\) from public, anon, authenticated/i.test(sql) && /revoke all on function public\.rereserve_order_reservation\(uuid\) from public, anon, authenticated/i.test(sql) && /grant execute on function public\.release_order_reservation\(uuid\) to service_role/i.test(sql) && /grant execute on function public\.rereserve_order_reservation\(uuid\) to service_role/i.test(sql)],
 ];
 
 let failed = 0;
