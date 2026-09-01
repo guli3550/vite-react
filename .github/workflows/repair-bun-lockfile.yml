@@ -1,0 +1,43 @@
+name: Repair Bun lockfile for Cloudflare
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun 1.2.15
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.15
+
+      - name: Regenerate Cloudflare-compatible lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f bun.lock bun.lockb
+          bun install --lockfile-only
+          test -f bun.lock
+          grep -q '"lockfileVersion": 1' bun.lock
+
+      - name: Commit repaired lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bun.lock
+          if git diff --cached --quiet; then
+            echo "No lockfile changes to commit."
+            exit 0
+          fi
+          git commit -m "fix(cloudflare): regenerate Bun 1.2 lockfile"
+          git push origin HEAD:main
