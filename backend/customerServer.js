@@ -66,9 +66,14 @@ app.use("/api/promo/validate", guliRateLimit("promo", 30, 60 * 1000));
 app.use("/api/telegram/webhook", guliRateLimit("telegram-webhook", 120, 60 * 1000));
 `;
 
+// The allowlist must be available before the generated source registers CORS middleware.
+const corsPrelude = `
+const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [process.env.VERCEL_APP_URL, process.env.MINI_APP_URL, "https://vite-react-seven-inky-10.vercel.app", "https://vite-react-guli3550.vercel.app"].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
+const GULI_CORS_SET = new Set(GULI_CORS_ORIGINS);
+`;
 source = source.replace(
   'app.use(cors({ origin: true }));',
-  'app.use(cors({ origin(origin, callback) { if (!origin || GULI_CORS_SET.size === 0 || GULI_CORS_SET.has(String(origin).replace(/\\/$/, ""))) return callback(null, true); return callback(null, false); }, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "X-Telegram-Init-Data", "X-Guli-Guest-Token", "X-Telegram-Bot-Api-Secret-Token"] }));'
+  corsPrelude + 'app.use(cors({ origin(origin, callback) { if (!origin || GULI_CORS_SET.size === 0 || GULI_CORS_SET.has(String(origin).replace(/\\/$/, ""))) return callback(null, true); return callback(null, false); }, methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allowedHeaders: ["Content-Type", "Authorization", "X-Telegram-Init-Data", "X-Guli-Guest-Token", "X-Telegram-Bot-Api-Secret-Token"] }));'
 );
 source = source.replace(
   'app.use(express.json({ limit: "4mb" }));',
@@ -83,10 +88,7 @@ source = source.replace(
   'app.post("/api/telegram/webhook", (req, res, next) => { const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim(); if (expected && req.headers["x-telegram-bot-api-secret-token"] !== expected) return res.sendStatus(401); if (!expected && process.env.NODE_ENV === "production") console.warn("SECURITY WARNING: TELEGRAM_WEBHOOK_SECRET is not configured"); next(); }, async (req, res) => {'
 );
 
-source = source.replace(
-  'const marker = \'\\nconst PORT=process.env.PORT||10000;\';',
-  'const marker = \'\\nconst PORT=process.env.PORT||10000;\';'
-);
+const marker = '\nconst PORT=process.env.PORT||10000;';
 if (!source.includes(marker)) throw new Error("customerServer: backend/index.js marker not found");
 source = source.replace(marker, `\n${patch}\n${manualPaymentPatch}\n${telegramBotPatch}\n${telegramAdminConfigPatch}\n${broadcastDirectRoutePatch}\n${customerAuthPatch}\n${paymentConfirmationRuntime}\n${reviewRuntime}\n${receiptWindowRuntime}\n${paymentTelegramNotificationPatch}\n${marker}`);
 
