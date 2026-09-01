@@ -4,6 +4,37 @@
 
 begin;
 
+-- Migration preflight: fail closed if the canonical checkout contract is missing.
+-- This prevents installing reservation metadata against an incompatible/legacy schema.
+do $$
+begin
+  if to_regclass('public.orders') is null then
+    raise exception 'Reservation migration requires public.orders';
+  end if;
+  if to_regclass('public.products') is null then
+    raise exception 'Reservation migration requires public.products';
+  end if;
+  if to_regclass('public.promo_codes') is null then
+    raise exception 'Reservation migration requires public.promo_codes';
+  end if;
+  if not exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'create_secure_order'
+      and pg_get_function_identity_arguments(p.oid) = 'p_order jsonb, p_telegram_id bigint'
+  ) then
+    raise exception 'Reservation migration requires canonical create_secure_order(jsonb,bigint)';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'orders' and column_name = 'items'
+  ) then
+    raise exception 'Reservation migration requires orders.items jsonb';
+  end if;
+end;
+$$;
+
 alter table if exists public.orders
   add column if not exists stock_reserved boolean not null default false,
   add column if not exists promo_reserved boolean not null default false,
