@@ -4,6 +4,12 @@
   const API = 'https://guli-lingerie-api.onrender.com';
   const tg = () => window.Telegram?.WebApp;
   const isTelegram = () => Boolean(tg()?.initData);
+  const isAdminContext = () => {
+    const path = String(window.location?.pathname || '').toLowerCase();
+    if (path === '/admin' || path.startsWith('/admin/')) return true;
+    const bodyText = String(document.body?.textContent || '');
+    return /GULI CONTROL CENTER|CARD PAYMENTS & RECEIPTS|Bosh sahifa\s+Bosh sahifa/i.test(bodyText);
+  };
   const normalize = (v) => String(v || '').replace(/[’‘]/g, "'").trim().toLowerCase();
   const customerHeaders = () => {
     const h = { 'Content-Type': 'application/json' };
@@ -69,7 +75,12 @@
   }
 
   function addCustomerReceiptRecovery(root, orderNumber) {
+    if (isAdminContext()) return;
     if (root.querySelector('[data-guli-receipt-recovery]')) return;
+    // The native customer order detail already renders its receipt block.
+    // Only add this recovery UI when that block is genuinely absent.
+    const nativeReceipt = /Mijoz yuborgan to‘lov cheki|Mijoz yuborgan to'lov cheki|Yuklangan chek|Chek haqiqiy/i.test(String(root?.textContent || ''));
+    if (nativeReceipt) return;
     const box = document.createElement('div');
     box.dataset.guliReceiptRecovery = '1';
     box.style.cssText = 'margin-top:12px;padding:12px 14px;border:1px solid #eadde1;border-radius:16px;background:#fff8f9;display:grid;gap:8px';
@@ -82,6 +93,7 @@
   }
 
   async function syncCustomerCard(root, orderNumber) {
+    if (isAdminContext()) return;
     try {
       const state = await paymentState(orderNumber);
       if (state.payment_status === 'verified') {
@@ -103,7 +115,7 @@
   }
 
   function normalizeCustomerPaymentText() {
-    if (!isTelegram()) return;
+    if (!isTelegram() || isAdminContext()) return;
     document.querySelectorAll('body *').forEach((el) => {
       if (el.children.length) return;
       const t = String(el.textContent || '').trim();
@@ -112,7 +124,7 @@
   }
 
   function scanCustomer() {
-    if (!isTelegram()) return;
+    if (!isTelegram() || isAdminContext()) return;
     normalizeCustomerPaymentText();
     const nodes = [...document.querySelectorAll('body *')].filter((el) => el.children.length > 0);
     for (const node of nodes) {
@@ -127,7 +139,7 @@
   }
 
   function scanAdmin() {
-    if (isTelegram()) return;
+    if (isTelegram() && !isAdminContext()) return;
     const tables = [...document.querySelectorAll('table')];
     for (const table of tables) {
       if (!/Kartadan to‘lovlar va Cheklar|CARD PAYMENTS & RECEIPTS/i.test(table.parentElement?.textContent || '')) continue;
