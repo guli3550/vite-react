@@ -24,14 +24,15 @@ async function rereserve(id) {
   return data;
 }
 
-function wrapAfter(method, path, after) {
+function wrapAfter(method, path, after, allowedStatuses = null) {
   const original = express.application[method];
   express.application[method] = function(routePath, ...handlers) {
     if (routePath !== path || !handlers.length) return original.call(this, routePath, ...handlers);
     const last = handlers[handlers.length - 1];
     handlers[handlers.length - 1] = async function(req, res, next) {
       await last(req, res, next);
-      if (res.headersSent && res.statusCode >= 200 && res.statusCode < 300) {
+      const statusAllowed = !allowedStatuses || allowedStatuses.includes(res.statusCode);
+      if (statusAllowed) {
         try { await after(req, res); }
         catch (e) { console.error('Payment reservation lifecycle error:', e.message); }
       }
@@ -70,22 +71,28 @@ async function findOrderByNumber(orderNumber) {
   return data;
 }
 
-// Customer timeout: paymentConfirmationRuntime must first authenticate the customer
-// and confirm the 10-minute window. We only release after that route returns 2xx.
-wrapAfter('post', '/api/orders/:orderNumber/payment-timeout', async (req) => {
+async function releaseByNumber(req) {
   const order = await findOrderByNumber(req.params.orderNumber);
-  if (order) await release(order.id);
-});
+  if (order && String(order.payment_status || '') === 'rejected') await release(order.id);
+}
 
-// Admin rejection: release only after the canonical admin route successfully changes
-// payment_status to rejected. Verified payments never enter this hook.
+// Payment-state polling can itself expire the order, so it must release too.
+wrapAfter('get', '/api/orders/:orderNumber/payment-state', releaseByNumber, [200]);
+
+// Customer timeout route: canonical handler authenticates and checks the 10-minute window.
+wrapAfter('post', '/api/orders/:orderNumber/payment-timeout', releaseByNumber, [200]);
+
+// Payment-confirm returns 410 after expireIfNeeded() changes the order to rejected.
+wrapAfter('post', '/api/orders/:orderNumber/payment-confirm', releaseByNumber, [410]);
+
+// Admin rejection: release only after the canonical admin route successfully returns 2xx.
 wrapAfter('put', '/api/admin/orders/:id/payment', async (req) => {
   if (String(req.body?.payment_status || '') !== 'rejected') return;
   await release(req.params.id);
-});
+}, [200, 201, 204]);
 
-// A rejected receipt can be replaced. Re-reserve BEFORE upload so a later verification
-// cannot succeed against inventory that was already released.
+// A rejected receipt can be replaced. Re-reserve BEFORE upload so later verification
+// cannot succeed against inventory that has already been released.
 wrapBefore('post', '/api/orders/:orderNumber/receipt', async (req) => {
   const order = await findOrderByNumber(req.params.orderNumber);
   if (!order) return true;
