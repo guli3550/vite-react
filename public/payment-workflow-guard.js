@@ -1,7 +1,15 @@
 (() => {
   'use strict';
 
-  const API = 'https://guli-lingerie-api.onrender.com';
+  // GULI payment workflow guard.
+  // Keep customer/admin runtime on the same API origin as the active app.
+  const getApiBase = () => {
+    try {
+      const configured = sessionStorage.getItem('guli_custom_api_url') || '';
+      if (configured.trim()) return configured.trim().replace(/\/$/, '');
+    } catch {}
+    return (window.__GULI_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
+  };
   const tg = () => window.Telegram?.WebApp;
   const isTelegram = () => Boolean(tg()?.initData);
   const isAdminContext = () => {
@@ -37,6 +45,7 @@
   });
 
   async function paymentState(orderNumber) {
+    const API = getApiBase();
     const r = await fetch(`${API}/api/orders/${encodeURIComponent(orderNumber)}/payment-state`, { headers: customerHeaders(), cache: 'no-store' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.success) throw new Error(j.message || 'To‘lov holatini olishda xatolik');
@@ -58,6 +67,7 @@
     try {
       const data = await readFile(file);
       const extension = (file.name.split('.').pop() || (file.type === 'application/pdf' ? 'pdf' : 'jpg')).toLowerCase();
+      const API = getApiBase();
       const r = await fetch(`${API}/api/orders/${encodeURIComponent(orderNumber)}/receipt`, {
         method: 'POST',
         headers: customerHeaders(),
@@ -77,8 +87,6 @@
   function addCustomerReceiptRecovery(root, orderNumber) {
     if (isAdminContext()) return;
     if (root.querySelector('[data-guli-receipt-recovery]')) return;
-    // The native customer order detail already renders its receipt block.
-    // Only add this recovery UI when that block is genuinely absent.
     const nativeReceipt = /Mijoz yuborgan to‘lov cheki|Mijoz yuborgan to'lov cheki|Yuklangan chek|Chek haqiqiy/i.test(String(root?.textContent || ''));
     if (nativeReceipt) return;
     const box = document.createElement('div');
