@@ -48,3 +48,5 @@ jobs:
         run: node scripts/audit-payment-verified-terminal.cjs
       - name: Run payment audit-log static audit
         run: node scripts/audit-payment-audit-log.cjs
+      - name: Run Supabase migration-order static audit
+        run: node scripts/audit-supabase-migration-order.cjs
