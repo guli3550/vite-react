@@ -23,8 +23,8 @@ function receiptPreviewFix() {
       return () => { cancelled = true; };
     }
     const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\\/$/, "");
-    fetch(\`${base}/api/admin/orders/${encodeURIComponent(String(order.id))}/payment-receipt\`, {
-      headers: { Authorization: \`Bearer ${adminToken}\` },
+    fetch(\`\${base}/api/admin/orders/\${encodeURIComponent(String(order.id))}/payment-receipt\`, {
+      headers: { Authorization: \`Bearer \${adminToken}\` },
     })
       .then((r) => r.json().catch(() => null))
       .then((j) => {
