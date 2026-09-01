@@ -29,7 +29,7 @@ for (const token of [
   '10mb',
   'TELEGRAM_WEBHOOK_SECRET',
   'secret_token',
-  'X-Telegram-Bot-Api-Secret-Token',
+  'x-telegram-bot-api-secret-token',
   'X-Telegram-Init-Data',
   'api/admin/login',
   'api/guest-session',
