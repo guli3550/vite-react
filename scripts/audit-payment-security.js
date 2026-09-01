@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..');
 const files = [
   'backend/customerServer.js',
@@ -13,7 +17,6 @@ let failed = false;
 for (const relative of files) {
   const file = path.join(root, relative);
   const source = fs.readFileSync(file, 'utf8');
-  const vm = require('vm');
   try {
     new vm.Script(source, { filename: relative });
     console.log(`PASS syntax: ${relative}`);
