@@ -11,11 +11,13 @@ const pkg = read('backend/package.json');
 
 const checks = [
   ['reservation runtime is preloaded before payment routes', pkg.indexOf('-r ./paymentReservationRuntime.js -r ./manualCardPaymentRuntime.js -r ./paymentConfirmationRuntime.js') >= 0],
-  ['timeout payment-state hook exists', runtime.includes("wrapAfter('get', '/api/orders/:orderNumber/payment-state'" )],
-  ['timeout payment-timeout hook exists', runtime.includes("wrapAfter('post', '/api/orders/:orderNumber/payment-timeout'" )],
+  ['timeout payment-state hook exists', runtime.includes("wrapAfter('get', '/api/orders/:orderNumber/payment-state'")],
+  ['timeout payment-timeout hook exists', runtime.includes("wrapAfter('post', '/api/orders/:orderNumber/payment-timeout'")],
   ['expired payment-confirm 410 hook exists', runtime.includes("wrapAfter('post', '/api/orders/:orderNumber/payment-confirm'") && runtime.includes('[410]')],
   ['admin rejection hook exists', runtime.includes("wrapAfter('put', '/api/admin/orders/:id/payment'")],
-  ['receipt replacement preflight uses the canonical receipt route', runtime.includes("wrapBefore('post', '/api/orders/:orderNumber/receipt'" )],
+  ['receipt replacement preflight uses the canonical receipt route', runtime.includes("wrapBefore('post', '/api/orders/:orderNumber/receipt'")],
+  ['admin receipt replacement preflight exists', runtime.includes("wrapBefore('post', '/api/admin/orders/:id/payment-receipt'")],
+  ['reservation migration has fail-closed preflight', /Migration preflight: fail closed/i.test(sql) && /create_secure_order.*jsonb.*bigint/i.test(sql)],
   ['release RPC locks the order row', /from public\.orders where id = p_order_id for update/i.test(sql)],
   ['release RPC is idempotent', /reservation_released_at is not null/i.test(sql) && /already_released/i.test(sql)],
   ['release RPC restores stock by product id text', /id::text = product_id_key/i.test(sql)],
