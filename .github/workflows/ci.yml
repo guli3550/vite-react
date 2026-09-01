@@ -54,3 +54,5 @@ jobs:
         run: node scripts/audit-payment-reservation-runtime.cjs
       - name: Run checkout concurrency static audit
         run: node scripts/audit-checkout-concurrency.cjs
+      - name: Run production runtime security static audit
+        run: node scripts/audit-production-runtime-security.cjs
