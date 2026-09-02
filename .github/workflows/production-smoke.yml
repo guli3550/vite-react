@@ -7,29 +7,34 @@ on:
   schedule:
     - cron: "17 * * * *"
 
+env:
+  FRONTEND_URL: https://vite-react-seven-inky-10.vercel.app
+  GATEWAY_URL: https://guli-gateway.parizodabaxtiyorov.workers.dev
+  BACKEND_URL: https://guli-lingerie-api.onrender.com
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check Render storefront
+      - name: Check Vercel storefront
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -L -sS -o /tmp/storefront.html -w '%{http_code}' --max-time 30 'https://guli-lingerie-web.onrender.com/?tgapp=smoke')"
+          code="$(curl -L -sS -o /tmp/storefront.html -w '%{http_code}' --max-time 30 "${FRONTEND_URL}/?tgapp=smoke")"
           if [[ "$code" != "200" ]]; then
-            echo "Render storefront is not publicly reachable: HTTP $code"
+            echo "Vercel storefront is not publicly reachable: HTTP $code"
             head -c 1000 /tmp/storefront.html || true
             exit 1
           fi
           grep -q '<div id="root"></div>' /tmp/storefront.html
-          echo "Render storefront OK"
+          echo "Vercel storefront OK"
 
       - name: Check Render API health
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -sS --fail --max-time 30 https://guli-lingerie-api.onrender.com/api/health)"
+          body="$(curl -sS --fail --max-time 30 "${BACKEND_URL}/api/health")"
           echo "$body"
           grep -q '"success":true' <<< "$body"
           grep -q '"status":"online"' <<< "$body"
@@ -39,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -sS --fail --max-time 30 https://guli-gateway.parizodabaxtiyorov.workers.dev/api/health)"
+          body="$(curl -sS --fail --max-time 30 "${GATEWAY_URL}/api/health")"
           echo "$body"
           grep -q '"success":true' <<< "$body"
           grep -q '"gateway":"cloudflare"' <<< "$body"
@@ -49,7 +54,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -sS --fail --max-time 30 'https://guli-gateway.parizodabaxtiyorov.workers.dev/api/products?limit=1')"
+          body="$(curl -sS --fail --max-time 30 "${GATEWAY_URL}/api/products?limit=1")"
           echo "$body" | head -c 2000
           grep -q '"success":true' <<< "$body"
           grep -q '"data":\[' <<< "$body"
@@ -59,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -sS --fail --max-time 30 'https://guli-gateway.parizodabaxtiyorov.workers.dev/api/categories')"
+          body="$(curl -sS --fail --max-time 30 "${GATEWAY_URL}/api/categories")"
           echo "$body" | head -c 2000
           grep -q '"success":true' <<< "$body"
           grep -q 'pinyuar' <<< "$(tr '[:upper:]' '[:lower:]' <<< "$body")"
@@ -69,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -sS -o /tmp/orders.json -w '%{http_code}' --max-time 30 https://guli-gateway.parizodabaxtiyorov.workers.dev/api/orders)"
+          code="$(curl -sS -o /tmp/orders.json -w '%{http_code}' --max-time 30 "${GATEWAY_URL}/api/orders")"
           cat /tmp/orders.json
           [[ "$code" == "401" ]]
           echo "Customer auth guard OK"
@@ -77,4 +82,4 @@ jobs:
       - name: Complete job
         if: ${{ always() }}
         shell: bash
-        run: echo "Render/Gateway production smoke checks completed; review any failed step above."
+        run: echo "Vercel/Gateway/Render production smoke checks completed; review any failed step above."
