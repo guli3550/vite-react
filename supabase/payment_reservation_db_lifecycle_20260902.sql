@@ -54,8 +54,8 @@ set search_path = public
 as $$
 begin
   if coalesce(old.payment_status,'') = 'rejected'
-     and coalesce(new.payment_status,'') = 'receipt_uploaded'
-     and coalesce(old.reservation_released_at is not null, false) then
+     and new.payment_status = 'receipt_uploaded'
+     and old.reservation_released_at is not null then
     perform public.rereserve_order_reservation(new.id);
   end if;
   return new;
@@ -69,8 +69,6 @@ for each row execute function public.guli_rereserve_rejected_receipt();
 
 revoke all on function public.guli_release_rejected_reservation() from public, anon, authenticated;
 revoke all on function public.guli_rereserve_rejected_receipt() from public, anon, authenticated;
-
-after_commit;
 
 commit;
 
