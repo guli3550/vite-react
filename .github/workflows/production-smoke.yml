@@ -92,11 +92,11 @@ jobs:
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ github.token }}
+          STATE: ${{ job.status }}
+          TARGET: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
-          state="${{ job.status }}"
-          target="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -sS --fail \
             -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -113,6 +113,3 @@ print(json.dumps({
 }))
 PY
 )"
-        env:
-          STATE: ${{ job.status }}
-          TARGET: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
