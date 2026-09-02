@@ -51,14 +51,14 @@
       img.src = state.receipt_url;
       img.removeAttribute('srcset');
       img.alt = 'Mijoz yuborgan to‘lov cheki';
-      img.style.objectFit = 'cover';
+      img.style.objectFit = 'contain';
     }
 
     const leaves = [...root.querySelectorAll('*')].filter((el) => el.children.length === 0);
     for (const el of leaves) {
       const text = String(el.textContent || '').trim();
-      if (/Chek yuklanmagan|Chek hali serverda topilmadi|To‘lov cheki/i.test(text)) {
-        if (!/to‘lov cheki/i.test(text.toLowerCase())) el.textContent = '✓ Mijoz yuborgan to‘lov cheki saqlangan';
+      if (/Chek yuklanmagan|Chek hali serverda topilmadi/i.test(text)) {
+        el.textContent = '✓ Mijoz yuborgan to‘lov cheki saqlangan';
       }
     }
 
@@ -77,45 +77,41 @@
     }
   }
 
+  let scanTimer = 0;
+  let scanRunning = false;
+
   async function scanCustomerOrders() {
-    if (!window.Telegram?.WebApp?.initData) return;
-    const roots = [...document.querySelectorAll('.modalCard, [role="dialog"], .orderDetail, .ordersPage')];
-    for (const root of roots) {
-      const orderNumber = orderNumberFrom(root);
-      if (!orderNumber || !/karta|uzcard|humo|card_manual/i.test(root.textContent || '')) continue;
-      if (root.dataset.guliPaymentStateOrder === orderNumber) continue;
-      root.dataset.guliPaymentStateOrder = orderNumber;
-      const state = await paymentState(orderNumber);
-      if (state) setReceiptPreview(root, state);
-    }
-  }
-
-  function checkoutFix() {
-    const page = document.querySelector('.checkoutPage');
-    if (!page) return;
-    const payment = page.querySelector('.paymentOptionVibrant');
-    const total = page.querySelector('.checkoutTotal');
-    if (payment && total && payment.parentElement) {
-      payment.parentElement.insertBefore(total, payment);
-    }
-
-    for (const button of [...page.querySelectorAll('button')]) {
-      if (button === payment || payment?.contains(button)) continue;
-      const text = String(button.textContent || '').replace(/\s+/g, ' ').trim();
-      if (/(to.?lov|payment)/i.test(text) && /(qilish|qilaman|pay|checkout)/i.test(text)) {
-        button.remove();
+    if (scanRunning) return;
+    scanRunning = true;
+    try {
+      const roots = [...document.querySelectorAll('.modalCard, [role="dialog"], .orderDetail, .ordersPage')];
+      for (const root of roots) {
+        const orderNumber = orderNumberFrom(root);
+        if (!orderNumber || !/karta|uzcard|humo|card_manual/i.test(root.textContent || '')) continue;
+        if (root.dataset.guliPaymentStateOrder === orderNumber) continue;
+        root.dataset.guliPaymentStateOrder = orderNumber;
+        const state = await paymentState(orderNumber);
+        if (state) setReceiptPreview(root, state);
       }
+    } finally {
+      scanRunning = false;
     }
   }
 
-  function scan() {
-    checkoutFix();
-    void scanCustomerOrders();
+  function scheduleScan() {
+    if (scanTimer) return;
+    scanTimer = window.setTimeout(() => {
+      scanTimer = 0;
+      void scanCustomerOrders();
+    }, 250);
   }
 
-  const observer = new MutationObserver(() => scan());
+  // Checkout DOM normalization is owned by order-ui-consistency-fix.js.
+  // Keeping a second checkout MutationObserver here caused duplicate work and
+  // contributed to the freeze when the order/checkout screen mounted.
+  const observer = new MutationObserver(scheduleScan);
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(scan, 500);
-  setTimeout(scan, 1800);
-  setInterval(scan, 5000);
+  setTimeout(scheduleScan, 700);
+  setTimeout(scheduleScan, 2000);
+  setInterval(scheduleScan, 5000);
 })();

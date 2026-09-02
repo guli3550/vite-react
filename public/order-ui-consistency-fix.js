@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  // Safety fix: this runtime observes the React DOM, but must never run
+  // synchronously for every mutation. The previous implementation called
+  // scan() from MutationObserver while scan() itself could mutate the DOM,
+  // creating a high-frequency feedback loop and freezing checkout on open.
+  let scanTimer = 0;
+  let scanning = false;
+
   function isCheckoutPage() {
     return Boolean(document.querySelector('.checkoutPage'));
   }
@@ -54,22 +61,38 @@
       const values = [address.region, address.district, address.street, address.house, address.apartment, address.landmark, address.address, address.formatted_address].filter(Boolean);
       if (!values.length) continue;
       const p = section.querySelector('.addressText');
-      if (p) p.textContent = `📍 ${values.join(', ')}`;
+      if (p && p.textContent !== `📍 ${values.join(', ')}`) {
+        p.textContent = `📍 ${values.join(', ')}`;
+      }
     }
   }
 
   function scan() {
-    if (isCheckoutPage()) {
-      moveCheckoutTotalAbovePayment();
-      removeDuplicatePaymentAction();
+    if (scanning) return;
+    scanning = true;
+    try {
+      if (isCheckoutPage()) {
+        moveCheckoutTotalAbovePayment();
+        removeDuplicatePaymentAction();
+      }
+      normalizeAdminOrderAddress();
+    } finally {
+      scanning = false;
     }
-    normalizeAdminOrderAddress();
   }
 
-  const observer = new MutationObserver(scan);
+  function scheduleScan() {
+    if (scanTimer) return;
+    scanTimer = window.setTimeout(() => {
+      scanTimer = 0;
+      scan();
+    }, 120);
+  }
+
+  const observer = new MutationObserver(scheduleScan);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   setTimeout(scan, 250);
   setTimeout(scan, 1000);
   setTimeout(scan, 2500);
-  setInterval(scan, 1500);
+  setInterval(scheduleScan, 3000);
 })();
