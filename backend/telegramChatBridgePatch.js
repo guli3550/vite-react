@@ -24,6 +24,28 @@ async function telegramSend(chatId, text) {
   }
 }
 
+async function broadcastRealtime(data) {
+  const channel = supabase.channel("guli-chat-realtime", { config: { broadcast: { self: true } } });
+  try {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, value) => { if (settled) return; settled = true; fn(value); };
+      channel.subscribe(async status => {
+        if (status === "SUBSCRIBED") {
+          try {
+            await channel.send({ type: "broadcast", event: "chat_message", payload: data });
+            finish(resolve);
+          } catch (error) { finish(reject, error); }
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          finish(reject, new Error(`Supabase realtime ${status}`));
+        }
+      });
+    });
+  } finally {
+    try { await channel.unsubscribe(); } catch {}
+  }
+}
+
 async function persistTelegramMessage(message) {
   if (!supabase) return null;
   const from = message?.from || {};
@@ -44,8 +66,6 @@ async function persistTelegramMessage(message) {
   };
 
   const row = { telegram_id: chatId, sender: "customer", text };
-  // chat_messages.metadata is present in the current production schema; keep the insert
-  // compatible with older deployments by retrying without metadata if the column is absent.
   let data, error;
   ({ data, error } = await supabase.from("chat_messages").insert([{ ...row, metadata }]).select("*").single());
   if (error && /metadata|column|schema cache/i.test(error.message || "")) {
@@ -56,16 +76,8 @@ async function persistTelegramMessage(message) {
   const adminText = `💬 <b>Yangi Telegram xabari</b>\n\n👤 ${from.first_name || "Mijoz"}${from.username ? ` (@${from.username})` : ""}\n📝 ${text.slice(0, 500)}`;
   await Promise.all(ADMIN_CHAT_IDS.map(id => telegramSend(id, adminText)));
 
-  // chatRealtimePatch subscribes to the same broadcast channel and fans the message out
-  // to connected admin/customer SSE clients.
-  try {
-    const channel = supabase.channel("guli-chat-realtime", { config: { broadcast: { self: true } } });
-    await channel.subscribe();
-    await channel.send({ type: "broadcast", event: "chat_message", payload: data });
-    await channel.unsubscribe();
-  } catch (error) {
-    console.warn("[Telegram chat bridge] realtime broadcast failed:", error.message);
-  }
+  try { await broadcastRealtime(data); }
+  catch (error) { console.warn("[Telegram chat bridge] realtime broadcast failed:", error.message); }
   return data;
 }
 
