@@ -52,9 +52,33 @@ async function persistTelegramMessage(message) {
   const chatId = Number(message?.chat?.id || from.id || 0);
   if (!chatId) return null;
 
+  let fileId = "";
+  let fileName = "";
+  let msgType = "text";
+  if (Array.isArray(message?.photo) && message.photo.length > 0) {
+    const largest = message.photo[message.photo.length - 1];
+    fileId = largest.file_id;
+    fileName = "photo.jpg";
+    msgType = "image";
+  } else if (message?.document) {
+    fileId = message.document.file_id;
+    fileName = message.document.file_name || "document";
+    msgType = "file";
+  } else if (message?.audio) {
+    fileId = message.audio.file_id;
+    fileName = message.audio.file_name || "audio.mp3";
+    msgType = "audio";
+  } else if (message?.voice) {
+    fileId = message.voice.file_id;
+    fileName = "voice.ogg";
+    msgType = "audio";
+  }
+
+  const mediaProxyUrl = fileId ? `/api/chat/media/${encodeURIComponent(fileId)}?name=${encodeURIComponent(fileName)}` : null;
+
   const text = String(message?.text || message?.caption || "").trim()
-    || (message?.photo ? "📷 Rasm" : message?.audio ? "🎵 Audio" : message?.voice ? "🎙️ Ovozli xabar" : message?.document ? "📁 Fayl" : "");
-  if (!text) return null;
+    || (msgType === "image" ? "📷 Rasm" : msgType === "audio" ? "🎙️ Ovozli xabar" : msgType === "file" ? `📁 ${fileName || "Fayl"}` : "");
+  if (!text && !mediaProxyUrl) return null;
 
   const metadata = {
     source: "telegram",
@@ -62,7 +86,10 @@ async function persistTelegramMessage(message) {
     telegram_username: from.username || null,
     first_name: from.first_name || null,
     last_name: from.last_name || null,
-    type: message?.photo ? "image" : message?.audio ? "audio" : message?.voice ? "audio" : message?.document ? "file" : "text"
+    type: msgType,
+    mediaUrl: mediaProxyUrl,
+    fileName: fileName || null,
+    file_id: fileId || null
   };
 
   const row = { telegram_id: chatId, sender: "customer", text };
@@ -73,13 +100,57 @@ async function persistTelegramMessage(message) {
   }
   if (error) throw error;
 
-  const adminText = `💬 <b>Yangi Telegram xabari</b>\n\n👤 ${from.first_name || "Mijoz"}${from.username ? ` (@${from.username})` : ""}\n📝 ${text.slice(0, 500)}`;
+  // Enrich data with metadata in case column was stripped
+  if (data && !data.metadata) {
+    data.metadata = metadata;
+  }
+  if (data && mediaProxyUrl && !data.mediaUrl) {
+    data.mediaUrl = mediaProxyUrl;
+    data.type = msgType;
+    data.fileName = fileName;
+  }
+
+  const adminText = `💬 <b>Yangi Telegram xabari</b>\n\n👤 ${from.first_name || "Mijoz"}${from.username ? ` (@${from.username})` : ""}\n📝 ${text.slice(0, 500)}${fileId ? `\n📎 ${msgType.toUpperCase()}: ${fileName}` : ""}`;
   await Promise.all(ADMIN_CHAT_IDS.map(id => telegramSend(id, adminText)));
 
   try { await broadcastRealtime(data); }
   catch (error) { console.warn("[Telegram chat bridge] realtime broadcast failed:", error.message); }
   return data;
 }
+
+// Media proxy for Telegram photos & files so admin and client can view without exposing BOT_TOKEN
+const originalGet = express.application.get;
+express.application.get = function telegramChatMediaGet(routePath, ...handlers) {
+  if (routePath === "/api/chat/media/:fileId") {
+    return originalGet.call(this, routePath, async (req, res) => {
+      try {
+        const fileId = String(req.params.fileId || "").trim();
+        if (!fileId || !BOT_TOKEN) return res.status(404).json({ success: false, message: "Fayl topilmadi" });
+
+        const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
+        const fileJson = await fileRes.json().catch(() => null);
+        if (!fileRes.ok || !fileJson?.ok || !fileJson?.result?.file_path) {
+          return res.status(404).json({ success: false, message: "Telegram fayl yo'li olinmadi" });
+        }
+
+        const telegramFileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileJson.result.file_path}`;
+        const mediaResp = await fetch(telegramFileUrl);
+        if (!mediaResp.ok) return res.status(502).json({ success: false, message: "Telegramdan fayl yuklab olinmadi" });
+
+        const contentType = mediaResp.headers.get("content-type") || (fileJson.result.file_path.endsWith(".jpg") || fileJson.result.file_path.endsWith(".jpeg") ? "image/jpeg" : fileJson.result.file_path.endsWith(".png") ? "image/png" : "application/octet-stream");
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        const buffer = Buffer.from(await mediaResp.arrayBuffer());
+        res.setHeader("Content-Length", String(buffer.length));
+        return res.send(buffer);
+      } catch (err) {
+        console.error("Chat media proxy error:", err);
+        return res.status(500).json({ success: false, message: "Fayl proxy xatosi" });
+      }
+    });
+  }
+  return originalGet.call(this, routePath, ...handlers);
+};
 
 const originalPost = express.application.post;
 express.application.post = function telegramChatBridgePost(routePath, ...handlers) {

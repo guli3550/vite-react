@@ -1309,3 +1309,109 @@
     margin-left: 0;
   }
 }
+
+/* ==========================================================================
+   DARK MODE SUPPORT FOR ADMIN REVIEWS MANAGEMENT
+   ========================================================================== */
+
+[data-theme="dark"] .statBox,
+html[data-theme="dark"] .statBox {
+  background: #1e1318;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .statBox b,
+html[data-theme="dark"] .statBox b {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .statBox span,
+html[data-theme="dark"] .statBox span {
+  color: #a8949b;
+}
+
+[data-theme="dark"] .statIcon,
+html[data-theme="dark"] .statIcon {
+  background: #2d1822;
+  color: #fb7185;
+}
+
+[data-theme="dark"] .reviewsToolbarRow,
+html[data-theme="dark"] .reviewsToolbarRow {
+  background: #180d12;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .reviewsSearchBox input,
+html[data-theme="dark"] .reviewsSearchBox input {
+  background: #23161c;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .filterSelectWrapper select,
+html[data-theme="dark"] .filterSelectWrapper select {
+  background: #23161c;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .reviewCard,
+html[data-theme="dark"] .reviewCard {
+  background: #1e1318;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .reviewCard:hover,
+html[data-theme="dark"] .reviewCard:hover {
+  background: #25161f;
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+[data-theme="dark"] .reviewCard.reviewCardPinned,
+html[data-theme="dark"] .reviewCard.reviewCardPinned {
+  background: linear-gradient(180deg, #2a1f14 0%, #1e1318 100%);
+  border-color: #eab308;
+}
+
+[data-theme="dark"] .reviewCard.reviewCardHidden,
+html[data-theme="dark"] .reviewCard.reviewCardHidden {
+  background: #160d11;
+  border-color: #3f2d35;
+}
+
+[data-theme="dark"] .reviewAdminComment,
+html[data-theme="dark"] .reviewAdminComment {
+  color: #e6d5d9;
+}
+
+[data-theme="dark"] .reviewAdminAuthor,
+html[data-theme="dark"] .reviewAdminAuthor {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .adminReplyBox,
+html[data-theme="dark"] .adminReplyBox {
+  background: #150d10;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .adminModalCard,
+html[data-theme="dark"] .adminModalCard {
+  background: #1e1318;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .adminModalCard input,
+[data-theme="dark"] .adminModalCard textarea,
+[data-theme="dark"] .adminModalCard select,
+html[data-theme="dark"] .adminModalCard input,
+html[data-theme="dark"] .adminModalCard textarea,
+html[data-theme="dark"] .adminModalCard select {
+  background: #150d10;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fbeff2;
+}
+

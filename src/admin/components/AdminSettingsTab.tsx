@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from "react";
 import { type PlatformType } from "../../utils/platformAdapter";
+import { getSocialLinks, saveSocialLinks, DEFAULT_SOCIAL_LINKS } from "../../utils/socialLinks";
 
 type AdminSettingsTabProps = {
   notify: (m: string) => void;
@@ -29,10 +30,20 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
     try { return JSON.parse(localStorage.getItem("guli_admin_settings") || "{}"); } catch { return {}; }
   })();
 
-  const [activeTab, setActiveTab] = useState<"all" | "appearance" | "finance" | "store" | "integrations" | "system">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "appearance" | "social" | "finance" | "store" | "integrations" | "system">("all");
   const [themeMode, setThemeMode] = useState<"light" | "dark">((localStorage.getItem("guli_admin_theme") as "light" | "dark") || "light");
   const [language, setLanguage] = useState<"uz" | "ru" | "en">((localStorage.getItem("guli_lang") as "uz" | "ru" | "en") || "uz");
   const [notifSoundEnabled, setNotifSoundEnabled] = useState(localStorage.getItem("guli_notif_sound_enabled") !== "false");
+
+  // Web App Custom Logo
+  const [appLogo, setAppLogo] = useState<string>(localStorage.getItem("guli_custom_logo") || "/guli_logo.jpg");
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Social Links
+  const initialSocial = getSocialLinks();
+  const [instagramUrl, setInstagramUrl] = useState(initialSocial.instagram || DEFAULT_SOCIAL_LINKS.instagram);
+  const [telegramUrl, setTelegramUrl] = useState(initialSocial.telegram || DEFAULT_SOCIAL_LINKS.telegram);
+  const [tiktokUrl, setTiktokUrl] = useState(initialSocial.tiktok || DEFAULT_SOCIAL_LINKS.tiktok);
 
   const [paymentCardNumber, setPaymentCardNumber] = useState(localStorage.getItem("guli_payment_card_number") || saved.paymentCardNumber || "9860 1766 1229 1557");
   const [paymentCardHolder, setPaymentCardHolder] = useState(localStorage.getItem("guli_payment_card_holder") || saved.paymentCardHolder || "X.Yusufaliyev");
@@ -40,7 +51,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const [supportCardHolder, setSupportCardHolder] = useState(localStorage.getItem("guli_support_card_holder") || saved.supportCardHolder || "X.Yusufaliyev");
 
   const [callCenterPhone, setCallCenterPhone] = useState(localStorage.getItem("guli_callcenter_phone") || saved.callCenterPhone || "+998 90 581 11 17");
-  const [storeName, setStoreName] = useState(saved.storeName || "Guli Lingerie");
+  const [storeName, setStoreName] = useState(localStorage.getItem("guli_store_name") || saved.storeName || "Guli premium");
   const [workHours, setWorkHours] = useState(saved.workHours || "09:00 - 21:00 (Har kuni)");
   const [storeAddress, setStoreAddress] = useState(saved.storeAddress || "Toshkent sh., Navoiy ko'chasi 14");
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(saved.freeDeliveryThreshold || "300000");
@@ -90,15 +101,21 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const toggleTheme = (mode: "light" | "dark") => {
     setThemeMode(mode);
     localStorage.setItem("guli_admin_theme", mode);
+    localStorage.setItem("guli_theme", mode);
     document.documentElement.classList.toggle("dark", mode === "dark");
     document.documentElement.setAttribute("data-theme", mode);
+    window.dispatchEvent(new CustomEvent("guli_theme_changed", { detail: mode }));
     window.dispatchEvent(new Event("guli_settings_updated"));
+    notify(mode === "dark" ? "🌙 Tun (Dark) rejimi yoqildi" : "☀️ Kun (Light) rejimi yoqildi");
   };
 
   const changeLanguage = (lang: "uz" | "ru" | "en") => {
     setLanguage(lang);
     localStorage.setItem("guli_lang", lang);
+    localStorage.setItem("guli_admin_lang", lang);
+    window.dispatchEvent(new CustomEvent("guli_lang_changed", { detail: lang }));
     window.dispatchEvent(new Event("guli_settings_updated"));
+    notify(lang === "uz" ? "🇺🇿 O'zbek tili tanlandi" : lang === "ru" ? "🇷🇺 Русский язык выбран" : "🇬🇧 English language selected");
   };
 
   const toggleSound = (enabled: boolean) => {
@@ -141,6 +158,27 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
     }
   };
 
+  const handleLogoFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      notify("⚠️ Rasm hajmi 3MB dan oshmasligi kerak");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setAppLogo(result);
+      notify("🖼️ Yangi logo yuklandi! 'Saqlash' tugmasini bosing.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetLogo = () => {
+    setAppLogo("/guli_logo.jpg");
+    notify("🔄 Standart logotip tiklandi");
+  };
+
   const handleSaveAllSettings = async (event?: FormEvent) => {
     event?.preventDefault();
     try {
@@ -161,9 +199,22 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       localStorage.setItem("guli_support_card_holder", supportCardHolder.trim());
       localStorage.setItem("guli_callcenter_phone", callCenterPhone.trim());
       localStorage.setItem("guli_admin_settings", JSON.stringify(settingsObj));
+      
+      // Save Logo & Social Links
+      localStorage.setItem("guli_custom_logo", appLogo.trim() || "/guli_logo.jpg");
+      localStorage.setItem("guli_store_name", storeName.trim() || "Guli premium");
+      localStorage.setItem("guli_custom_brand_name", storeName.trim() || "Guli premium");
+      saveSocialLinks({
+        instagram: instagramUrl.trim(),
+        telegram: telegramUrl.trim(),
+        tiktok: tiktokUrl.trim(),
+      });
+
       if (telegramChannelId.trim()) await saveTelegramChat();
+      window.dispatchEvent(new CustomEvent("guli_logo_updated", { detail: appLogo.trim() || "/guli_logo.jpg" }));
+      window.dispatchEvent(new CustomEvent("guli_brand_name_updated", { detail: storeName.trim() || "Guli premium" }));
       window.dispatchEvent(new Event("guli_settings_updated"));
-      notify("✅ Sozlamalar saqlandi. Telegram token esa faqat Render serverida saqlanadi.");
+      notify("✅ Barcha sozlamalar, logotip va ijtimoiy tarmoqlar saqlandi!");
     } catch (error) {
       notify(error instanceof Error ? error.message : "Sozlamalarni saqlashda xatolik");
     }
@@ -171,10 +222,12 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
 
   const handleExportSettings = () => {
     const exportData = {
-      themeMode, language, notifSoundEnabled, paymentCardNumber, paymentCardHolder,
-      supportCardNumber, supportCardHolder, callCenterPhone, storeName, workHours,
-      storeAddress, freeDeliveryThreshold, standardDeliveryFee, clickMerchantId,
-      paymeMerchantId, telegramChannelId, exportedAt: new Date().toISOString(),
+      themeMode, language, notifSoundEnabled, appLogo,
+      socialLinks: { instagram: instagramUrl, telegram: telegramUrl, tiktok: tiktokUrl },
+      paymentCardNumber, paymentCardHolder, supportCardNumber, supportCardHolder,
+      callCenterPhone, storeName, workHours, storeAddress, freeDeliveryThreshold,
+      standardDeliveryFee, clickMerchantId, paymeMerchantId, telegramChannelId,
+      exportedAt: new Date().toISOString(),
       telegramBotToken: "[SERVER_ONLY — export qilinmaydi]",
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
@@ -195,6 +248,12 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
         if (parsed.themeMode) setThemeMode(parsed.themeMode);
         if (parsed.language) setLanguage(parsed.language);
         if (typeof parsed.notifSoundEnabled === "boolean") setNotifSoundEnabled(parsed.notifSoundEnabled);
+        if (parsed.appLogo) setAppLogo(parsed.appLogo);
+        if (parsed.socialLinks) {
+          if (parsed.socialLinks.instagram) setInstagramUrl(parsed.socialLinks.instagram);
+          if (parsed.socialLinks.telegram) setTelegramUrl(parsed.socialLinks.telegram);
+          if (parsed.socialLinks.tiktok) setTiktokUrl(parsed.socialLinks.tiktok);
+        }
         if (parsed.paymentCardNumber) setPaymentCardNumber(parsed.paymentCardNumber);
         if (parsed.paymentCardHolder) setPaymentCardHolder(parsed.paymentCardHolder);
         if (parsed.supportCardNumber) setSupportCardNumber(parsed.supportCardNumber);
@@ -217,6 +276,12 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
 
   const resetSettings = () => {
     setThemeMode("light"); setLanguage("uz"); setNotifSoundEnabled(true);
+    setAppLogo("/guli_logo.jpg");
+    setInstagramUrl(DEFAULT_SOCIAL_LINKS.instagram);
+    setTelegramUrl(DEFAULT_SOCIAL_LINKS.telegram);
+    setTiktokUrl(DEFAULT_SOCIAL_LINKS.tiktok);
+    localStorage.removeItem("guli_custom_logo");
+    saveSocialLinks(DEFAULT_SOCIAL_LINKS);
     setPaymentCardNumber("9860 1766 1229 1557"); setPaymentCardHolder("X.Yusufaliyev");
     setSupportCardNumber("9860 1766 1229 1557"); setSupportCardHolder("X.Yusufaliyev");
     setCallCenterPhone("+998 90 581 11 17"); setStoreName("Guli Lingerie");
@@ -227,8 +292,13 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   };
 
   const tabs = [
-    ["all", "📋 Barchasi"], ["appearance", "🎨 Tashqi Ko'rinish"], ["finance", "💳 Moliya"],
-    ["store", "📞 Do'kon & Aloqa"], ["integrations", "⚡ Integratsiyalar"], ["system", "⚙️ Tizim & Zaxira"],
+    ["all", "📋 Barchasi"],
+    ["appearance", "🎨 Tashqi Ko'rinish & Logo"],
+    ["social", "🌐 Ijtimoiy Tarmoqlar"],
+    ["finance", "💳 Moliya"],
+    ["store", "📞 Do'kon & Aloqa"],
+    ["integrations", "⚡ Integratsiyalar"],
+    ["system", "⚙️ Tizim & Zaxira"],
   ] as const;
 
   const inputStyle: React.CSSProperties = { width: "100%", padding: "11px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 14, boxSizing: "border-box" };
@@ -253,11 +323,306 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       </div>
 
       <form onSubmit={handleSaveAllSettings} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        {(activeTab === "all" || activeTab === "appearance") && <section style={sectionStyle}><h2>🎨 Tashqi Ko'rinish, Til va Ovoz</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
-          <div><b>🌗 Kun / Tun</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => toggleTheme("light")}>☀️ Kun</button><button type="button" onClick={() => toggleTheme("dark")}>🌙 Tun</button></div></div>
-          <div><b>🌐 Til</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => changeLanguage("uz")}>🇺🇿 O'zbek</button><button type="button" onClick={() => changeLanguage("ru")}>🇷🇺 Русский</button><button type="button" onClick={() => changeLanguage("en")}>🇬🇧 English</button></div></div>
-          <div><b>🔔 Chat bildirishnoma ovozi</b><div style={{ display: "flex", gap: 8, marginTop: 10 }}><button type="button" onClick={() => toggleSound(true)}>🔊 Yoqilgan</button><button type="button" onClick={() => toggleSound(false)}>🔇 O'chirilgan</button></div></div>
-        </div><div style={{ marginTop: 18 }}><b>📱 Qurilma preview</b><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>{["android","telegram","windows","tv","browser"].map((p) => <button key={p} type="button" onClick={() => onPlatformChange?.(p as PlatformType)}>{p === activePlatform ? "✓ " : ""}{p}</button>)}</div></div></section>}
+        {(activeTab === "all" || activeTab === "appearance") && (
+          <section style={sectionStyle}>
+            <h2>🎨 Tashqi Ko'rinish, Logo va Ovoz</h2>
+            
+            {/* Logo Configuration */}
+            <div style={{ marginTop: 14, marginBottom: 20, padding: 18, borderRadius: 16, background: "var(--bg-card-sub, #f8fafc)", border: "1px solid var(--border-color, #e2e8f0)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 22 }}>🖼️</span>
+                <div>
+                  <b style={{ fontSize: 15, display: "block" }}>Web App Logotipi</b>
+                  <small style={{ color: "#64748b" }}>Mijoz web ilovasi tepasidagi va boshqa bo'limlaridagi do'kon logotipini o'zgartirish</small>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", border: "3px solid #be123c", boxShadow: "0 4px 14px rgba(190,18,60,0.2)", background: "#fff", display: "grid", placeItems: "center" }}>
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg"; }} />
+                  </div>
+                  <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Aylana ko'rinish</small>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 72, height: 72, borderRadius: 16, overflow: "hidden", border: "2px solid #cbd5e1", background: "#fff", display: "grid", placeItems: "center" }}>
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg"; }} />
+                  </div>
+                  <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Kvadrat ko'rinish</small>
+                </div>
+
+                <div style={{ flex: "1 1 260px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#475569" }}>Rasm URL manzili:</span>
+                    <input
+                      style={inputStyle}
+                      value={appLogo}
+                      onChange={(e) => setAppLogo(e.target.value)}
+                      placeholder="https://example.com/logo.png yoki /guli_logo.jpg"
+                    />
+                  </label>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => logoFileInputRef.current?.click()}
+                      style={{ padding: "8px 14px", borderRadius: 10, background: "#be123c", color: "#fff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}
+                    >
+                      📁 Fayldan yuklash
+                    </button>
+                    <input
+                      ref={logoFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoFileChange}
+                      style={{ display: "none" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleResetLogo}
+                      style={{ padding: "8px 14px", borderRadius: 10, background: "#f1f5f9", color: "#475569", fontWeight: 700, fontSize: 13, border: "1px solid #cbd5e1", cursor: "pointer" }}
+                    >
+                      🔄 Standart logoni tiklash
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Do'kon nomini tahrirlash qatori (Guli premium) */}
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px dashed var(--border-color, #cbd5e1)" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main, #334155)", display: "flex", alignItems: "center", gap: 8 }}>
+                    🏪 Do'kon / Brend nomi (Hozirgi: <b style={{ color: "#be123c" }}>{storeName}</b>):
+                  </span>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <input
+                      style={{ ...inputStyle, flex: "1 1 260px" }}
+                      value={storeName}
+                      onChange={(e) => setStoreName(e.target.value)}
+                      placeholder="Guli premium"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStoreName("Guli premium");
+                        notify("Nom standart 'Guli premium' ga tiklandi");
+                      }}
+                      style={{ padding: "9px 15px", borderRadius: 10, background: "#f1f5f9", color: "#475569", fontWeight: 700, fontSize: 13, border: "1px solid #cbd5e1", cursor: "pointer" }}
+                    >
+                      🔄 Standart nom ("Guli premium")
+                    </button>
+                  </div>
+                  <small style={{ color: "#64748b", fontSize: 11.5 }}>
+                    Ushbu nom mijoz web app yuqori qismida, sahifalar boshida va do'kon identifikatorlarida to'liq aks etadi.
+                  </small>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 16 }}>
+              <div>
+                <b style={{ color: "var(--text-main, #0f172a)" }}>🌗 Kun / Tun (Dark / Light)</b>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTheme("light")}
+                    style={{
+                      padding: "9px 18px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: themeMode === "light" ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: themeMode === "light" ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: themeMode === "light" ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    ☀️ Kun (Light)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleTheme("dark")}
+                    style={{
+                      padding: "9px 18px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: themeMode === "dark" ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: themeMode === "dark" ? "#381e28" : "var(--bg-main, #fff)",
+                      color: themeMode === "dark" ? "#fb7185" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    🌙 Tun (Dark)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <b style={{ color: "var(--text-main, #0f172a)" }}>🌐 Til (Tilni tanlash)</b>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => changeLanguage("uz")}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: language === "uz" ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: language === "uz" ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: language === "uz" ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🇺🇿 O'zbek
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeLanguage("ru")}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: language === "ru" ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: language === "ru" ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: language === "ru" ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🇷🇺 Русский
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeLanguage("en")}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: language === "en" ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: language === "en" ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: language === "en" ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🇬🇧 English
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <b style={{ color: "var(--text-main, #0f172a)" }}>🔔 Chat bildirishnoma ovozi</b>
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleSound(true)}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: notifSoundEnabled ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: notifSoundEnabled ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: notifSoundEnabled ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔊 Yoqilgan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleSound(false)}
+                    style={{
+                      padding: "9px 14px",
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      fontSize: 13,
+                      border: !notifSoundEnabled ? "2px solid #be123c" : "1px solid #cbd5e1",
+                      background: !notifSoundEnabled ? "#fcecef" : "var(--bg-main, #fff)",
+                      color: !notifSoundEnabled ? "#be123c" : "var(--text-main, #334155)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🔇 O'chirilgan
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ marginTop: 18 }}><b>📱 Qurilma preview</b><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>{["android","telegram","windows","tv","browser"].map((p) => <button key={p} type="button" onClick={() => onPlatformChange?.(p as PlatformType)}>{p === activePlatform ? "✓ " : ""}{p}</button>)}</div></div>
+          </section>
+        )}
+
+        {(activeTab === "all" || activeTab === "social") && (
+          <section style={sectionStyle}>
+            <h2>🌐 RASMIY SAHIFALARIMIZ (Ijtimoiy Tarmoqlar)</h2>
+            <p style={{ color: "#64748b", fontSize: 13, marginTop: 2, marginBottom: 16 }}>
+              Mijoz web app dagi "Ijtimoiy tarmoqlar" oynasida chiqadigan Instagram, Telegram va TikTok rasmiy sahifalar havolalarini sozlang.
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <b style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "#e1306c" }}>📸</span> Instagram URL
+                </b>
+                <input
+                  style={inputStyle}
+                  type="url"
+                  value={instagramUrl}
+                  onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://instagram.com/guli_lingerie"
+                  required
+                />
+                <small style={{ color: "#64748b", fontSize: 11.5 }}>
+                  Do'konning rasmiy Instagram profili havolasi
+                </small>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <b style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: "#229ed9" }}>✈️</span> Telegram URL
+                </b>
+                <input
+                  style={inputStyle}
+                  type="url"
+                  value={telegramUrl}
+                  onChange={(e) => setTelegramUrl(e.target.value)}
+                  placeholder="https://t.me/guli_lingerie_official"
+                  required
+                />
+                <small style={{ color: "#64748b", fontSize: 11.5 }}>
+                  Do'konning rasmiy Telegram kanali yoki boti havolasi
+                </small>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <b style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>🎵</span> TikTok URL
+                </b>
+                <input
+                  style={inputStyle}
+                  type="url"
+                  value={tiktokUrl}
+                  onChange={(e) => setTiktokUrl(e.target.value)}
+                  placeholder="https://www.tiktok.com/@guli_lingerie"
+                  required
+                />
+                <small style={{ color: "#64748b", fontSize: 11.5 }}>
+                  Do'konning rasmiy TikTok profili havolasi
+                </small>
+              </label>
+            </div>
+          </section>
+        )}
 
         {(activeTab === "all" || activeTab === "finance") && <section style={sectionStyle}><h2>💳 To'lov va Support Kartalari</h2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 }}>
           <label>Checkout karta<input style={inputStyle} value={paymentCardNumber} onChange={(e) => setPaymentCardNumber(formatCardDigits(e.target.value))} /></label>

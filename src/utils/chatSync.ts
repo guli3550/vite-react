@@ -47,7 +47,47 @@ export function votePollOption(messageId: string, optionIndex: number): void { c
 
 export async function syncChatWithBackend(telegramId: string | number): Promise<ChatMessage[]> {
   if (!telegramId) return getStoredChatMessages();
-  try { const res = await fetch(`${API_URL}/api/chat/messages/${encodeURIComponent(telegramId)}`); const json = await res.json(); if (json.success && Array.isArray(json.data)) { const backend = json.data.map((m: any) => ({ id: String(m.id), sender: m.sender === "customer" ? "user" : "admin", text: String(m.text || ""), timestamp: m.created_at, read: true, userId: m.telegram_id } as ChatMessage)); const local = getStoredChatMessages(telegramId); const combined = [...local]; backend.forEach((bm: ChatMessage) => { if (!combined.some(lm => String(lm.id) === String(bm.id) || (lm.timestamp === bm.timestamp && lm.text === bm.text))) combined.push(bm); }); combined.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); saveChatMessages(combined); return combined; } } catch (err) { console.error("Backend sync failed:", err); } return getStoredChatMessages(telegramId);
+  try {
+    const res = await fetch(`${API_URL}/api/chat/messages/${encodeURIComponent(telegramId)}`);
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data)) {
+      const backend = json.data.map((m: any) => {
+        const meta = m.metadata || {};
+        const mediaUrl = meta.mediaUrl || m.media_url || meta.media_url || m.mediaUrl;
+        const msgType = meta.type || m.type || (mediaUrl ? (mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? "image" : "file") : "text");
+        const fileName = meta.fileName || meta.file_name || m.fileName || m.file_name;
+        return {
+          id: String(m.id),
+          sender: m.sender === "customer" ? "user" : "admin",
+          text: String(m.text || ""),
+          timestamp: m.created_at,
+          read: true,
+          userId: m.telegram_id,
+          type: msgType,
+          mediaUrl: mediaUrl ? (mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`) : undefined,
+          fileName,
+        } as ChatMessage;
+      });
+      const local = getStoredChatMessages(telegramId);
+      const combined = [...local];
+      backend.forEach((bm: ChatMessage) => {
+        const existingIdx = combined.findIndex(lm => String(lm.id) === String(bm.id) || (lm.timestamp === bm.timestamp && lm.text === bm.text));
+        if (existingIdx === -1) {
+          combined.push(bm);
+        } else {
+          if (bm.mediaUrl && !combined[existingIdx].mediaUrl) {
+            combined[existingIdx] = { ...combined[existingIdx], mediaUrl: bm.mediaUrl, type: bm.type, fileName: bm.fileName };
+          }
+        }
+      });
+      combined.sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      saveChatMessages(combined);
+      return combined;
+    }
+  } catch (err) {
+    console.error("Backend sync failed:", err);
+  }
+  return getStoredChatMessages(telegramId);
 }
 
 export async function sendChatMessage(msg: Partial<ChatMessage>): Promise<ChatMessage | null> {

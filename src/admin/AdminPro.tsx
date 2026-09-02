@@ -120,6 +120,8 @@ type User = {
   last_name?: string;
   telegram_phone?: string;
   updated_at?: string;
+  photo_url?: string;
+  telegram_photo?: string;
 };
 
 type Promo = {
@@ -127,6 +129,7 @@ type Promo = {
   code: string;
   discount_type: "percent" | "fixed";
   discount_value: number;
+  max_discount_amount?: number | null;
   min_order_amount: number;
   usage_limit: number | null;
   used_count: number;
@@ -168,6 +171,7 @@ const emptyPromo: Promo = {
   code: "",
   discount_type: "percent",
   discount_value: 10,
+  max_discount_amount: null,
   min_order_amount: 0,
   usage_limit: null,
   used_count: 0,
@@ -281,6 +285,54 @@ export default function AdminPro() {
   // Online Chat Unread Count & Bell 3D Animation State
   const [unreadChatCount, setUnreadChatCount] = useState<number>(() => getTotalUnreadChatCount());
   const [isBellRinging, setIsBellRinging] = useState<boolean>(false);
+  const [userPhotosMap, setUserPhotosMap] = useState<Record<number, string>>({});
+
+  // Kun / Tun rejimini mijoz web app kabi to'liq qo'llash va eshitib turish
+  useEffect(() => {
+    const applyTheme = () => {
+      const mode = localStorage.getItem("guli_admin_theme") || localStorage.getItem("guli_theme") || "light";
+      document.documentElement.setAttribute("data-theme", mode);
+      document.documentElement.classList.toggle("dark", mode === "dark");
+    };
+    applyTheme();
+    window.addEventListener("guli_theme_changed", applyTheme);
+    window.addEventListener("guli_settings_updated", applyTheme);
+    return () => {
+      window.removeEventListener("guli_theme_changed", applyTheme);
+      window.removeEventListener("guli_settings_updated", applyTheme);
+    };
+  }, []);
+
+  // Mijozlarning Telegram profil rasmlarini sinxronlashtirish
+  useEffect(() => {
+    let cancelled = false;
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
+    if (!adminToken || !users.length) return;
+
+    const missingUsers = users.filter((u) => u.telegram_id && !userPhotosMap[u.telegram_id]);
+    if (!missingUsers.length) return;
+
+    missingUsers.slice(0, 30).forEach((u) => {
+      fetch(`${base}/api/admin/users/${u.telegram_id}/details`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((j) => {
+          if (!cancelled && j?.success && j?.data?.photos?.length) {
+            const pUrl = j.data.photos[0]?.url;
+            if (pUrl) {
+              setUserPhotosMap((prev) => ({ ...prev, [u.telegram_id]: pUrl }));
+            }
+          }
+        })
+        .catch(() => {});
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [users, token]);
 
   useEffect(() => {
     let prevCount = getTotalUnreadChatCount();
@@ -620,10 +672,15 @@ export default function AdminPro() {
     setBusy(true);
     try {
       const code = promo.code.trim().toUpperCase();
+      const type = promo.discount_type === "fixed" ? "fixed" : "percent";
       const discount = Number(promo.discount_value);
       const min = Number(promo.min_order_amount || 0);
+      const maxLimit =
+        promo.max_discount_amount == null || (promo.max_discount_amount as any) === ""
+          ? null
+          : Number(promo.max_discount_amount);
       const limit =
-        promo.usage_limit == null || promo.usage_limit === null
+        promo.usage_limit == null || promo.usage_limit === null || (promo.usage_limit as any) === ""
           ? null
           : Number(promo.usage_limit);
 
@@ -631,8 +688,15 @@ export default function AdminPro() {
         throw Error(
           "Promo kodi 3–40 belgidan iborat bo‘lsin (masalan: GULI10)"
         );
-      if (!Number.isFinite(discount) || discount <= 0 || discount > 100)
-        throw Error("Chegirma foizi 1 dan 100 gacha bo‘lishi kerak");
+      if (type === "percent") {
+        if (!Number.isFinite(discount) || discount <= 0 || discount > 100)
+          throw Error("Chegirma foizi 1 dan 100 gacha bo‘lishi kerak");
+      } else {
+        if (!Number.isFinite(discount) || discount <= 0)
+          throw Error("Chegirma summasi 0 dan katta bo‘lishi kerak");
+      }
+      if (maxLimit !== null && (!Number.isFinite(maxLimit) || maxLimit <= 0))
+        throw Error("Maksimal chegirma summasi 0 dan katta bo‘lishi kerak yoki bo‘sh qoldiring");
       if (!Number.isFinite(min) || min < 0)
         throw Error("Minimal buyurtma noto‘g‘ri");
       if (limit !== null && (!Number.isInteger(limit) || limit < 1))
@@ -641,8 +705,9 @@ export default function AdminPro() {
       const payload = {
         ...promo,
         code,
-        discount_type: "percent",
+        discount_type: type,
         discount_value: discount,
+        max_discount_amount: maxLimit,
         min_order_amount: min,
         usage_limit: limit,
       };
@@ -1314,8 +1379,36 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                       onClick={() => setSelectedUser(u)}
                     >
                       <td>
-                        <div className="avatarMini">
-                          {(u.first_name || "G").slice(0, 1).toUpperCase()}
+                        <div
+                          className="avatarMini"
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: "50%",
+                            overflow: "hidden",
+                            display: "inline-grid",
+                            placeItems: "center",
+                            background: "#f8fafc",
+                            border: "1.5px solid #be123c",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                            padding: 0,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {(userPhotosMap[u.telegram_id] || (u as any).photo_url || (u as any).telegram_photo) ? (
+                            <img
+                              src={userPhotosMap[u.telegram_id] || (u as any).photo_url || (u as any).telegram_photo}
+                              alt={u.first_name || ""}
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <span style={{ fontSize: 14, fontWeight: 800, color: "#be123c" }}>
+                              {(u.first_name || u.username || "G").slice(0, 1).toUpperCase()}
+                            </span>
+                          )}
                         </div>
                         <b>
                           {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
@@ -1369,9 +1462,22 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                           <b className="promoCode">{p.code}</b>
                         </td>
                         <td>
-                          {p.discount_type === "percent"
-                            ? `${p.discount_value}%`
-                            : money(p.discount_value)}
+                          {p.discount_type === "percent" ? (
+                            <div>
+                              <b>{p.discount_value}%</b>
+                              {p.max_discount_amount && Number(p.max_discount_amount) > 0 ? (
+                                <div style={{ fontSize: "11px", color: "var(--accent, #e11d48)", fontWeight: 500 }}>
+                                  maks. {money(p.max_discount_amount)}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: "11px", color: "var(--text-muted, #71717a)" }}>
+                                  limitsiz
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            money(p.discount_value)
+                          )}
                         </td>
                         <td>{money(p.min_order_amount)}</td>
                         <td>
@@ -1626,10 +1732,43 @@ function OrderDrawer({
   const addr = parseOrderAddress(order.address);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const codes = productCodes(order);
-  const receiptImg = (order as any).receiptUrl || (order as any).receipt_url || "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80";
+  const [realReceiptUrl, setRealReceiptUrl] = useState<string>(
+    (order as any).receiptUrl || (order as any).receipt_url || ""
+  );
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [customerPhoto, setCustomerPhoto] = useState<string>(
     order.telegram_photo || order.photo_url || ""
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const orderId = String(order.id || order.order_number || "");
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
+
+    if (orderId && adminToken) {
+      setLoadingReceipt(true);
+      fetch(`${base}/api/admin/orders/${encodeURIComponent(orderId)}/payment-receipt`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((j) => {
+          if (!cancelled && j?.success && j?.data?.receipt_url) {
+            setRealReceiptUrl(j.data.receipt_url);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setLoadingReceipt(false);
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [order.id, order.order_number]);
+
+  const receiptImg = realReceiptUrl || (order as any).receiptUrl || (order as any).receipt_url || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -1801,36 +1940,63 @@ function OrderDrawer({
               <h3 style={{ margin: 0, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
                 🧾 Mijoz yuborgan to‘lov cheki ({order.payment === "card" ? "💳 Karta o'tkazmasi" : "💳 Click / Payme"})
               </h3>
-              <span style={{ fontSize: 11, background: "#dcfce7", color: "#166534", padding: "3px 8px", borderRadius: 12, fontWeight: 700 }}>
-                Yuklangan chek
+              <span style={{ fontSize: 11, background: receiptImg ? "#dcfce7" : "#fef3c7", color: receiptImg ? "#166534" : "#92400e", padding: "3px 8px", borderRadius: 12, fontWeight: 700 }}>
+                {loadingReceipt ? "Yuklanmoqda..." : receiptImg ? "Yuklangan chek ✓" : "Chek kutilmoqda"}
               </span>
             </div>
             
             <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-              <div
-                style={{
-                  position: "relative",
-                  cursor: "pointer",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  border: "1px solid #cbd5e1",
-                  width: 100,
-                  height: 120,
-                  flexShrink: 0,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                  background: "#e2e8f0",
-                }}
-                onClick={() => onOpenReceipt(receiptImg)}
-              >
-                <img
-                  src={receiptImg}
-                  alt="To'lov cheki"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
-                <div style={{ position: "absolute", bottom: 0, inset: "auto 0 0 0", background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, textAlign: "center", padding: "3px 0", fontWeight: 600 }}>
-                  🔍 Kengaytirish
+              {receiptImg ? (
+                <div
+                  style={{
+                    position: "relative",
+                    cursor: "pointer",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    border: "1px solid #cbd5e1",
+                    width: 100,
+                    height: 120,
+                    flexShrink: 0,
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                    background: "#e2e8f0",
+                  }}
+                  onClick={() => onOpenReceipt(receiptImg)}
+                  title="To'liq hajmda ko'rish"
+                >
+                  <img
+                    src={receiptImg}
+                    alt="To'lov cheki"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                  <div style={{ position: "absolute", bottom: 0, inset: "auto 0 0 0", background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, textAlign: "center", padding: "3px 0", fontWeight: 600 }}>
+                    🔍 Kengaytirish
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  style={{
+                    width: 100,
+                    height: 120,
+                    flexShrink: 0,
+                    borderRadius: 10,
+                    border: "1px dashed #cbd5e1",
+                    display: "grid",
+                    placeItems: "center",
+                    background: "#f1f5f9",
+                    color: "#94a3b8",
+                    fontSize: 24,
+                    textAlign: "center",
+                    padding: 8,
+                  }}
+                >
+                  <div>
+                    <div>🧾</div>
+                    <small style={{ fontSize: 10, display: "block", color: "#64748b", marginTop: 4 }}>
+                      {loadingReceipt ? "Yuklanmoqda..." : "Chek yo'q"}
+                    </small>
+                  </div>
+                </div>
+              )}
 
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: "#475569", marginBottom: 4 }}>
@@ -1839,6 +2005,30 @@ function OrderDrawer({
                 <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
                   <b>Tranzaksiya:</b> #{order.order_number || order.id}-TX
                 </div>
+                {receiptImg && (
+                  <div style={{ marginBottom: 8 }}>
+                    <a
+                      href={receiptImg}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={`Chek_${order.order_number || order.id}`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 11.5,
+                        color: "#0284c7",
+                        textDecoration: "none",
+                        fontWeight: 600,
+                        background: "#e0f2fe",
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                      }}
+                    >
+                      📥 Chekni yuklab olish (asl nusxa)
+                    </a>
+                  </div>
+                )}
 
                 {order.status !== "Qabul qilindi" ? (
                   <button
@@ -2095,7 +2285,9 @@ function UserDrawer({
   onClose: () => void;
   onOrder: (o: Order) => void;
 }) {
-  const [userPhoto, setUserPhoto] = useState<string>("");
+  const [userPhoto, setUserPhoto] = useState<string>(
+    user.photo_url || user.telegram_photo || ""
+  );
   const mine = orders.filter(
     (o) =>
       o.telegram_id === user.telegram_id ||
@@ -2261,6 +2453,8 @@ function PromoModal({
   const replaceZeroOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     if (e.currentTarget.value === "0") e.currentTarget.select();
   };
+  const isPercent = (value.discount_type || "percent") === "percent";
+
   return (
     <Modal
       title={value.id ? "Promo tahrirlash" : "Yangi promo"}
@@ -2276,19 +2470,32 @@ function PromoModal({
               onChange={(e) =>
                 set("code", e.target.value.toUpperCase().replace(/\s/g, ""))
               }
-              placeholder="Masalan: GULI10"
+              placeholder="Masalan: GULI20"
               maxLength={40}
               pattern="[A-Za-z0-9_-]{3,40}"
               required
             />
             <small>Faqat harf, raqam, _ va - ishlating.</small>
           </label>
+
           <label>
-            Chegirma (%)
+            Chegirma turi
+            <select
+              value={value.discount_type || "percent"}
+              onChange={(e) => set("discount_type", e.target.value as any)}
+            >
+              <option value="percent">Foiz (%)</option>
+              <option value="fixed">Aniq summa (so'm)</option>
+            </select>
+            <small>Foizli yoki qat'iy summa chegirmasi.</small>
+          </label>
+
+          <label>
+            {isPercent ? "Chegirma foizi (%)" : "Chegirma summasi (so'm)"}
             <input
               type="number"
               min="1"
-              max="100"
+              max={isPercent ? "100" : undefined}
               step="1"
               value={value.discount_value}
               onFocus={replaceZeroOnFocus}
@@ -2298,15 +2505,91 @@ function PromoModal({
                   e.target.value === "" ? 0 : Number(e.target.value)
                 )
               }
+              placeholder={isPercent ? "Masalan: 20" : "Masalan: 50000"}
+              required
             />
-            <small>Mijoz savatidan shu foiz chegiriladi.</small>
+            <small>
+              {isPercent
+                ? "Mijoz savatidan shu foiz chegiriladi."
+                : "Mijoz savatidan aynan shu summa chegiriladi."}
+            </small>
           </label>
+
+          {isPercent && (
+            <label style={{ gridColumn: "1 / -1" }}>
+              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Maksimal chegirma limiti (so'm, ixtiyoriy)</span>
+                {value.max_discount_amount && Number(value.max_discount_amount) > 0 ? (
+                  <span style={{ fontSize: "11px", color: "var(--accent, #e11d48)", fontWeight: 600 }}>
+                    Maks. {money(Number(value.max_discount_amount))}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "11px", color: "var(--text-muted, #71717a)" }}>
+                    Limitsiz
+                  </span>
+                )}
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="1000"
+                inputMode="numeric"
+                value={value.max_discount_amount ?? ""}
+                onChange={(e) =>
+                  set(
+                    "max_discount_amount",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="Masalan: 100000 (bo‘sh qoldirilsa limitsiz)"
+              />
+              <small>
+                Mijoz qancha katta xarid qilsa ham (masalan 1 000 000 so'm), chegirma shu ko'rsatilgan limitdan oshmaydi.
+              </small>
+              <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+                {[30000, 50000, 100000, 200000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => set("max_discount_amount", preset)}
+                    style={{
+                      fontSize: "11px",
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border-color, #e4e4e7)",
+                      background: value.max_discount_amount === preset ? "var(--accent, #e11d48)" : "transparent",
+                      color: value.max_discount_amount === preset ? "#fff" : "inherit",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {preset.toLocaleString("uz-UZ")} so'm
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => set("max_discount_amount", null)}
+                  style={{
+                    fontSize: "11px",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border-color, #e4e4e7)",
+                    background: !value.max_discount_amount ? "var(--accent, #e11d48)" : "transparent",
+                    color: !value.max_discount_amount ? "#fff" : "inherit",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cheksiz (limitsiz)
+                </button>
+              </div>
+            </label>
+          )}
+
           <label>
             Minimal buyurtma (ixtiyoriy)
             <input
               type="number"
               min="0"
-              step="1"
+              step="1000"
               inputMode="numeric"
               value={value.min_order_amount}
               onFocus={replaceZeroOnFocus}
@@ -2316,9 +2599,11 @@ function PromoModal({
                   e.target.value === "" ? 0 : Number(e.target.value)
                 )
               }
+              placeholder="0"
             />
             <small>0 bo‘lsa minimal summa talabi yo‘q.</small>
           </label>
+
           <label>
             Foydalanish limiti (ixtiyoriy)
             <input
@@ -2336,6 +2621,7 @@ function PromoModal({
             />
             <small>Bo‘sh qoldirilsa cheksiz.</small>
           </label>
+
           <label>
             Holat
             <select

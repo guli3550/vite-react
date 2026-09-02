@@ -939,3 +939,289 @@
     display: none;
   }
 }
+
+/* ==========================================================================
+   DARK MODE SUPPORT FOR PRODUCT REVIEWS SECTION (KUN / TUN REJIMI)
+   ========================================================================== */
+
+[data-theme="dark"] .productReviewsContainer,
+html[data-theme="dark"] .productReviewsContainer {
+  background: #1c1216;
+  border-color: rgba(225, 29, 72, 0.2);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .reviewsTitle,
+html[data-theme="dark"] .reviewsTitle {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .reviewsTitleIcon,
+html[data-theme="dark"] .reviewsTitleIcon {
+  background: #2d1822;
+  border-color: rgba(225, 29, 72, 0.25);
+  color: #f43f5e;
+}
+
+[data-theme="dark"] .reviewsHeaderMeta,
+html[data-theme="dark"] .reviewsHeaderMeta {
+  background: linear-gradient(135deg, #2a1620, #361b28);
+  border-color: rgba(225, 29, 72, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .reviewsHeaderScore,
+html[data-theme="dark"] .reviewsHeaderScore {
+  color: #fb7185;
+}
+
+[data-theme="dark"] .reviewsHeaderCount,
+html[data-theme="dark"] .reviewsHeaderCount {
+  color: #c4b0b6;
+}
+
+[data-theme="dark"] .reviewsList,
+html[data-theme="dark"] .reviewsList {
+  background: #150d10;
+  border-color: rgba(225, 29, 72, 0.15);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .reviewsList::-webkit-scrollbar-track,
+html[data-theme="dark"] .reviewsList::-webkit-scrollbar-track {
+  background: rgba(45, 24, 34, 0.6);
+}
+
+[data-theme="dark"] .reviewsList::-webkit-scrollbar-thumb,
+html[data-theme="dark"] .reviewsList::-webkit-scrollbar-thumb {
+  background: #542b3b;
+}
+
+[data-theme="dark"] .reviewItemCard,
+html[data-theme="dark"] .reviewItemCard {
+  background: #23161c;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .reviewItemCard:hover,
+html[data-theme="dark"] .reviewItemCard:hover {
+  background: #2c1a24;
+  border-color: rgba(225, 29, 72, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .reviewItemCard.isPinnedReview,
+html[data-theme="dark"] .reviewItemCard.isPinnedReview {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.15), #261720);
+  border-color: #d97706;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.18);
+}
+
+[data-theme="dark"] .authorNameText,
+html[data-theme="dark"] .authorNameText {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .verifiedPurchasePill,
+html[data-theme="dark"] .verifiedPurchasePill {
+  color: #34d399;
+  background: rgba(6, 78, 59, 0.6);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+[data-theme="dark"] .reviewDateText,
+html[data-theme="dark"] .reviewDateText {
+  color: #9e8a91;
+}
+
+[data-theme="dark"] .reviewCommentBody,
+html[data-theme="dark"] .reviewCommentBody {
+  color: #e6d5d9;
+}
+
+[data-theme="dark"] .emptyReviewsState,
+html[data-theme="dark"] .emptyReviewsState {
+  background: linear-gradient(135deg, #25141c 0%, #1a0f14 100%);
+  border-color: rgba(225, 29, 72, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] .emptyReviewsState h4,
+html[data-theme="dark"] .emptyReviewsState h4 {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .emptyReviewsState p,
+html[data-theme="dark"] .emptyReviewsState p {
+  color: #baa4ab;
+}
+
+[data-theme="dark"] .inlineBoxTitle,
+html[data-theme="dark"] .inlineBoxTitle {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .inlineInputRow,
+html[data-theme="dark"] .inlineInputRow {
+  background: #23161c;
+  border-color: rgba(225, 29, 72, 0.25) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .inlineInputRow:focus-within,
+html[data-theme="dark"] .inlineInputRow:focus-within {
+  background: #2a1a23;
+  border-color: rgba(225, 29, 72, 0.55) !important;
+  box-shadow: 0 4px 18px rgba(225, 29, 72, 0.2) !important;
+}
+
+[data-theme="dark"] .inlineCommentInput,
+html[data-theme="dark"] .inlineCommentInput {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .inlineCommentInput::placeholder,
+html[data-theme="dark"] .inlineCommentInput::placeholder {
+  color: #8c767e;
+}
+
+[data-theme="dark"] .inlineStarBtn,
+html[data-theme="dark"] .inlineStarBtn {
+  color: #4a313b;
+}
+
+[data-theme="dark"] .inlineStarBtn.active,
+html[data-theme="dark"] .inlineStarBtn.active {
+  color: #f59e0b;
+}
+
+[data-theme="dark"] .inlineAttachGalleryBtn,
+html[data-theme="dark"] .inlineAttachGalleryBtn {
+  background: #2f1b25;
+  color: #fb7185;
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+[data-theme="dark"] .inlineAttachGalleryBtn:hover,
+html[data-theme="dark"] .inlineAttachGalleryBtn:hover {
+  background: #3d2331;
+  border-color: #f43f5e;
+}
+
+[data-theme="dark"] .inlinePhotoThumbWrap,
+html[data-theme="dark"] .inlinePhotoThumbWrap {
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+[data-theme="dark"] .reviewDetailModalCard,
+html[data-theme="dark"] .reviewDetailModalCard {
+  background: #201318;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .reviewDetailModalHeader,
+html[data-theme="dark"] .reviewDetailModalHeader {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .detailUserName,
+html[data-theme="dark"] .detailUserName {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .detailDateText,
+html[data-theme="dark"] .detailDateText {
+  color: #9e8a91;
+}
+
+[data-theme="dark"] .detailScoreBadge,
+html[data-theme="dark"] .detailScoreBadge {
+  background: #3d1b26;
+  color: #fb7185;
+  border-color: rgba(225, 29, 72, 0.4);
+}
+
+[data-theme="dark"] .detailCommentCard,
+html[data-theme="dark"] .detailCommentCard {
+  background: #180d12;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .detailCommentText,
+html[data-theme="dark"] .detailCommentText {
+  color: #f2e2e6;
+}
+
+[data-theme="dark"] .detailPhotosGallery h4,
+html[data-theme="dark"] .detailPhotosGallery h4 {
+  color: #c4b0b6;
+}
+
+[data-theme="dark"] .detailPhotoGridItem,
+html[data-theme="dark"] .detailPhotoGridItem {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .likeReviewBtn,
+html[data-theme="dark"] .likeReviewBtn {
+  background: linear-gradient(135deg, #381a25, #441f2d);
+  color: #fb7185;
+  border-color: rgba(225, 29, 72, 0.4);
+}
+
+[data-theme="dark"] .likeReviewBtn:hover,
+html[data-theme="dark"] .likeReviewBtn:hover {
+  background: #4e2233;
+}
+
+[data-theme="dark"] .writeReviewModal,
+html[data-theme="dark"] .writeReviewModal {
+  background: #201318;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .formLabel,
+html[data-theme="dark"] .formLabel {
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .modalSubText,
+html[data-theme="dark"] .modalSubText {
+  color: #baa4ab;
+}
+
+[data-theme="dark"] .starSelectBtn,
+html[data-theme="dark"] .starSelectBtn {
+  background: #180d12;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #5c3e49;
+}
+
+[data-theme="dark"] .starSelectBtn.selected,
+html[data-theme="dark"] .starSelectBtn.selected {
+  background: #3e240a;
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .uploadPhotoBtn,
+html[data-theme="dark"] .uploadPhotoBtn {
+  background: #25151e;
+  border-color: rgba(225, 29, 72, 0.4);
+  color: #fb7185;
+}
+
+[data-theme="dark"] .cancelReviewBtn,
+html[data-theme="dark"] .cancelReviewBtn {
+  background: #2d1822;
+  color: #e6d5d9;
+}
+
+[data-theme="dark"] .cancelReviewBtn:hover,
+html[data-theme="dark"] .cancelReviewBtn:hover {
+  background: #3a1f2c;
+}
+

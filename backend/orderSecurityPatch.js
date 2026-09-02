@@ -1,5 +1,6 @@
 const { createClient } = require("@supabase/supabase-js");
 const express = require("express");
+const { calculatePromoDiscount } = require("./promoLimits");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const originalPost = express.application.post;
@@ -51,7 +52,7 @@ async function calculateOrder(body) {
   let discount = 0;
   let promo = null;
   if (promoCode) {
-    const { data, error } = await supabase.from("promo_codes").select("code,discount_type,discount_value,min_order_amount,usage_limit,used_count,starts_at,expires_at,active").eq("code", promoCode).maybeSingle();
+    const { data, error } = await supabase.from("promo_codes").select("*").eq("code", promoCode).maybeSingle();
     if (error) throw error;
     if (!data || data.active === false) throw Object.assign(new Error("Promo kod topilmadi yoki faol emas"), { status: 400 });
     const now = Date.now();
@@ -59,7 +60,8 @@ async function calculateOrder(body) {
     if (data.expires_at && new Date(data.expires_at).getTime() < now) throw Object.assign(new Error("Promo kod muddati tugagan"), { status: 400 });
     if (data.usage_limit != null && Number(data.used_count || 0) >= Number(data.usage_limit)) throw Object.assign(new Error("Promo koddan foydalanish limiti tugagan"), { status: 400 });
     if (subtotal < Number(data.min_order_amount || 0)) throw Object.assign(new Error(`Minimal buyurtma ${Number(data.min_order_amount || 0).toLocaleString("uz-UZ")} so‘m`), { status: 400 });
-    discount = data.discount_type === "percent" ? Math.min(subtotal, Math.round(subtotal * Number(data.discount_value || 0) / 100)) : Math.min(subtotal, Math.max(0, Number(data.discount_value || 0)));
+    const { discount: calculatedDiscount } = calculatePromoDiscount(data, subtotal);
+    discount = calculatedDiscount;
     promo = data;
   }
   const delivery = Math.max(0, Number(body?.delivery) || 0);

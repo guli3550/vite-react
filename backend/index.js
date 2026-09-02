@@ -3,6 +3,7 @@ const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { listProducts, getProduct } = require("./catalog");
+const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -153,7 +154,7 @@ app.post("/api/promo/validate", async (req, res) => {
     const code = String(req.body?.code || "").trim().toUpperCase();
     const subtotal = Number(req.body?.subtotal) || 0;
     if (!code) return res.status(400).json({ success: false, message: "Promo kodini kiriting" });
-    const { data, error } = await supabase.from("promo_codes").select("code,discount_type,discount_value,min_order_amount,usage_limit,used_count,starts_at,expires_at,active").eq("code", code).eq("active", true).maybeSingle();
+    const { data, error } = await supabase.from("promo_codes").select("*").eq("code", code).eq("active", true).maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, message: "Promo kod topilmadi yoki faol emas" });
     const now = Date.now();
@@ -161,8 +162,19 @@ app.post("/api/promo/validate", async (req, res) => {
     if (data.expires_at && new Date(data.expires_at).getTime() < now) return res.status(400).json({ success: false, message: "Promo kod muddati tugagan" });
     if (data.usage_limit != null && Number(data.used_count || 0) >= Number(data.usage_limit)) return res.status(400).json({ success: false, message: "Promo koddan foydalanish limiti tugagan" });
     if (subtotal < Number(data.min_order_amount || 0)) return res.status(400).json({ success: false, message: `Minimal buyurtma ${Number(data.min_order_amount || 0).toLocaleString("uz-UZ")} so‘m` });
-    const discount = data.discount_type === "percent" ? Math.round(subtotal * Number(data.discount_value) / 100) : Math.min(subtotal, Number(data.discount_value));
-    res.json({ success: true, data: { code: data.code, discount, discount_type: data.discount_type, discount_value: Number(data.discount_value) } });
+    
+    const { discount, max_discount_amount, is_limit_applied } = calculatePromoDiscount(data, subtotal);
+    res.json({
+      success: true,
+      data: {
+        code: data.code,
+        discount,
+        discount_type: data.discount_type,
+        discount_value: Number(data.discount_value),
+        max_discount_amount,
+        is_limit_applied,
+      }
+    });
   } catch (error) { console.error("Promo validation error:", error); res.status(500).json({ success: false, message: "Promo kodni tekshirishda xatolik" }); }
 });
 
@@ -224,7 +236,12 @@ app.get("/api/admin/promos", requireAdmin, async (req,res) => {
   try {
     const { data, error } = await supabase.from("promo_codes").select("*").order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));
     if(error) throw error;
-    res.json({success:true,data:data||[]});
+    const limitsMap = getLimitsMap();
+    const enriched = (data || []).map((p) => ({
+      ...p,
+      max_discount_amount: p.max_discount_amount != null ? Number(p.max_discount_amount) : (limitsMap[p.code] || null),
+    }));
+    res.json({success:true,data:enriched});
   } catch(error) {
     console.error("Admin promos list error:", error);
     res.status(500).json({success:false,message:"Promo kodlarni yuklashda xatolik",detail:error.message});
@@ -236,44 +253,96 @@ function promoPayload(body) {
   const discountType = body?.discount_type === "fixed" ? "fixed" : "percent";
   const discountValue = Number(body?.discount_value);
   const minOrderAmount = Number(body?.min_order_amount || 0);
+  const maxDiscountAmount = body?.max_discount_amount == null || body.max_discount_amount === "" ? null : Number(body.max_discount_amount);
   const usageLimit = body?.usage_limit == null || body.usage_limit === "" ? null : Number(body.usage_limit);
   if (!/^[A-Z0-9_-]{3,40}$/.test(code)) throw Object.assign(new Error("Promo kodi 3–40 belgidan iborat bo‘lsin: harf, raqam, _ yoki -"),{status:400});
   if (!Number.isFinite(discountValue) || discountValue <= 0) throw Object.assign(new Error("Chegirma qiymati 0 dan katta bo‘lishi kerak"),{status:400});
   if (discountType === "percent" && discountValue > 100) throw Object.assign(new Error("Foizli chegirma 100% dan oshmasin"),{status:400});
+  if (maxDiscountAmount !== null && (!Number.isFinite(maxDiscountAmount) || maxDiscountAmount <= 0)) throw Object.assign(new Error("Maksimal chegirma summasi 0 dan katta bo‘lishi kerak"),{status:400});
   if (!Number.isFinite(minOrderAmount) || minOrderAmount < 0) throw Object.assign(new Error("Minimal buyurtma 0 yoki undan katta bo‘lishi kerak"),{status:400});
   if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) throw Object.assign(new Error("Limit kamida 1 bo‘lishi kerak yoki bo‘sh qoldiring"),{status:400});
-  return {code,discount_type:discountType,discount_value:discountValue,min_order_amount:minOrderAmount,usage_limit:usageLimit,active:body?.active!==false};
+  return {
+    code,
+    discount_type: discountType,
+    discount_value: discountValue,
+    max_discount_amount: maxDiscountAmount,
+    min_order_amount: minOrderAmount,
+    usage_limit: usageLimit,
+    active: body?.active !== false
+  };
 }
 
 app.post("/api/admin/promos", requireAdmin, async (req,res) => {
   try {
-    const payload=promoPayload(req.body);
-    const {data,error}=await supabase.from("promo_codes").insert([payload]).select("*").single();
-    if(error){
-      console.error("Promo create DB error:",error);
-      if(error.code==="23505") return res.status(409).json({success:false,message:`${payload.code} promo kodi allaqachon mavjud`});
-      if(/relation .*promo_codes.*does not exist|schema cache/i.test(error.message||"")) return res.status(503).json({success:false,message:"promo_codes jadvali Supabase'da hali tayyor emas. Repair SQL'ni bir marta ishga tushiring."});
-      return res.status(500).json({success:false,message:"Promo kod yaratishda xatolik",detail:error.message});
+    const payload = promoPayload(req.body);
+    const maxDiscount = payload.max_discount_amount;
+    setPromoLimit(payload.code, maxDiscount);
+
+    let resData = null;
+    let { data, error } = await supabase.from("promo_codes").insert([payload]).select("*").single();
+    if (error && /column .*max_discount_amount.* does not exist/i.test(error.message || "")) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.max_discount_amount;
+      const secondTry = await supabase.from("promo_codes").insert([fallbackPayload]).select("*").single();
+      if (secondTry.error) throw secondTry.error;
+      resData = { ...secondTry.data, max_discount_amount: maxDiscount };
+    } else if (error) {
+      console.error("Promo create DB error:", error);
+      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} promo kodi allaqachon mavjud` });
+      if (/relation .*promo_codes.*does not exist|schema cache/i.test(error.message || "")) return res.status(503).json({ success: false, message: "promo_codes jadvali Supabase'da hali tayyor emas. Repair SQL'ni bir marta ishga tushiring." });
+      return res.status(500).json({ success: false, message: "Promo kod yaratishda xatolik", detail: error.message });
+    } else {
+      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount };
     }
-    res.status(201).json({success:true,data});
+
+    res.status(201).json({ success: true, data: resData });
   } catch(error) {
-    const status=error.status||400; console.error("Promo create error:",error); res.status(status).json({success:false,message:error.message||"Promo kod yaratishda xatolik"});
+    const status = error.status || 400;
+    console.error("Promo create error:", error);
+    res.status(status).json({ success: false, message: error.message || "Promo kod yaratishda xatolik" });
   }
 });
 
 app.put("/api/admin/promos/:id", requireAdmin, async (req,res) => {
   try {
-    const payload=promoPayload(req.body);
-    const {data,error}=await supabase.from("promo_codes").update(payload).eq("id",req.params.id).select("*").single();
-    if(error){
-      console.error("Promo update DB error:",error);
-      if(error.code==="23505") return res.status(409).json({success:false,message:`${payload.code} promo kodi allaqachon mavjud`});
-      return res.status(500).json({success:false,message:"Promo kodni yangilashda xatolik",detail:error.message});
+    const payload = promoPayload(req.body);
+    const maxDiscount = payload.max_discount_amount;
+    setPromoLimit(payload.code, maxDiscount);
+
+    let resData = null;
+    let { data, error } = await supabase.from("promo_codes").update(payload).eq("id", req.params.id).select("*").single();
+    if (error && /column .*max_discount_amount.* does not exist/i.test(error.message || "")) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.max_discount_amount;
+      const secondTry = await supabase.from("promo_codes").update(fallbackPayload).eq("id", req.params.id).select("*").single();
+      if (secondTry.error) throw secondTry.error;
+      resData = { ...secondTry.data, max_discount_amount: maxDiscount };
+    } else if (error) {
+      console.error("Promo update DB error:", error);
+      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} promo kodi allaqachon mavjud` });
+      return res.status(500).json({ success: false, message: "Promo kodni yangilashda xatolik", detail: error.message });
+    } else {
+      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount };
     }
-    res.json({success:true,data});
-  } catch(error) { const status=error.status||400; res.status(status).json({success:false,message:error.message||"Promo ma’lumotlari noto‘g‘ri"}); }
+
+    res.json({ success: true, data: resData });
+  } catch(error) {
+    const status = error.status || 400;
+    res.status(status).json({ success: false, message: error.message || "Promo ma’lumotlari noto‘g‘ri" });
+  }
 });
-app.delete("/api/admin/promos/:id",requireAdmin,async(req,res)=>{try{const {error}=await supabase.from("promo_codes").delete().eq("id",req.params.id);if(error)throw error;res.json({success:true})}catch(error){res.status(500).json({success:false,message:"Promo kodni o‘chirishda xatolik"})}});
+
+app.delete("/api/admin/promos/:id", requireAdmin, async (req,res) => {
+  try {
+    const { data: existing } = await supabase.from("promo_codes").select("code").eq("id", req.params.id).maybeSingle();
+    if (existing?.code) deletePromoLimit(existing.code);
+    const { error } = await supabase.from("promo_codes").delete().eq("id", req.params.id);
+    if(error) throw error;
+    res.json({ success: true });
+  } catch(error) {
+    res.status(500).json({ success: false, message: "Promo kodni o‘chirishda xatolik" });
+  }
+});
 
 // Contributions/Saxovat Storage & Endpoints
 const fs = require("fs");

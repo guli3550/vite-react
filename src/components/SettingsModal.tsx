@@ -117,24 +117,27 @@ export function SettingsModal({
         <div
           className="settingsBody"
           style={{
-            padding: "20px 24px",
+            padding: "16px 16px 24px",
             overflowY: "auto",
+            WebkitOverflowScrolling: "touch",
             display: "flex",
             flexDirection: "column",
-            gap: "24px",
+            gap: "20px",
+            boxSizing: "border-box",
+            width: "100%",
           }}
         >
           {/* 1. Theme Section (Kun / Tun rejimini takomillashtirish) */}
-          <section className="settingsSection">
-            <div className="settingsSectionHeader" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-              <span className="settingsIcon" style={{ fontSize: "22px" }}>🌓</span>
+          <section className="settingsSection" style={{ margin: 0, width: "100%", boxSizing: "border-box" }}>
+            <div className="settingsSectionHeader" style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+              <span className="settingsIcon" style={{ fontSize: "20px" }}>🌓</span>
               <div>
-                <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>{t("theme_setting")}</h3>
-                <small style={{ color: "var(--text-muted)", fontSize: "12px" }}>{t("theme_desc")}</small>
+                <h3 style={{ margin: 0, fontSize: "14.5px", fontWeight: 750 }}>{t("theme_setting")}</h3>
+                <small style={{ color: "var(--text-muted)", fontSize: "11.5px" }}>{t("theme_desc")}</small>
               </div>
             </div>
 
-            <div className="themeToggleGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            <div className="themeToggleGrid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: "10px", width: "100%", boxSizing: "border-box" }}>
               <button
                 type="button"
                 className={`themeChoiceBtn ${theme === "light" ? "active" : ""}`}
@@ -144,7 +147,7 @@ export function SettingsModal({
                 }}
                 id="theme-btn-light"
                 style={{
-                  padding: "14px",
+                  padding: "12px 14px",
                   borderRadius: "16px",
                   border: theme === "light" ? "2px solid var(--primary)" : "1px solid var(--border-color)",
                   background: theme === "light" ? "var(--bg-card-sub)" : "var(--bg-card)",
@@ -154,13 +157,15 @@ export function SettingsModal({
                   justifyContent: "space-between",
                   cursor: "pointer",
                   transition: "all 0.2s ease",
+                  minWidth: 0,
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "20px" }}>☀️</span>
-                  <b style={{ fontSize: "13.5px" }}>{t("theme_light")}</b>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
+                  <span style={{ fontSize: "18px", flexShrink: 0 }}>☀️</span>
+                  <b style={{ fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("theme_light")}</b>
                 </div>
-                <span style={{ color: "var(--primary)", fontWeight: 800 }}>{theme === "light" ? "✓" : ""}</span>
+                <span style={{ color: "var(--primary)", fontWeight: 800, flexShrink: 0 }}>{theme === "light" ? "✓" : ""}</span>
               </button>
 
               <button
@@ -172,7 +177,7 @@ export function SettingsModal({
                 }}
                 id="theme-btn-dark"
                 style={{
-                  padding: "14px",
+                  padding: "12px 14px",
                   borderRadius: "16px",
                   border: theme === "dark" ? "2px solid var(--primary)" : "1px solid var(--border-color)",
                   background: theme === "dark" ? "var(--bg-card-sub)" : "var(--bg-card)",
@@ -182,13 +187,15 @@ export function SettingsModal({
                   justifyContent: "space-between",
                   cursor: "pointer",
                   transition: "all 0.2s ease",
+                  minWidth: 0,
+                  boxSizing: "border-box",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ fontSize: "20px" }}>🌙</span>
-                  <b style={{ fontSize: "13.5px" }}>{t("theme_dark")}</b>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
+                  <span style={{ fontSize: "18px", flexShrink: 0 }}>🌙</span>
+                  <b style={{ fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("theme_dark")}</b>
                 </div>
-                <span style={{ color: "var(--primary)", fontWeight: 800 }}>{theme === "dark" ? "✓" : ""}</span>
+                <span style={{ color: "var(--primary)", fontWeight: 800, flexShrink: 0 }}>{theme === "dark" ? "✓" : ""}</span>
               </button>
             </div>
           </section>

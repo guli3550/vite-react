@@ -165,13 +165,46 @@ export function HelpSupportModal({
           boxShadow: "0 25px 60px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.1)",
           background: "var(--bg-card)",
           borderRadius: "24px",
-          overflow: "hidden"
+          maxHeight: "88vh",
+          height: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          padding: 0,
+          width: "100%",
+          maxWidth: "520px",
+          boxSizing: "border-box",
         }}
       >
         {supportStep !== "none" ? (
           <>
-            <div className="modalHead" style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="modalHead" style={{ borderBottom: "1px solid var(--border-color)", padding: "16px 20px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (supportStep === "upload") {
+                      setSupportStep("details");
+                    } else {
+                      setSupportStep("none");
+                    }
+                  }}
+                  style={{
+                    background: "var(--bg-card-sub)",
+                    border: "1px solid var(--border-color)",
+                    borderRadius: "10px",
+                    width: "32px",
+                    height: "32px",
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    color: "var(--text-main)",
+                    fontSize: "14px",
+                  }}
+                  title={language === "ru" ? "Назад" : "Ortga"}
+                >
+                  ←
+                </button>
                 <span style={{ fontSize: "1.4rem" }}>🤗</span>
                 <span style={{ fontWeight: "850", fontSize: "16px", color: "var(--text-main)" }}>
                   {language === "ru" ? "Поддержка админа" : language === "en" ? "Support Admin" : "Adminni qo'llab-quvvatlash"}
@@ -188,7 +221,21 @@ export function HelpSupportModal({
               </button>
             </div>
 
-            <div className="helpBody" style={{ minHeight: "360px", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: "15px" }}>
+            <div
+              className="helpBody"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                flex: "1 1 auto",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                overscrollBehavior: "contain",
+                touchAction: "pan-y",
+                padding: "18px 20px 24px",
+                width: "100%",
+                boxSizing: "border-box",
+              }}
+            >
               {supportStep === "thanks" ? (
                 <div className="supportThanksContainer" style={{ textAlign: "center", padding: "15px" }}>
                   <div className="thanksIcon" style={{ fontSize: "65px", marginBottom: "16px", filter: "drop-shadow(0 10px 15px rgba(185, 90, 112, 0.35))", animation: "bounce 2s infinite" }}>🥹💖✨</div>
@@ -481,10 +528,10 @@ export function HelpSupportModal({
           </>
         ) : (
           <>
-            <div className="modalHead" style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: "12px" }}>
+            <div className="modalHead" style={{ borderBottom: "1px solid var(--border-color)", padding: "16px 20px 14px", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <span className="proEyebrow">{t("help_support")}</span>
-                <h2 style={{ fontSize: "20px", fontWeight: "900" }}>{t("help_support")}</h2>
+                <h2 style={{ fontSize: "20px", fontWeight: "900", margin: 0 }}>{t("help_support")}</h2>
               </div>
               <button
                 type="button"
@@ -497,7 +544,21 @@ export function HelpSupportModal({
               </button>
             </div>
 
-            <div className="helpBody">
+            <div
+              className="helpBody"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                flex: "1 1 auto",
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                overscrollBehavior: "contain",
+                touchAction: "pan-y",
+                padding: "18px 20px 24px",
+                width: "100%",
+                boxSizing: "border-box",
+              }}
+            >
               {/* Quick Actions Grid */}
               <div className="helpQuickGrid">
                 {/* Online Chat Box */}
@@ -632,7 +693,7 @@ export function HelpSupportModal({
               </section>
             </div>
 
-            <div className="helpFooter" style={{ borderTop: "1px solid var(--border-color)", paddingTop: "12px" }}>
+            <div className="helpFooter" style={{ borderTop: "1px solid var(--border-color)", padding: "14px 20px 16px", flexShrink: 0 }}>
               <button type="button" className="primaryButton" onClick={onClose} id="help-ok-btn" style={{ borderRadius: "14px", padding: "12px", fontSize: "13px", fontWeight: "700" }}>
                 {t("close")}
               </button>

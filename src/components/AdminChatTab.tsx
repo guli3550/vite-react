@@ -1108,20 +1108,47 @@ export default function AdminChatTab({
                           </div>
                         )}
 
-                        {/* Image Attachment */}
-                        {msg.type === "image" && msg.mediaUrl && (
-                          <img
-                            className="chat2-media-img"
-                            src={msg.mediaUrl}
-                            alt="Rasm"
-                            onClick={() => setLightboxImageUrl(msg.mediaUrl!)}
-                          />
+                        {/* Image Attachment (Telegram botdan kelgan rasm) */}
+                        {((msg.type === "image" || Boolean(msg.mediaUrl && (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || msg.mediaUrl.includes("photo"))))) && msg.mediaUrl && (
+                          <div className="chat2-media-img-container" style={{ margin: "6px 0" }}>
+                            <img
+                              className="chat2-media-img"
+                              src={msg.mediaUrl}
+                              alt="Rasm"
+                              style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: "12px", objectFit: "contain", cursor: "pointer", display: "block", border: "1px solid rgba(0,0,0,0.08)" }}
+                              onClick={() => setLightboxImageUrl(msg.mediaUrl!)}
+                              loading="lazy"
+                            />
+                          </div>
                         )}
 
-                        {/* File Attachment */}
-                        {msg.type === "file" && msg.mediaUrl && (
-                          <a className="chat2-media-file" href={msg.mediaUrl} download={msg.fileName || "fayl"}>
-                            📄 {msg.fileName || "Biriktirilgan fayl"}
+                        {/* File Attachment (Telegram botdan kelgan fayl) */}
+                        {((msg.type === "file" || Boolean(msg.mediaUrl && !(msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || msg.mediaUrl.includes("photo"))))) && msg.mediaUrl && (
+                          <a
+                            className="chat2-media-file"
+                            href={msg.mediaUrl}
+                            download={msg.fileName || "fayl"}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "10px",
+                              padding: "9px 13px",
+                              background: "rgba(0,0,0,0.06)",
+                              borderRadius: "12px",
+                              textDecoration: "none",
+                              color: "inherit",
+                              margin: "6px 0",
+                              maxWidth: "100%",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            <span style={{ fontSize: "22px" }}>📁</span>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: "13px" }}>{msg.fileName || "Biriktirilgan fayl"}</div>
+                              <div style={{ fontSize: "11px", opacity: 0.75 }}>Faylni ochish / yuklab olish</div>
+                            </div>
                           </a>
                         )}
 

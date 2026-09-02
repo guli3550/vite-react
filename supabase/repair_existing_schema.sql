@@ -98,6 +98,7 @@ alter table if exists public.promo_codes add column if not exists code text;
 alter table if exists public.promo_codes add column if not exists discount_type text default 'percent';
 alter table if exists public.promo_codes add column if not exists discount_value numeric(12,2) default 10;
 alter table if exists public.promo_codes add column if not exists min_order_amount numeric(12,2) default 0;
+alter table if exists public.promo_codes add column if not exists max_discount_amount numeric(12,2);
 alter table if exists public.promo_codes add column if not exists usage_limit integer;
 alter table if exists public.promo_codes add column if not exists used_count integer default 0;
 alter table if exists public.promo_codes add column if not exists starts_at timestamptz;

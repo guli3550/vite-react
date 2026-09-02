@@ -1294,3 +1294,254 @@
   background: #fff0f3 !important;
 }
 
+/* ==========================================================================
+   ADMIN DARK THEME STYLING (Mijoz Web App Kabi Nafis Kun/Tun Rejimi)
+   ========================================================================== */
+
+[data-theme="dark"],
+html[data-theme="dark"] {
+  --ink: #fbeff2;
+  --muted: #b89ea6;
+  --rose: #e26b84;
+  --rose2: #361f28;
+  --cream: #140e11;
+  --line: #38262d;
+  --panel: #1c1317;
+  --shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] body,
+[data-theme="dark"] body {
+  background: #140e11 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .proShell {
+  background: #140e11 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .proSide {
+  background: rgba(28, 19, 23, 0.96) !important;
+  border-right-color: #38262d !important;
+}
+
+[data-theme="dark"] .proBrand b,
+[data-theme="dark"] .headerTitleBlock h1,
+[data-theme="dark"] .panelHead h2,
+[data-theme="dark"] .drawerHead h2,
+[data-theme="dark"] .proModal h2 {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .proBrand small,
+[data-theme="dark"] .proEyebrow,
+[data-theme="dark"] .metricLabel,
+[data-theme="dark"] .drawerHead small,
+[data-theme="dark"] .tableScroll th {
+  color: #b89ea6 !important;
+}
+
+[data-theme="dark"] .sideNav button,
+[data-theme="dark"] .sideBottom button {
+  color: #d1c4c8 !important;
+}
+
+[data-theme="dark"] .sideNav button:hover,
+[data-theme="dark"] .sideBottom button:hover {
+  background: #2a1d23 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .sideNav button.active {
+  background: #381e28 !important;
+  color: #e26b84 !important;
+  font-weight: 700 !important;
+}
+
+[data-theme="dark"] .adminProfileMiniCard {
+  background: #24171d !important;
+  border-color: #38262d !important;
+}
+
+[data-theme="dark"] .adminProfileDetails b {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .adminProfileDetails small {
+  color: #b89ea6 !important;
+}
+
+[data-theme="dark"] .logoutBtn {
+  background: #25171d !important;
+  border-color: #4a2732 !important;
+  color: #fb7185 !important;
+}
+
+[data-theme="dark"] .exitToClientBtn,
+[data-theme="dark"] .exitWebAppTopBtn {
+  background: #2d1b23 !important;
+  border-color: #4a2835 !important;
+  color: #fb7185 !important;
+}
+
+[data-theme="dark"] .exitToClientBtn:hover,
+[data-theme="dark"] .exitWebAppTopBtn:hover {
+  background: #be123c !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .headerSearchBox {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .headerSearchBox input {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .headerSearchBox input::placeholder {
+  color: #8f7781 !important;
+}
+
+[data-theme="dark"] .notifBellBtn,
+[data-theme="dark"] .refreshTopBtn,
+[data-theme="dark"] .hamburgerMenuBtn {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .topActions button,
+[data-theme="dark"] .panelHead button,
+[data-theme="dark"] .filterRow button {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #d1c4c8 !important;
+}
+
+[data-theme="dark"] .filterRow button.active {
+  background: #3a1e28 !important;
+  border-color: #be123c !important;
+  color: #fb7185 !important;
+}
+
+[data-theme="dark"] .proPanel {
+  background: #1c1317 !important;
+  border-color: #38262d !important;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.45) !important;
+}
+
+[data-theme="dark"] .metricCard {
+  background: #1c1317 !important;
+  border-color: #38262d !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-theme="dark"] .metricCard.rose {
+  background: linear-gradient(145deg, #281820, #1c1317) !important;
+}
+
+[data-theme="dark"] .metricCard .metricIcon {
+  background: #2b1b22 !important;
+  color: #fb7185 !important;
+}
+
+[data-theme="dark"] .metricValue {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .tableScroll th {
+  border-bottom-color: #38262d !important;
+}
+
+[data-theme="dark"] .tableScroll td {
+  border-bottom-color: #2c1b22 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .tableScroll tr.clickable:hover {
+  background: #281820 !important;
+}
+
+[data-theme="dark"] .statusBoard > div {
+  background: #25171d !important;
+  border: 1px solid #38262d !important;
+}
+
+[data-theme="dark"] .statusBoard b {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .drawer,
+[data-theme="dark"] .proModal {
+  background: #191014 !important;
+  border-left: 1px solid #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .drawerHead,
+[data-theme="dark"] .modalHead {
+  border-bottom-color: #38262d !important;
+}
+
+[data-theme="dark"] .drawerHead > button,
+[data-theme="dark"] .modalHead > button,
+[data-theme="dark"] .drawerCloseBtn {
+  background: #2b1b22 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .detailHero,
+[data-theme="dark"] .detailGrid > div,
+[data-theme="dark"] .addressText {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .detailSection select,
+[data-theme="dark"] .proModal input,
+[data-theme="dark"] .proModal select,
+[data-theme="dark"] .proModal textarea {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .lineItem {
+  border-bottom-color: #2e1c24 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .proMobileNav {
+  background: rgba(28, 19, 23, 0.96) !important;
+  border-color: #38262d !important;
+}
+
+[data-theme="dark"] .proMobileNav button {
+  color: #b89ea6 !important;
+}
+
+[data-theme="dark"] .proMobileNav button.active {
+  background: #361f28 !important;
+  color: #e26b84 !important;
+}
+
+[data-theme="dark"] .bannerCardItem,
+[data-theme="dark"] .extensionCard,
+[data-theme="dark"] .analyticsBarItem,
+[data-theme="dark"] .channelRow {
+  background: #1c1317 !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .proEmptyState {
+  background: #1c1317 !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+

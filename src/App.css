@@ -48,10 +48,12 @@ img{max-width:100%}
 .topbar{height:70px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--bg-card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:1000;border-bottom:1px solid var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,0.03)}
 [data-theme="dark"] .topbar{background:var(--bg-card)}
 
-.brand{display:flex;align-items:center;gap:10px;background:transparent;color:var(--text-main);text-align:left}
-.brandIcon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#f9dfe5,#f4cbd5);color:#c34d68;font-size:22px;box-shadow:0 7px 18px rgba(181,76,100,.12)}
-[data-theme="dark"] .brandIcon{background:linear-gradient(145deg,#46202c,#31141e);color:#f4cbd5}
-.brand b,.brand small{display:block}
+.brand{display:flex;align-items:center;gap:10px;background:transparent;color:var(--text-main);text-align:left;border:none;padding:0;cursor:pointer;-webkit-touch-callout:none !important;-webkit-user-select:none !important;-moz-user-select:none !important;-ms-user-select:none !important;user-select:none !important;-webkit-tap-highlight-color:transparent !important;outline:none !important;transform:none !important;opacity:1 !important;filter:none !important;box-shadow:none !important;transition:none !important}
+.brand:hover,.brand:active,.brand:focus,.brand:focus-visible{transform:none !important;opacity:1 !important;filter:none !important;box-shadow:none !important;outline:none !important;background:transparent !important}
+.brandIcon{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#f9dfe5,#f4cbd5);color:#c34d68;font-size:22px;box-shadow:0 7px 18px rgba(181,76,100,.12);-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;-webkit-tap-highlight-color:transparent !important;outline:none !important;transform:none !important}
+.brandIcon:hover,.brandIcon:active,.brandIcon:focus{transform:none !important;opacity:1 !important;filter:none !important;outline:none !important}
+.brandIcon img{-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important;pointer-events:none !important;-webkit-user-drag:none !important}
+.brand b,.brand small{display:block;-webkit-touch-callout:none !important;-webkit-user-select:none !important;user-select:none !important}
 .brand b{letter-spacing:4px;font-size:15px;color:var(--text-main)}
 .brand small{font-size:8px;letter-spacing:3px;color:var(--text-muted);margin-top:2px}
 .headerActions{display:flex;align-items:center;gap:8px}
@@ -382,6 +384,9 @@ img{max-width:100%}
 .discount{position:absolute;top:9px;left:9px;background:#d94f6a;color:#fff;padding:5px 8px;border-radius:20px;font-size:9.5px;font-weight:850;z-index:4;pointer-events:none}
 .heart,.detailHeart{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.95);color:#bd526a;font-size:19px;z-index:5;box-shadow:0 4px 12px rgba(50,20,30,.12);display:grid;place-items:center;border:1px solid rgba(255,255,255,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-sizing:border-box}
 [data-theme="dark"] .heart,[data-theme="dark"] .detailHeart{background:rgba(35,22,28,.95);color:#f4cbd5;border-color:rgba(255,255,255,.1)}
+.detailBackSticker{position:absolute;top:8px;left:8px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.94);color:var(--text-main);font-size:22px;font-weight:700;line-height:1;z-index:5;box-shadow:0 4px 12px rgba(0,0,0,.1);display:grid;place-items:center;border:1px solid rgba(255,255,255,.7);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-sizing:border-box;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .15s ease}
+.detailBackSticker:active{transform:scale(.92)}
+[data-theme="dark"] .detailBackSticker{background:rgba(35,22,28,.94);color:#f4cbd5;border-color:rgba(255,255,255,.12);box-shadow:0 4px 14px rgba(0,0,0,.35)}
 .productBody{padding:10px 10px;width:100%;min-width:0;box-sizing:border-box;overflow:hidden}
 .productBody>span,.categoryLabel{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted)}
 .productBody h3{font-size:13px;margin:4px 0;line-height:1.28;min-height:33px;color:var(--text-main)}
@@ -807,12 +812,12 @@ img{max-width:100%}
 .settingsSectionHeader h3{margin:0;font-size:14px;color:var(--text-main)}
 .settingsSectionHeader small{color:var(--text-muted);font-size:10px}
 
-.themeToggleGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.themeChoiceBtn{display:flex;align-items:center;gap:10px;padding:14px;background:var(--bg-card);border:2px solid var(--border-color);border-radius:16px;color:var(--text-main);cursor:pointer;transition:all .18s ease}
+.themeToggleGrid{display:grid;grid-template-columns:repeat(auto-fit, minmax(125px, 1fr));gap:10px;width:100%;box-sizing:border-box}
+.themeChoiceBtn{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:var(--bg-card);border:2px solid var(--border-color);border-radius:16px;color:var(--text-main);cursor:pointer;transition:all .18s ease;min-width:0;box-sizing:border-box;max-width:100%}
 .themeChoiceBtn.active{border-color:var(--primary);background:var(--bg-card-hover);box-shadow:var(--shadow-sm)}
-.themeIconPreview{font-size:20px}
-.themeChoiceBtn b{flex:1;text-align:left;font-size:12px}
-.themeCheckmark{font-weight:900;color:var(--primary)}
+.themeIconPreview{font-size:20px;flex-shrink:0}
+.themeChoiceBtn b{flex:1;text-align:left;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.themeCheckmark{font-weight:900;color:var(--primary);flex-shrink:0}
 
 .langOptionList{display:flex;flex-direction:column;gap:8px}
 .langChoiceRow{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-card);border:1.5px solid var(--border-color);border-radius:15px;color:var(--text-main);cursor:pointer;transition:all .18s ease}

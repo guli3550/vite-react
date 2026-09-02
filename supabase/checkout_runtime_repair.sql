@@ -26,6 +26,7 @@ alter table if exists public.orders add column if not exists status text default
 alter table if exists public.orders add column if not exists created_at timestamptz default now();
 alter table if exists public.orders add column if not exists updated_at timestamptz default now();
 alter table if exists public.orders add column if not exists order_number text;
+alter table if exists public.promo_codes add column if not exists max_discount_amount numeric(12,2);
 
 -- Remove the legacy UUID overload when it exists. Keeping both UUID and bigint
 -- signatures can make PostgREST resolve the wrong RPC on old databases.
@@ -216,6 +217,9 @@ begin
 
     if promo.discount_type = 'percent' then
       discount := least(subtotal, round(subtotal * promo.discount_value / 100));
+      if promo.max_discount_amount is not null and promo.max_discount_amount > 0 then
+        discount := least(discount, promo.max_discount_amount);
+      end if;
     else
       discount := least(subtotal, greatest(0, promo.discount_value));
     end if;
