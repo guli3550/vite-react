@@ -22,12 +22,24 @@ export function SwipeableMessageRow({
   const isHorizontalRef = useRef<boolean | null>(null);
 
   const handleStart = (clientX: number, clientY: number, target: HTMLElement, e: React.SyntheticEvent) => {
-    // Ignore interactive controls inside bubble
-    if (target.closest("button, a, audio, input, textarea, select, .chat2-action-icon, .chat2-reaction-pill")) {
+    // ONLY start message swipe-to-reply if user touched directly on the message bubble/media content
+    const bubbleTarget = target.closest(".bubbleBox, .chatMediaImage, .chatMediaAudio, .chatMediaFile");
+    if (!bubbleTarget) {
+      // User touched the empty row space outside the bubble.
+      // Do NOT intercept; let it bubble up to SwipeableChatBackground for exit swipe!
       return;
     }
 
-    // Stop propagation so background swipe never triggers when touching a message
+    // Ignore interactive controls inside bubble
+    if (
+      target.closest(
+        "button, a, audio, input, textarea, select, .chatReactionEmojiBtn, .chatSmallCopyBtn, .chatReactionPill, .chat2-action-icon, .chat2-reaction-pill"
+      )
+    ) {
+      return;
+    }
+
+    // Stop propagation so background swipe never triggers when touching a message bubble
     e.stopPropagation();
 
     startXRef.current = clientX;
@@ -60,12 +72,12 @@ export function SwipeableMessageRow({
 
       if (isHorizontalRef.current) {
         if (align === "left") {
-          // Incoming message: swipe LEFT (deltaX < 0) to reply
-          const clamped = Math.min(0, Math.max(deltaX, -85));
+          // Incoming message: swipe right (deltaX > 0) or left (deltaX < 0) to reply
+          const clamped = Math.max(-80, Math.min(deltaX, 85));
           setTranslateX(clamped);
         } else {
-          // Outgoing message: swipe RIGHT (deltaX > 0) to reply
-          const clamped = Math.max(0, Math.min(deltaX, 85));
+          // Outgoing message: swipe right (deltaX > 0) or left (deltaX < 0) to reply
+          const clamped = Math.max(-80, Math.min(deltaX, 85));
           setTranslateX(clamped);
         }
       }
@@ -83,11 +95,7 @@ export function SwipeableMessageRow({
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (
-      (align === "left" && translateX <= -32) ||
-      (align === "right" && translateX >= 32) ||
-      Math.abs(translateX) >= 48
-    ) {
+    if (Math.abs(translateX) >= 30) {
       try {
         window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
       } catch {}
@@ -96,7 +104,7 @@ export function SwipeableMessageRow({
 
     setTranslateX(0);
     isHorizontalRef.current = null;
-  }, [align, isDragging, onReply, translateX]);
+  }, [isDragging, onReply, translateX]);
 
   // Window-level mouseup listener to catch drag release anywhere
   useEffect(() => {
@@ -244,10 +252,10 @@ export function SwipeableChatBackground({
   const isHorizontalBgRef = useRef<boolean | null>(null);
 
   const handleBgStart = (clientX: number, clientY: number, target: HTMLElement) => {
-    // Ignore if target is interactive or inside a message bubble row
+    // Only ignore if target is directly an interactive control or the message bubble itself
     if (
       target.closest(
-        "input, textarea, button, a, select, audio, .swipeableRowWrap, .chatBubbleRow, .chat2-bubble-wrap, .chat2-bubble, .bubbleBox, .chatQuickChipsScroll, .chatInputBar, .chat2-quick-replies, .chat2-footer, .chat2-header-actions, .chat2-action-btn"
+        "input, textarea, button, a, select, audio, .bubbleBox, .chatMediaImage, .chatMediaAudio, .chatMediaFile, .chatLongPressReactionsBar, .chatCopyBtnSeparate, .chatReactionPill, .chatQuickChipsScroll, .chatInputBar, .chatHeader, .chatReplyPreviewBar, .chat2-quick-replies, .chat2-footer, .chat2-header-actions, .chat2-action-btn"
       )
     ) {
       return;

@@ -107,14 +107,23 @@ app.post("/api/save-address", requireTelegramUser, async (req, res) => { try { c
 
 app.post("/api/orders", requireTelegramUser, async (req, res) => {
   try {
-    const { order_number, phone, items, address, payment, status, created_at, promo_code } = req.body || {};
+    const { order_number, phone, items, address, payment, status, created_at, promo_code, first_name, last_name, birth_date, dob } = req.body || {};
     if (!phone?.trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
     if (!Array.isArray(items) || items.length === 0 || items.length > 100) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari noto‘g‘ri" });
     const safeOrderNumber = /^GULI-\d{6}$/.test(String(order_number || "")) ? String(order_number) : null;
+    const orderFirstName = first_name?.trim() || req.telegramUser.first_name || null;
+    const orderLastName = last_name?.trim() || req.telegramUser.last_name || null;
+    const orderBirthDate = birth_date?.trim() || dob?.trim() || null;
+    const orderCustomerName = [orderFirstName, orderLastName].filter(Boolean).join(" ") || req.telegramUser.username || null;
+
     const orderInput = {
       order_number: safeOrderNumber,
       username: req.telegramUser.username || null,
-      first_name: req.telegramUser.first_name || null,
+      first_name: orderFirstName,
+      last_name: orderLastName,
+      customer_name: orderCustomerName,
+      birth_date: orderBirthDate,
+      dob: orderBirthDate,
       phone: phone.trim(),
       items,
       address: address || null,

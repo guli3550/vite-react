@@ -82,11 +82,15 @@ export function markSingleMessageAsRead(messageId: string, userId?: string | num
   }
 }
 export function markMessagesAsRead(userId?: string | number, role: "admin" | "user" = "user"): void {
+  if (!userId && role === "admin") return;
   const messages = getStoredChatMessages();
   const target = role === "admin" ? "user" : "admin";
   let changed = false;
+  const targetUserId = userId ? String(userId) : undefined;
   const updated = messages.map(m => {
-    if (m.sender === target && !m.read && (!userId || !m.userId || String(m.userId) === String(userId))) {
+    const msgUserId = String(m.userId || "guest-user");
+    const matchesUser = targetUserId ? msgUserId === targetUserId : true;
+    if (m.sender === target && !m.read && matchesUser) {
       changed = true;
       return { ...m, read: true };
     }

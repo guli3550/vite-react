@@ -108,6 +108,11 @@ type Address = {
 type Order = {
   id: string;
   order_number?: string;
+  first_name?: string;
+  last_name?: string;
+  customer_name?: string;
+  birth_date?: string;
+  dob?: string;
   items: CartItem[];
   subtotal: number;
   delivery: number;
@@ -742,6 +747,16 @@ const DEFAULT_HERO_BANNERS: Banner[] = [
 
 export default function App() {
   const isTelegramWebapp = useMemo(() => detectPlatform().isTelegram, []);
+  const telegramUser = tg()?.initDataUnsafe?.user;
+  const displayName =
+    [telegramUser?.first_name, telegramUser?.last_name]
+      .filter(Boolean)
+      .join(" ") || "GULI mijozi";
+  const avatar = telegramUser?.photo_url || "";
+  const currentUserId = telegramUser?.id
+    ? String(telegramUser.id)
+    : "guest-user";
+
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [products, setProducts] = useState<Product[]>([]);
@@ -767,6 +782,23 @@ export default function App() {
   const [phone, setPhone] = useState(
     () => localStorage.getItem("guli_phone") || "",
   );
+  const [firstName, setFirstName] = useState<string>(() => {
+    return (
+      localStorage.getItem("guli_first_name") ||
+      telegramUser?.first_name ||
+      ""
+    );
+  });
+  const [lastName, setLastName] = useState<string>(() => {
+    return (
+      localStorage.getItem("guli_last_name") ||
+      telegramUser?.last_name ||
+      ""
+    );
+  });
+  const [birthDate, setBirthDate] = useState<string>(() => {
+    return localStorage.getItem("guli_birth_date") || "";
+  });
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [showCardPaymentModal, setShowCardPaymentModal] = useState(false);
   const [paymentTimer, setPaymentTimer] = useState(600); // 10 minutes (600 seconds)
@@ -799,16 +831,6 @@ export default function App() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showSpendingStats, setShowSpendingStats] = useState(false);
   const [toast, setToast] = useState("");
-
-  const telegramUser = tg()?.initDataUnsafe?.user;
-  const displayName =
-    [telegramUser?.first_name, telegramUser?.last_name]
-      .filter(Boolean)
-      .join(" ") || "GULI mijozi";
-  const avatar = telegramUser?.photo_url || "";
-  const currentUserId = telegramUser?.id
-    ? String(telegramUser.id)
-    : "guest-user";
 
   // Theme & Settings & Chat states (Dynamic User-Specific Sessions)
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -1227,6 +1249,15 @@ export default function App() {
     localStorage.setItem("guli_phone", phone);
   }, [phone]);
   useEffect(() => {
+    localStorage.setItem("guli_first_name", firstName);
+  }, [firstName]);
+  useEffect(() => {
+    localStorage.setItem("guli_last_name", lastName);
+  }, [lastName]);
+  useEffect(() => {
+    localStorage.setItem("guli_birth_date", birthDate);
+  }, [birthDate]);
+  useEffect(() => {
     localStorage.setItem("guli_address", JSON.stringify(address));
   }, [address]);
 
@@ -1336,6 +1367,11 @@ export default function App() {
         if (!j.success || !Array.isArray(j.data)) return [];
         const list: Order[] = j.data.map((row: any) => ({
           id: String(row.order_number || row.id || orderNumber()),
+          order_number: row.order_number || undefined,
+          first_name: row.first_name || undefined,
+          last_name: row.last_name || undefined,
+          customer_name: row.customer_name || undefined,
+          birth_date: row.birth_date || row.dob || undefined,
           items: Array.isArray(row.items) ? row.items : [],
           subtotal: Number(row.subtotal || 0),
           delivery: Number(row.delivery || 0),
@@ -1345,6 +1381,7 @@ export default function App() {
           phone: row.phone || "",
           payment: row.payment || "cash",
           status: row.status || "Qabul qilindi",
+          receipt_url: row.receipt_url || undefined,
           createdAt: row.created_at || new Date().toISOString(),
           updatedAt: row.updated_at || undefined,
           statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
@@ -1680,6 +1717,10 @@ export default function App() {
   const setAddressField = (key: keyof Address, value: string) =>
     setAddress((a) => ({ ...a, [key]: value }));
   const submitOrderWithCard = async () => {
+    if (!firstName.trim()) {
+      showToast("Iltimos ismingizni kiriting");
+      return;
+    }
     if (!phone.trim()) {
       showToast("Iltimos telefon raqamingizni kiriting");
       return;
@@ -1707,11 +1748,16 @@ export default function App() {
 
     const id = orderNumber();
     const now = new Date().toISOString();
+    const customerFullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
     const payload = {
       order_number: id,
       telegram_id: telegramUser?.id,
       username: telegramUser?.username,
-      first_name: telegramUser?.first_name,
+      first_name: firstName.trim() || telegramUser?.first_name || "",
+      last_name: lastName.trim() || telegramUser?.last_name || "",
+      customer_name: customerFullName || telegramUser?.first_name || "Mijoz",
+      birth_date: birthDate.trim() || null,
+      dob: birthDate.trim() || null,
       phone: phone.trim(),
       items: cart,
       subtotal,
@@ -2389,18 +2435,27 @@ export default function App() {
                             </div>
                           </div>
                           {o.address ? (
-                            <p className="orderAddress">
-                              📍{" "}
-                              {[
-                                o.address.region,
-                                o.address.district,
-                                o.address.street,
-                                o.address.house,
-                                o.address.apartment,
-                              ]
-                                .filter(Boolean)
-                                .join(", ") || "Manzil saqlangan"}
-                            </p>
+                            <div className="orderAddress" style={{ marginTop: "10px", padding: "10px 12px", background: "rgba(0,0,0,0.02)", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
+                              <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-color)", marginBottom: "4px" }}>
+                                📍 Yetkazib berish manzili:
+                              </div>
+                              <div style={{ fontSize: "13px", color: "var(--text-color)", lineHeight: "1.4" }}>
+                                {[
+                                  o.address.region,
+                                  o.address.district,
+                                  o.address.street,
+                                  o.address.house ? `Uy/Dom: ${o.address.house}` : null,
+                                  o.address.apartment ? `Padezd/Xonadon: ${o.address.apartment}` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ") || "Manzil saqlangan"}
+                              </div>
+                              {o.address.landmark ? (
+                                <div style={{ fontSize: "12px", color: "var(--muted-color)", marginTop: "4px" }}>
+                                  🏢 <b>Mo‘ljal:</b> {o.address.landmark}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : null}
                           {o.receipt_url ? (
                             <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "10px", background: "rgba(0,0,0,0.03)", borderRadius: "10px" }}>
@@ -3280,28 +3335,76 @@ export default function App() {
               <div className="cardTitle">
                 <span className="step">1</span>
                 <div>
-                  <h3>Telefon raqami</h3>
-                  <p>Buyurtma bo‘yicha bog‘lanish uchun</p>
+                  <h3>Shaxsiy ma’lumotlar</h3>
+                  <p>Ism, familiya, tug‘ilgan sana va telefon</p>
                 </div>
               </div>
-              <input
-                className="input full"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+998 90 123 45 67"
-                type="tel"
-              />
-              <button
-                className={`phoneAutoButton btn-3d ${phoneLoading ? "loading" : ""}`}
-                onClick={requestTelegramPhone}
-                disabled={phoneLoading}
-              >
-                {phoneLoading
-                  ? "⏳ Telegramdan olinmoqda…"
-                  : phone
-                    ? "✓ Telegram raqamini yangilash"
-                    : "📱 Telegram raqamimni avtomatik olish"}
-              </button>
+              
+              <div className="twoInputs" style={{ marginBottom: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                    Ism *
+                  </label>
+                  <input
+                    className="input full"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Ismingiz (masalan: Malika)"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                    Familiya
+                  </label>
+                  <input
+                    className="input full"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Familiyangiz"
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "10px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                  🎂 Tug‘ilgan sana (kun/oy/yil)
+                </label>
+                <input
+                  className="input full"
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  placeholder="KK.OO.YYYY"
+                />
+                <small style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block", marginTop: "3px" }}>
+                  💡 Masalan: 15.08.1998 (Tug‘ilgan kuningizda maxsus sovg‘a va chegirmalar uchun)
+                </small>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 700, display: "block", marginBottom: "4px" }}>
+                  📱 Telefon raqami *
+                </label>
+                <input
+                  className="input full"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+998 90 123 45 67"
+                  type="tel"
+                />
+                <button
+                  className={`phoneAutoButton btn-3d ${phoneLoading ? "loading" : ""}`}
+                  onClick={requestTelegramPhone}
+                  disabled={phoneLoading}
+                  style={{ marginTop: "6px" }}
+                >
+                  {phoneLoading
+                    ? "⏳ Telegramdan olinmoqda…"
+                    : phone
+                      ? "✓ Telegram raqamini yangilash"
+                      : "📱 Telegram raqamimni avtomatik olish"}
+                </button>
+              </div>
             </div>
             <div className="checkoutCard">
               <div className="cardTitle">
@@ -3454,8 +3557,12 @@ export default function App() {
                 </div>
               </div>
               <div
-                className={`paymentOptionVibrant ${!phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length ? "disabled" : ""}`}
+                className={`paymentOptionVibrant ${!firstName.trim() || !phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length ? "disabled" : ""}`}
                 onClick={() => {
+                  if (!firstName.trim()) {
+                    showToast("Iltimos ismingizni kiriting");
+                    return;
+                  }
                   if (!phone.trim()) {
                     showToast("Iltimos telefon raqamingizni kiriting");
                     return;
@@ -3471,8 +3578,8 @@ export default function App() {
                   setShowCardPaymentModal(true);
                 }}
                 style={{
-                  cursor: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed",
-                  opacity: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.65
+                  cursor: (firstName.trim() && phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed",
+                  opacity: (firstName.trim() && phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.65
                 }}
               >
                 <div className="vibrantCardIcon">💳</div>
@@ -3492,8 +3599,12 @@ export default function App() {
             </div>
             <button
               className="primaryButton large btn-3d"
-              disabled={!phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length}
+              disabled={!firstName.trim() || !phone.trim() || !address.region?.trim() || !address.district?.trim() || !address.street?.trim() || !cart.length}
               onClick={() => {
+                if (!firstName.trim()) {
+                  showToast("Iltimos ismingizni kiriting");
+                  return;
+                }
                 if (!phone.trim()) {
                   showToast("Iltimos telefon raqamingizni kiriting");
                   return;
@@ -3509,8 +3620,8 @@ export default function App() {
                 setShowCardPaymentModal(true);
               }}
               style={{
-                opacity: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.55,
-                cursor: (phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed"
+                opacity: (firstName.trim() && phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? 1 : 0.55,
+                cursor: (firstName.trim() && phone.trim() && address.region?.trim() && address.district?.trim() && address.street?.trim() && cart.length) ? "pointer" : "not-allowed"
               }}
             >
               💳 Karta orqali to‘lov qilish — {formatPrice(total)}

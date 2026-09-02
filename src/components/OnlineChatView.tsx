@@ -330,6 +330,7 @@ export function OnlineChatView({
             const isAdmin = msg.sender === "admin";
             const align = isAdmin ? "left" : "right";
             const isLongPressActive = activeLongPressMsgId === msg.id;
+            const isTopMessage = index === 0;
 
             const handleToggleReaction = (emoji: string) => {
               try {
@@ -347,7 +348,7 @@ export function OnlineChatView({
                 id={`swipe-msg-row-${msg.id || index}`}
               >
                 <div
-                  className={`chatBubbleRow ${isAdmin ? "fromAdmin" : "fromUser"}`}
+                  className={`chatBubbleRow ${isAdmin ? "fromAdmin" : "fromUser"} ${isLongPressActive ? "activeLongPressBubbleRow" : ""}`}
                   id={`chat-bubble-${msg.id || index}`}
                   style={{ position: "relative", userSelect: "none", WebkitUserSelect: "none" }}
                 >
@@ -362,9 +363,12 @@ export function OnlineChatView({
                       <span>{isAdmin ? t("admin_tag") : t("you_tag")}</span>
                     </div>
 
-                    {/* Long Press Floating Reaction Emojis Bar */}
+                    {/* Long Press Floating Reaction Emojis Bar (Optimized & clamped within view) */}
                     {isLongPressActive && (
-                      <div className="chatLongPressReactionsBar" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className={`chatLongPressReactionsBar ${isTopMessage ? "renderBelowBubble" : "renderAboveBubble"}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {REACTION_EMOJIS.map((emoji) => (
                           <button
                             key={emoji}
@@ -374,15 +378,16 @@ export function OnlineChatView({
                               e.stopPropagation();
                               handleToggleReaction(emoji);
                             }}
+                            title={`Reaksiya: ${emoji}`}
                           >
-                            {emoji}
+                            <span>{emoji}</span>
                           </button>
                         ))}
                       </div>
                     )}
 
                     <div
-                      className="bubbleBox"
+                      className={`bubbleBox ${isLongPressActive ? "activeBubbleBox" : ""}`}
                       onTouchStart={(e) => {
                         touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                         handleStartHold(msg);
@@ -435,6 +440,27 @@ export function OnlineChatView({
                         <p className="bubbleText">{msg.text}</p>
                       )}
 
+                      {/* Active Reaction Pills inside the message bubble */}
+                      {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                        <div className="chatReactionPillsRow insideBubble">
+                          {Object.entries(msg.reactions).map(([emoji, count]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className="chatReactionPill insideBubble"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleReaction(emoji);
+                              }}
+                              title={`Reaksiya: ${emoji} (${count})`}
+                            >
+                              <span>{emoji}</span>
+                              <span className="reactionCount">{count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       <span className="bubbleTime">
                         {formatMessageTime(msg.timestamp)}
                         {!isAdmin && (
@@ -445,7 +471,7 @@ export function OnlineChatView({
                       </span>
                     </div>
 
-                    {/* Separate Small Copy Button (Appears separately after incoming or sent message on long press) */}
+                    {/* Separate Small Copy Button (Appears cleanly below message on long press) */}
                     {isLongPressActive && (
                       <div className={`chatCopyBtnSeparate ${isAdmin ? "afterAdminBubble" : "afterUserBubble"}`} onClick={(e) => e.stopPropagation()}>
                         <button
@@ -459,26 +485,6 @@ export function OnlineChatView({
                           <span>📋</span>
                           <span>Matnni nusxalash</span>
                         </button>
-                      </div>
-                    )}
-
-                    {/* Active Reaction Pills Row */}
-                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                      <div className="chatReactionPillsRow">
-                        {Object.entries(msg.reactions).map(([emoji, count]) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            className="chatReactionPill"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleReaction(emoji);
-                            }}
-                          >
-                            <span>{emoji}</span>
-                            <span className="reactionCount">{count}</span>
-                          </button>
-                        ))}
                       </div>
                     )}
                   </div>

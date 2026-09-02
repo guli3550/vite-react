@@ -136,7 +136,21 @@
   }
 
   if (!installed) {
-    window.fetch = patchedFetch;
+    try {
+      Object.defineProperty(window, 'fetch', {
+        value: patchedFetch,
+        writable: true,
+        configurable: true,
+      });
+    } catch {
+      try {
+        window.fetch = patchedFetch;
+      } catch {
+        try {
+          globalThis.fetch = patchedFetch;
+        } catch {}
+      }
+    }
     installed = true;
   }
 })();

@@ -255,15 +255,12 @@ export default function AdminChatTab({
   const [conversations, setConversations] = useState<ConversationSummary[]>(() =>
     getAllConversations()
   );
-  const [selectedUserId, setSelectedUserId] = useState<string>(() => {
-    const list = getAllConversations();
-    return list[0]?.userId || "998901234567";
-  });
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const [replyText, setReplyText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<
-    "all" | "unread" | "pending" | "operators" | "telegram" | "webapp" | "callcenter"
+    "all" | "unread" | "telegram" | "webapp" | "callcenter" | "orders"
   >("all");
   const [allMessages, setAllMessages] = useState<ChatMessage[]>(() =>
     getStoredChatMessages()
@@ -319,22 +316,31 @@ export default function AdminChatTab({
     setTimeout(() => setToastMessage(""), 3000);
   };
 
+  // Handler to select conversation and immediately mark all user messages in it as read
+  const handleSelectConversation = (userId: string) => {
+    setSelectedUserId(userId);
+    setMobileView("chat");
+    markMessagesAsRead(userId, "admin");
+    setAllMessages(getStoredChatMessages());
+    setConversations(getAllConversations());
+  };
+
   // Subscribe to real-time chat updates
   useEffect(() => {
     const unsubscribe = subscribeToChat((updatedMessages) => {
       setAllMessages(updatedMessages);
+      if (selectedUserId && (mobileView === "chat" || typeof window !== "undefined" && window.innerWidth > 900)) {
+        const hasUnreadInActive = updatedMessages.some(
+          (m) => String(m.userId || "guest-user") === String(selectedUserId) && m.sender === "user" && !m.read
+        );
+        if (hasUnreadInActive) {
+          markMessagesAsRead(selectedUserId, "admin");
+        }
+      }
       setConversations(getAllConversations());
     });
     return () => unsubscribe();
-  }, []);
-
-  // Mark as read when selecting conversation
-  useEffect(() => {
-    if (selectedUserId) {
-      markMessagesAsRead(selectedUserId);
-      setConversations(getAllConversations());
-    }
-  }, [selectedUserId]);
+  }, [selectedUserId, mobileView]);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -349,32 +355,44 @@ export default function AdminChatTab({
     }
   }, [selectedUserId, currentConversation]);
 
-  // Category statistics breakdown
+  // Telegram-style Category statistics breakdown
+  const totalUnread = conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
   const telegramConvs = conversations.filter((c) => c.source === "telegram");
   const webAppConvs = conversations.filter((c) => c.source === "webapp");
   const callCenterConvs = conversations.filter((c) => c.source === "callcenter");
+  const ordersConvs = conversations.filter(
+    (c) => (c.orderCount && c.orderCount > 0) || Boolean(c.lastOrderNumber)
+  );
 
   const telegramUnread = telegramConvs.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
   const webAppUnread = webAppConvs.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
   const callCenterUnread = callCenterConvs.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+  const ordersUnread = ordersConvs.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
 
   // Filter conversations
   const filteredConversations = conversations.filter((c) => {
     const matchesSearch =
       c.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.phone && c.phone.includes(searchQuery)) ||
-      (c.telegramUsername && c.telegramUsername.toLowerCase().includes(searchQuery.toLowerCase()));
+      (c.telegramUsername && c.telegramUsername.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (c.lastOrderNumber && c.lastOrderNumber.includes(searchQuery));
 
     if (!matchesSearch) return false;
 
     if (filterType === "unread") return c.unreadCount > 0;
-    if (filterType === "pending") return c.status === "pending";
-    if (filterType === "operators") return Boolean(c.assignedOperator);
     if (filterType === "telegram") return c.source === "telegram";
     if (filterType === "webapp") return c.source === "webapp";
     if (filterType === "callcenter") return c.source === "callcenter";
+    if (filterType === "orders") return (c.orderCount && c.orderCount > 0) || Boolean(c.lastOrderNumber);
 
     return true;
+  });
+
+  // Sort conversations: unread first, then newest timestamp first
+  const sortedConversations = [...filteredConversations].sort((a, b) => {
+    if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+    if (b.unreadCount > 0 && a.unreadCount === 0) return 1;
+    return new Date(b.lastTimestamp || 0).getTime() - new Date(a.lastTimestamp || 0).getTime();
   });
 
   // Current active chat messages
@@ -702,137 +720,104 @@ export default function AdminChatTab({
           </div>
         </div>
 
-        {/* Filter chips */}
-        <div className="chat2-filters">
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "all" ? "active" : ""}`}
-            onClick={() => setFilterType("all")}
-          >
-            Barcha
-          </button>
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "unread" ? "active" : ""}`}
-            onClick={() => setFilterType("unread")}
-          >
-            O‘qilmagan
-          </button>
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "pending" ? "active" : ""}`}
-            onClick={() => setFilterType("pending")}
-          >
-            Kutayotgan
-          </button>
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "telegram" ? "active" : ""}`}
-            onClick={() => setFilterType("telegram")}
-          >
-            ✈️ Telegram
-          </button>
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "webapp" ? "active" : ""}`}
-            onClick={() => setFilterType("webapp")}
-          >
-            🌐 Web App
-          </button>
-          <button
-            type="button"
-            className={`chat2-filter-btn ${filterType === "callcenter" ? "active" : ""}`}
-            onClick={() => setFilterType("callcenter")}
-          >
-            ☎️ Call Center
-          </button>
-        </div>
+        {/* Telegram-style Folder Tabs */}
+        <div className="chat2-folder-tabs-wrapper">
+          <div className="chat2-folder-tabs">
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "all" ? "active" : ""}`}
+              onClick={() => setFilterType("all")}
+            >
+              <span>Barchasi</span>
+              {totalUnread > 0 ? (
+                <span className="chat2-tab-unread-pill highlight">{totalUnread}</span>
+              ) : (
+                <span className="chat2-tab-count-pill">{conversations.length}</span>
+              )}
+            </button>
 
-        {/* Online Chat Category Breakdown */}
-        <div
-          style={{
-            padding: "8px 12px",
-            background: "#f8fafc",
-            borderBottom: "1px solid #e2e8f0",
-            fontSize: 11,
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 6,
-          }}
-        >
-          <div
-            onClick={() => setFilterType("telegram")}
-            style={{
-              background: filterType === "telegram" ? "#e0f2fe" : "#ffffff",
-              border: filterType === "telegram" ? "1px solid #0284c7" : "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: "5px 6px",
-              cursor: "pointer",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ color: "#64748b", fontSize: 10 }}>✈️ Telegram</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#0369a1" }}>
-              {telegramConvs.length}{" "}
-              {telegramUnread > 0 && <span style={{ color: "#e11d48", fontSize: 10 }}>({telegramUnread})</span>}
-            </div>
-          </div>
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "unread" ? "active" : ""}`}
+              onClick={() => setFilterType("unread")}
+            >
+              <span>O‘qilmagan</span>
+              {totalUnread > 0 && (
+                <span className="chat2-tab-unread-pill highlight">{totalUnread}</span>
+              )}
+            </button>
 
-          <div
-            onClick={() => setFilterType("webapp")}
-            style={{
-              background: filterType === "webapp" ? "#fcecef" : "#ffffff",
-              border: filterType === "webapp" ? "1px solid #b6536b" : "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: "5px 6px",
-              cursor: "pointer",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ color: "#64748b", fontSize: 10 }}>🌐 Web App</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#b6536b" }}>
-              {webAppConvs.length}{" "}
-              {webAppUnread > 0 && <span style={{ color: "#e11d48", fontSize: 10 }}>({webAppUnread})</span>}
-            </div>
-          </div>
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "telegram" ? "active" : ""}`}
+              onClick={() => setFilterType("telegram")}
+            >
+              <span>✈️ Telegram</span>
+              {telegramUnread > 0 ? (
+                <span className="chat2-tab-unread-pill telegram">{telegramUnread}</span>
+              ) : (
+                <span className="chat2-tab-count-pill">{telegramConvs.length}</span>
+              )}
+            </button>
 
-          <div
-            onClick={() => setFilterType("callcenter")}
-            style={{
-              background: filterType === "callcenter" ? "#f0fdf4" : "#ffffff",
-              border: filterType === "callcenter" ? "1px solid #16a34a" : "1px solid #e2e8f0",
-              borderRadius: 8,
-              padding: "5px 6px",
-              cursor: "pointer",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ color: "#64748b", fontSize: 10 }}>☎️ Call Center</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: "#15803d" }}>
-              {callCenterConvs.length}{" "}
-              {callCenterUnread > 0 && <span style={{ color: "#e11d48", fontSize: 10 }}>({callCenterUnread})</span>}
-            </div>
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "webapp" ? "active" : ""}`}
+              onClick={() => setFilterType("webapp")}
+            >
+              <span>🌐 Web App</span>
+              {webAppUnread > 0 ? (
+                <span className="chat2-tab-unread-pill webapp">{webAppUnread}</span>
+              ) : (
+                <span className="chat2-tab-count-pill">{webAppConvs.length}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "callcenter" ? "active" : ""}`}
+              onClick={() => setFilterType("callcenter")}
+            >
+              <span>☎️ Call Center</span>
+              {callCenterUnread > 0 ? (
+                <span className="chat2-tab-unread-pill callcenter">{callCenterUnread}</span>
+              ) : (
+                <span className="chat2-tab-count-pill">{callCenterConvs.length}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`chat2-folder-tab ${filterType === "orders" ? "active" : ""}`}
+              onClick={() => setFilterType("orders")}
+            >
+              <span>🛍️ Buyurtmali</span>
+              {ordersUnread > 0 ? (
+                <span className="chat2-tab-unread-pill orders">{ordersUnread}</span>
+              ) : (
+                <span className="chat2-tab-count-pill">{ordersConvs.length}</span>
+              )}
+            </button>
           </div>
         </div>
 
         {/* Conversations List */}
         <div className="chat2-conv-list">
-          {filteredConversations.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+          {sortedConversations.length === 0 ? (
+            <div style={{ padding: 28, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}>📭</div>
               Suhbatlar topilmadi
             </div>
           ) : (
-            filteredConversations.map((c) => {
+            sortedConversations.map((c) => {
               const isSelected = c.userId === selectedUserId;
+              const isUnread = (c.unreadCount || 0) > 0;
               return (
                 <button
                   type="button"
                   key={c.userId}
-                  className={`chat2-conv-item ${isSelected ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedUserId(c.userId);
-                    setMobileView("chat");
-                  }}
+                  className={`chat2-conv-item ${isSelected ? "active" : ""} ${isUnread ? "unread" : "read"}`}
+                  onClick={() => handleSelectConversation(c.userId)}
                 >
                   <div className="chat2-avatar-wrap">
                     {c.userPhoto ? (
@@ -841,20 +826,34 @@ export default function AdminChatTab({
                       <div className="chat2-avatar">{c.userName.slice(0, 1).toUpperCase()}</div>
                     )}
                     <span className="chat2-online-dot" />
+                    {isUnread && <span className="chat2-unread-dot" />}
                   </div>
                   <div className="chat2-conv-content">
                     <div className="chat2-conv-top">
-                      <span className="chat2-conv-name">{c.userName}</span>
-                      <span className="chat2-conv-time">
+                      <div className="chat2-conv-name-wrap">
+                        <span className={`chat2-conv-name ${isUnread ? "unread-name" : ""}`}>{c.userName}</span>
+                        {c.orderCount && c.orderCount > 0 ? (
+                          <span className="chat2-order-chip" title={`${c.orderCount} ta buyurtma`}>
+                            🛍️ {c.orderCount}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className={`chat2-conv-time ${isUnread ? "unread-time" : ""}`}>
                         {c.lastTimestamp ? new Date(c.lastTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
                       </span>
                     </div>
                     <div className="chat2-conv-bottom">
-                      <span className="chat2-conv-snippet">{c.lastMessage}</span>
-                      <span className={`chat2-platform-badge ${c.source}`}>
-                        {c.source === "telegram" ? "Telegram" : c.source === "webapp" ? "Web App" : "Call Center"}
-                      </span>
-                      {c.unreadCount > 0 && <span className="chat2-unread-badge">{c.unreadCount}</span>}
+                      <span className={`chat2-conv-snippet ${isUnread ? "unread-snippet" : ""}`}>{c.lastMessage}</span>
+                      <div className="chat2-conv-badges">
+                        <span className={`chat2-platform-badge ${c.source}`}>
+                          {c.source === "telegram" ? "Telegram" : c.source === "webapp" ? "Web App" : "Call Center"}
+                        </span>
+                        {isUnread && (
+                          <span className="chat2-unread-badge" title={`${c.unreadCount} ta yangi xabar`}>
+                            {c.unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -866,13 +865,54 @@ export default function AdminChatTab({
 
       {/* 2. MAIN ACTIVE CHAT WINDOW */}
       <main className={`chat2-main ${mobileView !== "chat" ? "chat2-mobile-hide" : ""}`}>
-        <SwipeableChatBackground
-          onExit={() => {
-            setMobileView("list");
-            if (onOpenSidebar) onOpenSidebar();
-          }}
-          id="admin-chat-swipe-bg"
-        >
+        {!currentConversation ? (
+          <div
+            style={{
+              flex: 1,
+              height: "100%",
+              minHeight: 400,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 32,
+              textAlign: "center",
+              background: "#f8fafc",
+            }}
+          >
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background: "#ffffff",
+                border: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 32,
+                marginBottom: 16,
+                boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
+              }}
+            >
+              💬
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 6 }}>
+              Mijoz suhbatini tanlang
+            </h3>
+            <p style={{ fontSize: 13, color: "#64748b", maxWidth: 320, lineHeight: 1.5, margin: 0 }}>
+              Xabarlarni o‘qish va javob yo‘llash uchun chap tarafdagi ro‘yxatdan kerakli mijoz kartochkasini bosing
+            </p>
+          </div>
+        ) : (
+          <>
+            <SwipeableChatBackground
+              onExit={() => {
+                setMobileView("list");
+                if (onOpenSidebar) onOpenSidebar();
+              }}
+              id="admin-chat-swipe-bg"
+            >
           {/* Chat Header */}
           <div className="chat2-header">
             <div className="chat2-header-info">
@@ -1476,6 +1516,8 @@ export default function AdminChatTab({
             </>
           )}
         </form>
+        </>
+      )}
       </main>
 
       {/* Telegram Poll Creator Modal */}
@@ -1624,8 +1666,14 @@ export default function AdminChatTab({
           </button>
         </div>
 
-        {/* Customer Info */}
-        <div className="chat2-crm-section">
+        {!currentConversation ? (
+          <div style={{ padding: 32, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
+            Suhbat tanlanganda bu yerda mijoz CRM ma'lumotlari ko'rsatiladi
+          </div>
+        ) : (
+          <>
+            {/* Customer Info */}
+            <div className="chat2-crm-section">
           <div className="chat2-crm-label">Shaxsiy ma'lumotlar</div>
           <div className="chat2-crm-card">
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>
@@ -1707,6 +1755,8 @@ export default function AdminChatTab({
             💾 Izohni saqlash
           </button>
         </div>
+        </>
+      )}
       </aside>
 
       {/* Edit Message Inline Modal */}

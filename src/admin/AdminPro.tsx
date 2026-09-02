@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
 import { detectPlatform, type PlatformType } from "../utils/platformAdapter";
-import { sendAdminReply, updateConversationMetadata, getTotalUnreadChatCount, subscribeToChat, markAllAdminChatRead } from "../utils/chatSync";
+import { sendAdminReply, updateConversationMetadata, getTotalUnreadChatCount, subscribeToChat } from "../utils/chatSync";
 
 import { AdminSidebar } from "./components/AdminSidebar";
 import { SIDEBAR_NAV_ITEMS, type NavTabKey } from "./components/AdminSidebarData";
@@ -48,6 +48,12 @@ type Order = {
   telegram_id?: number;
   username?: string;
   first_name?: string;
+  last_name?: string;
+  customer_name?: string;
+  birth_date?: string;
+  dob?: string;
+  telegram_photo?: string;
+  photo_url?: string;
   phone?: string;
   total: number;
   subtotal: number;
@@ -58,7 +64,54 @@ type Order = {
   address?: any;
   items: any[];
   created_at: string;
+  receipt_url?: string;
+  receiptUrl?: string;
+  payment_status?: string;
 };
+
+function parseOrderAddress(raw: any) {
+  if (!raw) return { region: "", district: "", street: "", house: "", apartment: "", landmark: "", latitude: undefined, longitude: undefined, formatted_address: "" };
+  let obj = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return { region: "", district: "", street: raw, house: "", apartment: "", landmark: "", formatted_address: raw };
+    }
+  }
+  return {
+    region: String(obj.region || obj.city || obj.viloyat || "").trim(),
+    district: String(obj.district || obj.tuman || "").trim(),
+    street: String(obj.street || obj.street_name || obj.street_address || obj.address_line || obj.kocha || "").trim(),
+    house: String(obj.house || obj.house_number || obj.dom || obj.building || obj.bino || "").trim(),
+    apartment: String(obj.apartment || obj.flat || obj.apartment_number || obj.padez || obj.entrance || obj.xonadon || "").trim(),
+    landmark: String(obj.landmark || obj.moljal || obj.target || obj.note || obj.comment || "").trim(),
+    latitude: obj.latitude || obj.lat,
+    longitude: obj.longitude || obj.lng || obj.lon,
+    formatted_address: String(obj.formatted_address || obj.address || obj.full_address || "").trim(),
+  };
+}
+
+function formatBirthDate(v?: string): string {
+  if (!v) return "";
+  const str = String(v).trim();
+  const months = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
+  const matchIso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (matchIso) {
+    const [, y, m, d] = matchIso;
+    const mIdx = Number(m) - 1;
+    return `${d}.${m}.${y} (${Number(d)}-${months[mIdx] || m}, ${y}-yil)`;
+  }
+  const matchDot = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (matchDot) {
+    const [, d, m, y] = matchDot;
+    const dPad = d.padStart(2, "0");
+    const mPad = m.padStart(2, "0");
+    const mIdx = Number(m) - 1;
+    return `${dPad}.${mPad}.${y} (${Number(d)}-${months[mIdx] || m}, ${y}-yil)`;
+  }
+  return str;
+}
 
 type User = {
   telegram_id: number;
@@ -249,11 +302,9 @@ export default function AdminPro() {
     return () => unsubscribe();
   }, []);
 
-  // When admin opens the chat tab, immediately clear unread chat notifications & stop ringing
+  // When admin opens the chat tab, stop ringing bell animation
   useEffect(() => {
     if (tab === "chat") {
-      markAllAdminChatRead();
-      setUnreadChatCount(0);
       setIsBellRinging(false);
     }
   }, [tab]);
@@ -1360,7 +1411,17 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {tab === "analytics" && <AdminAnalyticsTab dashboardData={dashboard} />}
 
         {/* Tab 10: 💬 Online Chat */}
-        {tab === "chat" && <AdminChatTab token={token} />}
+        {tab === "chat" && (
+          <AdminChatTab
+            token={token}
+            onViewOrderDetails={(orderNum) => {
+              const ord = orders.find(
+                (o) => String(o.order_number || o.id) === String(orderNum)
+              );
+              if (ord) setSelectedOrder(ord);
+            }}
+          />
+        )}
 
         {/* Tab 11: ☎️ Call Center Chat */}
         {tab === "callcenter" && <AdminCallCenterTab notify={notify} />}
@@ -1562,9 +1623,56 @@ function OrderDrawer({
   onStatus: (o: Order, s: string) => void;
   onOpenReceipt: (url: string) => void;
 }) {
-  const addr = order.address || {};
+  const addr = parseOrderAddress(order.address);
+  const [copiedAddress, setCopiedAddress] = useState(false);
   const codes = productCodes(order);
-  const receiptImg = (order as any).receiptUrl || "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80";
+  const receiptImg = (order as any).receiptUrl || (order as any).receipt_url || "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&auto=format&fit=crop&q=80";
+  const [customerPhoto, setCustomerPhoto] = useState<string>(
+    order.telegram_photo || order.photo_url || ""
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const orderNum = order.order_number || String(order.id || "");
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
+
+    if (orderNum) {
+      fetch(`${base}/api/admin/order/${encodeURIComponent(orderNum)}/customer-photos`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((j) => {
+          if (!cancelled && j?.success && j?.data?.photos?.length) {
+            const photoUrl = j.data.photos[0]?.url;
+            if (photoUrl) setCustomerPhoto(photoUrl);
+          }
+        })
+        .catch(() => {});
+    } else if (order.telegram_id) {
+      fetch(`${base}/api/admin/users/${order.telegram_id}/details`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((j) => {
+          if (!cancelled && j?.success && j?.data?.photos?.length) {
+            const photoUrl = j.data.photos[0]?.url;
+            if (photoUrl) setCustomerPhoto(photoUrl);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [order.id, order.order_number, order.telegram_id]);
+
+  const customerFullName =
+    [order.first_name, order.last_name].filter(Boolean).join(" ") ||
+    order.customer_name ||
+    order.first_name ||
+    "Mijoz";
 
   return (
     <div className="drawerShade" onMouseDown={onClose}>
@@ -1580,39 +1688,110 @@ function OrderDrawer({
           </button>
         </div>
         <div className="drawerBody">
-          <section className="detailHero">
-            <span className="orderIcon">▣</span>
-            <div>
-              <b>{order.first_name || "Mijoz"}</b>
-              <small>
+          {/* Mijoz Profil Card (Telegram Avatar + Ism Familiya + Username) */}
+          <section
+            className="detailHero"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              background: "#ffffff",
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+            }}
+          >
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: "50%",
+                overflow: "hidden",
+                background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                fontSize: 20,
+                fontWeight: 700,
+                boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
+                flexShrink: 0,
+                border: "2px solid #ffffff",
+              }}
+            >
+              {customerPhoto ? (
+                <img
+                  src={customerPhoto}
+                  alt={customerFullName}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={() => setCustomerPhoto("")}
+                />
+              ) : (
+                customerFullName.slice(0, 1).toUpperCase()
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: 16, color: "var(--text-color, #0f172a)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {customerFullName}
+                </b>
+                {order.telegram_id ? (
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      background: "#e0f2fe",
+                      color: "#0369a1",
+                      padding: "2px 8px",
+                      borderRadius: 10,
+                      fontWeight: 600,
+                    }}
+                  >
+                    TG ID: {order.telegram_id}
+                  </span>
+                ) : null}
+              </div>
+              <small style={{ color: "#64748b", display: "block", marginTop: 2 }}>
                 {order.username ? `@${order.username}` : "Telegram mijozi"}
               </small>
             </div>
           </section>
+
+          {/* Mijoz Ma'lumotlari & To'lov Grid */}
           <div className="detailGrid">
             <div>
-              <small>Mahsulot kodi</small>
-              <b>{codes.join(", ") || "—"}</b>
+              <small>👤 Mijoz F.I.Sh</small>
+              <b>{customerFullName}</b>
             </div>
             <div>
-              <small>Telefon</small>
+              <small>🎂 Tug‘ilgan sana</small>
+              <b style={{ color: order.birth_date || (order as any).dob ? "#0f172a" : "#94a3b8" }}>
+                {formatBirthDate(order.birth_date || (order as any).dob) || "Ko‘rsatilmagan"}
+              </b>
+            </div>
+            <div>
+              <small>📞 Telefon</small>
               <b>{order.phone || "—"}</b>
             </div>
             <div>
-              <small>To‘lov</small>
-              <b>{order.payment === "card" ? "Karta" : "Naqd"}</b>
+              <small>💳 To‘lov usuli</small>
+              <b>{order.payment === "card" ? "Karta (Uzcard/Humo)" : "Naqd"}</b>
             </div>
             <div>
-              <small>Mahsulotlar</small>
+              <small>📦 Mahsulot kodi</small>
+              <b>{codes.join(", ") || "—"}</b>
+            </div>
+            <div>
+              <small>💰 Mahsulotlar</small>
               <b>{money(order.subtotal)}</b>
             </div>
             <div>
-              <small>Yetkazib berish</small>
+              <small>🚚 Yetkazib berish</small>
               <b>{order.delivery ? money(order.delivery) : "Bepul"}</b>
             </div>
             <div>
-              <small>Jami</small>
-              <b>{money(order.total)}</b>
+              <small>💵 Jami summa</small>
+              <b style={{ color: "#e11d48" }}>{money(order.total)}</b>
             </div>
           </div>
 
@@ -1639,6 +1818,7 @@ function OrderDrawer({
                   height: 120,
                   flexShrink: 0,
                   boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                  background: "#e2e8f0",
                 }}
                 onClick={() => onOpenReceipt(receiptImg)}
               >
@@ -1647,7 +1827,7 @@ function OrderDrawer({
                   alt="To'lov cheki"
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
-                <div style={{ position: "absolute", bottom: 0, inset: "auto 0 0 0", background: "rgba(0,0,0,0.6)", color: "#fff", fontSize: 10, textAlign: "center", padding: "2px 0" }}>
+                <div style={{ position: "absolute", bottom: 0, inset: "auto 0 0 0", background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, textAlign: "center", padding: "3px 0", fontWeight: 600 }}>
                   🔍 Kengaytirish
                 </div>
               </div>
@@ -1712,6 +1892,7 @@ function OrderDrawer({
               })}
             </div>
           </div>
+
           <div className="detailSection">
             <h3>Mahsulotlar</h3>
             {(order.items || []).map((it: any, i: number) => (
@@ -1735,21 +1916,167 @@ function OrderDrawer({
               </div>
             ))}
           </div>
-          <div className="detailSection">
-            <h3>Yetkazib berish manzili</h3>
-            <p className="addressText">
-              📍{" "}
-              {[
-                addr.region,
-                addr.district,
-                addr.street,
-                addr.house,
-                addr.apartment,
-              ]
-                .filter(Boolean)
-                .join(", ") || "Manzil ko‘rsatilmagan"}
-            </p>
-            {addr.landmark && <small>Mo‘ljal: {addr.landmark}</small>}
+
+          {/* To'liq Yetkazib Berish Manzili */}
+          <div className="detailSection" style={{ background: "#f8fafc", padding: 16, borderRadius: 14, border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
+                📍 To‘liq yetkazib berish manzili
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  const fullText = [
+                    addr.region && `Viloyat: ${addr.region}`,
+                    addr.district && `Tuman: ${addr.district}`,
+                    addr.street && `Ko'cha/Manzil: ${addr.street}`,
+                    addr.house && `Uy/Dom: ${addr.house}`,
+                    addr.apartment && `Padez/Xonadon: ${addr.apartment}`,
+                    addr.landmark && `Mo'ljal: ${addr.landmark}`,
+                    order.phone && `Tel: ${order.phone}`,
+                  ].filter(Boolean).join(", ");
+                  navigator.clipboard?.writeText(fullText || "Manzil ko'rsatilmagan");
+                  setCopiedAddress(true);
+                  setTimeout(() => setCopiedAddress(false), 2000);
+                }}
+                style={{
+                  fontSize: 11.5,
+                  padding: "4px 9px",
+                  borderRadius: 6,
+                  border: "1px solid #cbd5e1",
+                  background: copiedAddress ? "#dcfce7" : "#ffffff",
+                  color: copiedAddress ? "#166534" : "#334155",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  transition: "all 0.2s",
+                }}
+              >
+                {copiedAddress ? "✓ Nusxalandi" : "📋 Nusxa olish"}
+              </button>
+            </div>
+
+            {/* Asosiy birlashtirilgan manzil */}
+            <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 10, border: "1px solid #e2e8f0", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>
+                Umumiy qator:
+              </div>
+              <p className="addressText" style={{ fontSize: 13.5, color: "#0f172a", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
+                📍 {[
+                  addr.region,
+                  addr.district,
+                  addr.street,
+                  addr.house ? `Uy/Dom: ${addr.house}` : null,
+                  addr.apartment ? `Padez/Xonadon: ${addr.apartment}` : null,
+                  addr.landmark ? `(Mo‘ljal: ${addr.landmark})` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || addr.formatted_address || "Manzil ko‘rsatilmagan"}
+              </p>
+            </div>
+
+            {/* Mijoz qo'lda kiritgan manzil detallari (4 ta asosiy blok) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 10 }}>
+              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  📍 Ko‘cha nomi va uy manzili:
+                </div>
+                <b style={{ fontSize: 13, color: addr.street ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+                  {addr.street || "Ko‘rsatilmagan"}
+                </b>
+              </div>
+
+              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  🏠 Uy raqami / Dom:
+                </div>
+                <b style={{ fontSize: 13, color: addr.house ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+                  {addr.house || "Ko‘rsatilmagan"}
+                </b>
+              </div>
+
+              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  🚪 Padezd / Xonadon:
+                </div>
+                <b style={{ fontSize: 13, color: addr.apartment ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+                  {addr.apartment || "Ko‘rsatilmagan"}
+                </b>
+              </div>
+
+              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                  🏢 Mo‘ljal:
+                </div>
+                <b style={{ fontSize: 13, color: addr.landmark ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+                  {addr.landmark || "Ko‘rsatilmagan"}
+                </b>
+              </div>
+            </div>
+
+            {/* Hududiy ma'lumotlar (Viloyat & Tuman) */}
+            {(addr.region || addr.district) && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                {addr.region && (
+                  <span style={{ fontSize: 12, background: "#f1f5f9", color: "#334155", padding: "3px 8px", borderRadius: 6, fontWeight: 500 }}>
+                    🗺️ Viloyat: <b>{addr.region}</b>
+                  </span>
+                )}
+                {addr.district && (
+                  <span style={{ fontSize: 12, background: "#f1f5f9", color: "#334155", padding: "3px 8px", borderRadius: 6, fontWeight: 500 }}>
+                    🏘️ Tuman: <b>{addr.district}</b>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Geolokatsiya & Xaritalar */}
+            {addr.latitude && addr.longitude ? (
+              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <a
+                  href={`https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontSize: 12,
+                    color: "#2563eb",
+                    textDecoration: "none",
+                    background: "#eff6ff",
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    border: "1px solid #bfdbfe",
+                  }}
+                >
+                  🗺️ Google Maps ({Number(addr.latitude).toFixed(4)}, {Number(addr.longitude).toFixed(4)}) ↗
+                </a>
+                <a
+                  href={`https://yandex.com/maps/?pt=${addr.longitude},${addr.latitude}&z=16&l=map`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontSize: 12,
+                    color: "#dc2626",
+                    textDecoration: "none",
+                    background: "#fef2f2",
+                    padding: "5px 10px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    border: "1px solid #fecaca",
+                  }}
+                >
+                  📍 Yandex Maps ↗
+                </a>
+              </div>
+            ) : null}
           </div>
         </div>
       </aside>
@@ -1768,22 +2095,52 @@ function UserDrawer({
   onClose: () => void;
   onOrder: (o: Order) => void;
 }) {
+  const [userPhoto, setUserPhoto] = useState<string>("");
   const mine = orders.filter(
     (o) =>
       o.telegram_id === user.telegram_id ||
       (user.username && o.username === user.username)
   );
   const spend = mine.reduce((s, o) => s + Number(o.total || 0), 0);
+  const userFullName =
+    [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+    user.username ||
+    "Mijoz";
+  const userDob =
+    mine.find((o) => o.birth_date || (o as any).dob)?.birth_date ||
+    (mine.find((o) => (o as any).dob) as any)?.dob ||
+    "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user.telegram_id) return;
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
+
+    fetch(`${base}/api/admin/users/${user.telegram_id}/details`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    })
+      .then((r) => r.json().catch(() => null))
+      .then((j) => {
+        if (!cancelled && j?.success && j?.data?.photos?.length) {
+          const photoUrl = j.data.photos[0]?.url;
+          if (photoUrl) setUserPhoto(photoUrl);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.telegram_id]);
+
   return (
     <div className="drawerShade" onMouseDown={onClose}>
       <aside className="drawer" onMouseDown={(e) => e.stopPropagation()}>
         <div className="drawerHead">
           <div>
             <span className="proEyebrow">CRM MIJOZ</span>
-            <h2>
-              {[user.first_name, user.last_name].filter(Boolean).join(" ") ||
-                "Noma’lum"}
-            </h2>
+            <h2>{userFullName}</h2>
             <small>
               {user.username ? `@${user.username}` : "Telegram foydalanuvchisi"}
             </small>
@@ -1793,27 +2150,75 @@ function UserDrawer({
           </button>
         </div>
         <div className="drawerBody">
-          <section className="detailHero">
-            <div className="avatarLarge">
-              {(user.first_name || "G").slice(0, 1)}
+          <section
+            className="detailHero"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              background: "#ffffff",
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: "50%",
+                overflow: "hidden",
+                background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                fontSize: 22,
+                fontWeight: 700,
+                boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
+                flexShrink: 0,
+                border: "2px solid #ffffff",
+              }}
+            >
+              {userPhoto ? (
+                <img
+                  src={userPhoto}
+                  alt={userFullName}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={() => setUserPhoto("")}
+                />
+              ) : (
+                (user.first_name || "G").slice(0, 1).toUpperCase()
+              )}
             </div>
             <div>
-              <b>{user.telegram_phone || "Telefon saqlanmagan"}</b>
-              <small>ID: {user.telegram_id}</small>
+              <b style={{ fontSize: 16 }}>{user.telegram_phone || "Telefon saqlanmagan"}</b>
+              <small style={{ color: "#64748b", display: "block", marginTop: 2 }}>ID: {user.telegram_id}</small>
             </div>
           </section>
           <div className="detailGrid">
             <div>
-              <small>Buyurtmalar</small>
-              <b>{mine.length}</b>
+              <small>👤 Ism Familiya</small>
+              <b>{userFullName}</b>
             </div>
             <div>
-              <small>Jami xarid</small>
-              <b>{money(spend)}</b>
+              <small>🎂 Tug‘ilgan sana</small>
+              <b style={{ color: userDob ? "#0f172a" : "#94a3b8" }}>
+                {formatBirthDate(userDob) || "Ko‘rsatilmagan"}
+              </b>
+            </div>
+            <div>
+              <small>📦 Buyurtmalar soni</small>
+              <b>{mine.length} ta</b>
+            </div>
+            <div>
+              <small>💎 Jami xarid</small>
+              <b style={{ color: "#e11d48" }}>{money(spend)}</b>
             </div>
           </div>
           <div className="detailSection">
-            <h3>Buyurtmalar tarixi</h3>
+            <h3>Buyurtmalar tarixi ({mine.length})</h3>
             {mine.length ? (
               mine.map((o) => (
                 <button
