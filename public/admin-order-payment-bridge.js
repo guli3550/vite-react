@@ -40,16 +40,16 @@
     o.payment = normalizePayment(o.payment);
     o.items = parseItems(o.items);
 
-    // Accept all known legacy receipt property names.
-    const existingReceipt = o.receiptUrl || o.receipt_url || o.payment_receipt_url || '';
-    if (existingReceipt) {
-      o.receiptUrl = existingReceipt;
-      o.receipt_url = existingReceipt;
+    // Receipt URLs are sensitive and must never be copied into ordinary order payloads.
+    // The Payments section explicitly requests /payment-receipt to obtain a short-lived URL.
+    if (!attachReceipt) {
+      delete o.receiptUrl;
+      delete o.receipt_url;
+      delete o.payment_receipt_url;
+      delete o.receipt_path;
     }
 
-    // Private receipts use short-lived signed URLs. Always refresh the URL when
-    // a receipt path exists so an expired/stale URL cannot produce a broken image.
-    if (attachReceipt && o.id && (o.payment_receipt_path || !o.receiptUrl)) {
+    if (attachReceipt && o.id) {
       try {
         const API = getApiBase();
         const r = await originalFetch(`${API}/api/admin/orders/${encodeURIComponent(o.id)}/payment-receipt`, {
@@ -76,18 +76,19 @@
     const isAdmin = /\/api\/admin\//.test(url);
     const isOrderEndpoint = /\/api\/orders(?:\/|\?|$)/.test(url);
     if (!isAdmin && !isOrderEndpoint) return json;
+    const paymentReceiptEndpoint = /\/payment-receipt(?:\?|$)/.test(url);
 
     if (Array.isArray(data)) {
-      json.data = await Promise.all(data.map((o) => normalizeOrder(o, headers, isAdmin)));
+      json.data = await Promise.all(data.map((o) => normalizeOrder(o, headers, isAdmin && paymentReceiptEndpoint)));
     } else if (data && typeof data === 'object') {
       if (Array.isArray(data.recentOrders)) {
-        data.recentOrders = await Promise.all(data.recentOrders.map((o) => normalizeOrder(o, headers, true)));
+        data.recentOrders = await Promise.all(data.recentOrders.map((o) => normalizeOrder(o, headers, false)));
       }
       if (data.order && typeof data.order === 'object') {
-        data.order = await normalizeOrder(data.order, headers, isAdmin);
+        data.order = await normalizeOrder(data.order, headers, isAdmin && paymentReceiptEndpoint);
       }
       if (!Array.isArray(data.recentOrders) && !data.order && (data.id || data.order_number || data.payment)) {
-        json.data = await normalizeOrder(data, headers, isAdmin);
+        json.data = await normalizeOrder(data, headers, isAdmin && paymentReceiptEndpoint);
       }
     }
     return json;
@@ -119,7 +120,14 @@
     try {
       const parsed = JSON.parse(value || '[]');
       if (!Array.isArray(parsed)) return value;
-      return JSON.stringify(parsed.map((o) => ({ ...o, payment: normalizePayment(o?.payment), items: parseItems(o?.items) })));
+      return JSON.stringify(parsed.map((o) => {
+        const copy = { ...(o || {}), payment: normalizePayment(o?.payment), items: parseItems(o?.items) };
+        delete copy.receipt_url;
+        delete copy.receiptUrl;
+        delete copy.payment_receipt_url;
+        delete copy.receipt_path;
+        return copy;
+      }));
     } catch {
       return value;
     }
