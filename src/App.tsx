@@ -1084,36 +1084,6 @@ export default function App() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
-  // 5-second stealth long-press on header logo to open admin panel
-  const logoPressTimerRef = useRef<any>(null);
-
-  const handleLogoPressStart = () => {
-    if (logoPressTimerRef.current) {
-      clearTimeout(logoPressTimerRef.current);
-    }
-    logoPressTimerRef.current = setTimeout(() => {
-      try {
-        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("heavy");
-      } catch {}
-      window.location.href = "/admin";
-    }, 5000);
-  };
-
-  const handleLogoPressEnd = () => {
-    if (logoPressTimerRef.current) {
-      clearTimeout(logoPressTimerRef.current);
-      logoPressTimerRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (logoPressTimerRef.current) {
-        clearTimeout(logoPressTimerRef.current);
-      }
-    };
-  }, []);
-
   // Initialize platform responsive environment
   useEffect(() => {
     initPlatformEnvironment();
@@ -2833,13 +2803,6 @@ export default function App() {
         <button
           className="brand"
           onClick={() => go("home")}
-          onTouchStart={handleLogoPressStart}
-          onTouchEnd={handleLogoPressEnd}
-          onTouchCancel={handleLogoPressEnd}
-          onMouseDown={handleLogoPressStart}
-          onMouseUp={handleLogoPressEnd}
-          onMouseLeave={handleLogoPressEnd}
-          onContextMenu={(e) => e.preventDefault()}
           type="button"
           aria-label="GULI Home"
         >

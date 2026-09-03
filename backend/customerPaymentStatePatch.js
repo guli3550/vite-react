@@ -68,46 +68,41 @@ function requireCustomer(req, res, next) {
   return res.status(401).json({ success: false, message: 'Mijoz sessiyasi topilmadi.' });
 }
 
-const originalGet = express.application.get;
-express.application.get = function customerPaymentStateGet(routePath, ...handlers) {
-  if (routePath === '/api/orders/:orderNumber/payment-state') {
-    return originalGet.call(this, routePath, requireCustomer, async (req, res) => {
-      try {
-        if (!supabase) return res.status(503).json({ success: false, message: 'To‘lov xizmati sozlanmagan.' });
-        const orderNumber = String(req.params.orderNumber || '').trim();
-        const customerId = Number(req.customerPaymentUser.id);
-        const { data: order, error } = await supabase
-          .from('orders')
-          .select('id,order_number,total,subtotal,delivery,discount,phone,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at,telegram_id,address,items,updated_at')
-          .eq('order_number', orderNumber)
-          .eq('telegram_id', customerId)
-          .maybeSingle();
-        if (error) throw error;
-        if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
+const { install } = require('./routeRegistry.js');
+install('get', '/api/orders/:orderNumber/payment-state', requireCustomer, async (req, res) => {
+  try {
+    if (!supabase) return res.status(503).json({ success: false, message: 'To‘lov xizmati sozlanmagan.' });
+    const orderNumber = String(req.params.orderNumber || '').trim();
+    const customerId = Number(req.customerPaymentUser.id);
+    const { data: order, error } = await supabase
+      .from('orders')
+      .select('id,order_number,total,subtotal,delivery,discount,phone,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at,telegram_id,address,items,updated_at')
+      .eq('order_number', orderNumber)
+      .eq('telegram_id', customerId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
 
-        let receiptUrl = '';
-        if (order.payment_receipt_path) {
-          const { data: signed, error: signedError } = await supabase.storage
-            .from(RECEIPT_BUCKET)
-            .createSignedUrl(String(order.payment_receipt_path).replace(/^\/+/, ''), 900);
-          if (!signedError) receiptUrl = String(signed?.signedUrl || '');
-        }
+    let receiptUrl = '';
+    if (order.payment_receipt_path) {
+      const { data: signed, error: signedError } = await supabase.storage
+        .from(RECEIPT_BUCKET)
+        .createSignedUrl(String(order.payment_receipt_path).replace(/^\/+/, ''), 900);
+      if (!signedError) receiptUrl = String(signed?.signedUrl || '');
+    }
 
-        res.setHeader('Cache-Control', 'private, no-store');
-        return res.json({
-          success: true,
-          data: {
-            ...order,
-            receipt_path: order.payment_receipt_path || '',
-            receipt_url: receiptUrl,
-            receipt_available: Boolean(order.payment_receipt_path),
-          },
-        });
-      } catch (error) {
-        console.error('[Customer payment state]', error);
-        return res.status(500).json({ success: false, message: 'To‘lov ma’lumotlarini olishda xatolik.' });
-      }
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({
+      success: true,
+      data: {
+        ...order,
+        receipt_path: order.payment_receipt_path || '',
+        receipt_url: receiptUrl,
+        receipt_available: Boolean(order.payment_receipt_path),
+      },
     });
+  } catch (error) {
+    console.error('[Customer payment state]', error);
+    return res.status(500).json({ success: false, message: 'To‘lov ma’lumotlarini olishda xatolik.' });
   }
-  return originalGet.call(this, routePath, ...handlers);
-};
+});
