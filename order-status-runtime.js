@@ -26,6 +26,9 @@
     .guli-live-order-status .guli-status-step.active .guli-status-dot{background:#f5dce2;border-color:#d77d93;color:#9d405b}
     .guli-live-order-status .guli-status-step.current .guli-status-dot{box-shadow:0 0 0 4px rgba(185,90,112,.11)}
     .guli-live-payment{margin-top:8px;font-size:10px;color:#78686e}
+    .guli-receipt-card{margin-top:12px;padding:12px;border:1px solid #eadde1;border-radius:15px;background:#fff}
+    .guli-receipt-card img{display:block;width:100%;max-height:320px;object-fit:contain;border-radius:10px;background:#f8fafc}
+    .guli-receipt-link{display:inline-flex;margin-top:8px;padding:8px 12px;border-radius:10px;background:#f8e4e9;color:#9d405b;text-decoration:none;font-size:11px;font-weight:800}
     .guli-legacy-status{display:none!important}
   `;
   document.head.appendChild(style);
@@ -54,6 +57,18 @@
     return best;
   };
 
+  const renderReceipt = (card, orderNumber, state) => {
+    card.querySelector('.guli-receipt-card')?.remove();
+    // Receipt evidence is intentionally visible in the customer order only after admin verification.
+    if (normalize(state?.payment_status) !== 'verified' || !state?.receipt_available || !state?.receipt_url) return;
+    const box = document.createElement('div');
+    box.className = 'guli-receipt-card';
+    const url = String(state.receipt_url);
+    const isPdf = /\.pdf(?:\?|$)/i.test(url);
+    box.innerHTML = `<div style="font-size:12px;font-weight:850;color:#5d4a50;margin-bottom:8px">🧾 To‘lov cheki</div>${isPdf ? `<div style="padding:18px;text-align:center;background:#f8fafc;border-radius:10px;font-size:12px">📄 PDF chek tasdiqlangan</div>` : `<img src="${url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" alt="To‘lov cheki" loading="lazy"/>`}<a class="guli-receipt-link" href="${url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" target="_blank" rel="noreferrer">👁 Chekni ko‘rish</a>`;
+    card.appendChild(box);
+  };
+
   const renderOrder = (order) => {
     if (!order?.order_number) return;
     const card = findCard(String(order.order_number));
@@ -67,6 +82,16 @@
     card.insertAdjacentHTML('beforeend', statusMarkup(order.status || 'Qabul qilindi', order.payment_status));
   };
 
+  const syncReceipt = async (orderNumber, card) => {
+    if (!orderNumber || !card) return;
+    try {
+      const r = await fetch(`${API}/api/orders/${encodeURIComponent(orderNumber)}/payment-state`, { headers: headers(), cache: 'no-store' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success || !j.data) return;
+      renderReceipt(card, orderNumber, j.data);
+    } catch {}
+  };
+
   const sync = async () => {
     if (!tg()?.initData) return;
     try {
@@ -74,7 +99,11 @@
       const j = await r.json();
       if (!r.ok || !j.success || !Array.isArray(j.data)) return;
       localStorage.setItem('guli_orders_last_sync', new Date().toISOString());
-      j.data.forEach(renderOrder);
+      j.data.forEach((order) => {
+        renderOrder(order);
+        const card = findCard(String(order.order_number));
+        void syncReceipt(String(order.order_number), card);
+      });
     } catch {}
   };
 
