@@ -172,8 +172,30 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
   const backendId = user?.id ? String(user.id) : String(localStorage.getItem("guli_chat_guest_id") || "");
   if (backendId) {
-    try { await fetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegram_id: backendId, sender: "customer", text: text.trim() }) }); }
-    catch (e) { console.error("Chat backend sync failed:", e); }
+    try {
+      await fetch(`${API_URL}/api/chat/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telegram_id: backendId,
+          sender: "customer",
+          text: text.trim(),
+          media_url: media?.mediaUrl,
+          metadata: {
+            userName,
+            userPhoto: user?.photo_url,
+            type: media?.type || "text",
+            mediaUrl: media?.mediaUrl,
+            fileName: media?.fileName,
+            replyToId: replyTo?.id,
+            replyToText: replyTo?.text,
+            replyToSender: replyTo?.sender,
+          }
+        })
+      });
+    } catch (e) {
+      console.error("Chat backend sync failed:", e);
+    }
   }
   return newMsg;
 }
@@ -182,7 +204,29 @@ export async function sendAdminReply(userId: string, text: string, media?: { typ
   const allMessages = getStoredChatMessages();
   const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: text.trim(), timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, reply]);
-  try { await fetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegram_id: userId, sender: "admin", text: text.trim() }) }); } catch (e) { console.error("Admin chat backend sync failed:", e); }
+  try {
+    await fetch(`${API_URL}/api/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        telegram_id: userId,
+        sender: "admin",
+        text: text.trim(),
+        media_url: media?.mediaUrl,
+        metadata: {
+          userName: "GULI Admin",
+          type: media?.type || "text",
+          mediaUrl: media?.mediaUrl,
+          fileName: media?.fileName,
+          replyToId: replyTo?.id,
+          replyToText: replyTo?.text,
+          replyToSender: replyTo?.sender,
+        }
+      })
+    });
+  } catch (e) {
+    console.error("Admin chat backend sync failed:", e);
+  }
   notifyNewAdminMessage(reply);
   return reply;
 }

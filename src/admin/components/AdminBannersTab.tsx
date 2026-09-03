@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { EmptyState } from "./AdminUIComponents";
 
 export type Banner = {
@@ -109,6 +109,22 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
   const [badgeText, setBadgeText] = useState("");
   const [ctaText, setCtaText] = useState("");
 
+  useEffect(() => {
+    const apiBase = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+    fetch(`${apiBase}/api/banners`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length) {
+          setBanners(json.data);
+          (window as any).__GULI_ADMIN_BANNERS__ = json.data;
+          try {
+            localStorage.setItem("guli_admin_banners", JSON.stringify(json.data));
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const saveToStorage = (list: Banner[]) => {
     setBanners(list);
     (window as any).__GULI_ADMIN_BANNERS__ = list;
@@ -121,13 +137,27 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
 
     window.dispatchEvent(new Event("guli_banners_updated"));
 
+    const apiBase = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+
+    fetch(`${apiBase}/api/admin/banners`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+      },
+      body: JSON.stringify({ banners: list }),
+    }).catch(() => {});
+
     const active = list.find((b) => b.active);
     if (active) {
-      const apiBase = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
-      fetch(`${apiBase}/api/settings/banner`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: active.imageUrl }),
+      fetch(`${apiBase}/api/admin/settings/banner`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+        },
+        body: JSON.stringify({ image_url: active.imageUrl }),
       }).catch(() => {});
     }
   };

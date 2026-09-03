@@ -204,7 +204,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
           </div>
 
           {/* Interactive Map */}
-          <div style={{ borderRadius: 18, overflow: "hidden", border: "1px solid var(--border-color, #cbd5e1)" }}>
+          <div style={{ borderRadius: 18, overflow: "hidden", border: "1px solid var(--border-color)" }}>
             <LocationPicker
               latitude={draft.latitude || 41.2995}
               longitude={draft.longitude || 69.2401}
@@ -233,8 +233,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "13.5px",
                 }}
@@ -255,8 +255,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "13.5px",
                 }}
@@ -286,8 +286,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "13.5px",
                 }}
@@ -304,8 +304,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "13.5px",
                 }}
@@ -322,8 +322,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "13.5px",
                 }}
@@ -342,8 +342,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
               style={{
                 padding: "12px 14px",
                 borderRadius: "14px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "13.5px",
               }}
@@ -358,9 +358,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
               style={{
                 padding: "12px 20px",
                 borderRadius: "14px",
-                background: "var(--bg-card-sub, #f1f5f9)",
-                color: "var(--text-muted, #64748b)",
-                border: "1px solid var(--border-color, #cbd5e1)",
+                background: "var(--bg-card-sub)",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border-color)",
                 fontWeight: "750",
                 fontSize: "13px",
                 cursor: "pointer",
@@ -423,9 +423,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                     gap: 6,
                     padding: "6px 12px",
                     borderRadius: "12px",
-                    background: "var(--bg-card-sub, #f8fafc)",
-                    border: "1px solid var(--border-color, #cbd5e1)",
-                    color: "var(--text-main, #0f172a)",
+                    background: "var(--bg-card-sub)",
+                    border: "1px solid var(--border-color)",
+                    color: "var(--text-main)",
                     fontSize: "12px",
                     fontWeight: "750",
                     cursor: "pointer",
@@ -491,7 +491,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 </p>
 
                 {address.landmark && (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: "10px", background: "var(--bg-card-sub, #f1f5f9)", fontSize: "12px", color: "var(--text-muted)", marginTop: 2 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: "10px", background: "var(--bg-card-sub)", fontSize: "12px", color: "var(--text-muted)", marginTop: 2 }}>
                     <span>🚩 Mo'ljal:</span>
                     <b style={{ color: "var(--text-main)" }}>{address.landmark}</b>
                   </div>
@@ -510,8 +510,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   gap: 10,
                   padding: "12px 14px",
                   borderRadius: "16px",
-                  background: "var(--bg-card-sub, #f8fafc)",
-                  border: "1px solid var(--border-color, #e2e8f0)",
+                  background: "var(--bg-card-sub)",
+                  border: "1px solid var(--border-color)",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -535,9 +535,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                     gap: 6,
                     padding: "6px 12px",
                     borderRadius: "10px",
-                    background: copiedCoords ? "#10b981" : "var(--bg-card, #ffffff)",
+                    background: copiedCoords ? "#10b981" : "var(--bg-card)",
                     color: copiedCoords ? "#ffffff" : "var(--text-main)",
-                    border: "1px solid var(--border-color, #cbd5e1)",
+                    border: "1px solid var(--border-color)",
                     fontSize: "12px",
                     fontWeight: "750",
                     cursor: "pointer",
@@ -550,7 +550,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             )}
 
             {/* Interactive Leaflet Map Preview */}
-            <div style={{ borderRadius: "18px", overflow: "hidden", border: "1px solid var(--border-color, #cbd5e1)", boxShadow: "inset 0 2px 6px rgba(0,0,0,0.05)" }}>
+            <div style={{ borderRadius: "18px", overflow: "hidden", border: "1px solid var(--border-color)", boxShadow: "inset 0 2px 6px rgba(0,0,0,0.05)" }}>
               <LocationPicker
                 latitude={address.latitude || 41.2995}
                 longitude={address.longitude || 69.2401}
@@ -618,9 +618,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   gap: 8,
                   padding: "10px 14px",
                   borderRadius: "14px",
-                  background: "var(--bg-card-sub, #f1f5f9)",
-                  color: "var(--text-main, #0f172a)",
-                  border: "1px solid var(--border-color, #cbd5e1)",
+                  background: "var(--bg-card-sub)",
+                  color: "var(--text-main)",
+                  border: "1px solid var(--border-color)",
                   fontSize: "12.5px",
                   fontWeight: "750",
                   cursor: "pointer",
@@ -635,8 +635,8 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
         /* Empty State */
         <div
           style={{
-            background: "var(--bg-card, #ffffff)",
-            border: "1px dashed var(--border-color, #cbd5e1)",
+            background: "var(--bg-card)",
+            border: "1px dashed var(--border-color)",
             borderRadius: "24px",
             padding: "40px 24px",
             textAlign: "center",

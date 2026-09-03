@@ -1545,3 +1545,121 @@ html[data-theme="dark"] body,
   color: #fbeff2 !important;
 }
 
+/* Order Drawer & Detail Rows Enhanced Layout */
+.orderDetailCard {
+  background: #ffffff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  margin-bottom: 14px;
+}
+
+.orderDetailRowList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line, #e2e8f0);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line, #e2e8f0);
+  margin: 14px 0;
+}
+
+.orderDetailRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #ffffff;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.orderDetailRow:hover {
+  background: #fdfafb;
+}
+
+.orderDetailRow .rowLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted, #64748b);
+  font-weight: 600;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+
+.orderDetailRow .rowValue {
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  word-break: break-word;
+}
+
+.addressRowGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+@media (max-width: 480px) {
+  .addressRowGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.addressRowCard {
+  background: #ffffff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.addressRowCard .addrLabel {
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.addressRowCard .addrVal {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  display: block;
+}
+
+/* Dark mode overrides for order drawer */
+[data-theme="dark"] .orderDetailCard,
+[data-theme="dark"] .orderDetailRow,
+[data-theme="dark"] .addressRowCard {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .orderDetailRow:hover {
+  background: #2c1a23 !important;
+}
+
+[data-theme="dark"] .orderDetailRowList {
+  background: #38262d !important;
+  border-color: #38262d !important;
+}
+
+[data-theme="dark"] .orderDetailRow .rowLabel,
+[data-theme="dark"] .addressRowCard .addrLabel {
+  color: #b89ea6 !important;
+}
+
+[data-theme="dark"] .orderDetailRow .rowValue,
+[data-theme="dark"] .addressRowCard .addrVal {
+  color: #fbeff2 !important;
+}
+
+

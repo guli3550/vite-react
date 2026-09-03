@@ -1004,7 +1004,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const syncBanners = () => {
+    const syncBanners = async () => {
       let list = (window as any).__GULI_ADMIN_BANNERS__;
       if (!list) {
         try {
@@ -1012,6 +1012,19 @@ export default function App() {
           if (saved) list = JSON.parse(saved);
         } catch {}
       }
+      try {
+        const res = await fetch(`${API_URL}/api/banners`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+            list = json.data;
+            try {
+              localStorage.setItem("guli_admin_banners", JSON.stringify(list));
+            } catch {}
+          }
+        }
+      } catch {}
+
       if (Array.isArray(list) && list.length > 0) {
         const active = list.filter((b: Banner) => b.active !== false);
         if (active.length > 0) {

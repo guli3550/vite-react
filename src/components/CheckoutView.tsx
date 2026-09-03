@@ -112,7 +112,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const missingTip = getMissingFieldsTip();
 
   return (
-    <main className="page checkoutPage modernCheckoutContainer" style={{ paddingBottom: "48px" }}>
+    <main className="page checkoutPage modernCheckoutContainer">
       {/* Top Bar with Back Button */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <button
@@ -124,13 +124,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            background: "var(--bg-card-sub, #f1f5f9)",
-            border: "1px solid var(--border-color, #e2e8f0)",
+            background: "var(--bg-card-sub)",
+            border: "1px solid var(--border-color)",
             padding: "8px 16px",
             borderRadius: "14px",
             fontSize: "13px",
             fontWeight: "750",
-            color: "var(--text-main, #0f172a)",
+            color: "var(--text-main)",
             cursor: "pointer",
           }}
         >
@@ -142,8 +142,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             fontSize: "11px",
             fontWeight: "800",
             letterSpacing: "0.8px",
-            color: "#059669",
-            background: "rgba(16,185,129,0.1)",
+            color: "var(--success-badge-color, #059669)",
+            background: "var(--success-badge-bg, rgba(16,185,129,0.12))",
             padding: "4px 10px",
             borderRadius: "999px",
           }}
@@ -154,11 +154,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
       {/* Modern Page Header */}
       <div className="pageHeader" style={{ marginBottom: "16px" }}>
-        <span style={{ fontSize: "11px", fontWeight: "850", letterSpacing: "1px", color: "var(--primary, #be123c)" }}>
+        <span style={{ fontSize: "11px", fontWeight: "850", letterSpacing: "1px", color: "var(--primary)" }}>
           BUYURTMA BOSQICHI
         </span>
-        <h1 style={{ fontSize: "23px", fontWeight: "900", margin: "4px 0" }}>Buyurtmani rasmiylashtirish</h1>
-        <p style={{ color: "var(--text-muted, #64748b)", fontSize: "12.5px" }}>
+        <h1 style={{ fontSize: "23px", fontWeight: "900", margin: "4px 0", color: "var(--text-main)" }}>Buyurtmani rasmiylashtirish</h1>
+        <p style={{ color: "var(--text-muted)", fontSize: "12.5px" }}>
           Ma’lumotlarni kiriting va buyurtmangizni 1 bosishda rasmiylashtiring.
         </p>
       </div>
@@ -170,12 +170,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          background: "var(--bg-card, #ffffff)",
-          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
           borderRadius: "16px",
           padding: "10px 14px",
           marginBottom: "16px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -184,7 +184,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 22,
               height: 22,
               borderRadius: "50%",
-              background: firstName && phone ? "#10b981" : "var(--primary, #be123c)",
+              background: firstName && phone ? "#10b981" : "var(--primary)",
               color: "#fff",
               fontSize: "11px",
               fontWeight: "800",
@@ -197,7 +197,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>Ma’lumotlar</span>
         </div>
 
-        <span style={{ color: "var(--border-color, #cbd5e1)", fontSize: "14px" }}>—</span>
+        <span style={{ color: "var(--border-color)", fontSize: "14px" }}>—</span>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
@@ -205,8 +205,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 22,
               height: 22,
               borderRadius: "50%",
-              background: address.street && address.region ? "#10b981" : "var(--bg-card-sub, #e2e8f0)",
-              color: address.street && address.region ? "#fff" : "var(--text-muted, #64748b)",
+              background: address.street && address.region ? "#10b981" : "var(--bg-card-sub)",
+              color: address.street && address.region ? "#fff" : "var(--text-muted)",
               fontSize: "11px",
               fontWeight: "800",
               display: "grid",
@@ -218,7 +218,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>Manzil</span>
         </div>
 
-        <span style={{ color: "var(--border-color, #cbd5e1)", fontSize: "14px" }}>—</span>
+        <span style={{ color: "var(--border-color)", fontSize: "14px" }}>—</span>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span
@@ -226,8 +226,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 22,
               height: 22,
               borderRadius: "50%",
-              background: isFormValid ? "var(--primary, #be123c)" : "var(--bg-card-sub, #e2e8f0)",
-              color: isFormValid ? "#fff" : "var(--text-muted, #64748b)",
+              background: isFormValid ? "var(--primary)" : "var(--bg-card-sub)",
+              color: isFormValid ? "#fff" : "var(--text-muted)",
               fontSize: "11px",
               fontWeight: "800",
               display: "grid",
@@ -244,12 +244,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       {cart.length > 0 && (
         <div
           style={{
-            background: "var(--bg-card, #ffffff)",
-            border: "1px solid var(--border-color, #e2e8f0)",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border-color)",
             borderRadius: "18px",
             marginBottom: "16px",
             overflow: "hidden",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+            boxShadow: "var(--shadow-sm)",
           }}
         >
           <button
@@ -291,15 +291,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </button>
 
           {showOrderSummary && (
-            <div style={{ borderTop: "1px solid var(--border-color, #f1f5f9)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ borderTop: "1px solid var(--border-color)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
               {cart.map((item, idx) => {
                 const img = item.product.image || item.product.images?.[0] || "/placeholder.jpg";
                 return (
-                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 8, borderBottom: idx < cart.length - 1 ? "1px dashed var(--border-color, #f1f5f9)" : "none" }}>
+                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 8, borderBottom: idx < cart.length - 1 ? "1px dashed var(--border-color)" : "none" }}>
                     <img
                       src={img}
                       alt={item.product.name}
-                      style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "1px solid var(--border-color, #e2e8f0)" }}
+                      style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "1px solid var(--border-color)" }}
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).src = "/placeholder.jpg";
                       }}
@@ -314,7 +314,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                         <span>× {item.quantity}</span>
                       </div>
                     </div>
-                    <b style={{ fontSize: "13px", color: "var(--primary, #be123c)", flexShrink: 0 }}>
+                    <b style={{ fontSize: "13px", color: "var(--primary)", flexShrink: 0 }}>
                       {formatPrice(item.product.price * item.quantity)}
                     </b>
                   </div>
@@ -329,12 +329,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       <div
         className="checkoutCard modernCard"
         style={{
-          background: "var(--bg-card, #ffffff)",
-          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
           borderRadius: "20px",
           padding: "18px 16px",
           marginBottom: "14px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <div className="cardTitle" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -343,8 +343,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 32,
               height: 32,
               borderRadius: "12px",
-              background: "linear-gradient(135deg, rgba(190,18,60,0.12), rgba(190,18,60,0.04))",
-              color: "var(--primary, #be123c)",
+              background: "linear-gradient(135deg, rgba(189,82,106,0.18), rgba(189,82,106,0.06))",
+              color: "var(--primary)",
               display: "grid",
               placeItems: "center",
               fontSize: "16px",
@@ -378,8 +378,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 width: "100%",
                 padding: "11px 12px",
                 borderRadius: "13px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "13px",
                 boxSizing: "border-box",
@@ -399,8 +399,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 width: "100%",
                 padding: "11px 12px",
                 borderRadius: "13px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "13px",
                 boxSizing: "border-box",
@@ -423,8 +423,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "13px",
               boxSizing: "border-box",
@@ -450,8 +450,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "13px",
               boxSizing: "border-box",
@@ -468,9 +468,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               marginTop: "8px",
               padding: "10px 14px",
               borderRadius: "13px",
-              background: "rgba(36, 158, 227, 0.1)",
-              border: "1px solid rgba(36, 158, 227, 0.25)",
-              color: "#0284c7",
+              background: "var(--phone-btn-bg)",
+              border: "1px solid var(--phone-btn-border)",
+              color: "var(--phone-btn-color)",
               fontSize: "12px",
               fontWeight: "750",
               cursor: "pointer",
@@ -495,12 +495,12 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       <div
         className="checkoutCard modernCard"
         style={{
-          background: "var(--bg-card, #ffffff)",
-          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
           borderRadius: "20px",
           padding: "18px 16px",
           marginBottom: "14px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <div className="cardTitle" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -509,8 +509,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 32,
               height: 32,
               borderRadius: "12px",
-              background: "linear-gradient(135deg, rgba(14,165,233,0.12), rgba(14,165,233,0.04))",
-              color: "#0284c7",
+              background: "linear-gradient(135deg, rgba(14,165,233,0.18), rgba(14,165,233,0.06))",
+              color: "var(--phone-btn-color, #0284c7)",
               display: "grid",
               placeItems: "center",
               fontSize: "16px",
@@ -564,7 +564,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
         {/* Map Picker */}
         {address.latitude ? (
-          <div style={{ borderRadius: "16px", overflow: "hidden", border: "1px solid var(--border-color, #cbd5e1)", marginBottom: 14 }}>
+          <div style={{ borderRadius: "16px", overflow: "hidden", border: "1px solid var(--border-color)", marginBottom: 14 }}>
             <LocationPicker
               latitude={address.latitude}
               longitude={address.longitude}
@@ -597,8 +597,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 width: "100%",
                 padding: "11px 12px",
                 borderRadius: "13px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "12.5px",
                 boxSizing: "border-box",
@@ -632,8 +632,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   width: "100%",
                   padding: "11px 12px",
                   borderRadius: "13px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "12.5px",
                   boxSizing: "border-box",
@@ -655,8 +655,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   width: "100%",
                   padding: "11px 12px",
                   borderRadius: "13px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  background: "var(--bg-input, #f8fafc)",
+                  border: "1px solid var(--border-input)",
+                  background: "var(--bg-input)",
                   color: "var(--text-main)",
                   fontSize: "12.5px",
                   boxSizing: "border-box",
@@ -673,8 +673,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "12.5px",
               boxSizing: "border-box",
@@ -693,8 +693,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "12.5px",
               boxSizing: "border-box",
@@ -720,8 +720,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "13px",
               boxSizing: "border-box",
@@ -744,8 +744,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 width: "100%",
                 padding: "11px 12px",
                 borderRadius: "13px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "13px",
                 boxSizing: "border-box",
@@ -766,8 +766,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 width: "100%",
                 padding: "11px 12px",
                 borderRadius: "13px",
-                border: "1px solid var(--border-color, #cbd5e1)",
-                background: "var(--bg-input, #f8fafc)",
+                border: "1px solid var(--border-input)",
+                background: "var(--bg-input)",
                 color: "var(--text-main)",
                 fontSize: "13px",
                 boxSizing: "border-box",
@@ -790,8 +790,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: "100%",
               padding: "11px 12px",
               borderRadius: "13px",
-              border: "1px solid var(--border-color, #cbd5e1)",
-              background: "var(--bg-input, #f8fafc)",
+              border: "1px solid var(--border-input)",
+              background: "var(--bg-input)",
               color: "var(--text-main)",
               fontSize: "13px",
               boxSizing: "border-box",
@@ -800,16 +800,70 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </div>
       </div>
 
-      {/* Step 3: Payment Method Card */}
+      {/* Summary Calculations Card */}
+      <div
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "20px",
+          padding: "16px 18px",
+          marginBottom: "16px",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
+          <span>Mahsulotlar qiymati:</span>
+          <b style={{ color: "var(--text-main)" }}>{formatPrice(subtotal || total)}</b>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 10 }}>
+          <span>Yetkazib berish xizmati:</span>
+          <b style={{ color: deliveryFee > 0 ? "var(--text-main)" : "#059669" }}>
+            {deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul"}
+          </b>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingTop: 12,
+            borderTop: "1px dashed var(--border-color)",
+          }}
+        >
+          <div>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "block" }}>Jami to‘lov miqdori:</span>
+            <b style={{ fontSize: "21px", color: "var(--primary)", fontWeight: "900" }}>
+              {formatPrice(total)}
+            </b>
+          </div>
+
+          <span
+            style={{
+              fontSize: "11px",
+              color: "var(--success-badge-color, #059669)",
+              background: "var(--success-badge-bg, rgba(16,185,129,0.1))",
+              padding: "4px 8px",
+              borderRadius: "8px",
+              fontWeight: "750",
+            }}
+          >
+            ✓ Yetkazib berish bepul
+          </span>
+        </div>
+      </div>
+
+      {/* Step 3: Payment Method Card (at the bottom) */}
       <div
         className="checkoutCard modernCard"
         style={{
-          background: "var(--bg-card, #ffffff)",
-          border: "1px solid var(--border-color, #e2e8f0)",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
           borderRadius: "20px",
           padding: "18px 16px",
           marginBottom: "16px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <div className="cardTitle" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -818,7 +872,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 32,
               height: 32,
               borderRadius: "12px",
-              background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04))",
+              background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06))",
               color: "#059669",
               display: "grid",
               placeItems: "center",
@@ -842,16 +896,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           className="paymentOptionVibrant"
           onClick={handlePayClick}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "14px 16px",
-            borderRadius: "16px",
-            background: "linear-gradient(135deg, rgba(190,18,60,0.06), rgba(190,18,60,0.02))",
-            border: "1.5px solid var(--primary, #be123c)",
             cursor: isFormValid ? "pointer" : "not-allowed",
             opacity: isFormValid ? 1 : 0.75,
-            transition: "all 0.2s ease",
           }}
         >
           <div
@@ -859,13 +905,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 44,
               height: 44,
               borderRadius: "14px",
-              background: "linear-gradient(135deg, #be123c, #9f1239)",
+              background: "var(--primary-gradient)",
               color: "#ffffff",
               display: "grid",
               placeItems: "center",
               fontSize: "22px",
               flexShrink: 0,
-              boxShadow: "0 4px 10px rgba(190,18,60,0.25)",
+              boxShadow: "0 4px 10px rgba(189,82,106,0.3)",
             }}
           >
             💳
@@ -878,8 +924,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 style={{
                   fontSize: "10px",
                   fontWeight: "800",
-                  color: "#059669",
-                  background: "rgba(16,185,129,0.12)",
+                  color: "var(--success-badge-color, #059669)",
+                  background: "var(--success-badge-bg, rgba(16,185,129,0.12))",
                   padding: "2px 6px",
                   borderRadius: "6px",
                 }}
@@ -897,7 +943,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               width: 24,
               height: 24,
               borderRadius: "50%",
-              background: "var(--primary, #be123c)",
+              background: "var(--primary)",
               color: "#ffffff",
               display: "grid",
               placeItems: "center",
@@ -910,63 +956,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, padding: "8px 12px", borderRadius: "12px", background: "var(--bg-card-sub, #f8fafc)", fontSize: "11px", color: "var(--text-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, padding: "8px 12px", borderRadius: "12px", background: "var(--bg-card-sub)", fontSize: "11px", color: "var(--text-muted)" }}>
           <span>🛡️</span>
           <span>To‘lovlar 256-bitli SSL orqali to‘liq himoyalangan va xavfsiz.</span>
-        </div>
-      </div>
-
-      {/* Summary Calculations Card */}
-      <div
-        style={{
-          background: "var(--bg-card, #ffffff)",
-          border: "1px solid var(--border-color, #e2e8f0)",
-          borderRadius: "20px",
-          padding: "16px 18px",
-          marginBottom: "16px",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
-          <span>Mahsulotlar qiymati:</span>
-          <b style={{ color: "var(--text-main)" }}>{formatPrice(subtotal || total)}</b>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 10 }}>
-          <span>Yetkazib berish xizmati:</span>
-          <b style={{ color: deliveryFee > 0 ? "var(--text-main)" : "#059669" }}>
-            {deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul"}
-          </b>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingTop: 12,
-            borderTop: "1px dashed var(--border-color, #e2e8f0)",
-          }}
-        >
-          <div>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "block" }}>Jami to‘lov miqdori:</span>
-            <b style={{ fontSize: "21px", color: "var(--primary, #be123c)", fontWeight: "900" }}>
-              {formatPrice(total)}
-            </b>
-          </div>
-
-          <span
-            style={{
-              fontSize: "11px",
-              color: "#059669",
-              background: "rgba(16,185,129,0.1)",
-              padding: "4px 8px",
-              borderRadius: "8px",
-              fontWeight: "750",
-            }}
-          >
-            ✓ Yetkazib berish bepul
-          </span>
         </div>
       </div>
 
@@ -977,9 +969,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             marginBottom: 12,
             padding: "10px 14px",
             borderRadius: "14px",
-            background: "rgba(225, 29, 72, 0.08)",
-            border: "1px solid rgba(225, 29, 72, 0.2)",
-            color: "#e11d48",
+            background: "rgba(225, 29, 72, 0.12)",
+            border: "1px solid rgba(225, 29, 72, 0.25)",
+            color: "var(--primary)",
             fontSize: "11.5px",
             fontWeight: "750",
             display: "flex",
@@ -1004,14 +996,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           padding: "16px 20px",
           borderRadius: "18px",
           background: isFormValid
-            ? "var(--primary-gradient, linear-gradient(135deg, #be123c, #9f1239))"
-            : "var(--bg-card-sub, #cbd5e1)",
-          color: isFormValid ? "#ffffff" : "var(--text-muted, #64748b)",
+            ? "var(--primary-gradient)"
+            : "var(--bg-card-sub)",
+          color: isFormValid ? "#ffffff" : "var(--text-muted)",
           fontSize: "15px",
           fontWeight: "850",
           border: "none",
           cursor: isFormValid ? "pointer" : "not-allowed",
-          boxShadow: isFormValid ? "0 8px 24px rgba(190,18,60,0.35)" : "none",
+          boxShadow: isFormValid ? "0 8px 24px rgba(189,82,106,0.35)" : "none",
           transition: "all 0.2s ease",
           display: "flex",
           alignItems: "center",

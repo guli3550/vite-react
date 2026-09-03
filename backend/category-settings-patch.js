@@ -168,6 +168,73 @@ function installRoutes(app) {
     }
   });
 
+  originalGet.call(app, "/api/banners", async (_req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("category_settings")
+        .select("slug,name,image_url,sort_order,active,updated_at")
+        .like("slug", "banner_%")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      res.set("Cache-Control", "no-store, max-age=0");
+      if (data && data.length) {
+        const banners = data.map((item, idx) => {
+          let meta = {};
+          try { meta = JSON.parse(item.name || "{}"); } catch { meta = { title: item.name }; }
+          return {
+            id: item.slug.replace(/^banner_/, "") || `banner-${idx + 1}`,
+            imageUrl: item.image_url,
+            title: meta.title || "Maxsus Taklif",
+            subtitle: meta.subtitle || "",
+            badgeText: meta.badgeText || "TOP SOTILGAN",
+            ctaText: meta.ctaText || "Xarid qilish",
+            actionType: meta.actionType || "catalog",
+            actionTarget: meta.actionTarget || "",
+            active: item.active !== false,
+            createdAt: item.updated_at,
+          };
+        });
+        return res.json({ success: true, data: banners });
+      }
+      res.json({ success: true, data: [] });
+    } catch (error) {
+      console.error("Get banners error:", error);
+      res.status(500).json({ success: false, message: "Bannerlarni yuklashda xatolik", data: [] });
+    }
+  });
+
+  originalPut.call(app, "/api/admin/banners", requireAdmin, async (req, res) => {
+    try {
+      const banners = Array.isArray(req.body?.banners) ? req.body.banners : [];
+      for (let i = 0; i < banners.length; i++) {
+        const b = banners[i];
+        const slug = `banner_${b.id || i + 1}`;
+        const metaStr = JSON.stringify({
+          title: b.title || "",
+          subtitle: b.subtitle || "",
+          badgeText: b.badgeText || "",
+          ctaText: b.ctaText || "",
+          actionType: b.actionType || "catalog",
+          actionTarget: b.actionTarget || ""
+        });
+        await supabase
+          .from("category_settings")
+          .upsert({
+            slug,
+            name: metaStr,
+            image_url: b.imageUrl || "",
+            sort_order: i + 1,
+            active: b.active !== false,
+            updated_at: new Date().toISOString()
+          }, { onConflict: "slug" });
+      }
+      res.json({ success: true, message: "Bannerlar muvaffaqiyatli saqlandi" });
+    } catch (error) {
+      console.error("Save banners error:", error);
+      res.status(500).json({ success: false, message: "Bannerlarni saqlashda xatolik" });
+    }
+  });
+
   originalPut.call(app, "/api/admin/settings/banner", requireAdmin, async (req, res) => {
     try {
       const imageUrl = String(req.body?.image_url || "").trim();

@@ -1731,6 +1731,7 @@ function OrderDrawer({
 }) {
   const addr = parseOrderAddress(order.address);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const [copiedCoords, setCopiedCoords] = useState(false);
   const codes = productCodes(order);
   const [realReceiptUrl, setRealReceiptUrl] = useState<string>(
     (order as any).receiptUrl || (order as any).receipt_url || ""
@@ -1818,172 +1819,279 @@ function OrderDrawer({
       <aside className="drawer" onMouseDown={(e) => e.stopPropagation()}>
         <div className="drawerHead">
           <div>
-            <span className="proEyebrow">BUYURTMA</span>
+            <span className="proEyebrow">BUYURTMA TAFSILOTLARI</span>
             <h2>№ {order.order_number || order.id}</h2>
-            <small>{date(order.created_at)}</small>
+            <small>🕒 {date(order.created_at)}</small>
           </div>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={onClose} aria-label="Yopish">
             ×
           </button>
         </div>
+
         <div className="drawerBody">
-          {/* Mijoz Profil Card (Telegram Avatar + Ism Familiya + Username) */}
-          <section
-            className="detailHero"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              background: "#ffffff",
-              padding: "12px 14px",
-              borderRadius: 14,
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-            }}
-          >
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: "50%",
-                overflow: "hidden",
-                background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#ffffff",
-                fontSize: 20,
-                fontWeight: 700,
-                boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
-                flexShrink: 0,
-                border: "2px solid #ffffff",
-              }}
-            >
-              {customerPhoto ? (
-                <img
-                  src={customerPhoto}
-                  alt={customerFullName}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  onError={() => setCustomerPhoto("")}
-                />
-              ) : (
-                customerFullName.slice(0, 1).toUpperCase()
+          {/* Mijoz Profil Card (Telegram Avatar + Ism Familiya + Username + Aloqa) */}
+          <div className="orderDetailCard">
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div
+                style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: "50%",
+                  overflow: "hidden",
+                  background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ffffff",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
+                  flexShrink: 0,
+                  border: "2px solid #ffffff",
+                }}
+              >
+                {customerPhoto ? (
+                  <img
+                    src={customerPhoto}
+                    alt={customerFullName}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={() => setCustomerPhoto("")}
+                  />
+                ) : (
+                  customerFullName.slice(0, 1).toUpperCase()
+                )}
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <b style={{ fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {customerFullName}
+                  </b>
+                  {order.telegram_id ? (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        background: "#e0f2fe",
+                        color: "#0369a1",
+                        padding: "2px 8px",
+                        borderRadius: 8,
+                        fontWeight: 700,
+                      }}
+                    >
+                      TG ID: {order.telegram_id}
+                    </span>
+                  ) : null}
+                </div>
+                <small style={{ color: "var(--muted, #64748b)", display: "block", marginTop: 3 }}>
+                  {order.username ? `@${order.username}` : "Telegram orqali buyurtma"}
+                </small>
+              </div>
+            </div>
+
+            {/* Quick action buttons (Qo'ng'iroq / Telegram) */}
+            <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--line, #e2e8f0)" }}>
+              {order.phone && (
+                <a
+                  href={`tel:${order.phone}`}
+                  style={{
+                    flex: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    padding: "7px 10px",
+                    borderRadius: 8,
+                    background: "#ecfdf5",
+                    color: "#059669",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    border: "1px solid #a7f3d0",
+                  }}
+                >
+                  📞 Qo‘ng‘iroq qilish
+                </a>
+              )}
+              {order.username && (
+                <a
+                  href={`https://t.me/${order.username.replace(/^@/, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 6,
+                    padding: "7px 10px",
+                    borderRadius: 8,
+                    background: "#eff6ff",
+                    color: "#2563eb",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    border: "1px solid #bfdbfe",
+                  }}
+                >
+                  ✈️ Telegram yozish
+                </a>
               )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <b style={{ fontSize: 16, color: "var(--text-color, #0f172a)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {customerFullName}
-                </b>
-                {order.telegram_id ? (
-                  <span
-                    style={{
-                      fontSize: 10.5,
-                      background: "#e0f2fe",
-                      color: "#0369a1",
-                      padding: "2px 8px",
-                      borderRadius: 10,
-                      fontWeight: 600,
-                    }}
-                  >
-                    TG ID: {order.telegram_id}
-                  </span>
-                ) : null}
-              </div>
-              <small style={{ color: "#64748b", display: "block", marginTop: 2 }}>
-                {order.username ? `@${order.username}` : "Telegram mijozi"}
-              </small>
-            </div>
-          </section>
+          </div>
 
-          {/* Mijoz Ma'lumotlari & To'lov Grid */}
-          <div className="detailGrid">
-            <div>
-              <small>👤 Mijoz F.I.Sh</small>
-              <b>{customerFullName}</b>
+          {/* Barcha ma'lumotlar toza, tartibli qatorlarda (Order Details Row List) */}
+          <div className="orderDetailRowList">
+            <div className="orderDetailRow">
+              <span className="rowLabel">👤 Mijoz F.I.Sh</span>
+              <span className="rowValue">{customerFullName}</span>
             </div>
-            <div>
-              <small>🎂 Tug‘ilgan sana</small>
-              <b style={{ color: order.birth_date || (order as any).dob ? "#0f172a" : "#94a3b8" }}>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">🎂 Tug‘ilgan sana</span>
+              <span className="rowValue" style={{ color: (order.birth_date || (order as any).dob) ? "inherit" : "var(--muted)" }}>
                 {formatBirthDate(order.birth_date || (order as any).dob) || "Ko‘rsatilmagan"}
-              </b>
+              </span>
             </div>
-            <div>
-              <small>📞 Telefon</small>
-              <b>{order.phone || "—"}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">📞 Telefon raqami</span>
+              <span className="rowValue">
+                {order.phone ? (
+                  <a href={`tel:${order.phone}`} style={{ color: "var(--rose, #e11d48)", textDecoration: "none" }}>
+                    {order.phone}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </span>
             </div>
-            <div>
-              <small>💳 To‘lov usuli</small>
-              <b>{order.payment === "card" ? "Karta (Uzcard/Humo)" : "Naqd"}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">💳 To‘lov usuli</span>
+              <span className="rowValue">
+                {order.payment === "card" ? "💳 Karta (Uzcard / Humo)" : "💵 Naqd pul"}
+              </span>
             </div>
-            <div>
-              <small>📦 Mahsulot kodi</small>
-              <b>{codes.join(", ") || "—"}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">🏷️ To‘lov holati</span>
+              <span className="rowValue">
+                {order.status === "Qabul qilindi" || order.payment_status === "paid" ? (
+                  <span style={{ color: "#059669", background: "#ecfdf5", padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
+                    ✓ To‘langan / Tasdiqlangan
+                  </span>
+                ) : receiptImg ? (
+                  <span style={{ color: "#0284c7", background: "#e0f2fe", padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
+                    Chek yuklangan (Tekshirilmoqda)
+                  </span>
+                ) : (
+                  <span style={{ color: "#b45309", background: "#fef3c7", padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
+                    Chek kutilmoqda
+                  </span>
+                )}
+              </span>
             </div>
-            <div>
-              <small>💰 Mahsulotlar</small>
-              <b>{money(order.subtotal)}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">📦 Mahsulot kodlari</span>
+              <span className="rowValue" style={{ color: "var(--rose, #e11d48)", letterSpacing: "0.05em" }}>
+                {codes.join(", ") || "—"}
+              </span>
             </div>
-            <div>
-              <small>🚚 Yetkazib berish</small>
-              <b>{order.delivery ? money(order.delivery) : "Bepul"}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">💰 Mahsulotlar qiymati</span>
+              <span className="rowValue">{money(order.subtotal || order.total)}</span>
             </div>
-            <div>
-              <small>💵 Jami summa</small>
-              <b style={{ color: "#e11d48" }}>{money(order.total)}</b>
+
+            <div className="orderDetailRow">
+              <span className="rowLabel">🚚 Yetkazib berish xizmati</span>
+              <span className="rowValue" style={{ color: order.delivery ? "inherit" : "#059669" }}>
+                {order.delivery ? money(order.delivery) : "Bepul"}
+              </span>
+            </div>
+
+            <div className="orderDetailRow" style={{ background: "rgba(244,63,94,0.06)", fontWeight: 800 }}>
+              <span className="rowLabel" style={{ fontWeight: 800, color: "var(--rose, #e11d48)" }}>
+                💵 Jami buyurtma summasi
+              </span>
+              <span className="rowValue" style={{ color: "var(--rose, #e11d48)", fontSize: 15, fontWeight: 900 }}>
+                {money(order.total)}
+              </span>
             </div>
           </div>
 
           {/* Mijoz Yuborgan To'lov Cheki */}
-          <div className="detailSection" style={{ background: "#f8fafc", padding: 14, borderRadius: 12, border: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <h3 style={{ margin: 0, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
-                🧾 Mijoz yuborgan to‘lov cheki ({order.payment === "card" ? "💳 Karta o'tkazmasi" : "💳 Click / Payme"})
+          <div className="orderDetailCard">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 6 }}>
+              <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 750, display: "flex", alignItems: "center", gap: 6 }}>
+                🧾 Mijoz yuborgan to‘lov cheki
               </h3>
-              <span style={{ fontSize: 11, background: receiptImg ? "#dcfce7" : "#fef3c7", color: receiptImg ? "#166534" : "#92400e", padding: "3px 8px", borderRadius: 12, fontWeight: 700 }}>
-                {loadingReceipt ? "Yuklanmoqda..." : receiptImg ? "Yuklangan chek ✓" : "Chek kutilmoqda"}
+              <span
+                style={{
+                  fontSize: 11,
+                  background: receiptImg ? "#dcfce7" : "#fef3c7",
+                  color: receiptImg ? "#166534" : "#92400e",
+                  padding: "3px 9px",
+                  borderRadius: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {loadingReceipt ? "Yuklanmoqda..." : receiptImg ? "Yuklangan chek ✓" : "Chek yo'q"}
               </span>
             </div>
-            
+
             <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
               {receiptImg ? (
                 <div
                   style={{
                     position: "relative",
                     cursor: "pointer",
-                    borderRadius: 10,
+                    borderRadius: 12,
                     overflow: "hidden",
-                    border: "1px solid #cbd5e1",
-                    width: 100,
-                    height: 120,
+                    border: "1px solid var(--line, #cbd5e1)",
+                    width: 96,
+                    height: 118,
                     flexShrink: 0,
                     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                    background: "#e2e8f0",
+                    background: "var(--bg-card-sub, #e2e8f0)",
                   }}
                   onClick={() => onOpenReceipt(receiptImg)}
-                  title="To'liq hajmda ko'rish"
+                  title="To'liq hajmda ochish"
                 >
                   <img
                     src={receiptImg}
                     alt="To'lov cheki"
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                   />
-                  <div style={{ position: "absolute", bottom: 0, inset: "auto 0 0 0", background: "rgba(0,0,0,0.65)", color: "#fff", fontSize: 10, textAlign: "center", padding: "3px 0", fontWeight: 600 }}>
-                    🔍 Kengaytirish
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      inset: "auto 0 0 0",
+                      background: "rgba(0,0,0,0.65)",
+                      color: "#fff",
+                      fontSize: 10,
+                      textAlign: "center",
+                      padding: "3px 0",
+                      fontWeight: 600,
+                    }}
+                  >
+                    🔍 Katta ko‘rish
                   </div>
                 </div>
               ) : (
                 <div
                   style={{
-                    width: 100,
-                    height: 120,
+                    width: 96,
+                    height: 118,
                     flexShrink: 0,
-                    borderRadius: 10,
-                    border: "1px dashed #cbd5e1",
+                    borderRadius: 12,
+                    border: "1px dashed var(--line, #cbd5e1)",
                     display: "grid",
                     placeItems: "center",
-                    background: "#f1f5f9",
-                    color: "#94a3b8",
+                    background: "var(--bg-card-sub, #f1f5f9)",
+                    color: "var(--muted, #94a3b8)",
                     fontSize: 24,
                     textAlign: "center",
                     padding: 8,
@@ -1991,22 +2099,22 @@ function OrderDrawer({
                 >
                   <div>
                     <div>🧾</div>
-                    <small style={{ fontSize: 10, display: "block", color: "#64748b", marginTop: 4 }}>
-                      {loadingReceipt ? "Yuklanmoqda..." : "Chek yo'q"}
+                    <small style={{ fontSize: 10, display: "block", color: "var(--muted, #64748b)", marginTop: 4 }}>
+                      {loadingReceipt ? "Yuklanmoqda..." : "Chek yuklanmagan"}
                     </small>
                   </div>
                 </div>
               )}
 
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, color: "#475569", marginBottom: 4 }}>
-                  <b>To'lov turi:</b> {order.payment === "card" ? "💳 Karta o'tkazmasi (Uzcard/Humo)" : "💳 Click / Payme"}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: "var(--muted, #475569)", marginBottom: 4 }}>
+                  <b>To‘lov turi:</b> {order.payment === "card" ? "💳 Karta o‘tkazmasi (Uzcard/Humo)" : "💵 Naqd"}
                 </div>
-                <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: "var(--muted, #475569)", marginBottom: 8 }}>
                   <b>Tranzaksiya:</b> #{order.order_number || order.id}-TX
                 </div>
                 {receiptImg && (
-                  <div style={{ marginBottom: 8 }}>
+                  <div style={{ marginBottom: 10 }}>
                     <a
                       href={receiptImg}
                       target="_blank"
@@ -2025,7 +2133,7 @@ function OrderDrawer({
                         borderRadius: 6,
                       }}
                     >
-                      📥 Chekni yuklab olish (asl nusxa)
+                      📥 Chekni yuklab olish
                     </a>
                   </div>
                 )}
@@ -2046,28 +2154,58 @@ function OrderDrawer({
                       alignItems: "center",
                       gap: 6,
                       boxShadow: "0 2px 6px rgba(5, 150, 105, 0.3)",
+                      width: "100%",
+                      justifyContent: "center",
                     }}
                     onClick={() => onStatus(order, "Qabul qilindi")}
                   >
-                    ✅ Chek haqiqiy — Statusni "Qabul qilindi"ga o'zgartirish
+                    ✅ Chek tasdiqlash → "Qabul qilindi"
                   </button>
                 ) : (
-                  <div style={{ fontSize: 12, color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: 6, background: "#ecfdf5", padding: "6px 10px", borderRadius: 8 }}>
-                    ✓ Chek haqiqiy va status "Qabul qilindi"ga o'tkazilgan
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#059669",
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "#ecfdf5",
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                    }}
+                  >
+                    ✓ Chek tasdiqlangan va status "Qabul qilindi"
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="detailSection">
-            <h3>Status</h3>
+          {/* Buyurtma Holati (Status & Timeline) */}
+          <div className="orderDetailCard">
+            <h3 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 750 }}>
+              🔄 Buyurtma statusi
+            </h3>
             <select
               value={order.status}
               onChange={(e) => onStatus(order, e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--line, #e2e8f0)",
+                background: "var(--bg-card, #ffffff)",
+                color: "var(--ink, #0f172a)",
+                fontWeight: 700,
+                fontSize: 13,
+                outline: "none",
+              }}
             >
               {STATUSES.map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
             </select>
             <div className="timeline">
@@ -2083,34 +2221,56 @@ function OrderDrawer({
             </div>
           </div>
 
-          <div className="detailSection">
-            <h3>Mahsulotlar</h3>
+          {/* Mahsulotlar Ro'yxati */}
+          <div className="orderDetailCard">
+            <h3 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 750 }}>
+              👗 Buyurtma mahsulotlari ({order.items?.length || 0} ta)
+            </h3>
             {(order.items || []).map((it: any, i: number) => (
               <div className="lineItem" key={i}>
-                {it.product?.image && <img src={it.product.image} alt="" />}
+                {it.product?.image ? (
+                  <img
+                    src={it.product.image}
+                    alt={it.product?.name || "Mahsulot"}
+                    style={{ width: 48, height: 56, objectFit: "cover", borderRadius: 8 }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 48,
+                      height: 56,
+                      borderRadius: 8,
+                      background: "var(--bg-card-sub, #f1f5f9)",
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 20,
+                    }}
+                  >
+                    👗
+                  </div>
+                )}
                 <div>
-                  <b>{it.product?.name || "Mahsulot"}</b>
-                  <small>
-                    {it.product?.product_code
-                      ? `Kod: ${it.product.product_code} · `
-                      : ""}
-                    {it.size || "—"} · {formatColorName(it.color) || "—"} ·{" "}
-                    {it.quantity || 1} dona
+                  <b style={{ fontSize: 13.5 }}>{it.product?.name || "Mahsulot"}</b>
+                  <small style={{ color: "var(--muted, #64748b)", fontSize: 11, marginTop: 4, display: "block" }}>
+                    {it.product?.product_code ? (
+                      <span style={{ color: "var(--rose, #e11d48)", fontWeight: 700 }}>
+                        Kod: {it.product.product_code} ·{" "}
+                      </span>
+                    ) : null}
+                    O‘lcham: {it.size || "—"} · Rang: {formatColorName(it.color) || "—"} · Soni: {it.quantity || 1} dona
                   </small>
                 </div>
-                <strong>
-                  {money(
-                    Number(it.product?.price || 0) * Number(it.quantity || 1)
-                  )}
+                <strong style={{ fontSize: 13.5, color: "var(--ink, #0f172a)", whiteSpace: "nowrap" }}>
+                  {money(Number(it.product?.price || 0) * Number(it.quantity || 1))}
                 </strong>
               </div>
             ))}
           </div>
 
-          {/* To'liq Yetkazib Berish Manzili */}
-          <div className="detailSection" style={{ background: "#f8fafc", padding: 16, borderRadius: 14, border: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
+          {/* To'liq Yetkazib Berish Manzili Qatorlari */}
+          <div className="orderDetailCard">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 750, display: "flex", alignItems: "center", gap: 6 }}>
                 📍 To‘liq yetkazib berish manzili
               </h3>
               <button
@@ -2124,19 +2284,21 @@ function OrderDrawer({
                     addr.apartment && `Padez/Xonadon: ${addr.apartment}`,
                     addr.landmark && `Mo'ljal: ${addr.landmark}`,
                     order.phone && `Tel: ${order.phone}`,
-                  ].filter(Boolean).join(", ");
+                  ]
+                    .filter(Boolean)
+                    .join(", ");
                   navigator.clipboard?.writeText(fullText || "Manzil ko'rsatilmagan");
                   setCopiedAddress(true);
                   setTimeout(() => setCopiedAddress(false), 2000);
                 }}
                 style={{
                   fontSize: 11.5,
-                  padding: "4px 9px",
-                  borderRadius: 6,
-                  border: "1px solid #cbd5e1",
-                  background: copiedAddress ? "#dcfce7" : "#ffffff",
-                  color: copiedAddress ? "#166534" : "#334155",
-                  fontWeight: 600,
+                  padding: "5px 10px",
+                  borderRadius: 8,
+                  border: "1px solid var(--line, #cbd5e1)",
+                  background: copiedAddress ? "#dcfce7" : "var(--bg-card, #ffffff)",
+                  color: copiedAddress ? "#166534" : "var(--ink, #334155)",
+                  fontWeight: 700,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -2144,16 +2306,24 @@ function OrderDrawer({
                   transition: "all 0.2s",
                 }}
               >
-                {copiedAddress ? "✓ Nusxalandi" : "📋 Nusxa olish"}
+                {copiedAddress ? "✓ Nusxalandi" : "📋 Manzilni nusxalash"}
               </button>
             </div>
 
             {/* Asosiy birlashtirilgan manzil */}
-            <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: 10, border: "1px solid #e2e8f0", marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>
-                Umumiy qator:
+            <div
+              style={{
+                background: "var(--bg-card-sub, #f8fafc)",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--line, #e2e8f0)",
+                marginBottom: 10,
+              }}
+            >
+              <div style={{ fontSize: 10.5, color: "var(--muted, #64748b)", fontWeight: 700, textTransform: "uppercase", marginBottom: 3 }}>
+                Umumiy manzil qatori:
               </div>
-              <p className="addressText" style={{ fontSize: 13.5, color: "#0f172a", lineHeight: 1.5, margin: 0, fontWeight: 600 }}>
+              <p style={{ fontSize: 13, lineHeight: 1.5, margin: 0, fontWeight: 600, color: "var(--ink, #0f172a)" }}>
                 📍 {[
                   addr.region,
                   addr.district,
@@ -2167,64 +2337,54 @@ function OrderDrawer({
               </p>
             </div>
 
-            {/* Mijoz qo'lda kiritgan manzil detallari (4 ta asosiy blok) */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginBottom: 10 }}>
-              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  📍 Ko‘cha nomi va uy manzili:
-                </div>
-                <b style={{ fontSize: 13, color: addr.street ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+            {/* Manzilning alohida qatorlari (Row Grid) */}
+            <div className="addressRowGrid">
+              <div className="addressRowCard">
+                <span className="addrLabel">🗺️ Viloyat / Shahar:</span>
+                <span className="addrVal" style={{ color: addr.region ? "inherit" : "var(--muted)" }}>
+                  {addr.region || "Ko‘rsatilmagan"}
+                </span>
+              </div>
+
+              <div className="addressRowCard">
+                <span className="addrLabel">🏘️ Tuman / Hudud:</span>
+                <span className="addrVal" style={{ color: addr.district ? "inherit" : "var(--muted)" }}>
+                  {addr.district || "Ko‘rsatilmagan"}
+                </span>
+              </div>
+
+              <div className="addressRowCard">
+                <span className="addrLabel">📍 Ko‘cha / Mahalla:</span>
+                <span className="addrVal" style={{ color: addr.street ? "inherit" : "var(--muted)" }}>
                   {addr.street || "Ko‘rsatilmagan"}
-                </b>
+                </span>
               </div>
 
-              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  🏠 Uy raqami / Dom:
-                </div>
-                <b style={{ fontSize: 13, color: addr.house ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+              <div className="addressRowCard">
+                <span className="addrLabel">🏠 Uy raqami / Dom:</span>
+                <span className="addrVal" style={{ color: addr.house ? "inherit" : "var(--muted)" }}>
                   {addr.house || "Ko‘rsatilmagan"}
-                </b>
+                </span>
               </div>
 
-              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  🚪 Padezd / Xonadon:
-                </div>
-                <b style={{ fontSize: 13, color: addr.apartment ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+              <div className="addressRowCard">
+                <span className="addrLabel">🚪 Xonadon / Padezd:</span>
+                <span className="addrVal" style={{ color: addr.apartment ? "inherit" : "var(--muted)" }}>
                   {addr.apartment || "Ko‘rsatilmagan"}
-                </b>
+                </span>
               </div>
 
-              <div style={{ background: "#ffffff", padding: "8px 10px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  🏢 Mo‘ljal:
-                </div>
-                <b style={{ fontSize: 13, color: addr.landmark ? "#0f172a" : "#94a3b8", display: "block", marginTop: 2 }}>
+              <div className="addressRowCard">
+                <span className="addrLabel">🏢 Mo‘ljal (Orientir):</span>
+                <span className="addrVal" style={{ color: addr.landmark ? "inherit" : "var(--muted)" }}>
                   {addr.landmark || "Ko‘rsatilmagan"}
-                </b>
+                </span>
               </div>
             </div>
 
-            {/* Hududiy ma'lumotlar (Viloyat & Tuman) */}
-            {(addr.region || addr.district) && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                {addr.region && (
-                  <span style={{ fontSize: 12, background: "#f1f5f9", color: "#334155", padding: "3px 8px", borderRadius: 6, fontWeight: 500 }}>
-                    🗺️ Viloyat: <b>{addr.region}</b>
-                  </span>
-                )}
-                {addr.district && (
-                  <span style={{ fontSize: 12, background: "#f1f5f9", color: "#334155", padding: "3px 8px", borderRadius: 6, fontWeight: 500 }}>
-                    🏘️ Tuman: <b>{addr.district}</b>
-                  </span>
-                )}
-              </div>
-            )}
-
             {/* Geolokatsiya & Xaritalar */}
             {addr.latitude && addr.longitude ? (
-              <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <a
                   href={`https://www.google.com/maps?q=${addr.latitude},${addr.longitude}`}
                   target="_blank"
@@ -2237,9 +2397,9 @@ function OrderDrawer({
                     color: "#2563eb",
                     textDecoration: "none",
                     background: "#eff6ff",
-                    padding: "5px 10px",
+                    padding: "6px 12px",
                     borderRadius: 8,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     border: "1px solid #bfdbfe",
                   }}
                 >
@@ -2257,14 +2417,37 @@ function OrderDrawer({
                     color: "#dc2626",
                     textDecoration: "none",
                     background: "#fef2f2",
-                    padding: "5px 10px",
+                    padding: "6px 12px",
                     borderRadius: 8,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     border: "1px solid #fecaca",
                   }}
                 >
                   📍 Yandex Maps ↗
                 </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`${addr.latitude}, ${addr.longitude}`);
+                    setCopiedCoords(true);
+                    setTimeout(() => setCopiedCoords(false), 2000);
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    color: copiedCoords ? "#166534" : "var(--muted, #475569)",
+                    background: copiedCoords ? "#dcfce7" : "var(--bg-card, #ffffff)",
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    border: "1px solid var(--line, #cbd5e1)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {copiedCoords ? "✓ Koordinata olindi" : "🌐 Nusxa"}
+                </button>
               </div>
             ) : null}
           </div>
@@ -2337,80 +2520,80 @@ function UserDrawer({
               {user.username ? `@${user.username}` : "Telegram foydalanuvchisi"}
             </small>
           </div>
-          <button type="button" onClick={onClose}>
+          <button type="button" onClick={onClose} aria-label="Yopish">
             ×
           </button>
         </div>
         <div className="drawerBody">
-          <section
-            className="detailHero"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              background: "#ffffff",
-              padding: "12px 14px",
-              borderRadius: 14,
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-            }}
-          >
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: "50%",
-                overflow: "hidden",
-                background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#ffffff",
-                fontSize: 22,
-                fontWeight: 700,
-                boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
-                flexShrink: 0,
-                border: "2px solid #ffffff",
-              }}
-            >
-              {userPhoto ? (
-                <img
-                  src={userPhoto}
-                  alt={userFullName}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                  onError={() => setUserPhoto("")}
-                />
-              ) : (
-                (user.first_name || "G").slice(0, 1).toUpperCase()
-              )}
-            </div>
-            <div>
-              <b style={{ fontSize: 16 }}>{user.telegram_phone || "Telefon saqlanmagan"}</b>
-              <small style={{ color: "#64748b", display: "block", marginTop: 2 }}>ID: {user.telegram_id}</small>
-            </div>
-          </section>
-          <div className="detailGrid">
-            <div>
-              <small>👤 Ism Familiya</small>
-              <b>{userFullName}</b>
-            </div>
-            <div>
-              <small>🎂 Tug‘ilgan sana</small>
-              <b style={{ color: userDob ? "#0f172a" : "#94a3b8" }}>
-                {formatBirthDate(userDob) || "Ko‘rsatilmagan"}
-              </b>
-            </div>
-            <div>
-              <small>📦 Buyurtmalar soni</small>
-              <b>{mine.length} ta</b>
-            </div>
-            <div>
-              <small>💎 Jami xarid</small>
-              <b style={{ color: "#e11d48" }}>{money(spend)}</b>
+          <div className="orderDetailCard">
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: "50%",
+                  overflow: "hidden",
+                  background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ffffff",
+                  fontSize: 22,
+                  fontWeight: 700,
+                  boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
+                  flexShrink: 0,
+                  border: "2px solid #ffffff",
+                }}
+              >
+                {userPhoto ? (
+                  <img
+                    src={userPhoto}
+                    alt={userFullName}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={() => setUserPhoto("")}
+                  />
+                ) : (
+                  (user.first_name || "G").slice(0, 1).toUpperCase()
+                )}
+              </div>
+              <div>
+                <b style={{ fontSize: 16 }}>{user.telegram_phone || userFullName}</b>
+                <small style={{ color: "var(--muted, #64748b)", display: "block", marginTop: 2 }}>
+                  TG ID: {user.telegram_id} {user.username ? `· @${user.username}` : ""}
+                </small>
+              </div>
             </div>
           </div>
-          <div className="detailSection">
-            <h3>Buyurtmalar tarixi ({mine.length})</h3>
+
+          <div className="orderDetailRowList">
+            <div className="orderDetailRow">
+              <span className="rowLabel">👤 Ism Familiya</span>
+              <span className="rowValue">{userFullName}</span>
+            </div>
+            <div className="orderDetailRow">
+              <span className="rowLabel">🎂 Tug‘ilgan sana</span>
+              <span className="rowValue" style={{ color: userDob ? "inherit" : "var(--muted)" }}>
+                {formatBirthDate(userDob) || "Ko‘rsatilmagan"}
+              </span>
+            </div>
+            <div className="orderDetailRow">
+              <span className="rowLabel">📦 Buyurtmalar soni</span>
+              <span className="rowValue">{mine.length} ta buyurtma</span>
+            </div>
+            <div className="orderDetailRow" style={{ background: "rgba(244,63,94,0.06)" }}>
+              <span className="rowLabel" style={{ color: "var(--rose, #e11d48)", fontWeight: 800 }}>
+                💎 Jami xarid summasi
+              </span>
+              <span className="rowValue" style={{ color: "var(--rose, #e11d48)", fontSize: 15, fontWeight: 900 }}>
+                {money(spend)}
+              </span>
+            </div>
+          </div>
+
+          <div className="orderDetailCard">
+            <h3 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 750 }}>
+              📜 Buyurtmalar tarixi ({mine.length})
+            </h3>
             {mine.length ? (
               mine.map((o) => (
                 <button
@@ -2420,14 +2603,14 @@ function UserDrawer({
                   onClick={() => onOrder(o)}
                 >
                   <span>
-                    {productCodes(o)[0] || "—"} · {o.order_number || o.id}
+                    {productCodes(o)[0] || "—"} · #{o.order_number || o.id}
                   </span>
                   <b>{money(o.total)}</b>
-                  <small>{o.status}</small>
+                  <small>{o.status} · {date(o.created_at)}</small>
                 </button>
               ))
             ) : (
-              <p>Bu mijozda buyurtmalar topilmadi.</p>
+              <p style={{ color: "var(--muted)", margin: 0, fontSize: 13 }}>Bu mijozda buyurtmalar topilmadi.</p>
             )}
           </div>
         </div>

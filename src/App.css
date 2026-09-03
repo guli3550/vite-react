@@ -9,14 +9,23 @@
   --bg-card:#ffffff;
   --bg-card-sub:#faf1f3;
   --bg-card-hover:#fdf3f5;
+  --bg-input:#f8fafc;
+  --bg-input-focus:#ffffff;
   --border-color:#f0dfe3;
   --border-sub:#f7e8eb;
+  --border-input:#cbd5e1;
   --text-main:#21191c;
+  --text-color:#21191c;
   --text-muted:#8b787e;
   --primary:#bd526a;
   --primary-gradient:linear-gradient(135deg,#c9526b,#b84561);
   --shadow-sm:0 4px 14px rgba(70,35,45,.04);
   --shadow-md:0 10px 28px rgba(70,35,45,.08);
+  --phone-btn-bg:rgba(36, 158, 227, 0.1);
+  --phone-btn-color:#0284c7;
+  --phone-btn-border:rgba(36, 158, 227, 0.25);
+  --success-badge-bg:rgba(16, 185, 129, 0.12);
+  --success-badge-color:#059669;
 }
 
 [data-theme="dark"]{
@@ -27,14 +36,23 @@
   --bg-card:#1c1317;
   --bg-card-sub:#261b20;
   --bg-card-hover:#2a1e24;
+  --bg-input:#23171d;
+  --bg-input-focus:#2c1d25;
   --border-color:#38262d;
   --border-sub:#48323a;
+  --border-input:#4a323c;
   --text-main:#fbeff2;
+  --text-color:#fbeff2;
   --text-muted:#b89ea6;
   --primary:#e26b84;
   --primary-gradient:linear-gradient(135deg,#d95572,#b83d57);
   --shadow-sm:0 4px 16px rgba(0,0,0,.35);
   --shadow-md:0 12px 32px rgba(0,0,0,.5);
+  --phone-btn-bg:rgba(56, 189, 248, 0.15);
+  --phone-btn-color:#38bdf8;
+  --phone-btn-border:rgba(56, 189, 248, 0.35);
+  --success-badge-bg:rgba(16, 185, 129, 0.2);
+  --success-badge-color:#34d399;
 }
 
 body{margin:0;min-width:320px;background:var(--bg-main);color:var(--text-main);transition:background .25s ease,color .25s ease}
@@ -737,19 +755,154 @@ img{max-width:100%}
 .summary .total b{color:var(--primary)}
 
 /* Checkout */
-.checkoutCard{background:var(--bg-card);border:1px solid var(--border-color);border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow-sm)}
-.cardTitle{display:flex;gap:11px;align-items:center;margin-bottom:14px}
-.cardTitle h3{margin:0;font-size:15px;color:var(--text-main)}
-.cardTitle p{margin:3px 0 0;color:var(--text-muted);font-size:10px}
-.step{width:29px;height:29px;border-radius:50%;display:grid;place-items:center;background:var(--bg-card-sub);color:var(--primary);font-weight:850}
-.input.full{width:100%}
-.twoInputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
-.locationButton{width:100%;padding:14px;border-radius:14px;background:var(--bg-card-sub);color:var(--primary);font-weight:850}
-.phoneAutoButton{width:100%;margin-top:9px;padding:12px;border-radius:13px;background:#e7f5fb;color:#2387b7;font-size:11px;font-weight:850}
-.paymentOption{display:flex;align-items:center;gap:10px;padding:13px;border:1px solid var(--border-color);border-radius:15px;margin-top:9px;color:var(--text-main)}
-.paymentOption.selected{border-color:var(--primary);background:var(--bg-card-hover)}
-.checkoutTotal{display:flex;justify-content:space-between;align-items:center;padding:14px 2px;font-size:13px;color:var(--text-main)}
-.checkoutTotal b{font-size:20px;color:var(--primary)}
+.checkoutPage {
+  color: var(--text-main);
+}
+.modernCheckoutContainer {
+  padding-bottom: 50px;
+}
+.checkoutCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 18px 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.cardTitle {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.cardTitle h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 850;
+  color: var(--text-main);
+}
+.cardTitle p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.step {
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-card-sub);
+  color: var(--primary);
+  font-weight: 850;
+}
+.input, select.input {
+  border: 1px solid var(--border-input);
+  background: var(--bg-input);
+  outline: none;
+  border-radius: 13px;
+  padding: 11px 12px;
+  color: var(--text-main);
+  font-size: 13px;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.input:focus, select.input:focus {
+  border-color: var(--primary);
+  background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px rgba(189, 82, 106, 0.15);
+}
+select.input option {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+.input.full {
+  width: 100%;
+}
+.twoInputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.locationButton {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  border: none;
+  font-weight: 750;
+  font-size: 12.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+.locationButton:hover {
+  opacity: 0.95;
+}
+.phoneAutoButton {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  background: var(--phone-btn-bg);
+  border: 1px solid var(--phone-btn-border);
+  color: var(--phone-btn-color);
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.paymentOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  margin-top: 9px;
+  color: var(--text-main);
+  background: var(--bg-card);
+}
+.paymentOption.selected {
+  border-color: var(--primary);
+  background: var(--bg-card-hover);
+}
+.paymentOptionVibrant {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(189, 82, 106, 0.08), rgba(189, 82, 106, 0.03));
+  border: 1.5px solid var(--primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+[data-theme="dark"] .paymentOptionVibrant {
+  background: linear-gradient(135deg, rgba(226, 107, 132, 0.15), rgba(226, 107, 132, 0.05));
+  border-color: var(--primary);
+}
+.checkoutTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 2px;
+  font-size: 13px;
+  color: var(--text-main);
+}
+.checkoutTotal b {
+  font-size: 20px;
+  color: var(--primary);
+}
 
 /* Profile */
 .profileHero{background:linear-gradient(135deg,var(--bg-card),var(--bg-card-sub));border:1px solid var(--border-color);border-radius:25px;padding:22px 18px;display:flex;align-items:center;gap:15px;box-shadow:var(--shadow-sm)}
@@ -4343,3 +4496,81 @@ html[data-theme="dark"] .option.active {
   object-fit: cover;
   display: block;
 }
+
+/* ============================================================
+   DARK THEME CHECKOUT, MAPS & FORMS ENHANCEMENTS
+   ============================================================ */
+html[data-theme="dark"] .checkoutPage,
+html[data-theme="dark"] .modernCheckoutContainer {
+  background: var(--bg-main) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .checkoutCard,
+html[data-theme="dark"] .checkoutStepper {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+html[data-theme="dark"] .input,
+html[data-theme="dark"] select.input,
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="tel"],
+html[data-theme="dark"] input[type="date"] {
+  background: var(--bg-input) !important;
+  border-color: var(--border-input) !important;
+  color: var(--text-main) !important;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] .input:focus,
+html[data-theme="dark"] select.input:focus,
+html[data-theme="dark"] input:focus {
+  background: var(--bg-input-focus) !important;
+  border-color: var(--primary) !important;
+}
+
+html[data-theme="dark"] select option {
+  background-color: #1c1317 !important;
+  color: #fbeff2 !important;
+}
+
+html[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.85);
+  cursor: pointer;
+}
+
+html[data-theme="dark"] .backButton {
+  background: var(--bg-card-sub) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-main) !important;
+}
+
+/* Leaflet Map Dark Theme */
+html[data-theme="dark"] .leaflet-container {
+  background: #1c1317 !important;
+  border-color: var(--border-color) !important;
+}
+
+html[data-theme="dark"] .leaflet-tile {
+  filter: brightness(0.85) invert(1) contrast(2.6) hue-rotate(200deg) saturate(0.4) !important;
+}
+
+html[data-theme="dark"] .leaflet-bar a {
+  background-color: #23171d !important;
+  border-bottom: 1px solid #38262d !important;
+  color: #fbeff2 !important;
+}
+
+html[data-theme="dark"] .leaflet-bar a:hover {
+  background-color: #2a1e24 !important;
+}
+
+html[data-theme="dark"] .leaflet-popup-content-wrapper,
+html[data-theme="dark"] .leaflet-popup-tip {
+  background: #1c1317 !important;
+  color: #fbeff2 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
