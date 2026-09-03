@@ -1,180 +1,39 @@
-// GULI manual card payment: HUMO / UZCARD card-to-card + receipt verification.
+const express = require('express');
+const crypto = require('crypto');
+
 (() => {
-  const CARD_NUMBER = String(process.env.CARD_PAYMENT_NUMBER || "").replace(/\D/g, "");
-  const CARD_HOLDER = String(process.env.CARD_PAYMENT_NAME || "").trim();
-  const RECEIPT_BUCKET = "payment-receipts";
+  const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
+  const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
+  const supabase = require('@supabase/supabase-js').createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession:false, autoRefreshToken:false } });
+  const CARD_NUMBER = String(process.env.CARD_PAYMENT_NUMBER || '').replace(/\D/g, '');
+  const CARD_HOLDER = String(process.env.CARD_PAYMENT_NAME || '').trim();
+  const RECEIPT_BUCKET = 'payment-receipts';
   const MAX_RECEIPT_BYTES = 6 * 1024 * 1024;
   const GUEST_TOKEN_TTL = 30 * 24 * 60 * 60 * 1000;
-  const initials = (name) => String(name || "").trim().split(/\s+/).filter(Boolean).map((part) => `${part.slice(0, 2)}...`).join(" ");
-  const normalizePath = (value) => String(value || "").replace(/^\/+/, "");
-  const signGuestToken = (guestId, expiresAt) => {
-    const payload = Buffer.from(JSON.stringify({ guestId: Number(guestId), exp: Number(expiresAt) })).toString("base64url");
-    const signature = crypto.createHmac("sha256", String(process.env.ADMIN_SECRET || "")).update(payload).digest("base64url");
-    return `${payload}.${signature}`;
-  };
-  const verifyGuestToken = (token) => {
-    try {
-      const [payload, signature] = String(token || "").split(".");
-      if (!payload || !signature || !process.env.ADMIN_SECRET) return null;
-      const expected = crypto.createHmac("sha256", String(process.env.ADMIN_SECRET)).update(payload).digest("base64url");
-      if (!safeEqual(signature, expected)) return null;
-      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-      if (!Number.isSafeInteger(Number(data.guestId)) || Number(data.guestId) >= 0 || Number(data.exp) < Date.now()) return null;
-      return { id: Number(data.guestId), username: null, first_name: null, last_name: null };
-    } catch { return null; }
-  };
-  const requireCustomerUser = (req, res, next) => {
-    const initData = req.headers["x-telegram-init-data"] || "";
-    const telegramUser = verifyTelegramInitData(initData);
-    if (telegramUser) { req.customerUser = telegramUser; return next(); }
-    const guestUser = verifyGuestToken(req.headers["x-guli-guest-token"] || "");
-    if (guestUser) { req.customerUser = guestUser; return next(); }
-    return res.status(401).json({ success: false, message: "Mijoz sessiyasi topilmadi. Telegram Mini App yoki brauzer sessiyasini yangilang." });
-  };
-  async function ensureReceiptBucket() {
-    const existing = await supabase.storage.getBucket(RECEIPT_BUCKET);
-    if (!existing.error) return;
-    const created = await supabase.storage.createBucket(RECEIPT_BUCKET, { public: false, allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"], fileSizeLimit: `${MAX_RECEIPT_BYTES}B` });
-    if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
-  }
-  function decodeReceiptData(data, mimeType) {
-    const raw = String(data || "");
-    if (!raw || raw.length > 8500000 || raw.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(raw)) throw new Error("Chek fayli noto‘g‘ri kodlangan");
-    const buffer = Buffer.from(raw, "base64");
-    if (!buffer.length || buffer.length > MAX_RECEIPT_BYTES) throw new Error("Chek hajmi 6 MB dan oshmasligi kerak");
-    const header = buffer.subarray(0, 12);
-    const valid = (mimeType === "image/jpeg" && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff)
-      || (mimeType === "image/png" && header.toString("hex", 0, 8) === "89504e470d0a1a0a")
-      || (mimeType === "image/webp" && header.toString("ascii", 0, 4) === "RIFF" && header.toString("ascii", 8, 12) === "WEBP")
-      || (mimeType === "application/pdf" && header.toString("ascii", 0, 5) === "%PDF-");
-    if (!valid) throw new Error("Chek fayli e’lon qilingan formatga mos emas");
-    return buffer;
-  }
-  function receiptExtension(mimeType) {
-    if (mimeType === "application/pdf") return "pdf";
-    if (mimeType === "image/png") return "png";
-    if (mimeType === "image/webp") return "webp";
-    return "jpg";
-  }
+  const safeEqual=(a,b)=>{const aa=Buffer.from(String(a||'')),bb=Buffer.from(String(b||''));return aa.length===bb.length&&crypto.timingSafeEqual(aa,bb)};
+  const normalizePath=v=>String(v||'').replace(/^\/+/, '');
+  const signGuestToken=(guestId,exp)=>{const p=Buffer.from(JSON.stringify({guestId:Number(guestId),exp:Number(exp)})).toString('base64url');const s=crypto.createHmac('sha256',String(process.env.ADMIN_SECRET||'')).update(p).digest('base64url');return `${p}.${s}`};
+  const verifyGuestToken=token=>{try{const [p,s]=String(token||'').split('.');if(!p||!s||!process.env.ADMIN_SECRET)return null;const e=crypto.createHmac('sha256',String(process.env.ADMIN_SECRET)).update(p).digest('base64url');if(!safeEqual(s,e))return null;const d=JSON.parse(Buffer.from(p,'base64url').toString('utf8'));const id=Number(d.guestId);if(!Number.isSafeInteger(id)||id>=0||Number(d.exp)<Date.now())return null;return{id}}catch{return null}};
+  const verifyTelegramInitData=raw=>{const bot=String(process.env.TELEGRAM_BOT_TOKEN||process.env.BOT_TOKEN||'').trim();if(!raw||!bot)return null;try{const p=new URLSearchParams(String(raw));const h=p.get('hash')||'';p.delete('hash');const dc=[...p.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n');const sk=crypto.createHmac('sha256','WebAppData').update(bot).digest();const ex=crypto.createHmac('sha256',sk).update(dc).digest('hex');if(!safeEqual(h,ex))return null;const u=JSON.parse(p.get('user')||'{}');return Number.isSafeInteger(Number(u.id))?{id:Number(u.id)}:null}catch{return null}};
+  const requireCustomer=(req,res,next)=>{const tg=verifyTelegramInitData(req.headers['x-telegram-init-data']||'');if(tg){req.customerUser=tg;return next()}const g=verifyGuestToken(req.headers['x-guli-guest-token']||'');if(g){req.customerUser=g;return next()}return res.status(401).json({success:false,message:'Mijoz sessiyasi topilmadi.'})};
+  const requireAdmin=(req,res,next)=>{try{const t=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const [b,s]=t.split('.');const e=crypto.createHmac('sha256',String(process.env.ADMIN_SECRET||'')).update(b||'').digest('base64url');const p=b?JSON.parse(Buffer.from(b,'base64url').toString('utf8')):null;if(!b||!s||!safeEqual(s,e)||p?.role!=='admin'||Number(p?.exp)<=Date.now())return res.status(401).json({success:false,message:'Admin sessiyasi yaroqsiz'});next()}catch{return res.status(401).json({success:false,message:'Admin sessiyasi yaroqsiz'})}};
+  async function ensureBucket(){const b=await supabase.storage.getBucket(RECEIPT_BUCKET);if(!b.error)return;const c=await supabase.storage.createBucket(RECEIPT_BUCKET,{public:false,allowedMimeTypes:['image/jpeg','image/png','image/webp','application/pdf'],fileSizeLimit:`${MAX_RECEIPT_BYTES}B`});if(c.error&&!/already exists|duplicate/i.test(c.error.message||''))throw c.error}
+  function decode(data,mime){const raw=String(data||'');if(!raw||raw.length>9000000||raw.length%4===1||!/^[A-Za-z0-9+/]*={0,2}$/.test(raw))throw new Error('Chek fayli noto‘g‘ri kodlangan');const b=Buffer.from(raw,'base64');if(!b.length||b.length>MAX_RECEIPT_BYTES)throw new Error('Chek hajmi 6 MB dan oshmasligi kerak');const h=b.subarray(0,12);const ok=(mime==='image/jpeg'&&h[0]===255&&h[1]===216&&h[2]===255)||(mime==='image/png'&&h.toString('hex',0,8)==='89504e470d0a1a0a')||(mime==='image/webp'&&h.toString('ascii',0,4)==='RIFF'&&h.toString('ascii',8,12)==='WEBP')||(mime==='application/pdf'&&h.toString('ascii',0,5)==='%PDF-');if(!ok)throw new Error('Chek fayli e’lon qilingan formatga mos emas');return b}
+  const ext=m=>m==='application/pdf'?'pdf':m==='image/png'?'png':m==='image/webp'?'webp':'jpg';
+  async function removeObject(path){if(!path)return;const r=await supabase.storage.from(RECEIPT_BUCKET).remove([normalizePath(path)]);if(r.error)console.error('Receipt delete error:',r.error)}
 
-  app.post("/api/guest-session", (req, res) => {
-    if (!process.env.ADMIN_SECRET) return res.status(503).json({ success: false, message: "Brauzer sessiyasi backend secret bilan sozlanmagan." });
-    const random = BigInt(`0x${crypto.randomBytes(7).toString("hex")}`);
-    const guestId = -Number((random % 900000000000n) + 100000000000n);
-    const expiresAt = Date.now() + GUEST_TOKEN_TTL;
-    res.json({ success: true, data: { token: signGuestToken(guestId, expiresAt), expires_at: new Date(expiresAt).toISOString() } });
-  });
+  app.post('/api/guest-session',(req,res)=>{if(!process.env.ADMIN_SECRET)return res.status(503).json({success:false,message:'Brauzer sessiyasi sozlanmagan.'});const n=BigInt(`0x${crypto.randomBytes(7).toString('hex')}`),id=-Number((n%900000000000n)+100000000000n),exp=Date.now()+GUEST_TOKEN_TTL;res.json({success:true,data:{token:signGuestToken(id,exp),expires_at:new Date(exp).toISOString()}})});
+  app.get('/api/payment/card-info',requireCustomer,(req,res)=>{if(!/^\d{16}$/.test(CARD_NUMBER)||!CARD_HOLDER)return res.status(503).json({success:false,message:'Karta rekvizitlari sozlanmagan.'});res.json({success:true,data:{card_number:CARD_NUMBER,holder_initials:CARD_HOLDER.trim().split(/\s+/).map(x=>x.slice(0,2)).join(' ')}})});
 
-  app.get("/api/payment/card-info", requireCustomerUser, async (req, res) => {
-    if (!/^\d{16}$/.test(CARD_NUMBER) || !CARD_HOLDER) return res.status(503).json({ success: false, message: "Karta to‘lovi rekvizitlari backend environment'da sozlanmagan." });
-    res.json({ success: true, data: { card_number: CARD_NUMBER, holder_initials: initials(CARD_HOLDER) } });
-  });
+  app.post('/api/guest/orders',requireCustomer,async(req,res)=>{try{if(req.customerUser.id>0)return res.status(400).json({success:false,message:'Telegram sessiyasi uchun asosiy checkout ishlatiladi.'});const{phone,items,address,promo_code}=req.body||{};if(!String(phone||'').trim())return res.status(400).json({success:false,message:'Telefon raqami kiritilmagan'});if(!Array.isArray(items)||!items.length||items.length>100)return res.status(400).json({success:false,message:'Buyurtma mahsulotlari noto‘g‘ri'});const orderInput={order_number:null,username:null,first_name:null,phone:String(phone).trim(),items,address:address||null,payment:'card_manual',status:'Qabul qilindi',promo_code:promo_code?String(promo_code).trim().toUpperCase():''};const{data,error}=await supabase.rpc('create_secure_order',{p_order:orderInput,p_telegram_id:req.customerUser.id});if(error)throw error;res.status(201).json({success:true,message:'Buyurtma muvaffaqiyatli saqlandi',data})}catch(e){console.error('Guest checkout error:',e);res.status(500).json({success:false,message:e.message||'Buyurtmani saqlashda xatolik'})}});
 
-  app.post("/api/guest/orders", requireCustomerUser, async (req, res) => {
-    try {
-      if (req.customerUser.id > 0) return res.status(400).json({ success: false, message: "Telegram sessiyasi uchun asosiy checkout ishlatiladi." });
-      const { phone, items, address, promo_code } = req.body || {};
-      if (!String(phone || "").trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
-      if (!Array.isArray(items) || !items.length || items.length > 100) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari noto‘g‘ri" });
-      const orderInput = { order_number: null, username: null, first_name: null, phone: String(phone).trim(), items, address: address || null, payment: "card_manual", status: "Qabul qilindi", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
-      const { data, error } = await supabase.rpc("create_secure_order", { p_order: orderInput, p_telegram_id: req.customerUser.id });
-      if (error) throw error;
-      res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
-    } catch (error) {
-      console.error("Guest secure checkout error:", error);
-      const statusCode = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori/i.test(error.message || "") ? 400 : 500;
-      res.status(statusCode).json({ success: false, message: error.message || "Buyurtmani saqlashda xatolik" });
-    }
-  });
+  app.post('/api/orders/:orderNumber/receipt',requireCustomer,async(req,res)=>{let newPath='';try{const orderNumber=String(req.params.orderNumber||'').trim(),customerId=Number(req.customerUser.id);const{data:order,error:oe}=await supabase.from('orders').select('id,order_number,total,telegram_id,payment,payment_status,payment_receipt_path').eq('order_number',orderNumber).eq('telegram_id',customerId).maybeSingle();if(oe)throw oe;if(!order)return res.status(404).json({success:false,message:'Buyurtma topilmadi'});if(String(order.payment||'')!=='card_manual')return res.status(400).json({success:false,message:'Bu buyurtma karta to‘lovi uchun yaratilmagan'});if(String(order.payment_status||'')==='verified')return res.status(409).json({success:false,message:'To‘lov allaqachon tasdiqlangan'});const{data,mimeType}=req.body||{};if(!data||typeof data!=='string')return res.status(400).json({success:false,message:'Chek rasmi topilmadi'});if(!/^image\/(jpeg|png|webp)$/.test(String(mimeType||''))&&mimeType!=='application/pdf')return res.status(400).json({success:false,message:'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin'});const buffer=decode(data,mimeType);await ensureBucket();newPath=`receipts/${order.id}/${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext(mimeType)}`;const{error:ue}=await supabase.storage.from(RECEIPT_BUCKET).upload(newPath,buffer,{contentType:mimeType,cacheControl:'31536000',upsert:false});if(ue)throw ue;const{data:updated,error:de}=await supabase.from('orders').update({payment_receipt_path:newPath,payment_status:'receipt_uploaded',payment_receipt_uploaded_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',order.id).eq('telegram_id',customerId).select('id,order_number,total,payment_status,payment_receipt_uploaded_at').single();if(de)throw de;res.json({success:true,message:'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.',data:updated})}catch(e){if(newPath)await removeObject(newPath);console.error('Receipt upload error:',e);const code=/Chek fayli|Chek hajmi|Chek rasmi/i.test(e.message||'')?400:500;res.status(code).json({success:false,message:code===400?e.message:'Chekni yuborishda xatolik'})}});
 
-  app.post("/api/orders/:orderNumber/receipt", requireCustomerUser, async (req, res) => {
-    try {
-      const orderNumber = String(req.params.orderNumber || "").trim();
-      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,total,telegram_id,payment,payment_status").eq("order_number", orderNumber).eq("telegram_id", req.customerUser.id).maybeSingle();
-      if (orderError) throw orderError;
-      if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
-      if (String(order.payment || "") !== "card_manual") return res.status(400).json({ success: false, message: "Bu buyurtma karta orqali to‘lov uchun yaratilmagan" });
-      const { data, mimeType } = req.body || {};
-      if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Chek rasmi topilmadi" });
-      if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") return res.status(400).json({ success: false, message: "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin" });
-      const buffer = decodeReceiptData(data, mimeType);
-      await ensureReceiptBucket();
-      const cleanExt = receiptExtension(mimeType);
-      const path = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
-      const { error: uploadError } = await supabase.storage.from(RECEIPT_BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("telegram_id", req.customerUser.id).select("id,order_number,total,payment_status,payment_receipt_path").single();
-      if (updateError) throw updateError;
-      res.json({ success: true, message: "Chek muvaffaqiyatli yuborildi. Admin tekshiradi.", data: updated });
-    } catch (error) {
-      console.error("Receipt upload error:", error);
-      if (/payment_receipt_path|payment_status|payment_receipt_uploaded_at/i.test(error.message || "")) return res.status(503).json({ success: false, message: "To‘lov chek ustunlari bazada hali tayyor emas. SQL migration'ni bir marta ishga tushiring." });
-      const code = /Chek fayli|Chek hajmi/i.test(error.message || "") ? 400 : 500;
-      res.status(code).json({ success: false, message: code === 400 ? error.message : "Chekni yuborishda xatolik" });
-    }
-  });
+  app.get('/api/admin/orders/:id/payment-receipt',requireAdmin,async(req,res)=>{try{const{data:order,error}=await supabase.from('orders').select('id,order_number,total,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at').eq('id',req.params.id).maybeSingle();if(error)throw error;if(!order)return res.status(404).json({success:false,message:'Buyurtma topilmadi'});if(!order.payment_receipt_path)return res.status(404).json({success:false,message:'Bu buyurtmaga chek yuborilmagan'});await ensureBucket();const{data:signed,error:se}=await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(normalizePath(order.payment_receipt_path),900);if(se)throw se;res.setHeader('Cache-Control','private, no-store');res.json({success:true,data:{id:order.id,order_number:order.order_number,total:order.total,payment:order.payment,payment_status:order.payment_status,payment_receipt_uploaded_at:order.payment_receipt_uploaded_at,payment_verified_at:order.payment_verified_at,receipt_url:signed.signedUrl}})}catch(e){console.error('Admin receipt view error:',e);res.status(500).json({success:false,message:'Chekni ochishda xatolik'})}});
 
-  app.get("/api/admin/orders/:id/payment-receipt", requireAdmin, async (req, res) => {
-    try {
-      const { data: order, error } = await supabase.from("orders").select("id,order_number,total,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at").eq("id", req.params.id).maybeSingle();
-      if (error) throw error;
-      if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
-      if (!order.payment_receipt_path) return res.status(404).json({ success: false, message: "Bu buyurtmaga chek yuborilmagan" });
-      await ensureReceiptBucket();
-      const { data: signed, error: signedError } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(normalizePath(order.payment_receipt_path), 900);
-      if (signedError) throw signedError;
-      res.setHeader("Cache-Control", "private, no-store");
-      res.json({ success: true, data: { ...order, receipt_url: signed.signedUrl } });
-    } catch (error) { console.error("Admin receipt view error:", error); res.status(500).json({ success: false, message: "Chekni ochishda xatolik" }); }
-  });
+  app.delete('/api/admin/orders/:id/payment-receipt',requireAdmin,async(req,res)=>{try{const{data:order,error}=await supabase.from('orders').select('id,payment_status,payment_receipt_path').eq('id',req.params.id).maybeSingle();if(error)throw error;if(!order)return res.status(404).json({success:false,message:'Buyurtma topilmadi'});if(!order.payment_receipt_path)return res.status(404).json({success:false,message:'Chek topilmadi'});await removeObject(order.payment_receipt_path);const status=String(order.payment_status||'')==='verified'?'verified':'pending';const patch={payment_receipt_path:null,payment_receipt_uploaded_at:null,updated_at:new Date().toISOString()};if(status!=='verified')patch.payment_status='pending';const{error:ue}=await supabase.from('orders').update(patch).eq('id',order.id);if(ue)throw ue;res.json({success:true,message:'Chek o‘chirildi',data:{id:order.id,payment_status:status}})}catch(e){console.error('Admin receipt delete error:',e);res.status(500).json({success:false,message:'Chekni o‘chirishda xatolik'})}});
 
-  // Admin can replace/attach a receipt and keep it in the same private Supabase bucket.
-  app.post("/api/admin/orders/:id/payment-receipt", requireAdmin, async (req, res) => {
-    try {
-      const { data, mimeType } = req.body || {};
-      if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Chek rasmi topilmadi" });
-      if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") return res.status(400).json({ success: false, message: "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin" });
-      const buffer = decodeReceiptData(data, mimeType);
-      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,payment,payment_status,payment_receipt_path").eq("id", req.params.id).maybeSingle();
-      if (orderError) throw orderError;
-      if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
-      await ensureReceiptBucket();
-      const cleanExt = receiptExtension(mimeType);
-      const path = `receipts/${order.id}/admin-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
-      const { error: uploadError } = await supabase.storage.from(RECEIPT_BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).select("id,order_number,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at").single();
-      if (updateError) throw updateError;
-      const { data: signed, error: signedError } = await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(path, 900);
-      if (signedError) throw signedError;
-      res.setHeader("Cache-Control", "private, no-store");
-      res.json({ success: true, message: "Chek admin tomonidan saqlandi", data: { ...updated, receipt_url: signed.signedUrl } });
-    } catch (error) {
-      console.error("Admin receipt upload error:", error);
-      if (/payment_receipt_path|payment_status|payment_receipt_uploaded_at/i.test(error.message || "")) return res.status(503).json({ success: false, message: "To‘lov chek ustunlari bazada hali tayyor emas." });
-      const code = /Chek fayli|Chek hajmi/i.test(error.message || "") ? 400 : 500;
-      res.status(code).json({ success: false, message: code === 400 ? error.message : "Chekni saqlashda xatolik" });
-    }
-  });
+  app.post('/api/admin/orders/:id/payment-receipt',requireAdmin,async(req,res)=>{let newPath='';try{const{data,mimeType}=req.body||{};if(!data||typeof data!=='string')return res.status(400).json({success:false,message:'Chek rasmi topilmadi'});if(!/^image\/(jpeg|png|webp)$/.test(String(mimeType||''))&&mimeType!=='application/pdf')return res.status(400).json({success:false,message:'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin'});const buffer=decode(data,mimeType);const{data:order,error:oe}=await supabase.from('orders').select('id,payment_receipt_path').eq('id',req.params.id).maybeSingle();if(oe)throw oe;if(!order)return res.status(404).json({success:false,message:'Buyurtma topilmadi'});await ensureBucket();newPath=`receipts/${order.id}/admin-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext(mimeType)}`;const{error:ue}=await supabase.storage.from(RECEIPT_BUCKET).upload(newPath,buffer,{contentType:mimeType,cacheControl:'31536000',upsert:false});if(ue)throw ue;const{data:updated,error:de}=await supabase.from('orders').update({payment_receipt_path:newPath,payment_status:'receipt_uploaded',payment_receipt_uploaded_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',order.id).select('id,order_number,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at').single();if(de)throw de;if(order.payment_receipt_path)await removeObject(order.payment_receipt_path);const{data:signed,error:se}=await supabase.storage.from(RECEIPT_BUCKET).createSignedUrl(newPath,900);if(se)throw se;res.setHeader('Cache-Control','private, no-store');res.json({success:true,message:'Chek admin tomonidan saqlandi',data:{...updated,receipt_url:signed.signedUrl}})}catch(e){if(newPath)await removeObject(newPath);console.error('Admin receipt upload error:',e);res.status(500).json({success:false,message:'Chekni saqlashda xatolik'})}});
 
-  app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
-    try {
-      const paymentStatus = ["pending", "receipt_uploaded", "verified", "rejected"].includes(String(req.body?.payment_status)) ? String(req.body.payment_status) : null;
-      if (!paymentStatus) return res.status(400).json({ success: false, message: "To‘lov holati noto‘g‘ri" });
-      const { data: current, error: currentError } = await supabase.from("orders").select("id,payment,payment_status,payment_receipt_path").eq("id", req.params.id).maybeSingle();
-      if (currentError) throw currentError;
-      if (!current) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
-      if (paymentStatus === "verified" && !current.payment_receipt_path) return res.status(409).json({ success: false, message: "Chek mavjud bo‘lmasdan to‘lovni tasdiqlab bo‘lmaydi" });
-      const allowed = { pending: new Set(["pending", "receipt_uploaded", "rejected"]), receipt_uploaded: new Set(["receipt_uploaded", "verified", "rejected"]), verified: new Set(["verified", "rejected"]), rejected: new Set(["rejected", "receipt_uploaded", "verified"]) };
-      if (!allowed[String(current.payment_status || "pending")]?.has(paymentStatus)) return res.status(409).json({ success: false, message: "To‘lov holati noto‘g‘ri ketma-ketlikda o‘zgartirilmoqda" });
-      const patch = { payment_status: paymentStatus, payment_verified_at: paymentStatus === "verified" ? new Date().toISOString() : null, updated_at: new Date().toISOString() };
-      const { data, error } = await supabase.from("orders").update(patch).eq("id", req.params.id).select("id,order_number,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at,updated_at").single();
-      if (error) throw error;
-      res.json({ success: true, data });
-    } catch (error) {
-      console.error("Admin payment status error:", error);
-      if (/payment_status|payment_verified_at/i.test(error.message || "")) return res.status(503).json({ success: false, message: "To‘lov ustunlari bazada hali tayyor emas. SQL migration'ni ishga tushiring." });
-      res.status(500).json({ success: false, message: "To‘lov holatini yangilashda xatolik" });
-    }
-  });
+  app.put('/api/admin/orders/:id/payment',requireAdmin,async(req,res)=>{try{const paymentStatus=['pending','receipt_uploaded','verified','rejected'].includes(String(req.body?.payment_status))?String(req.body.payment_status):null;if(!paymentStatus)return res.status(400).json({success:false,message:'To‘lov holati noto‘g‘ri'});const{data:current,error:ce}=await supabase.from('orders').select('id,payment,payment_status,payment_receipt_path').eq('id',req.params.id).maybeSingle();if(ce)throw ce;if(!current)return res.status(404).json({success:false,message:'Buyurtma topilmadi'});if(paymentStatus==='verified'&&!current.payment_receipt_path)return res.status(409).json({success:false,message:'Chek mavjud bo‘lmasdan to‘lovni tasdiqlab bo‘lmaydi'});const patch={payment_status:paymentStatus,payment_verified_at:paymentStatus==='verified'?new Date().toISOString():null,updated_at:new Date().toISOString()};const{data,error}=await supabase.from('orders').update(patch).eq('id',current.id).select('id,order_number,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at,updated_at').single();if(error)throw error;res.json({success:true,message:paymentStatus==='verified'?'To‘lov tasdiqlandi':'To‘lov holati yangilandi',data})}catch(e){console.error('Admin payment update error:',e);res.status(500).json({success:false,message:e.message||'To‘lov statusini saqlab bo‘lmadi'})}});
 })();
