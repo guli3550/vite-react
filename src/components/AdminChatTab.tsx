@@ -397,7 +397,9 @@ export default function AdminChatTab({
 
   // Current active chat messages
   const activeChatMessages = allMessages.filter(
-    (m) => !m.userId || String(m.userId) === String(selectedUserId) || m.id === "welcome-msg-1"
+    (m) =>
+      (!m.userId || String(m.userId) === String(selectedUserId) || m.id === "welcome-msg-1") &&
+      Boolean((m.text && m.text.trim()) || m.mediaUrl || m.pollOptions || m.location)
   );
 
   // Synthesize Telegram-style message send audio feedback

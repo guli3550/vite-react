@@ -9,8 +9,65 @@ const LINKED_ID_KEY = "guli_chat_linked_telegram_id";
 const LINKED_TOKEN_KEY = "guli_chat_linked_token";
 let activeConnectionKey = "";
 type ChatMessage = { id: string; sender: "user" | "admin"; text: string; timestamp: string; read: boolean; userId?: string | number; userName?: string; type?: string; mediaUrl?: string; fileName?: string };
-function normalize(raw: any): ChatMessage { return { ...raw, id: String(raw?.id ?? `rt-${Date.now()}`), sender: raw?.sender === "customer" || raw?.sender === "user" ? "user" : "admin", text: String(raw?.text || ""), timestamp: raw?.created_at || raw?.timestamp || new Date().toISOString(), read: false, userId: raw?.telegram_id }; }
-function mergeAndBroadcast(items: any[]) { const messages: ChatMessage[] = []; try { const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); if (Array.isArray(current)) messages.push(...current); } catch {} for (const raw of items) { const m = normalize(raw); if (!messages.some(x => String(x.id) === String(m.id))) messages.push(m); } messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); } catch {} try { window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: messages })); } catch {} try { const channel = new BroadcastChannel(CHANNEL_NAME); channel.postMessage({ type: "SYNC_MESSAGES", messages }); channel.close(); } catch {} }
+function isMessageValid(raw: any): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  if (raw.type === "ping" || raw.type === "heartbeat" || raw.ping || raw.event === "ping") return false;
+  const text = String(raw.text || "").trim();
+  const mediaUrl = raw.mediaUrl || raw.media_url || raw.metadata?.mediaUrl || raw.metadata?.media_url;
+  const hasPoll = Array.isArray(raw.pollOptions) && raw.pollOptions.length > 0;
+  const hasLocation = Boolean(raw.location?.lat && raw.location?.lng);
+  if (!text && !mediaUrl && !hasPoll && !hasLocation) return false;
+  return true;
+}
+
+function normalize(raw: any): ChatMessage {
+  const meta = raw?.metadata || {};
+  const mediaUrl = raw?.mediaUrl || raw?.media_url || meta.mediaUrl || meta.media_url;
+  return {
+    ...raw,
+    id: String(raw?.id ?? `rt-${Date.now()}`),
+    sender: raw?.sender === "customer" || raw?.sender === "user" ? "user" : "admin",
+    text: String(raw?.text || "").trim(),
+    timestamp: raw?.created_at || raw?.timestamp || new Date().toISOString(),
+    read: false,
+    userId: raw?.telegram_id || raw?.userId,
+    mediaUrl: mediaUrl ? String(mediaUrl) : undefined,
+  };
+}
+
+function mergeAndBroadcast(items: any[]) {
+  const messages: ChatMessage[] = [];
+  try {
+    const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    if (Array.isArray(current)) {
+      // Clean up any previously stored empty messages
+      for (const item of current) {
+        if (isMessageValid(item)) messages.push(item);
+      }
+    }
+  } catch {}
+
+  for (const raw of items) {
+    if (!isMessageValid(raw)) continue;
+    const m = normalize(raw);
+    if (!messages.some(x => String(x.id) === String(m.id))) {
+      messages.push(m);
+    }
+  }
+
+  messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: messages }));
+  } catch {}
+  try {
+    const channel = new BroadcastChannel(CHANNEL_NAME);
+    channel.postMessage({ type: "SYNC_MESSAGES", messages });
+    channel.close();
+  } catch {}
+}
 function isAdmin() { return window.location.pathname.replace(/\/$/, "") === "/admin"; }
 function telegramInitData() { return window.Telegram?.WebApp?.initData || ""; }
 function linkedTelegramId() { const raw = String(localStorage.getItem(LINKED_ID_KEY) || "").trim(); return /^\d+$/.test(raw) ? raw : ""; }

@@ -55,6 +55,7 @@ import {
   getUnreadMessages,
   markMessagesAsRead,
   subscribeToChat,
+  getStoredChatMessages,
 } from "./utils/chatSync";
 import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter";
 
@@ -1233,13 +1234,29 @@ export default function App() {
     };
   }, [currentUserId, page]);
 
-  // When user is viewing the chat page, automatically mark incoming messages as read
+  // When user is viewing the chat page or orders page, automatically mark incoming notifications as read and dismiss them
   useEffect(() => {
     if (page === "chat") {
       markMessagesAsRead(currentUserId, "user");
       setUnreadMessages([]);
+      try {
+        const raw = localStorage.getItem("guli_dismissed_notifs");
+        const dismissed: string[] = raw ? JSON.parse(raw) : [];
+        const chatMsgs = getStoredChatMessages(currentUserId);
+        const chatIds = chatMsgs.map((m) => `chat-${m.id}`);
+        const next = Array.from(new Set([...dismissed, ...chatIds]));
+        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
+      } catch {}
+    } else if (page === "orders") {
+      try {
+        const raw = localStorage.getItem("guli_dismissed_notifs");
+        const dismissed: string[] = raw ? JSON.parse(raw) : [];
+        const orderIds = (orders || []).map((o) => `order-${o.id}`);
+        const next = Array.from(new Set([...dismissed, ...orderIds]));
+        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
+      } catch {}
     }
-  }, [page, currentUserId]);
+  }, [page, currentUserId, orders]);
 
   const tabTouchStartX = useRef<number>(0);
   const tabTouchStartY = useRef<number>(0);
@@ -1391,6 +1408,99 @@ export default function App() {
         } catch {}
         showToast("To‘lov cheki muvaffaqiyatli yuklandi ☺️");
       };
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const [reuploadingOrderId, setReuploadingOrderId] = useState<string | null>(null);
+
+  const handleOrderReceiptReupload = (orderId: string, file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Iltimos faqat rasm faylini yuklang");
+      return;
+    }
+    setReuploadingOrderId(orderId);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const rawData = ev.target?.result as string;
+      const img = new Image();
+      img.src = rawData;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const maxDim = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > maxDim) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else if (h > maxDim) {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL("image/jpeg", 0.82);
+
+        // Update local orders state immediately
+        setOrders((prevOrders) => {
+          const updated = prevOrders.map((o) =>
+            String(o.id) === String(orderId)
+              ? {
+                  ...o,
+                  receipt_url: compressed,
+                  status: o.status === "Bekor qilindi" ? o.status : (o.status === "Qabul qilindi" ? o.status : "⏳ To'lovni tasdiqlash kutilmoqda"),
+                  updatedAt: new Date().toISOString(),
+                  statusUpdatedAt: new Date().toISOString(),
+                }
+              : o
+          );
+          try {
+            localStorage.setItem("orders", JSON.stringify(updated));
+            localStorage.setItem("guli_orders", JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+
+        // Sync with API backend
+        try {
+          fetch(`${API_URL}/api/orders/${orderId}/receipt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ receipt_url: compressed, order_id: orderId }),
+          }).catch(() => {
+            fetch(`${API_URL}/api/orders/${orderId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ receipt_url: compressed }),
+            }).catch(() => {});
+          });
+        } catch {}
+
+        try {
+          window.dispatchEvent(
+            new CustomEvent("guli_order_receipt_updated", {
+              detail: { orderId, receipt_url: compressed },
+            })
+          );
+        } catch {}
+
+        setReuploadingOrderId(null);
+        try {
+          window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+        } catch {}
+        showToast("To‘lov cheki muvaffaqiyatli qayta yuklandi ☺️");
+      };
+      img.onerror = () => {
+        setReuploadingOrderId(null);
+        showToast("Rasmni qayta ishlashda xatolik yuz berdi");
+      };
+    };
+    reader.onerror = () => {
+      setReuploadingOrderId(null);
+      showToast("Faylni o‘qishda xatolik yuz berdi");
     };
     reader.readAsDataURL(file);
   };
@@ -2525,18 +2635,84 @@ export default function App() {
                               ) : null}
                             </div>
                           ) : null}
-                          {o.receipt_url ? (
-                            <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "10px", background: "rgba(0,0,0,0.03)", borderRadius: "10px" }}>
-                              <small style={{ fontWeight: 600, display: "block", marginBottom: "6px" }}>🧾 Yuklangan to‘lov cheki (kvitansiya):</small>
-                              <img
-                                src={o.receipt_url}
-                                alt="To‘lov cheki"
-                                className="userReceiptThumb"
-                                onClick={() => window.open(o.receipt_url, '_blank')}
-                                style={{ maxWidth: "180px", maxHeight: "180px", borderRadius: "8px", border: "1px solid var(--border-color)", cursor: "pointer", objectFit: "cover" }}
-                              />
+                          {/* To'lov cheki bo'limi va aynan ushbu buyurtma uchun qayta yuklash knopkasi */}
+                          <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "12px", background: "rgba(0,0,0,0.025)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                              <small style={{ fontWeight: 700, fontSize: "12px", color: "var(--text-color)" }}>
+                                🧾 To‘lov cheki (Kvitansiya):
+                              </small>
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: o.receipt_url ? "#059669" : "#d97706", background: o.receipt_url ? "#ecfdf5" : "#fef3c7", padding: "2px 8px", borderRadius: "6px" }}>
+                                {o.receipt_url ? "Chek yuklangan ✓" : "Chek yuklanmagan"}
+                              </span>
                             </div>
-                          ) : null}
+
+                            {o.receipt_url ? (
+                              <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
+                                <img
+                                  src={o.receipt_url}
+                                  alt="To‘lov cheki"
+                                  className="userReceiptThumb"
+                                  onClick={() => window.open(o.receipt_url, '_blank')}
+                                  style={{ width: "80px", height: "80px", borderRadius: "8px", border: "1px solid var(--border-color)", cursor: "pointer", objectFit: "cover", boxShadow: "0 2px 6px rgba(0,0,0,0.06)" }}
+                                  title="To‘liq o‘lchamda ochish"
+                                />
+                                <div style={{ flex: 1, minWidth: "140px" }}>
+                                  <div style={{ fontSize: "11.5px", color: "var(--muted-color)", marginBottom: "4px" }}>
+                                    To‘lov cheki muvaffaqiyatli saqlangan. Agar yangilamoqchi bo‘lsangiz, quyidagi tugma orqali qayta yuklashingiz mumkin.
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: "11.5px", color: "var(--muted-color)", marginBottom: "8px" }}>
+                                To‘lovni tasdiqlash uchun to‘lov cheki (skrinshot yoki kvitansiya) rasmini yuklang.
+                              </div>
+                            )}
+
+                            <div>
+                              <label
+                                htmlFor={`order-receipt-upload-${o.id}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: "6px",
+                                  padding: "7px 14px",
+                                  borderRadius: "8px",
+                                  background: o.receipt_url ? "rgba(189, 82, 106, 0.08)" : "var(--primary-gradient, linear-gradient(135deg, #c9526b 0%, #a83d54 100%))",
+                                  color: o.receipt_url ? "var(--primary)" : "#ffffff",
+                                  border: o.receipt_url ? "1px solid var(--primary)" : "none",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                  boxShadow: o.receipt_url ? "none" : "0 3px 10px rgba(189,82,106,0.25)",
+                                }}
+                              >
+                                <span>{reuploadingOrderId === o.id ? "⏳" : "🔄"}</span>
+                                <span>
+                                  {reuploadingOrderId === o.id
+                                    ? "Yuklanmoqda..."
+                                    : o.receipt_url
+                                      ? "Chekni qayta yuklash"
+                                      : "To‘lov chekini yuklash"}
+                                </span>
+                                <input
+                                  id={`order-receipt-upload-${o.id}`}
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  disabled={reuploadingOrderId === o.id}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleOrderReceiptReupload(o.id, file);
+                                    }
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
                           {isCompleted ? (
                             <div className="orderReorderBar">
                               <button

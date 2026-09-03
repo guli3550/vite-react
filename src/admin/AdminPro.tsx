@@ -1867,6 +1867,20 @@ function OrderDrawer({
                   <b style={{ fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {customerFullName}
                   </b>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      background: "#fdf2f8",
+                      color: "var(--rose, #e11d48)",
+                      border: "1px solid #fbcfe8",
+                      padding: "2px 8px",
+                      borderRadius: 8,
+                      fontWeight: 800,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    ID: #{(order as any).customer_id || order.telegram_id || (order as any).user_id || order.id}
+                  </span>
                   {order.telegram_id ? (
                     <span
                       style={{
@@ -1941,6 +1955,22 @@ function OrderDrawer({
 
           {/* Barcha ma'lumotlar toza, tartibli qatorlarda (Order Details Row List) */}
           <div className="orderDetailRowList">
+            <div className="orderDetailRow">
+              <span className="rowLabel">🆔 Mijoz ID</span>
+              <span className="rowValue" style={{ fontFamily: "monospace", fontWeight: 800, color: "var(--rose, #e11d48)" }}>
+                #{(order as any).customer_id || order.telegram_id || (order as any).user_id || order.id}
+              </span>
+            </div>
+
+            {order.telegram_id ? (
+              <div className="orderDetailRow">
+                <span className="rowLabel">✈️ Telegram ID</span>
+                <span className="rowValue" style={{ fontFamily: "monospace", fontWeight: 700, color: "#0369a1" }}>
+                  {order.telegram_id}
+                </span>
+              </div>
+            ) : null}
+
             <div className="orderDetailRow">
               <span className="rowLabel">👤 Mijoz F.I.Sh</span>
               <span className="rowValue">{customerFullName}</span>

@@ -326,7 +326,9 @@ export function OnlineChatView({
             <span>🔒 {t("online_chat_desc")} · Xabarni surib javob berish, uzoq bosib reaksiya va nusxalash</span>
           </div>
 
-          {messages.map((msg, index) => {
+          {messages
+            .filter((m) => Boolean((m.text && m.text.trim()) || m.mediaUrl || m.pollOptions || m.location))
+            .map((msg, index) => {
             const isAdmin = msg.sender === "admin";
             const align = isAdmin ? "left" : "right";
             const isLongPressActive = activeLongPressMsgId === msg.id;

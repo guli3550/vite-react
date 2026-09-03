@@ -45,29 +45,41 @@ export function deleteChatMessage(messageId: string): void { const messages = ge
 export function toggleMessageReaction(messageId: string, emoji: string): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId) return m; changed = true; const reactions = { ...(m.reactions || {}) }; if (reactions[emoji]) delete reactions[emoji]; else reactions[emoji] = 1; return { ...m, reactions }; }); if (changed) saveChatMessages(updated); }
 export function votePollOption(messageId: string, optionIndex: number): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId || !m.pollOptions) return m; changed = true; const prev = m.userVotedOption; const options = m.pollOptions.map((opt, idx) => ({ ...opt, votes: Math.max(0, (opt.votes || 0) - (prev === idx ? 1 : 0) + (optionIndex === idx ? 1 : 0)) })); return { ...m, pollOptions: options, userVotedOption: prev === optionIndex ? undefined : optionIndex }; }); if (changed) saveChatMessages(updated); }
 
+export function isChatMessageValid(m: any): boolean {
+  if (!m || typeof m !== "object") return false;
+  if (m.type === "ping" || m.type === "heartbeat" || m.ping || m.event === "ping") return false;
+  const text = String(m.text || "").trim();
+  const mediaUrl = m.mediaUrl || m.media_url || m.metadata?.mediaUrl || m.metadata?.media_url;
+  const hasPoll = Array.isArray(m.pollOptions) && m.pollOptions.length > 0;
+  const hasLocation = Boolean(m.location?.lat && m.location?.lng);
+  return Boolean(text || mediaUrl || hasPoll || hasLocation);
+}
+
 export async function syncChatWithBackend(telegramId: string | number): Promise<ChatMessage[]> {
   if (!telegramId) return getStoredChatMessages();
   try {
     const res = await fetch(`${API_URL}/api/chat/messages/${encodeURIComponent(telegramId)}`);
     const json = await res.json();
     if (json.success && Array.isArray(json.data)) {
-      const backend = json.data.map((m: any) => {
-        const meta = m.metadata || {};
-        const mediaUrl = meta.mediaUrl || m.media_url || meta.media_url || m.mediaUrl;
-        const msgType = meta.type || m.type || (mediaUrl ? (mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? "image" : "file") : "text");
-        const fileName = meta.fileName || meta.file_name || m.fileName || m.file_name;
-        return {
-          id: String(m.id),
-          sender: m.sender === "customer" ? "user" : "admin",
-          text: String(m.text || ""),
-          timestamp: m.created_at,
-          read: true,
-          userId: m.telegram_id,
-          type: msgType,
-          mediaUrl: mediaUrl ? (mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`) : undefined,
-          fileName,
-        } as ChatMessage;
-      });
+      const backend = json.data
+        .map((m: any) => {
+          const meta = m.metadata || {};
+          const mediaUrl = meta.mediaUrl || m.media_url || meta.media_url || m.mediaUrl;
+          const msgType = meta.type || m.type || (mediaUrl ? (mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? "image" : "file") : "text");
+          const fileName = meta.fileName || meta.file_name || m.fileName || m.file_name;
+          return {
+            id: String(m.id),
+            sender: m.sender === "customer" ? "user" : "admin",
+            text: String(m.text || "").trim(),
+            timestamp: m.created_at,
+            read: true,
+            userId: m.telegram_id,
+            type: msgType,
+            mediaUrl: mediaUrl ? (mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`) : undefined,
+            fileName,
+          } as ChatMessage;
+        })
+        .filter(isChatMessageValid);
       const local = getStoredChatMessages(telegramId);
       const combined = [...local];
       backend.forEach((bm: ChatMessage) => {
@@ -91,8 +103,8 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
 }
 
 export async function sendChatMessage(msg: Partial<ChatMessage>): Promise<ChatMessage | null> {
-  if (!msg.userId || !msg.text || !msg.sender) return null;
-  try { const res = await fetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegram_id: msg.userId, sender: msg.sender, text: msg.text }) }); const json = await res.json(); if (json.success) { const newMsg: ChatMessage = { id: json.data.id, sender: json.data.sender === "customer" ? "user" : "admin", text: json.data.text, timestamp: json.data.created_at, read: true, userId: json.data.telegram_id, userName: msg.userName }; saveChatMessages([...getStoredChatMessages(), newMsg]); return newMsg; } } catch (err) { console.error("Failed to send message to backend:", err); } return null;
+  if (!msg.userId || (!msg.text?.trim() && !msg.mediaUrl) || !msg.sender) return null;
+  try { const res = await fetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegram_id: msg.userId, sender: msg.sender, text: msg.text?.trim() || "" }) }); const json = await res.json(); if (json.success) { const newMsg: ChatMessage = { id: json.data.id, sender: json.data.sender === "customer" ? "user" : "admin", text: json.data.text, timestamp: json.data.created_at, read: true, userId: json.data.telegram_id, userName: msg.userName }; saveChatMessages([...getStoredChatMessages(), newMsg]); return newMsg; } } catch (err) { console.error("Failed to send message to backend:", err); } return null;
 }
 
 let broadcastChannel: BroadcastChannel | null = null;
@@ -100,8 +112,38 @@ try { if (typeof window !== "undefined" && "BroadcastChannel" in window) broadca
 
 const DEFAULT_WELCOME_MESSAGE: ChatMessage = { id: "welcome-msg-1", sender: "admin", text: "Assalomu alaykum! GULI Premium qo‘llab-quvvatlash xizmatiga xush kelibsiz ✨ Sizga qanday yordam bera olamiz? Savollaringiz bo‘lsa bemalol yozing.", timestamp: new Date().toISOString(), read: true, userName: "GULI Support" };
 
-export function getStoredChatMessages(userId?: string | number): ChatMessage[] { try { const raw = localStorage.getItem(STORAGE_KEY); if (!raw) { localStorage.setItem(STORAGE_KEY, JSON.stringify([DEFAULT_WELCOME_MESSAGE])); return [DEFAULT_WELCOME_MESSAGE]; } const parsed: ChatMessage[] = JSON.parse(raw); if (!Array.isArray(parsed) || parsed.length === 0) return [DEFAULT_WELCOME_MESSAGE]; if (userId) return parsed.filter(m => !m.userId || String(m.userId) === String(userId) || m.id === "welcome-msg-1"); return parsed; } catch { return [DEFAULT_WELCOME_MESSAGE]; } }
-export function saveChatMessages(messages: ChatMessage[]): void { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(messages)); broadcastChannel?.postMessage({ type: "SYNC_MESSAGES", messages }); window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: messages })); } catch (err) { console.error("Error saving chat messages:", err); } }
+export function getStoredChatMessages(userId?: string | number): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([DEFAULT_WELCOME_MESSAGE]));
+      return [DEFAULT_WELCOME_MESSAGE];
+    }
+    const parsed: ChatMessage[] = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return [DEFAULT_WELCOME_MESSAGE];
+    const valid = parsed.filter(isChatMessageValid);
+    if (valid.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid.length === 0 ? [DEFAULT_WELCOME_MESSAGE] : valid));
+    }
+    if (valid.length === 0) return [DEFAULT_WELCOME_MESSAGE];
+    if (userId) return valid.filter(m => !m.userId || String(m.userId) === String(userId) || m.id === "welcome-msg-1");
+    return valid;
+  } catch {
+    return [DEFAULT_WELCOME_MESSAGE];
+  }
+}
+
+export function saveChatMessages(messages: ChatMessage[]): void {
+  try {
+    const valid = messages.filter(isChatMessageValid);
+    const toSave = valid.length === 0 ? [DEFAULT_WELCOME_MESSAGE] : valid;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    broadcastChannel?.postMessage({ type: "SYNC_MESSAGES", messages: toSave });
+    window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: toSave }));
+  } catch (err) {
+    console.error("Error saving chat messages:", err);
+  }
+}
 export function getUnreadMessages(userId?: string | number): ChatMessage[] { return getStoredChatMessages(userId).filter(m => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1"); }
 export function getUnreadAdminMessagesCount(userId?: string | number): number { return getStoredChatMessages(userId).filter(m => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1").length; }
 export function markSingleMessageAsRead(messageId: string, userId?: string | number): void {
@@ -162,11 +204,13 @@ export function markAllAdminChatRead(): void {
 
 export function getTotalUnreadChatCount(): number { return getAllConversations().reduce((sum, c) => sum + (c.unreadCount || 0), 0); }
 
-export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage> {
+export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
+  const cleanText = text.trim();
+  if (!cleanText && !media?.mediaUrl) return null;
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
   const userName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Mijoz";
-  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: text.trim(), timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, newMsg]);
 
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
@@ -179,7 +223,7 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         body: JSON.stringify({
           telegram_id: backendId,
           sender: "customer",
-          text: text.trim(),
+          text: cleanText,
           media_url: media?.mediaUrl,
           metadata: {
             userName,
@@ -200,9 +244,11 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   return newMsg;
 }
 
-export async function sendAdminReply(userId: string, text: string, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage> {
+export async function sendAdminReply(userId: string, text: string, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
+  const cleanText = text.trim();
+  if (!cleanText && !media?.mediaUrl) return null;
   const allMessages = getStoredChatMessages();
-  const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: text.trim(), timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: cleanText, timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, reply]);
   try {
     await fetch(`${API_URL}/api/chat/messages`, {
@@ -211,7 +257,7 @@ export async function sendAdminReply(userId: string, text: string, media?: { typ
       body: JSON.stringify({
         telegram_id: userId,
         sender: "admin",
-        text: text.trim(),
+        text: cleanText,
         media_url: media?.mediaUrl,
         metadata: {
           userName: "GULI Admin",

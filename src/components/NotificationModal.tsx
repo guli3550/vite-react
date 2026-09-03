@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { type Language, getTranslation } from "../utils/translations";
 import {
   type ChatMessage,
@@ -17,7 +17,7 @@ type NotificationModalProps = {
   onOpenOrders: () => void;
 };
 
-type FeedTab = "all" | "orders" | "messages" | "promos";
+type NotifCategory = "all" | "messages" | "orders";
 
 export function NotificationModal({
   language,
@@ -28,9 +28,11 @@ export function NotificationModal({
   onOpenChat,
   onOpenOrders,
 }: NotificationModalProps) {
-  const t = (key: any) => getTranslation(key, language);
-  const [activeTab, setActiveTab] = useState<FeedTab>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const t = useCallback((key: any) => getTranslation(key, language), [language]);
+
+  const [activeCategory, setActiveCategory] = useState<NotifCategory>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("guli_dismissed_notifs");
@@ -39,6 +41,20 @@ export function NotificationModal({
       return [];
     }
   });
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    return getStoredChatMessages(userId);
+  });
+
+  // Keep chat messages reactive
+  useEffect(() => {
+    const handleUpdate = (e: any) => {
+      const msgs = Array.isArray(e.detail) ? e.detail : getStoredChatMessages(userId);
+      setChatMessages(msgs);
+    };
+    window.addEventListener("guli_chat_updated", handleUpdate);
+    return () => window.removeEventListener("guli_chat_updated", handleUpdate);
+  }, [userId]);
 
   const dismissItem = (id: string) => {
     setDismissedIds((prev) => {
@@ -50,10 +66,6 @@ export function NotificationModal({
       return next;
     });
   };
-
-  const allChatMessages = useMemo(() => {
-    return getStoredChatMessages(userId);
-  }, [userId]);
 
   const isOrderStatusText = (text: string) => {
     if (!text) return false;
@@ -72,106 +84,131 @@ export function NotificationModal({
     );
   };
 
-  // Build unified feed items list (Habarlar lentasi)
-  const feedItems = useMemo(() => {
+  // Build the complete notification feed list
+  const allFeedItems = useMemo(() => {
     const list: any[] = [];
 
-    // 1. Chat messages (admin and support)
-    allChatMessages.forEach((msg) => {
+    // 1. Chat messages from Admin / Support
+    chatMessages.forEach((msg) => {
+      if (msg.sender !== "admin" || msg.id === "welcome-msg-1") return;
       const isStatus = isOrderStatusText(msg.text);
+      const isUnread = !msg.read;
+
       list.push({
         id: `chat-${msg.id}`,
         rawId: msg.id,
         category: isStatus ? "orders" : "messages",
         title: isStatus
-          ? (language === "ru" ? "Статус заказа" : language === "en" ? "Order Status" : "Buyurtma holati")
-          : (language === "ru" ? "Сообщение от GULI" : language === "en" ? "Message from GULI" : "GULI Qo‘llab-quvvatlash"),
-        text: msg.text,
+          ? language === "ru"
+            ? "Buyurtma holati"
+            : language === "en"
+            ? "Order Status"
+            : "Buyurtma holati"
+          : language === "ru"
+          ? "GULI Qo‘llab-quvvatlash"
+          : language === "en"
+          ? "GULI Support"
+          : "GULI Qo‘llab-quvvatlash",
+        text: msg.text || (msg.mediaUrl ? "📷 Rasm biriktirildi" : ""),
         timestamp: msg.timestamp,
-        read: !!msg.read,
+        read: !isUnread,
         icon: isStatus ? "📦" : "💬",
-        badgeStyle: isStatus
-          ? { background: "linear-gradient(135deg, #e0f2fe, #bae6fd)", color: "#0284c7" }
-          : { background: "linear-gradient(135deg, #fce7f3, #fbcfe8)", color: "#c9526b" },
+        badgeBg: isStatus ? "#e0f2fe" : "#fce7f3",
+        badgeColor: isStatus ? "#0284c7" : "#c9526b",
         actionText: isStatus ? `${t("my_orders")} →` : `${t("view_chat")} →`,
         type: "msg",
-        msgObj: msg,
       });
     });
 
     // 2. Orders updates
     orders.forEach((ord) => {
-      const isNewOrActive = ord.status === "Qabul qilindi" || ord.status === "Tayyorlanmoqda" || ord.status === "Yo‘lda";
+      const isNewOrActive =
+        ord.status === "Qabul qilindi" ||
+        ord.status === "Tayyorlanmoqda" ||
+        ord.status === "Yo‘lda";
+
       list.push({
         id: `order-${ord.id}`,
         rawId: ord.id,
         category: "orders",
         title: `Buyurtma #${ord.id} • ${ord.status || "Jarayonda"}`,
-        text: `${ord.items?.length || 1} ta tovar • Jami: ${Number(ord.total || 0).toLocaleString()} so‘m`,
+        text: `${ord.items?.length || 1} ta tovar • Jami: ${Number(
+          ord.total || 0
+        ).toLocaleString()} so‘m`,
         timestamp: ord.createdAt || new Date().toISOString(),
         read: !isNewOrActive,
         icon: "📦",
-        badgeStyle: { background: "linear-gradient(135deg, #e0f2fe, #bae6fd)", color: "#0284c7" },
+        badgeBg: "#e0f2fe",
+        badgeColor: "#0284c7",
         actionText: `${t("my_orders")} →`,
         type: "order",
-        orderObj: ord,
       });
     });
 
-    // 3. Official Store Promos / News Feed
-    list.push({
-      id: "promo-spring-2026",
-      category: "promos",
-      title: language === "ru" ? "🎁 Акция: Весенняя коллекция" : language === "en" ? "🎁 Special Offer: Spring Collection" : "🎁 Maxsus Taklif: Bahorgi Kolleksiya",
-      text: language === "ru" ? "В магазине GULI Premium действуют скидки на косметику и аксессуары!" : language === "en" ? "Special discounts on all cosmetics and accessories at GULI Premium!" : "GULI Premium do‘konida barcha kosmetika va eksklyuziv aksessuarlar uchun maxsus chegirmalar davom etmoqda!",
-      timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-      read: true,
-      icon: "✨",
-      badgeStyle: { background: "linear-gradient(135deg, #fef3c7, #fde68a)", color: "#d97706" },
-      actionText: "Aksiyani ko‘rish →",
-      type: "promo",
-    });
+    // Filter out dismissed items
+    const filtered = list.filter((item) => !dismissedIds.includes(item.id));
 
-    // Deduplicate and filter out dismissed items
+    // Deduplicate identical items
     const uniqueMap = new Map();
-    list.forEach((item) => {
-      if (dismissedIds.includes(item.id)) return;
-      const key = `${item.category}-${item.title}-${item.text.slice(0, 25)}`;
+    filtered.forEach((item) => {
+      const key = `${item.category}-${item.rawId || item.id}`;
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, item);
       }
     });
 
+    // Sort newest first
     return Array.from(uniqueMap.values()).sort((a, b) => {
       const tA = new Date(a.timestamp).getTime();
       const tB = new Date(b.timestamp).getTime();
       return tB - tA;
     });
-  }, [allChatMessages, orders, language, t, dismissedIds]);
+  }, [chatMessages, orders, language, dismissedIds, t]);
 
-  // Filter feed by active tab and search query
-  const filteredFeed = useMemo(() => {
-    return feedItems.filter((item) => {
-      if (activeTab === "orders" && item.category !== "orders") return false;
-      if (activeTab === "messages" && item.category !== "messages") return false;
-      if (activeTab === "promos" && item.category !== "promos") return false;
+  // Counts per category
+  const counts = useMemo(() => {
+    let all = 0;
+    let messages = 0;
+    let ordersCount = 0;
+    let unreadTotal = 0;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return item.title.toLowerCase().includes(q) || item.text.toLowerCase().includes(q);
-      }
-      return true;
+    allFeedItems.forEach((item) => {
+      all++;
+      if (item.category === "messages") messages++;
+      if (item.category === "orders") ordersCount++;
+      if (!item.read) unreadTotal++;
     });
-  }, [feedItems, activeTab, searchQuery]);
 
-  const totalUnreadCount = unreadMessages.length;
+    return { all, messages, orders: ordersCount, unreadTotal };
+  }, [allFeedItems]);
+
+  // Filtered by Category and Search Query
+  const displayedFeedItems = useMemo(() => {
+    let result = allFeedItems;
+
+    if (activeCategory !== "all") {
+      result = result.filter((item) => item.category === activeCategory);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (item) =>
+          item.title?.toLowerCase().includes(q) ||
+          item.text?.toLowerCase().includes(q) ||
+          String(item.rawId || "").toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [allFeedItems, activeCategory, searchQuery]);
 
   const handleItemClick = (item: any) => {
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
 
-    // Auto-remove notification from list on click
+    // Immediately dismiss this item so it disappears from notification feed
     dismissItem(item.id);
 
     if (item.type === "msg" && item.rawId) {
@@ -188,8 +225,6 @@ export function NotificationModal({
 
     if (item.category === "orders") {
       onOpenOrders();
-    } else if (item.category === "messages") {
-      onOpenChat();
     } else {
       onOpenChat();
     }
@@ -199,7 +234,7 @@ export function NotificationModal({
     try {
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
     } catch {}
-    feedItems.forEach((item) => dismissItem(item.id));
+    allFeedItems.forEach((item) => dismissItem(item.id));
     markMessagesAsRead(userId, "user");
     onClose();
   };
@@ -220,15 +255,22 @@ export function NotificationModal({
         onMouseDown={(e) => e.stopPropagation()}
         id="notification-modal-card"
       >
-        {/* Header */}
-        <div className="modalHead" style={{ marginBottom: "14px" }}>
-          <div>
-            <span className="proEyebrow">GULI FEED</span>
-            <h2>{t("notifications")}</h2>
+        {/* Compact Header */}
+        <div className="notifHeaderCompact">
+          <div className="notifHeaderLeft">
+            <span className="notifHeaderIcon">🔔</span>
+            <div>
+              <h2 className="notifHeaderTitle">{t("notifications")}</h2>
+              <span className="notifHeaderSubtitle">
+                {counts.unreadTotal > 0
+                  ? `${counts.unreadTotal} ta yangi bildirishnoma`
+                  : "Barcha xabarlar o‘qilgan"}
+              </span>
+            </div>
           </div>
           <button
             type="button"
-            className="modalCloseBtn"
+            className="modalCloseBtn notifCloseBtnCompact"
             onClick={() => {
               try {
                 window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
@@ -242,77 +284,105 @@ export function NotificationModal({
           </button>
         </div>
 
-        {/* Feed Search Input */}
-        <div className="notifSearchWrap">
-          <span className="notifSearchIcon">🔍</span>
+        {/* Habarlarni Qidirish (Search Bar) */}
+        <div className="notifSearchWrapCompact">
+          <span className="notifSearchIconCompact">🔍</span>
           <input
             type="text"
-            className="notifSearchInput"
-            placeholder={language === "ru" ? "Поиск в ленте..." : language === "en" ? "Search notifications feed..." : "Habarlardan qidirish..."}
+            className="notifSearchInputCompact"
+            placeholder={
+              language === "ru"
+                ? "Bildirishnomalarni qidirish..."
+                : language === "en"
+                ? "Search notifications..."
+                : "Bildirishnomalarni qidirish..."
+            }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             id="notif-search-input"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              className="notifSearchClearBtn"
+              onClick={() => setSearchQuery("")}
+              aria-label="Tozalash"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
-        {/* Avalsimon Feed Filter Tabs */}
-        <div className="notifFeedTabs">
+        {/* Kategoriyalar (Category Filter Tabs) */}
+        <div className="notifCategoryTabsCompact">
           <button
             type="button"
-            className={`notifTabPill ${activeTab === "all" ? "active" : ""}`}
-            onClick={() => setActiveTab("all")}
+            className={`notifCategoryTabItem ${activeCategory === "all" ? "active" : ""}`}
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              setActiveCategory("all");
+            }}
             id="notif-tab-all"
           >
-            <span>✨ Barchasi</span>
-            {totalUnreadCount > 0 && <span className="notifBadgePill">{totalUnreadCount}</span>}
+            <span>{language === "ru" ? "Barchasi" : language === "en" ? "All" : "Barchasi"}</span>
+            <span className="notifCategoryCount">{counts.all}</span>
           </button>
           <button
             type="button"
-            className={`notifTabPill ${activeTab === "orders" ? "active" : ""}`}
-            onClick={() => setActiveTab("orders")}
-            id="notif-tab-orders"
-          >
-            <span>📦 Buyurtmalar</span>
-          </button>
-          <button
-            type="button"
-            className={`notifTabPill ${activeTab === "messages" ? "active" : ""}`}
-            onClick={() => setActiveTab("messages")}
+            className={`notifCategoryTabItem ${activeCategory === "messages" ? "active" : ""}`}
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              setActiveCategory("messages");
+            }}
             id="notif-tab-messages"
           >
-            <span>💬 Xabarlar</span>
+            <span>💬 {language === "ru" ? "Xabarlar" : language === "en" ? "Messages" : "Xabarlar"}</span>
+            <span className="notifCategoryCount">{counts.messages}</span>
           </button>
           <button
             type="button"
-            className={`notifTabPill ${activeTab === "promos" ? "active" : ""}`}
-            onClick={() => setActiveTab("promos")}
-            id="notif-tab-promos"
+            className={`notifCategoryTabItem ${activeCategory === "orders" ? "active" : ""}`}
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              setActiveCategory("orders");
+            }}
+            id="notif-tab-orders"
           >
-            <span>🎁 Aksiyalar</span>
+            <span>📦 {language === "ru" ? "Buyurtmalar" : language === "en" ? "Orders" : "Buyurtmalar"}</span>
+            <span className="notifCategoryCount">{counts.orders}</span>
           </button>
         </div>
 
-        {/* Habarlar Lenta Body */}
-        <div className="notificationBody">
-          {filteredFeed.length > 0 ? (
+        {/* Habarlar Lentasi Body */}
+        <div className="notifFeedContainer">
+          {displayedFeedItems.length > 0 ? (
             <div className="notifFeedList">
-              {filteredFeed.map((item) => (
+              {displayedFeedItems.map((item) => (
                 <div
                   key={item.id}
                   className={`notifFeedCard ${!item.read ? "unread" : ""}`}
                   onClick={() => handleItemClick(item)}
                   id={`notif-card-${item.id}`}
                 >
-                  <div className="notifFeedIcon" style={item.badgeStyle}>
+                  <div
+                    className="notifFeedIcon"
+                    style={{ background: item.badgeBg, color: item.badgeColor }}
+                  >
                     <span>{item.icon}</span>
                   </div>
-                  <div className="notifContent" style={{ flex: 1 }}>
+                  <div className="notifContent" style={{ flex: 1, minWidth: 0 }}>
                     <div className="notifFeedHeader">
                       <div className="notifFeedTitle">
-                        <span>{item.title}</span>
+                        <span className="truncate">{item.title}</span>
                         {!item.read && <span className="notifUnreadDot" title="Yangi" />}
                       </div>
-                      <div className="notifFeedTimeWrap" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div className="notifTimeActionWrap">
                         <span className="notifFeedTime">
                           {item.timestamp
                             ? new Date(item.timestamp).toLocaleTimeString([], {
@@ -334,7 +404,7 @@ export function NotificationModal({
                               markSingleMessageAsRead(item.rawId, userId);
                             }
                           }}
-                          title="Yo‘qotish"
+                          title="O‘chirish"
                           id={`delete-notif-${item.id}`}
                         >
                           ✕
@@ -348,18 +418,26 @@ export function NotificationModal({
               ))}
             </div>
           ) : (
-            <div className="emptyNotifBox">
-              <div className="emptyNotifIcon">🔔</div>
-              <h3>{t("no_notifications")}</h3>
-              <p>Hozircha hech qanday bildirishnoma topilmadi.</p>
+            <div className="emptyNotifBoxCompact">
+              <div className="emptyNotifIconCompact">
+                {searchQuery ? "🔍" : "✨"}
+              </div>
+              <h3 className="emptyNotifTitleCompact">
+                {searchQuery ? "Natija topilmadi" : t("no_notifications")}
+              </h3>
+              <p className="emptyNotifDescCompact">
+                {searchQuery
+                  ? `"${searchQuery}" bo‘yicha bildirishnoma topilmadi.`
+                  : "Hozircha ushbu bo‘limda yangi bildirishnomalar mavjud emas."}
+              </p>
             </div>
           )}
 
           {/* Quick Shortcuts */}
-          <div className="notifShortcuts">
+          <div className="notifShortcutsCompact">
             <button
               type="button"
-              className="notifShortcutBtn"
+              className="notifShortcutBtnCompact"
               onClick={() => {
                 onClose();
                 onOpenChat();
@@ -371,7 +449,7 @@ export function NotificationModal({
             </button>
             <button
               type="button"
-              className="notifShortcutBtn"
+              className="notifShortcutBtnCompact"
               onClick={() => {
                 onClose();
                 onOpenOrders();
@@ -384,52 +462,20 @@ export function NotificationModal({
           </div>
         </div>
 
-        {/* Footer */}
-        <div
-          className="notificationFooter"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginTop: "16px",
-            paddingTop: "14px",
-            borderTop: "1px solid var(--border-color)",
-          }}
-        >
-          {totalUnreadCount > 0 ? (
+        {/* Compact Footer (No redundant close button, only Mark All As Read when unread exist) */}
+        {counts.unreadTotal > 0 && (
+          <div className="notifFooterCompact">
             <button
               type="button"
-              className="markAllReadBtn"
+              className="markAllReadBtnCompact"
               onClick={handleMarkAllRead}
               id="mark-all-read-btn"
             >
-              {t("mark_all_read")}
+              ✓ {t("mark_all_read")}
             </button>
-          ) : (
-            <div />
-          )}
-          <button
-            type="button"
-            className="primaryButton"
-            style={{
-              padding: "10px 22px",
-              borderRadius: "999px",
-              fontSize: "12px",
-              fontWeight: "800",
-            }}
-            onClick={() => {
-              try {
-                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
-              } catch {}
-              onClose();
-            }}
-            id="notif-dismiss-btn"
-          >
-            {t("close")}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

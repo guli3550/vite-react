@@ -15,6 +15,8 @@
       const source = read(), out = []; let changed = false;
       for (const message of source) {
         const m = { ...message }, metadata = m.metadata || {};
+        const isBlank = !String(m.text || "").trim() && !m.mediaUrl && !m.media_url && !metadata.mediaUrl && !metadata.media_url && !m.pollOptions && !m.location;
+        if (isBlank) { changed = true; continue; }
         if (metadata.source === "telegram" && !m.userName) { const username = metadata.telegram_username || metadata.telegramUsername; m.userName = username ? `Telegram @${username}` : `Telegram ${m.userId || "mijoz"}`; changed = true; }
         const last = out[out.length - 1], a = String(last?.id || ""), b = String(m.id || "");
         const optimisticPrefix = (id) => id.startsWith("msg-") || id.startsWith("admin-");
