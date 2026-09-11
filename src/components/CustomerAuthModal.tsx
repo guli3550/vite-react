@@ -31,7 +31,11 @@ async function callAuthApi<T extends ApiResult = ApiResult>(path: string, body: 
   let last: Error | null = null;
   for (const url of urls) {
     try {
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
       const type = res.headers.get("content-type") || "";
       const text = await res.text();
       if (!type.includes("application/json")) {
@@ -39,7 +43,8 @@ async function callAuthApi<T extends ApiResult = ApiResult>(path: string, body: 
         continue;
       }
       let json: T;
-      try { json = JSON.parse(text) as T; } catch { last = new Error("Server bilan bog‘lanishda xatolik yuz berdi."); continue; }
+      try { json = JSON.parse(text) as T; }
+      catch { last = new Error("Server bilan bog‘lanishda xatolik yuz berdi."); continue; }
       if (!res.ok || !json.success) throw new Error(json.message || "So‘rov bajarilmadi.");
       return json;
     } catch (e) {
@@ -54,7 +59,34 @@ async function callAuthApi<T extends ApiResult = ApiResult>(path: string, body: 
 const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 const inputStyle: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 14, outline: "none", boxSizing: "border-box" };
 const buttonStyle: React.CSSProperties = { width: "100%", padding: 13, borderRadius: 14, border: "none", background: "#4f46e5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" };
+const secondaryButtonStyle: React.CSSProperties = { ...buttonStyle, background: "#f1f5f9", color: "#334155" };
 const linkStyle: React.CSSProperties = { background: "none", border: "none", color: "#4f46e5", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" };
+
+// IMPORTANT: Keep this component at module scope. Defining it inside CustomerAuthModal
+// recreates it on every keystroke, causing React to unmount/remount the <input> and
+// mobile keyboards to close after the first character.
+interface FieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+}
+const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", placeholder, required = true }) => (
+  <div style={{ marginBottom: 13 }}>
+    <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>{label}</label>
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      required={required}
+      autoComplete={type === "password" ? "new-password" : type === "email" ? "email" : type === "tel" ? "tel" : "on"}
+      style={inputStyle}
+    />
+  </div>
+);
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, onClose, onSuccess, initialTab = "otp", forceGate = false, customTitle, customSubtitle }) => {
   const [view, setView] = useState<AuthView>(initialTab === "signin" ? "signin" : initialTab === "signup" ? "signup" : "choice");
@@ -199,31 +231,76 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
 
   const title = customTitle || (view === "signin" ? "Tizimga kirish" : view === "signup" ? "Ro‘yxatdan o‘tish" : view === "forgot_request" || view === "forgot_verify" ? "Parolni tiklash" : view === "otp_verify" || view === "signup_otp" ? "Emailni tasdiqlash" : "GULI hisobingiz");
   const subtitle = customSubtitle || (view === "choice" ? "Buyurtmalar va profilingizni barcha qurilmalarda saqlash uchun kiring" : view === "signup" ? "Yangi GULI hisobini yarating" : view === "signin" ? "Email va parolingiz bilan davom eting" : "Xavfsiz autentifikatsiya");
-  const Field = ({ label, value, onChange, type = "text", placeholder, required = true }: any) => <div style={{ marginBottom: 13 }}><label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>{label}</label><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} required={required} style={inputStyle} /></div>;
 
-  return <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.7)", backdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={(e) => { if (!forceGate && e.target === e.currentTarget) onClose?.(); }}>
-    <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 24, padding: "28px 24px", boxShadow: "0 20px 60px -15px rgba(0,0,0,.3)", position: "relative", maxHeight: "92vh", overflowY: "auto" }}>
-      {!forceGate && onClose && <button onClick={onClose} aria-label="Yopish" style={{ position: "absolute", top: 18, right: 18, background: "none", border: 0, fontSize: 22, color: "#64748b", cursor: "pointer" }}>✕</button>}
-      <div style={{ textAlign: "center", marginBottom: 20 }}><div style={{ width: 48, height: 48, borderRadius: 16, background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 12px" }}>🔒</div><h3 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{title}</h3><p style={{ margin: 0, fontSize: 14, color: "#64748b", lineHeight: 1.5 }}>{subtitle}</p></div>
-      {error && <div style={{ padding: "12px 14px", borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: 13, marginBottom: 16 }}>⚠️ {error}</div>}
-      {success && <div style={{ padding: "12px 14px", borderRadius: 12, background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d", fontSize: 13, marginBottom: 16 }}>✓ {success}</div>}
+  const otpForm = (submit: (e: React.FormEvent) => void, emailValue: string, back: AuthView = "choice") => (
+    <form onSubmit={submit}>
+      <div style={{ marginBottom: 13 }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Email</label>
+        <input value={emailValue} readOnly style={{ ...inputStyle, background: "#f8fafc" }} />
+      </div>
+      <Field label="6 xonali kod:" value={otp} onChange={setOtp} inputMode="numeric" placeholder="123456" />
+      <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Tekshirilmoqda..." : "Tasdiqlash"}</button>
+      <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go(back)}>← Orqaga</button>{timer > 0 && <span style={{ marginLeft: 10, fontSize: 12, color: "#64748b" }}>Qayta yuborish {timer}s</span>}</div>
+    </form>
+  );
 
-      {view === "choice" && <>
-        <button type="button" onClick={google} disabled={!googleConfigured || loading} style={{ ...buttonStyle, background: "#fff", color: "#1e293b", border: "1px solid #e2e8f0", marginBottom: 12, opacity: googleConfigured ? 1 : .65 }}>{googleConfigured ? "🌐  Google orqali davom etish" : "🌐  Google orqali kirish (sozlanmoqda)"}</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "14px 0" }}><div style={{ flex: 1, height: 1, background: "#e2e8f0" }}/><span style={{ fontSize: 12, color: "#94a3b8" }}>YOKI</span><div style={{ flex: 1, height: 1, background: "#e2e8f0" }}/></div>
-        <form onSubmit={sendOtp}><Field label="Email pochtangiz:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kod yuborilmoqda..." : "Davom etish"}</button></form>
-        <div style={{ textAlign: "center", marginTop: 15 }}><button type="button" onClick={() => go("signup")} style={linkStyle}>Ro‘yxatdan o‘tish</button><span style={{ color: "#cbd5e1", margin: "0 9px" }}>•</span><button type="button" onClick={() => go("signin")} style={linkStyle}>Parol orqali kirish</button></div>
-      </>}
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.7)", backdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={(e) => { if (!forceGate && e.target === e.currentTarget) onClose?.(); }}>
+      <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 24, padding: "28px 24px", boxShadow: "0 20px 60px -15px rgba(0,0,0,.3)", position: "relative", maxHeight: "92vh", overflowY: "auto" }}>
+        {!forceGate && onClose && <button onClick={onClose} aria-label="Yopish" style={{ position: "absolute", top: 18, right: 18, background: "none", border: 0, fontSize: 22, color: "#64748b", cursor: "pointer" }}>✕</button>}
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 16, background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 12px" }}>🔒</div>
+          <h3 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{title}</h3>
+          <p style={{ margin: 0, fontSize: 14, color: "#64748b", lineHeight: 1.5 }}>{subtitle}</p>
+        </div>
+        {error && <div style={{ padding: 11, borderRadius: 12, background: "#fef2f2", color: "#b91c1c", fontSize: 13, marginBottom: 14 }}>{error}</div>}
+        {success && <div style={{ padding: 11, borderRadius: 12, background: "#f0fdf4", color: "#15803d", fontSize: 13, marginBottom: 14 }}>{success}</div>}
 
-      {(view === "otp_verify" || view === "signup_otp") && <form onSubmit={view === "otp_verify" ? verifyOtp : verifySignup}><div style={{ textAlign: "center", marginBottom: 14 }}><b>{email}</b><p style={{ fontSize: 12, color: "#64748b" }}>Emailingizga yuborilgan 6 xonali kodni kiriting</p></div><Field label="6 xonali kod:" value={otp} onChange={(v: string) => setOtp(v.replace(/\D/g, "").slice(0, 6))} placeholder="123456"/><button type="submit" disabled={loading || otp.length !== 6} style={buttonStyle}>{loading ? "Tekshirilmoqda..." : "Kodni tasdiqlash"}</button><div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}><button type="button" disabled={timer > 0 || loading} onClick={() => sendOtp({ preventDefault() {} } as React.FormEvent)} style={linkStyle}>{timer ? `Qayta yuborish (${timer}s)` : "Kodni qayta yuborish"}</button><button type="button" onClick={() => go(view === "signup_otp" ? "signup" : "choice")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Orqaga</button></div></form>}
+        {view === "choice" && <>
+          <button type="button" style={buttonStyle} onClick={() => go("signin")}>Email va parol bilan kirish</button>
+          <button type="button" style={{ ...secondaryButtonStyle, marginTop: 10 }} onClick={() => go("signup")}>Ro‘yxatdan o‘tish</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0", color: "#94a3b8", fontSize: 12 }}><span style={{ flex: 1, height: 1, background: "#e2e8f0" }} />yoki<span style={{ flex: 1, height: 1, background: "#e2e8f0" }} /></div>
+          <button type="button" style={secondaryButtonStyle} onClick={google}>Google bilan davom etish</button>
+          <button type="button" style={{ ...linkStyle, display: "block", margin: "16px auto 0" }} onClick={() => go("otp_verify")}>Email orqali 6 xonali kod bilan kirish</button>
+        </>}
 
-      {view === "signup" && <form onSubmit={signup}><Field label="Ism va familiya:" value={fullName} onChange={setFullName} placeholder="Ism Familiya"/><Field label="Telefon:" value={phone} onChange={setPhone} type="tel" placeholder="+998 90 123 45 67" required={false}/><Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="Kamida 8 belgi"/><Field label="Parolni takrorlang:" value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="••••••••"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Hisob yaratilmoqda..." : "Ro‘yxatdan o‘tish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={linkStyle}>Hisobingiz bormi? Kirish</button></div></form>}
+        {view === "signin" && <form onSubmit={signIn}>
+          <Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com" />
+          <Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="Parolingiz" />
+          <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Kirilmoqda..." : "Kirish"}</button>
+          <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go("forgot_request")}>Parolni unutdingizmi?</button></div>
+          <div style={{ textAlign: "center", marginTop: 8 }}><button type="button" style={linkStyle} onClick={() => go("signup")}>Ro‘yxatdan o‘tish</button></div>
+        </form>}
 
-      {view === "signin" && <form onSubmit={signIn}><Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="••••••••"/><div style={{ textAlign: "right", marginBottom: 12 }}><button type="button" onClick={() => { setForgotEmail(email); go("forgot_request"); }} style={linkStyle}>Parolni unutdingizmi?</button></div><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kirilmoqda..." : "Kirish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signup")} style={linkStyle}>Hisobingiz yo‘qmi? Ro‘yxatdan o‘tish</button></div><div style={{ textAlign: "center", marginTop: 10 }}><button type="button" onClick={() => go("choice")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Boshqa usul</button></div></form>}
+        {view === "signup" && <form onSubmit={signup}>
+          <Field label="Ism va familiya:" value={fullName} onChange={setFullName} placeholder="Ism Familiya" />
+          <Field label="Telefon:" value={phone} onChange={setPhone} type="tel" placeholder="+998 90 123 45 67" required={false} />
+          <Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com" />
+          <Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="Kamida 8 belgi" />
+          <Field label="Parolni takrorlang:" value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="Parolni takrorlang" />
+          <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Yaratilmoqda..." : "Hisob yaratish"}</button>
+          <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go("signin")}>Hisobingiz bormi? Kirish</button></div>
+        </form>}
 
-      {view === "forgot_request" && <form onSubmit={sendReset}><Field label="Email manzilingiz:" value={forgotEmail} onChange={setForgotEmail} type="email" placeholder="user@gmail.com"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kod yuborilmoqda..." : "Tiklash kodini yuborish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Kirishga qaytish</button></div></form>}
+        {view === "otp_verify" && otpForm(verifyOtp, email, "choice")}
+        {view === "signup_otp" && otpForm(verifySignup, email, "signup")}
 
-      {view === "forgot_verify" && <form onSubmit={resetPassword}><Field label="6 xonali tiklash kodi:" value={forgotToken} onChange={(v: string) => setForgotToken(v.replace(/\D/g, "").slice(0, 6))} placeholder="123456"/><Field label="Yangi parol:" value={newPassword} onChange={setNewPassword} type="password" placeholder="Kamida 8 belgi"/><Field label="Yangi parolni takrorlang:" value={confirmNewPassword} onChange={setConfirmNewPassword} type="password" placeholder="••••••••"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Parol yangilanmoqda..." : "Parolni yangilash"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Kirishga qaytish</button></div></form>}
+        {view === "forgot_request" && <form onSubmit={sendReset}>
+          <Field label="Email:" value={forgotEmail} onChange={setForgotEmail} type="email" placeholder="user@gmail.com" />
+          <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Yuborilmoqda..." : "Tiklash kodini yuborish"}</button>
+          <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go("signin")}>← Kirishga qaytish</button></div>
+        </form>}
+
+        {view === "forgot_verify" && <form onSubmit={resetPassword}>
+          <div style={{ marginBottom: 13 }}><label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Email</label><input value={forgotEmail} readOnly style={{ ...inputStyle, background: "#f8fafc" }} /></div>
+          <Field label="6 xonali kod:" value={forgotToken} onChange={setForgotToken} placeholder="123456" />
+          <Field label="Yangi parol:" value={newPassword} onChange={setNewPassword} type="password" placeholder="Kamida 8 belgi" />
+          <Field label="Yangi parolni takrorlang:" value={confirmNewPassword} onChange={setConfirmNewPassword} type="password" placeholder="Parolni takrorlang" />
+          <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Yangilanmoqda..." : "Parolni yangilash"}</button>
+        </form>}
+
+        {view !== "choice" && view !== "signin" && view !== "signup" && view !== "forgot_request" && view !== "forgot_verify" && null}
+      </div>
     </div>
-  </div>;
+  );
 };
