@@ -24,7 +24,7 @@ export function AgentWorkflowPanel({ api, token, notify }: Props) {
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || json.success === false) throw new Error(json.message || "Workflow yaratilmadi");
-      setWorkflow(json.data || null);
+      setWorkflow(json.data?.workflow || null);
       setOrderNumber("");
       notify("Order → Payment workflow navbatga qo‘yildi ✓");
     } catch (error) {
