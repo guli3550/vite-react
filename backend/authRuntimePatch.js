@@ -41,13 +41,7 @@ function ok(res, data, message = "OK") {
   return res.json({ success: true, message, data });
 }
 
-function install(method, path, handler) {
-  const original = express.application[method];
-  express.application[method] = function authRoute(routePath, ...handlers) {
-    if (routePath === path) return original.call(this, routePath, handler, ...handlers);
-    return original.call(this, routePath, ...handlers);
-  };
-}
+const { install } = require("./routeRegistry.js");
 
 // 1. Email Sign-up (Supabase Auth)
 install("post", "/api/auth/password/signup", async (req, res) => {

@@ -2,6 +2,10 @@ import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 // Production Supabase URL for GULI web app
 export const DEFAULT_SUPABASE_URL = "https://qttwufydrvdwmhxcpgjb.supabase.co";
+export const BACKEND_API_URL = (
+  (import.meta.env.VITE_API_URL as string | undefined) ||
+  "https://guli-lingerie-api.onrender.com"
+).replace(/\/$/, "");
 
 let cachedClient: SupabaseClient | null = null;
 
@@ -58,14 +62,27 @@ export async function loadSupabaseConfigAsync(): Promise<SupabaseClient | null> 
   const existing = getSupabase();
   if (existing) return existing;
 
-  try {
-    const res = await fetch("/api/auth/config");
-    const json = await res.json();
-    if (json?.success && json?.data?.supabase_anon_key) {
-      return initSupabaseWithKey(json.data.supabase_anon_key, json.data.supabase_url);
+  const candidateUrls = [
+    `${BACKEND_API_URL}/api/auth/config`,
+    "/api/auth/config",
+  ];
+
+  for (const endpoint of candidateUrls) {
+    try {
+      const res = await fetch(endpoint, {
+        headers: { Accept: "application/json" },
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        continue;
+      }
+      const json = await res.json();
+      if (json?.success && json?.data?.supabase_anon_key) {
+        return initSupabaseWithKey(json.data.supabase_anon_key, json.data.supabase_url);
+      }
+    } catch {
+      // Network or offline fallback
     }
-  } catch {
-    // Network or offline fallback
   }
 
   return getSupabase();
@@ -80,23 +97,33 @@ export async function syncCustomerProfile(
   extra?: { full_name?: string; phone?: string; avatar_url?: string; auth_provider?: string }
 ): Promise<void> {
   if (!accessToken || !user) return;
-  try {
-    await fetch("/api/customer/sync", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        email: user.email,
-        full_name: extra?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "",
-        phone: extra?.phone || user.phone || user.user_metadata?.phone || "",
-        avatar_url: extra?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
-        auth_provider: extra?.auth_provider || user.app_metadata?.provider || "email",
-      }),
-    });
-  } catch (err) {
-    console.warn("Failed to sync customer profile:", err);
+  const candidateUrls = [
+    `${BACKEND_API_URL}/api/customer/sync`,
+    "/api/customer/sync",
+  ];
+  const payload = JSON.stringify({
+    email: user.email,
+    full_name: extra?.full_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "",
+    phone: extra?.phone || user.phone || user.user_metadata?.phone || "",
+    avatar_url: extra?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+    auth_provider: extra?.auth_provider || user.app_metadata?.provider || "email",
+  });
+
+  for (const endpoint of candidateUrls) {
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: payload,
+      });
+      if (res.ok) break;
+    } catch {
+      // Continue to next candidate
+    }
   }
 }
 

@@ -1,1 +1,1 @@
-deploy-auth-fix-20260830-admin-login-sync
+deploy-auth-route-registry-fix-20260911

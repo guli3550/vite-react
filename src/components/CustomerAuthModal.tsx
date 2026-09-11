@@ -1,6 +1,59 @@
 import React, { useState, useEffect } from "react";
-import { getSupabase, syncCustomerProfile, loadSupabaseConfigAsync } from "../lib/supabaseClient";
+import { getSupabase, syncCustomerProfile, loadSupabaseConfigAsync, BACKEND_API_URL } from "../lib/supabaseClient";
 import type { Language } from "../utils/translations";
+
+async function callAuthApi<T = any>(endpointPath: string, body: Record<string, any>): Promise<T> {
+  const candidateUrls = [
+    `${BACKEND_API_URL}${endpointPath}`,
+    endpointPath,
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const url of candidateUrls) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        lastError = new Error(`Serverdan kutilmagan javob keldi (${res.status}). Qaytadan urinib ko'ring.`);
+        continue;
+      }
+
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        lastError = new Error("Server bilan bog'lanishda xatolik yuz berdi.");
+        continue;
+      }
+
+      if (!res.ok || !json || !json.success) {
+        throw new Error(json?.message || "Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      }
+      return json;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("is not valid JSON") || msg.includes("Unexpected token") || msg.includes("<!DOCTYPE")) {
+        lastError = new Error("Server bilan bog'lanishda xatolik yuz berdi.");
+      } else {
+        lastError = err instanceof Error ? err : new Error(msg);
+        if (!lastError.message.startsWith("Serverdan kutilmagan javob") && !lastError.message.startsWith("Server bilan bog'lanishda")) {
+          throw lastError;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("Server bilan bog'lanish imkoni bo'lmadi.");
+}
 
 export interface AuthUser {
   id: string;
@@ -119,7 +172,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       }
 
       // Fallback via backend OAuth redirect
-      window.location.href = "/api/auth/google";
+      window.location.href = `${BACKEND_API_URL}/api/auth/google`;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Google orqali kirishda xatolik yuz berdi.";
       setError(message);
@@ -150,13 +203,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         });
         if (otpErr) throw otpErr;
       } else {
-        const res = await fetch("/api/auth/email/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail }),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
+        const json = await callAuthApi("/api/auth/email/start", { email: cleanEmail });
+        if (!json.success) {
           throw new Error(json.message || "Tasdiqlash kodi yuborilmadi.");
         }
       }
@@ -215,18 +263,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         sessionData = verifyRes.data.session;
         userData = verifyRes.data.user;
       } else {
-        const res = await fetch("/api/auth/email/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, token: cleanCode }),
+        const json = await callAuthApi("/api/auth/email/verify", {
+          email: cleanEmail,
+          token: cleanCode,
         });
-        const json = await res.json();
-        if (!res.ok || !json.success || !json.data?.session) {
+        const extractedSession = json.data?.session || (json.data?.access_token ? json.data : null);
+        if (!json.success || !extractedSession) {
           throw new Error(json.message || "Tasdiqlash kodi noto'g'ri yoki muddati tugagan.");
         }
 
-        sessionData = json.data.session;
-        userData = json.data.user;
+        sessionData = extractedSession;
+        userData = json.data?.user || json.data;
       }
 
       if (!sessionData?.access_token || !userData) {
@@ -360,17 +407,30 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         sessionData = data.session;
         userData = data.user;
       } else {
-        const res = await fetch("/api/auth/password/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail, password }),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success || !json.data?.session) {
+        let json;
+        try {
+          json = await callAuthApi("/api/auth/password/login", { email: cleanEmail, password });
+        } catch (loginErr) {
+          try {
+            json = await callAuthApi("/api/auth/signin", { email: cleanEmail, password });
+          } catch (signinErr: unknown) {
+            const rawMsg = signinErr instanceof Error ? signinErr.message : String(signinErr);
+            if (/invalid login credentials/i.test(rawMsg)) {
+              throw new Error("Email yoki parol noto'g'ri.");
+            }
+            if (rawMsg && !rawMsg.startsWith("Serverdan kutilmagan javob") && !rawMsg.startsWith("Server bilan bog'lanishda")) {
+              throw signinErr;
+            }
+            throw loginErr;
+          }
+        }
+
+        const extractedSession = json.data?.session || (json.data?.access_token ? json.data : null);
+        if (!json.success || !extractedSession) {
           throw new Error(json.message || "Email yoki parol noto'g'ri.");
         }
-        sessionData = json.data.session;
-        userData = json.data.user;
+        sessionData = extractedSession;
+        userData = json.data?.user || json.data;
       }
 
       const token = sessionData.access_token;
@@ -425,13 +485,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         });
         if (resetErr) throw resetErr;
       } else {
-        const res = await fetch("/api/auth/password/reset-start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: cleanEmail }),
-        });
-        const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json.message || "Parolni tiklash so'rovi qabul qilinmadi.");
+        const json = await callAuthApi("/api/auth/password/reset-start", { email: cleanEmail });
+        if (!json.success) throw new Error(json.message || "Parolni tiklash so'rovi qabul qilinmadi.");
       }
 
       setView("forgot_verify");
@@ -483,17 +538,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         const { error: updateErr } = await client.auth.updateUser({ password: newPassword });
         if (updateErr) throw updateErr;
       } else {
-        const res = await fetch("/api/auth/password/reset-verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: cleanEmail,
-            token: cleanToken,
-            password: newPassword,
-          }),
+        const json = await callAuthApi("/api/auth/password/reset-verify", {
+          email: cleanEmail,
+          token: cleanToken,
+          password: newPassword,
         });
-        const json = await res.json();
-        if (!res.ok || !json.success) throw new Error(json.message || "Parolni yangilashda xatolik.");
+        if (!json.success) throw new Error(json.message || "Parolni yangilashda xatolik.");
       }
 
       setSuccessMsg("✓ Parolingiz muvaffaqiyatli yangilandi! Endi yangi parol bilan kirishingiz mumkin.");
