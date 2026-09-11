@@ -72,8 +72,6 @@ interface FieldProps {
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }
 
-// Keep Field at module scope. A component declared inside CustomerAuthModal is
-// recreated on every keystroke, so React remounts the input and mobile keyboards close.
 const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", placeholder, required = true, inputMode }) => (
   <div style={{ marginBottom: 13 }}>
     <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>{label}</label>
@@ -90,7 +88,7 @@ const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", pl
   </div>
 );
 
-export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, onClose, onSuccess, initialTab = "otp", forceGate = false, customTitle, customSubtitle }) => {
+export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, onClose, onSuccess, language: _language, initialTab = "otp", forceGate = false, customTitle, customSubtitle }) => {
   const [view, setView] = useState<AuthView>(initialTab === "signin" ? "signin" : initialTab === "signup" ? "signup" : "choice");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -152,7 +150,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
     setLoading(true);
     try {
       await callAuthApi("/api/auth/email/start", { email: clean });
-      setEmail(clean); setTimer(60); setView("otp_verify");
+      setEmail(clean); setOtp(""); setTimer(60); setView("otp_verify");
       setSuccess(`6 xonali kod ${clean} pochtasiga yuborildi.`);
     } catch (e) {
       const m = e instanceof Error ? e.message : "Tasdiqlash kodi yuborilmadi.";
@@ -179,7 +177,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
     try {
       const r = await callAuthApi("/api/auth/password/signup", { email: clean, password, full_name: fullName.trim(), phone: phone.trim() });
       if (r.data?.session || r.data?.access_token) { await finish(r.data); return; }
-      setEmail(clean); setTimer(60); setView("signup_otp");
+      setEmail(clean); setOtp(""); setTimer(60); setView("signup_otp");
       setSuccess(`Hisob yaratildi. ${clean} pochtasiga tasdiqlash kodi yuborildi.`);
     } catch (e) { setError(e instanceof Error ? e.message : "Ro‘yxatdan o‘tishda xatolik yuz berdi."); }
     finally { setLoading(false); }
@@ -209,7 +207,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
     const clean = forgotEmail.trim().toLowerCase();
     if (!emailOk(clean)) { setError("Iltimos, to‘g‘ri email manzilini kiriting."); return; }
     setLoading(true);
-    try { await callAuthApi("/api/auth/password/reset-start", { email: clean }); setForgotEmail(clean); setTimer(60); setView("forgot_verify"); setSuccess(`Tiklash kodi ${clean} pochtasiga yuborildi.`); }
+    try { await callAuthApi("/api/auth/password/reset-start", { email: clean }); setForgotEmail(clean); setForgotToken(""); setTimer(60); setView("forgot_verify"); setSuccess(`Tiklash kodi ${clean} pochtasiga yuborildi.`); }
     catch (e) { setError(e instanceof Error ? e.message : "Tiklash kodi yuborilmadi. Email/SMTP xizmati sozlamasini tekshiring."); }
     finally { setLoading(false); }
   };
@@ -231,20 +229,23 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
     window.location.href = `${BACKEND_API_URL}/api/auth/google`;
   };
 
-  const title = customTitle || (view === "signin" ? "Tizimga kirish" : view === "signup" ? "Ro‘yxatdan o‘tish" : view === "forgot_request" || view === "forgot_verify" ? "Parolni tiklash" : view === "otp_verify" || view === "signup_otp" ? "Emailni tasdiqlash" : "GULI hisobingiz");
-  const subtitle = customSubtitle || (view === "choice" ? "Buyurtmalar va profilingizni barcha qurilmalarda saqlash uchun kiring" : view === "signup" ? "Yangi GULI hisobini yarating" : view === "signin" ? "Email va parolingiz bilan davom eting" : "Xavfsiz autentifikatsiya");
-
   const otpForm = (submit: (e: React.FormEvent) => void, emailValue: string, back: AuthView = "choice") => (
     <form onSubmit={submit}>
       <div style={{ marginBottom: 13 }}>
         <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Email</label>
         <input value={emailValue} readOnly style={{ ...inputStyle, background: "#f8fafc" }} />
       </div>
-      <Field label="6 xonali kod:" value={otp} onChange={setOtp} inputMode="numeric" placeholder="123456" />
-      <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Tekshirilmoqda..." : "Tasdiqlash"}</button>
-      <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go(back)}>← Orqaga</button>{timer > 0 && <span style={{ marginLeft: 10, fontSize: 12, color: "#64748b" }}>Qayta yuborish {timer}s</span>}</div>
+      <Field label="6 xonali kod:" value={otp} onChange={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="123456" />
+      <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Tekshirilmoqda..." : "Kodni tasdiqlash"}</button>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+        <button type="button" disabled={timer > 0 || loading} onClick={sendOtp} style={{ ...linkStyle, opacity: timer > 0 ? .55 : 1 }}>{timer ? `Qayta yuborish (${timer}s)` : "Kodni qayta yuborish"}</button>
+        <button type="button" onClick={() => go(back)} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Orqaga</button>
+      </div>
     </form>
   );
+
+  const title = customTitle || (view === "signin" ? "Tizimga kirish" : view === "signup" ? "Ro‘yxatdan o‘tish" : view === "forgot_request" || view === "forgot_verify" ? "Parolni tiklash" : view === "otp_verify" || view === "signup_otp" ? "Emailni tasdiqlash" : "GULI hisobingiz");
+  const subtitle = customSubtitle || (view === "choice" ? "Buyurtmalar va profilingizni barcha qurilmalarda saqlash uchun kiring" : view === "signup" ? "Yangi GULI hisobini yarating" : view === "signin" ? "Email va parolingiz bilan davom eting" : "Xavfsiz autentifikatsiya");
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.7)", backdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={(e) => { if (!forceGate && e.target === e.currentTarget) onClose?.(); }}>
@@ -259,19 +260,23 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
         {success && <div style={{ padding: 11, borderRadius: 12, background: "#f0fdf4", color: "#15803d", fontSize: 13, marginBottom: 14 }}>{success}</div>}
 
         {view === "choice" && <>
-          <button type="button" style={buttonStyle} onClick={() => go("signin")}>Email va parol bilan kirish</button>
-          <button type="button" style={{ ...secondaryButtonStyle, marginTop: 10 }} onClick={() => go("signup")}>Ro‘yxatdan o‘tish</button>
+          <form onSubmit={sendOtp}>
+            <Field label="Email pochtangiz:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com" />
+            <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Kod yuborilmoqda..." : "Email orqali davom etish"}</button>
+          </form>
           <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0", color: "#94a3b8", fontSize: 12 }}><span style={{ flex: 1, height: 1, background: "#e2e8f0" }} />yoki<span style={{ flex: 1, height: 1, background: "#e2e8f0" }} /></div>
-          <button type="button" style={secondaryButtonStyle} onClick={google}>Google bilan davom etish</button>
-          <button type="button" style={{ ...linkStyle, display: "block", margin: "16px auto 0" }} onClick={() => go("otp_verify")}>Email orqali 6 xonali kod bilan kirish</button>
+          <button type="button" style={secondaryButtonStyle} onClick={() => go("signin")}>Email va parol bilan kirish</button>
+          <button type="button" style={{ ...secondaryButtonStyle, marginTop: 10 }} onClick={() => go("signup")}>Ro‘yxatdan o‘tish</button>
+          <button type="button" style={{ ...secondaryButtonStyle, marginTop: 10, opacity: googleConfigured ? 1 : .65 }} onClick={google}>{googleConfigured ? "Google bilan davom etish" : "Google orqali kirish (sozlanmoqda)"}</button>
         </>}
 
         {view === "signin" && <form onSubmit={signIn}>
           <Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com" />
           <Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="Parolingiz" />
           <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Kirilmoqda..." : "Kirish"}</button>
-          <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => go("forgot_request")}>Parolni unutdingizmi?</button></div>
+          <div style={{ textAlign: "center", marginTop: 12 }}><button type="button" style={linkStyle} onClick={() => { setForgotEmail(email); go("forgot_request"); }}>Parolni unutdingizmi?</button></div>
           <div style={{ textAlign: "center", marginTop: 8 }}><button type="button" style={linkStyle} onClick={() => go("signup")}>Ro‘yxatdan o‘tish</button></div>
+          <div style={{ textAlign: "center", marginTop: 8 }}><button type="button" style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }} onClick={() => go("choice")}>← Boshqa usul</button></div>
         </form>}
 
         {view === "signup" && <form onSubmit={signup}>
@@ -295,7 +300,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
 
         {view === "forgot_verify" && <form onSubmit={resetPassword}>
           <div style={{ marginBottom: 13 }}><label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Email</label><input value={forgotEmail} readOnly style={{ ...inputStyle, background: "#f8fafc" }} /></div>
-          <Field label="6 xonali kod:" value={forgotToken} onChange={setForgotToken} inputMode="numeric" placeholder="123456" />
+          <Field label="6 xonali kod:" value={forgotToken} onChange={(v) => setForgotToken(v.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="123456" />
           <Field label="Yangi parol:" value={newPassword} onChange={setNewPassword} type="password" placeholder="Kamida 8 belgi" />
           <Field label="Yangi parolni takrorlang:" value={confirmNewPassword} onChange={setConfirmNewPassword} type="password" placeholder="Parolni takrorlang" />
           <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Yangilanmoqda..." : "Parolni yangilash"}</button>
