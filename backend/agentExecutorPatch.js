@@ -65,35 +65,46 @@ async function runSecurityAudit() {
   return { checks: { admin_secret_configured: Boolean(clean(process.env.ADMIN_SECRET)), supabase_url_configured: Boolean(clean(process.env.SUPABASE_URL)), supabase_secret_configured: Boolean(clean(process.env.SUPABASE_SECRET_KEY)), telegram_token_configured: Boolean(clean(process.env.TELEGRAM_BOT_TOKEN)) }, secrets_exposed: false, note: "Only configuration presence is reported; secret values are never returned." };
 }
 const RUNNERS = { catalog_check: runCatalogCheck, order_lookup: runOrderLookup, payment_status: runPaymentStatus, chat_inspect: runChatInspect, security_audit: runSecurityAudit };
+
+async function executeTask(taskId, actor = "agent-executor") {
+  const { data: task, error: loadError } = await supabase.from("agent_tasks").select("*").eq("id", taskId).maybeSingle();
+  if (loadError) throw loadError;
+  if (!task) return { ok: false, conflict: false, message: "Task topilmadi" };
+  if (task.status !== "queued") return { ok: false, conflict: true, message: `Task holati ${task.status}` };
+  const parsed = parseCommand(task.command);
+  if (!parsed) {
+    await emit(task.id, task.agent_id, "security_blocked", "Noma'lum yoki ruxsatsiz agent tool", { allowed_tools: [...ALLOWED_TOOLS] });
+    await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: "Tool allowlist tomonidan bloklandi" }).eq("id", task.id).eq("status", "queued");
+    return { ok: false, conflict: false, blocked: true, message: "Bu buyruq xavfsizlik siyosati bo'yicha bloklandi" };
+  }
+  const { data: claimed, error: claimError } = await supabase.from("agent_tasks").update({ status: "running", started_at: new Date().toISOString(), error: null }).eq("id", task.id).eq("status", "queued").select("*").maybeSingle();
+  if (claimError) throw claimError;
+  if (!claimed) return { ok: false, conflict: true, message: "Task boshqa jarayon tomonidan ishga tushirilgan" };
+  await emit(task.id, task.agent_id, "task_started", `Tool ${parsed.type} ishga tushdi`, { tool: parsed.type, actor });
+  await emit(task.id, task.agent_id, "tool_called", `Tool ${parsed.type} chaqirildi`, { tool: parsed.type, actor });
+  try {
+    const result = await RUNNERS[parsed.type](parsed.input);
+    const { data: completed, error: completeError } = await supabase.from("agent_tasks").update({ status: "completed", finished_at: new Date().toISOString(), result }).eq("id", task.id).eq("status", "running").select("*").maybeSingle();
+    if (completeError) throw completeError;
+    await emit(task.id, task.agent_id, "task_completed", `Tool ${parsed.type} muvaffaqiyatli yakunlandi`, { tool: parsed.type, actor });
+    return { ok: true, data: completed };
+  } catch (error) {
+    const message = String(error.message || "Tool execution error").slice(0, 1000);
+    await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: message }).eq("id", task.id).eq("status", "running");
+    await emit(task.id, task.agent_id, "task_failed", `Tool ${parsed.type} xato bilan tugadi`, { tool: parsed.type, error: message.slice(0, 500), actor });
+    return { ok: false, conflict: false, message: "Agent tool bajarilmadi" };
+  }
+}
+
 install("post", "/api/admin/agents/tasks/:id/run", async (req, res, next) => {
   const header = req.headers.authorization || ""; const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   if (!verifyAdminToken(token)) return res.status(401).json({ success: false, message: "Admin sessiyasi yaroqsiz yoki tugagan" });
   return next();
 }, async (req, res) => {
   try {
-    const { data: task, error: loadError } = await supabase.from("agent_tasks").select("*").eq("id", req.params.id).maybeSingle();
-    if (loadError) throw loadError; if (!task) return res.status(404).json({ success: false, message: "Task topilmadi" });
-    if (task.status !== "queued") return res.status(409).json({ success: false, message: "Faqat queued task ishga tushiriladi" });
-    const parsed = parseCommand(task.command);
-    if (!parsed) {
-      await emit(task.id, task.agent_id, "security_blocked", "Noma'lum yoki ruxsatsiz agent tool", { allowed_tools: [...ALLOWED_TOOLS] });
-      await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: "Tool allowlist tomonidan bloklandi" }).eq("id", task.id).eq("status", "queued");
-      return res.status(403).json({ success: false, message: "Bu buyruq xavfsizlik siyosati bo'yicha bloklandi" });
-    }
-    const { data: claimed, error: claimError } = await supabase.from("agent_tasks").update({ status: "running", started_at: new Date().toISOString(), error: null }).eq("id", task.id).eq("status", "queued").select("*").maybeSingle();
-    if (claimError) throw claimError; if (!claimed) return res.status(409).json({ success: false, message: "Task boshqa jarayon tomonidan ishga tushirilgan" });
-    await emit(task.id, task.agent_id, "task_started", `Tool ${parsed.type} ishga tushdi`, { tool: parsed.type });
-    await emit(task.id, task.agent_id, "tool_called", `Tool ${parsed.type} chaqirildi`, { tool: parsed.type });
-    try {
-      const result = await RUNNERS[parsed.type](parsed.input);
-      const { data: completed, error: completeError } = await supabase.from("agent_tasks").update({ status: "completed", finished_at: new Date().toISOString(), result }).eq("id", task.id).eq("status", "running").select("*").maybeSingle();
-      if (completeError) throw completeError; await emit(task.id, task.agent_id, "task_completed", `Tool ${parsed.type} muvaffaqiyatli yakunlandi`, { tool: parsed.type });
-      return res.json({ success: true, data: completed });
-    } catch (error) {
-      await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: String(error.message || "Tool execution error").slice(0, 1000) }).eq("id", task.id).eq("status", "running");
-      await emit(task.id, task.agent_id, "task_failed", `Tool ${parsed.type} xato bilan tugadi`, { tool: parsed.type, error: String(error.message || "").slice(0, 500) });
-      return res.status(500).json({ success: false, message: "Agent tool bajarilmadi" });
-    }
+    const result = await executeTask(req.params.id, "admin");
+    if (result.ok) return res.json({ success: true, data: result.data });
+    return res.status(result.blocked ? 403 : result.conflict ? 409 : 500).json({ success: false, message: result.message });
   } catch (error) { console.error("Agent executor error:", error); return res.status(500).json({ success: false, message: "Agent executor xatosi" }); }
 });
-module.exports = { ALLOWED_TOOLS, parseCommand };
+module.exports = { ALLOWED_TOOLS, parseCommand, executeTask };
