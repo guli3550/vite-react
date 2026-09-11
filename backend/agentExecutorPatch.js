@@ -6,6 +6,14 @@ const { advanceWorkflow } = require("./agentWorkflowPatch");
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim().replace(/^['"]|['"]$/g, "");
 const ALLOWED_TOOLS = new Set(["catalog_check", "order_lookup", "payment_status", "chat_inspect", "security_audit"]);
+const AGENT_TOOL_MAP = Object.freeze({
+  orchestrator: new Set(ALLOWED_TOOLS),
+  sales: new Set(["catalog_check"]),
+  order: new Set(["order_lookup"]),
+  payment: new Set(["payment_status"]),
+  support: new Set(["chat_inspect"]),
+  security: new Set(["security_audit"]),
+});
 
 function clean(value) { return String(value == null ? "" : value).trim(); }
 function safeEqual(a, b) { const left = Buffer.from(String(a || "")); const right = Buffer.from(String(b || "")); return left.length === right.length && crypto.timingSafeEqual(left, right); }
@@ -26,11 +34,12 @@ async function executeTask(taskId, actor = "agent-executor") {
   if (!task) return { ok: false, conflict: false, message: "Task topilmadi" };
   if (task.status !== "queued") return { ok: false, conflict: true, message: `Task holati ${task.status}` };
   const parsed = parseCommand(task.command);
-  if (!parsed) {
-    await emit(task.id, task.agent_id, "security_blocked", "Noma'lum yoki ruxsatsiz agent tool", { allowed_tools: [...ALLOWED_TOOLS] });
-    await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: "Tool allowlist tomonidan bloklandi" }).eq("id", task.id).eq("status", "queued");
+  const agentTools = AGENT_TOOL_MAP[task.agent_id];
+  if (!parsed || !agentTools || !agentTools.has(parsed.type)) {
+    await emit(task.id, task.agent_id, "security_blocked", "Agent tool mapping tomonidan bloklandi", { requested_tool: parsed?.type || null, agent_id: task.agent_id });
+    await supabase.from("agent_tasks").update({ status: "failed", finished_at: new Date().toISOString(), error: "Agent tool mapping tomonidan bloklandi" }).eq("id", task.id).eq("status", "queued");
     await advanceWorkflow(task.id).catch((error) => console.error("Workflow advance after blocked task failed:", error));
-    return { ok: false, conflict: false, blocked: true, message: "Bu buyruq xavfsizlik siyosati bo'yicha bloklandi" };
+    return { ok: false, conflict: false, blocked: true, message: "Bu agentga ushbu tool ruxsat etilmagan" };
   }
   const { data: claimed, error: claimError } = await supabase.from("agent_tasks").update({ status: "running", started_at: new Date().toISOString(), error: null }).eq("id", task.id).eq("status", "queued").select("*").maybeSingle();
   if (claimError) throw claimError;
@@ -61,4 +70,4 @@ install("post", "/api/admin/agents/tasks/:id/run", async (req, res, next) => {
   try { const result = await executeTask(req.params.id, "admin"); if (result.ok) return res.json({ success: true, data: result.data, workflow: result.workflow || null }); return res.status(result.blocked ? 403 : result.conflict ? 409 : 500).json({ success: false, message: result.message }); }
   catch (error) { console.error("Agent executor error:", error); return res.status(500).json({ success: false, message: "Agent executor xatosi" }); }
 });
-module.exports = { ALLOWED_TOOLS, parseCommand, executeTask };
+module.exports = { ALLOWED_TOOLS, AGENT_TOOL_MAP, parseCommand, executeTask };
