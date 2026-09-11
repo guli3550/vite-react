@@ -58,15 +58,19 @@ async function advanceWorkflow(taskId) {
   const { data: task, error } = await supabase.from("agent_tasks").select("id,agent_id,status,result,error,workflow_id,workflow_step").eq("id", taskId).maybeSingle();
   if (error || !task?.workflow_id || task.workflow_step == null) return { advanced: false };
   const { data: workflow, error: workflowError } = await supabase.from("agent_workflows").select("*").eq("id", task.workflow_id).maybeSingle();
-  if (workflowError || !workflow) return { advanced: false };
-  if (workflow.status !== "running") return { advanced: false };
+  if (workflowError || !workflow || workflow.status !== "running") return { advanced: false };
+
   if (task.status === "failed" || task.status === "cancelled") {
-    await supabase.from("agent_workflows").update({ status: "failed", finished_at: new Date().toISOString(), error: task.error || "Workflow step failed" }).eq("id", workflow.id).eq("status", "running");
-    await emitEvent({ taskId: task.id, agentId: task.agent_id, eventType: "task_failed", message: "Workflow keyingi qadamga o'tmadi", metadata: { workflow_id: workflow.id, workflow_step: task.workflow_step, handoff: "blocked" } });
-    return { advanced: false, failed: true };
+    const { data: failedWorkflow } = await supabase.from("agent_workflows").update({ status: "failed", finished_at: new Date().toISOString(), error: task.error || "Workflow step failed" }).eq("id", workflow.id).eq("status", "running").select("id").maybeSingle();
+    if (failedWorkflow) await emitEvent({ taskId: task.id, agentId: task.agent_id, eventType: "task_failed", message: "Workflow keyingi qadamga o'tmadi", metadata: { workflow_id: workflow.id, workflow_step: task.workflow_step, handoff: "blocked" } });
+    return { advanced: false, failed: Boolean(failedWorkflow) };
   }
   if (task.status !== "completed") return { advanced: false };
+
   if (task.workflow_step === 0 && workflow.workflow_type === "order_payment_status") {
+    const { data: existingNext, error: existingError } = await supabase.from("agent_tasks").select("id,status").eq("workflow_id", workflow.id).eq("workflow_step", 1).limit(1).maybeSingle();
+    if (existingError) throw existingError;
+    if (existingNext) return { advanced: false, duplicate: true, nextTaskId: existingNext.id };
     const command = JSON.stringify({ type: "payment_status", input: workflow.context });
     const { data: nextTask, error: nextError } = await supabase.from("agent_tasks").insert({ agent_id: "payment", command, status: "queued", created_by: "orchestrator", workflow_id: workflow.id, workflow_step: 1 }).select("*").single();
     if (nextError) throw nextError;
@@ -74,9 +78,9 @@ async function advanceWorkflow(taskId) {
     return { advanced: true, nextTask };
   }
   if (task.workflow_step === 1 && workflow.workflow_type === "order_payment_status") {
-    await supabase.from("agent_workflows").update({ status: "completed", finished_at: new Date().toISOString(), result: { final_task_id: task.id, payment_result: task.result || null } }).eq("id", workflow.id).eq("status", "running");
-    await emitEvent({ taskId: task.id, agentId: task.agent_id, eventType: "task_completed", message: "Multi-agent workflow yakunlandi", metadata: { workflow_id: workflow.id, workflow_type: workflow.workflow_type, handoff: "completed" } });
-    return { advanced: false, completed: true };
+    const { data: completedWorkflow } = await supabase.from("agent_workflows").update({ status: "completed", finished_at: new Date().toISOString(), result: { final_task_id: task.id, payment_result: task.result || null } }).eq("id", workflow.id).eq("status", "running").select("id").maybeSingle();
+    if (completedWorkflow) await emitEvent({ taskId: task.id, agentId: task.agent_id, eventType: "task_completed", message: "Multi-agent workflow yakunlandi", metadata: { workflow_id: workflow.id, workflow_type: workflow.workflow_type, handoff: "completed" } });
+    return { advanced: false, completed: Boolean(completedWorkflow) };
   }
   return { advanced: false };
 }
