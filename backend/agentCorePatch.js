@@ -1,6 +1,6 @@
 const crypto = require("crypto");
-const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { install } = require("./routeRegistry");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim().replace(/^['"]|['"]$/g, "");
@@ -41,61 +41,59 @@ function requireAgentAdmin(req, res, next) {
   next();
 }
 
-function registerAgentCore(app) {
-  app.get("/api/admin/agents", requireAgentAdmin, async (req, res) => {
-    try {
-      const { data: tasks, error } = await supabase
-        .from("agent_tasks")
-        .select("id,agent_id,command,status,created_by,created_at,started_at,finished_at,result,error")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error && !/relation .* does not exist|schema cache/i.test(error.message || "")) throw error;
-      const taskRows = dataOrEmpty(tasks, error);
-      const active = new Set(taskRows.filter((t) => ["queued", "running"].includes(t.status)).map((t) => t.agent_id));
-      res.json({ success: true, data: AGENTS.map((agent) => ({ ...agent, status: active.has(agent.id) ? "working" : "idle" })), tasks: taskRows, persistence: !error });
-    } catch (error) {
-      console.error("Agent registry error:", error);
-      res.status(500).json({ success: false, message: "Agent registry yuklanmadi" });
-    }
-  });
+install("get", "/api/admin/agents", requireAgentAdmin, async (req, res) => {
+  try {
+    const { data: tasks, error } = await supabase
+      .from("agent_tasks")
+      .select("id,agent_id,command,status,created_by,created_at,started_at,finished_at,result,error")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error && !/relation .* does not exist|schema cache/i.test(error.message || "")) throw error;
+    const taskRows = dataOrEmpty(tasks, error);
+    const active = new Set(taskRows.filter((t) => ["queued", "running"].includes(t.status)).map((t) => t.agent_id));
+    res.json({ success: true, data: AGENTS.map((agent) => ({ ...agent, status: active.has(agent.id) ? "working" : "idle" })), tasks: taskRows, persistence: !error });
+  } catch (error) {
+    console.error("Agent registry error:", error);
+    res.status(500).json({ success: false, message: "Agent registry yuklanmadi" });
+  }
+});
 
-  app.post("/api/admin/agents/tasks", requireAgentAdmin, async (req, res) => {
-    try {
-      const agentId = String(req.body?.agent_id || "").trim();
-      const command = String(req.body?.command || "").trim();
-      if (!AGENTS.some((agent) => agent.id === agentId)) return res.status(400).json({ success: false, message: "Noma'lum agent" });
-      if (!command || command.length > 2000) return res.status(400).json({ success: false, message: "Task buyrug'i noto'g'ri" });
+install("post", "/api/admin/agents/tasks", requireAgentAdmin, async (req, res) => {
+  try {
+    const agentId = String(req.body?.agent_id || "").trim();
+    const command = String(req.body?.command || "").trim();
+    if (!AGENTS.some((agent) => agent.id === agentId)) return res.status(400).json({ success: false, message: "Noma'lum agent" });
+    if (!command || command.length > 2000) return res.status(400).json({ success: false, message: "Task buyrug'i noto'g'ri" });
 
-      const row = { agent_id: agentId, command, status: "queued", created_by: "admin", created_at: new Date().toISOString() };
-      const { data, error } = await supabase.from("agent_tasks").insert(row).select("*").single();
-      if (error) throw error;
-      res.status(201).json({ success: true, data });
-    } catch (error) {
-      console.error("Agent task create error:", error);
-      res.status(500).json({ success: false, message: "Agent task yaratilmadi" });
-    }
-  });
+    const row = { agent_id: agentId, command, status: "queued", created_by: "admin", created_at: new Date().toISOString() };
+    const { data, error } = await supabase.from("agent_tasks").insert(row).select("*").single();
+    if (error) throw error;
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    console.error("Agent task create error:", error);
+    res.status(500).json({ success: false, message: "Agent task yaratilmadi" });
+  }
+});
 
-  app.post("/api/admin/agents/tasks/:id/stop", requireAgentAdmin, async (req, res) => {
-    try {
-      const { data, error } = await supabase.from("agent_tasks").update({ status: "cancelled", finished_at: new Date().toISOString() }).eq("id", req.params.id).in("status", ["queued", "running"]).select("*").maybeSingle();
-      if (error) throw error;
-      if (!data) return res.status(404).json({ success: false, message: "Faol task topilmadi" });
-      res.json({ success: true, data });
-    } catch (error) {
-      console.error("Agent task stop error:", error);
-      res.status(500).json({ success: false, message: "Agent task to'xtatilmadi" });
-    }
-  });
-}
+install("post", "/api/admin/agents/tasks/:id/stop", requireAgentAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("agent_tasks")
+      .update({ status: "cancelled", finished_at: new Date().toISOString() })
+      .eq("id", req.params.id)
+      .in("status", ["queued", "running"])
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, message: "Faol task topilmadi" });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error("Agent task stop error:", error);
+    res.status(500).json({ success: false, message: "Agent task to'xtatilmadi" });
+  }
+});
 
 function dataOrEmpty(data, error) {
   if (!error) return data || [];
   return [];
 }
-
-const originalListen = express.application.listen;
-express.application.listen = function patchedListen(...args) {
-  registerAgentCore(this);
-  return originalListen.apply(this, args);
-};
