@@ -4,6 +4,8 @@ type Workflow = { id: string; workflow_type: string; status: string; context?: R
 
 type Props = { api: string; token: string; notify: (message: string) => void };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function AgentWorkflowPanel({ api, token, notify }: Props) {
   const [orderNumber, setOrderNumber] = useState("");
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
@@ -14,10 +16,11 @@ export function AgentWorkflowPanel({ api, token, notify }: Props) {
     if (!value) return notify("Order number yoki ID kiriting");
     setLoading(true);
     try {
+      const input = UUID_RE.test(value) ? { order_id: value } : { order_number: value };
       const response = await fetch(`${api}/api/admin/agents/workflows`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ workflow_type: "order_payment_status", input: { order_number: value } })
+        body: JSON.stringify({ workflow_type: "order_payment_status", input })
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || json.success === false) throw new Error(json.message || "Workflow yaratilmadi");
