@@ -127,10 +127,24 @@ type User = {
   updated_at?: string;
   created_at?: string;
   photo_url?: string;
+  avatar_url?: string;
   telegram_photo?: string;
   orders_count?: number;
   total_spent?: number;
 };
+
+function getResolvedCustomerPhoto(u: any, photosMap?: Record<number, string>): string {
+  if (!u) return "";
+  const direct = u.avatar_url || u.photo_url || (u.telegram_id && photosMap ? photosMap[u.telegram_id] : "") || u.telegram_photo || "";
+  if (direct) return direct;
+  
+  // Local stored profile avatar check
+  try {
+    const savedCustom = localStorage.getItem("guli_custom_avatar") || localStorage.getItem("guli_avatar_url");
+    if (savedCustom) return savedCustom;
+  } catch {}
+  return "";
+}
 
 type Promo = {
   id?: number;
@@ -294,6 +308,114 @@ export default function AdminPro() {
   const [unreadChatCount, setUnreadChatCount] = useState<number>(() => getTotalUnreadChatCount());
   const [isBellRinging, setIsBellRinging] = useState<boolean>(false);
   const [userPhotosMap, setUserPhotosMap] = useState<Record<number, string>>({});
+
+  const handleAdminDeviceBack = useCallback(() => {
+    // 1. Close lightbox or modal drawers
+    if (receiptLightboxUrl) {
+      setReceiptLightboxUrl(null);
+      return true;
+    }
+    if (selectedOrder) {
+      setSelectedOrder(null);
+      return true;
+    }
+    if (selectedUser) {
+      setSelectedUser(null);
+      return true;
+    }
+    if (productOpen) {
+      setProductOpen(false);
+      return true;
+    }
+    if (promoOpen) {
+      setPromoOpen(false);
+      return true;
+    }
+    if (mobileSidebarOpen) {
+      setMobileSidebarOpen(false);
+      return true;
+    }
+
+    // 2. Return to dashboard main tab if in a sub-tab
+    if (tab !== "dashboard") {
+      setTab("dashboard");
+      return true;
+    }
+
+    return false;
+  }, [
+    receiptLightboxUrl,
+    selectedOrder,
+    selectedUser,
+    productOpen,
+    promoOpen,
+    mobileSidebarOpen,
+    tab,
+  ]);
+
+  // Admin Browser / Hardware Popstate Navigation
+  useEffect(() => {
+    try {
+      if (!window.history.state || !window.history.state.guliAdminInit) {
+        window.history.replaceState({ guliAdminInit: true, guliAdminTab: tab }, "", "");
+      }
+    } catch {}
+
+    const onPopState = () => {
+      const handled = handleAdminDeviceBack();
+      if (handled) {
+        try {
+          window.history.pushState({ guliAdminInit: true, guliAdminTab: tab }, "", "");
+        } catch {}
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [handleAdminDeviceBack, tab]);
+
+  // Admin Telegram BackButton Integration
+  useEffect(() => {
+    const tgBackButton = (window as any).Telegram?.WebApp?.BackButton;
+    if (!tgBackButton) return;
+
+    const isNonRoot =
+      Boolean(receiptLightboxUrl) ||
+      Boolean(selectedOrder) ||
+      Boolean(selectedUser) ||
+      productOpen ||
+      promoOpen ||
+      mobileSidebarOpen ||
+      tab !== "dashboard";
+
+    if (isNonRoot) {
+      try {
+        tgBackButton.show();
+        const onTgBack = () => {
+          handleAdminDeviceBack();
+        };
+        tgBackButton.onClick(onTgBack);
+        return () => {
+          tgBackButton.offClick(onTgBack);
+        };
+      } catch {}
+    } else {
+      try {
+        tgBackButton.hide();
+      } catch {}
+    }
+  }, [
+    handleAdminDeviceBack,
+    receiptLightboxUrl,
+    selectedOrder,
+    selectedUser,
+    productOpen,
+    promoOpen,
+    mobileSidebarOpen,
+    tab,
+  ]);
 
   // Kun / Tun rejimini mijoz web app kabi to'liq qo'llash va eshitib turish
   useEffect(() => {
@@ -1428,9 +1550,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                                 flexShrink: 0,
                               }}
                             >
-                              {(u.photo_url || (u.telegram_id && userPhotosMap[u.telegram_id]) || (u as any).telegram_photo) ? (
+                              {getResolvedCustomerPhoto(u, userPhotosMap) ? (
                                 <img
-                                  src={u.photo_url || (u.telegram_id ? userPhotosMap[u.telegram_id] : "") || (u as any).telegram_photo}
+                                  src={getResolvedCustomerPhoto(u, userPhotosMap)}
                                   alt={u.first_name || ""}
                                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                                   onError={(e) => {
@@ -1810,7 +1932,7 @@ function OrderDrawer({
   );
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [customerPhoto, setCustomerPhoto] = useState<string>(
-    order.telegram_photo || order.photo_url || ""
+    getResolvedCustomerPhoto(order)
   );
 
   useEffect(() => {
@@ -2571,7 +2693,7 @@ function UserDrawer({
   onOrder: (o: Order) => void;
 }) {
   const [userPhoto, setUserPhoto] = useState<string>(
-    user.photo_url || user.telegram_photo || ""
+    getResolvedCustomerPhoto(user)
   );
   const mine = orders.filter(
     (o) =>

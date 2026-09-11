@@ -28,6 +28,7 @@ interface ModernProfileViewProps {
   onLogout: () => void;
   onUpdateProfile: (updated: Partial<AuthUser>) => void;
   onSelectOrderFilter?: (filter: "all" | "recent" | "in_progress" | "completed" | "cancelled") => void;
+  onOpenAuth?: (tab?: "signin" | "signup") => void;
   t: (key: any) => string;
 }
 
@@ -55,12 +56,19 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   onLogout,
   onUpdateProfile,
   onSelectOrderFilter,
+  onOpenAuth,
   t,
 }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  // Avatar resolution & state
+  const savedCustomAvatar = localStorage.getItem("guli_custom_avatar") || localStorage.getItem("guli_avatar_url") || "";
+  const initialAvatar = savedCustomAvatar || authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
+  const [currentAvatar, setCurrentAvatar] = useState(initialAvatar);
+  const [editAvatar, setEditAvatar] = useState(initialAvatar);
 
   // Edit fields
   const [editName, setEditName] = useState(authUser?.full_name || telegramUser?.first_name || "");
@@ -76,7 +84,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
   const userEmail = authUser?.email || localStorage.getItem("guli_email") || (telegramUser?.username ? `@${telegramUser.username}` : "Hisob ulangan");
   const userPhone = authUser?.phone || localStorage.getItem("guli_phone") || "+998 -- --- -- --";
-  const userAvatar = authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
+  const userAvatar = currentAvatar || authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
   const isGoogle = authUser?.provider === "google" || (authUser?.email && authUser.email.endsWith("@gmail.com"));
 
   // Calculate order stats
@@ -92,6 +100,31 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       localStorage.setItem("guli_first_name", editName);
       localStorage.setItem("guli_phone", editPhone);
       localStorage.setItem("guli_birth_date", editBirthDate);
+      if (editAvatar) {
+        localStorage.setItem("guli_custom_avatar", editAvatar);
+        localStorage.setItem("guli_avatar_url", editAvatar);
+        localStorage.setItem("guli_customer_photo", editAvatar);
+        localStorage.setItem("chat_user_avatar", editAvatar);
+      } else {
+        localStorage.removeItem("guli_custom_avatar");
+        localStorage.removeItem("guli_avatar_url");
+        localStorage.removeItem("guli_customer_photo");
+      }
+
+      // Sync across multi-user photos storage for Admin and Chat consistency
+      try {
+        const synced = JSON.parse(localStorage.getItem("guli_synced_user_photos") || "{}");
+        if (authUser?.id) synced[authUser.id] = editAvatar;
+        if (authUser?.email) synced[authUser.email] = editAvatar;
+        if (authUser?.phone) synced[authUser.phone] = editAvatar;
+        if (editPhone) synced[editPhone] = editAvatar;
+        if (editName) synced[editName] = editAvatar;
+        localStorage.setItem("guli_synced_user_photos", JSON.stringify(synced));
+      } catch {}
+
+      // Dispatch real-time avatar event
+      window.dispatchEvent(new CustomEvent("guli_avatar_updated", { detail: { avatar: editAvatar } }));
+      setCurrentAvatar(editAvatar);
 
       // Call backend update if session token exists
       const token = localStorage.getItem("guli_access_token");
@@ -105,6 +138,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           body: JSON.stringify({
             full_name: editName,
             phone: editPhone,
+            avatar_url: editAvatar,
           }),
         }).catch(() => null);
       }
@@ -112,12 +146,61 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       onUpdateProfile({
         full_name: editName,
         phone: editPhone,
+        avatar_url: editAvatar,
       });
 
       setIsEditModalOpen(false);
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Rasm hajmi 5MB dan oshmasligi kerak");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Resize to 320x320 max for optimal storage and rendering
+        const canvas = document.createElement("canvas");
+        const maxDim = 320;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.85);
+          setEditAvatar(compressed);
+        } else {
+          setEditAvatar(event.target?.result as string);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -317,6 +400,75 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             <div style={{ height: "100%", width: "80%", background: "linear-gradient(90deg, #fbbf24, #ec4899)", borderRadius: "3px" }} />
           </div>
         </div>
+      </section>
+
+      {/* Profile Registration / Login trigger button card */}
+      <section
+        style={{
+          marginBottom: "18px",
+          background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fdf2f8 100%)",
+          borderRadius: "22px",
+          padding: "16px 18px",
+          border: "1px solid rgba(225, 29, 72, 0.18)",
+          boxShadow: "0 6px 20px rgba(225, 29, 72, 0.08)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "220px" }}>
+          <div
+            style={{
+              width: "44px",
+              height: "44px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #e11d48, #be123c)",
+              color: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "22px",
+              flexShrink: 0,
+              boxShadow: "0 4px 12px rgba(225, 29, 72, 0.3)",
+            }}
+          >
+            {authUser ? "👤" : "🎁"}
+          </div>
+          <div>
+            <div style={{ fontSize: "14px", fontWeight: 800, color: "#881337" }}>
+              {authUser ? "GULI Shaxsiy hisobingiz" : "GULI Shaxsiy profilingiz"}
+            </div>
+            <div style={{ fontSize: "12px", color: "#9f1239", marginTop: "2px" }}>
+              {authUser
+                ? `Ulangan: ${userEmail}`
+                : "Ro‘yxatdan o‘ting va 25,000 so‘m xush kelibsiz bonusiga ega bo‘ling"}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onOpenAuth?.(authUser ? "signin" : "signup")}
+          style={{
+            padding: "11px 20px",
+            borderRadius: "14px",
+            border: "none",
+            background: "linear-gradient(135deg, #e11d48 0%, #be123c 100%)",
+            color: "#ffffff",
+            fontSize: "13px",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 4px 14px rgba(225, 29, 72, 0.35)",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            transition: "transform 0.15s ease",
+          }}
+        >
+          <span>{authUser ? "🔑 Hisobni almashtirish" : "✨ Ro‘yxatdan o‘tish"}</span>
+        </button>
       </section>
 
       {/* 2. Wallet & Loyalty Points Widget (Uzum / Amazon Market Style) */}
@@ -894,6 +1046,142 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveProfile}>
+              {/* Profile Main Picture Upload */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  padding: "14px",
+                  borderRadius: "20px",
+                  backgroundColor: "#f8fafc",
+                  border: "1px dashed #cbd5e1",
+                  marginBottom: "16px",
+                  gap: "10px",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: "74px",
+                    height: "74px",
+                    borderRadius: "50%",
+                    padding: "3px",
+                    background: "linear-gradient(135deg, #fbbf24, #ec4899, #60a5fa)",
+                    boxShadow: "0 6px 16px rgba(0, 0, 0, 0.12)",
+                  }}
+                >
+                  {editAvatar ? (
+                    <img
+                      src={editAvatar}
+                      alt="Profil rasmi"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        borderRadius: "50%",
+                        backgroundColor: "#ffffff",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        backgroundColor: "#be185d",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#ffffff",
+                        fontSize: "26px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {editName ? editName.charAt(0).toUpperCase() : "👤"}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                  <label
+                    style={{
+                      padding: "7px 14px",
+                      borderRadius: "12px",
+                      backgroundColor: "#be185d",
+                      color: "#ffffff",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      boxShadow: "0 3px 10px rgba(190, 24, 93, 0.25)",
+                    }}
+                  >
+                    <span>📷</span> Yangi rasm yuklash
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarFileChange}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+
+                  {editAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => setEditAvatar("")}
+                      style={{
+                        padding: "7px 12px",
+                        borderRadius: "12px",
+                        backgroundColor: "#fee2e2",
+                        border: "1px solid #fca5a5",
+                        color: "#b91c1c",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                      }}
+                    >
+                      🗑️ O‘chirish
+                    </button>
+                  )}
+                </div>
+
+                {/* Quick Avatar Presets */}
+                <div style={{ textAlign: "center", width: "100%", marginTop: "2px" }}>
+                  <span style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "6px" }}>
+                    Yoki tayyor avatarlardan tanlang:
+                  </span>
+                  <div style={{ display: "flex", justifyContent: "center", gap: "6px" }}>
+                    {[
+                      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+                      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80",
+                      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80",
+                      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+                    ].map((sampleUrl, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setEditAvatar(sampleUrl)}
+                        style={{
+                          width: "32px",
+                          height: "32px",
+                          borderRadius: "50%",
+                          border: editAvatar === sampleUrl ? "2px solid #be185d" : "1px solid #cbd5e1",
+                          padding: "1px",
+                          cursor: "pointer",
+                          backgroundColor: "#fff",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <img src={sampleUrl} alt="Preset" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
                   Ism va Familiya

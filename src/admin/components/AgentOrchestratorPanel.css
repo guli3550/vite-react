@@ -1,3 +1,496 @@
-.agentOrchestrator{display:grid;gap:14px;overflow:hidden}.orchestratorHero{position:relative;min-height:190px;padding:22px;border:1px solid var(--line);border-radius:20px;background:radial-gradient(circle at 50% 40%,#fff 0,#fff6f8 48%,#f7e7eb 100%);display:flex;align-items:center;justify-content:center;gap:26px;overflow:hidden}.orchestratorHero:before{content:"";position:absolute;inset:22px;border:1px dashed #e5c5ce;border-radius:18px;pointer-events:none}.orchestratorCore{position:relative;z-index:2;width:128px;height:128px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle at 35% 30%,#fff,#f0cbd5 70%,#d98da1);box-shadow:0 18px 45px rgba(116,54,72,.22),inset 0 0 0 8px rgba(255,255,255,.45);transform:perspective(500px) rotateX(8deg)}.orchestratorCore span{font-size:30px}.orchestratorCore b{font-size:11px;letter-spacing:.1em}.orchestratorCore small{font-size:9px;opacity:.7}.orchestratorLine{height:2px;width:60px;background:linear-gradient(90deg,#d89aaa,#b6536b);box-shadow:0 0 12px #e6a8b7}.routeNodes{position:relative;z-index:2;display:grid;grid-template-columns:repeat(5,minmax(92px,1fr));gap:9px}.routeNode{min-height:108px;border:1px solid #ead7dc;background:rgba(255,255,255,.85);border-radius:16px;padding:10px 7px;display:grid;place-content:center;justify-items:center;gap:4px;cursor:pointer;box-shadow:0 9px 20px rgba(80,38,48,.08);transition:.2s}.routeNode:hover{transform:translateY(-4px);box-shadow:0 15px 28px rgba(80,38,48,.13)}.routeNode span{font-size:24px}.routeNode b{text-transform:uppercase;font-size:10px;letter-spacing:.08em}.routeNode small{font-size:9px;color:var(--muted);text-align:center}.orchestratorForm{display:grid;gap:12px;padding:18px;border:1px solid var(--line);border-radius:18px;background:#fff}.orchestratorForm h2{margin:4px 0;font-size:18px}.orchestratorForm p{margin:0;color:var(--muted);font-size:11px;line-height:1.5}.orchestratorForm textarea,.orchestratorForm select{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff;padding:12px;font:inherit;outline:0}.orchestratorForm textarea:focus,.orchestratorForm select:focus{border-color:#d79aa8;box-shadow:0 0 0 3px #f8e8ec}.orchestratorActions{display:flex;gap:10px}.orchestratorActions select{flex:1}.controlLegend{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:#fbf3f5;color:#7d6971;font-size:10px}.controlLegend b{color:var(--ink)}.orchestratorQueue{display:grid;gap:8px}.orchestratorTask{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:#fff}.orchestratorTask>div:first-child{min-width:0}.orchestratorTask b{font-size:12px;margin-right:8px}.orchestratorTask small{display:block;color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:650px;margin-top:4px}.queueStatus{display:inline-block;padding:3px 7px;border-radius:999px;font-size:9px;background:#f3eeee;color:#8c737b}.status-queued{background:#fff5db;color:#9a7218}.status-paused{background:#f1eeee;color:#7e6870}.status-running{background:#eef8f1;color:#3f8960}.taskControls{display:flex;gap:6px;flex-shrink:0}.taskControls button{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer}.taskControls button:hover{background:#f7e9ed;color:var(--rose)}
-@media(max-width:900px){.orchestratorHero{display:block;min-height:0;padding:18px}.orchestratorCore{margin:0 auto 18px}.orchestratorLine{width:2px;height:25px;margin:0 auto 12px}.routeNodes{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:520px){.routeNodes{grid-template-columns:repeat(2,1fr);gap:7px}.routeNode{min-height:88px}.orchestratorActions{display:grid}.orchestratorTask{align-items:flex-start}.orchestratorTask small{max-width:220px}}
+.agentOrchestratorCard {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+/* Header */
+.orchHeader {
+  display: flex;
+  justifyContent: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.orchBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.orchBadge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e11d48;
+  background: rgba(225, 29, 72, 0.08);
+  padding: 3px 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.orchSubBadge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.orchTitle {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.orchSubtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Route Ribbon (5 Route chips) */
+.orchRouteRibbon {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.orchRoutePill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.orchRoutePill:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.orchRoutePill.active {
+  background: rgba(225, 29, 72, 0.06);
+  border-color: #e11d48;
+  box-shadow: 0 2px 10px rgba(225, 29, 72, 0.12);
+}
+
+.orchRouteIcon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.orchRouteInfo {
+  text-align: left;
+}
+
+.orchRouteInfo b {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.orchRouteInfo small {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.orchRoutePill.active .orchRouteInfo b {
+  color: #e11d48;
+}
+
+/* Quick Prompts Bar */
+.orchQuickPrompts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.quickPromptsLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.quickPromptsScroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+
+.quickPromptChip {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.quickPromptChip:hover {
+  border-color: #e11d48;
+  color: #e11d48;
+  background: rgba(225, 29, 72, 0.04);
+}
+
+/* Input Area */
+.orchInputBox {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s;
+}
+
+.orchInputBox:focus-within {
+  border-color: #e11d48;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.08);
+}
+
+.orchTextarea {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  font-size: 13px;
+  color: #0f172a;
+  resize: none;
+  outline: none;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+.orchTextarea::placeholder {
+  color: #94a3b8;
+}
+
+.orchActionBar {
+  display: flex;
+  justifyContent: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.orchToolSelectWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.toolSelectIcon {
+  font-size: 13px;
+}
+
+.orchSelect {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.orchActionBtns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.orchClearBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.orchClearBtn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.orchSubmitBtn {
+  padding: 7px 16px;
+  border-radius: 10px;
+  border: none;
+  background: #e11d48;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(225, 29, 72, 0.25);
+  transition: all 0.15s ease;
+}
+
+.orchSubmitBtn:hover:not(:disabled) {
+  background: #be123c;
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(225, 29, 72, 0.35);
+}
+
+.orchSubmitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Control Section */
+.orchControlSection {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orchControlHeader {
+  display: flex;
+  justifyContent: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.controlHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.controlDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.taskCountBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.controlQuickLegend {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.orchEmptyState {
+  font-size: 12px;
+  color: var(--muted);
+  background: #f8fafc;
+  padding: 10px 14px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.orchEmptyState span {
+  color: #10b981;
+  font-weight: bold;
+}
+
+/* Active Task List */
+.orchActiveList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.orchActiveItem {
+  display: flex;
+  justifyContent: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.activeItemInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+.itemTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agentName {
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.orchStatusPill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.orchStatusPill.status-queued {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.orchStatusPill.status-paused {
+  background: #fefce8;
+  color: #854d0e;
+}
+
+.orchStatusPill.status-running {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.cmdPreview {
+  font-size: 10px;
+  color: var(--muted);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  margin-top: 2px;
+}
+
+.itemControlBtns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.controlBtn {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.15s ease;
+}
+
+.controlBtn:hover {
+  background: #f8fafc;
+}
+
+.controlBtn.pause {
+  color: #854d0e;
+}
+
+.controlBtn.resume {
+  color: #15803d;
+}
+
+.controlBtn.stop {
+  color: #dc2626;
+}
+
+.runningIndicator {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border-radius: 6px;
+}
+
+.runningSpin {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .orchActionBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .orchToolSelectWrap {
+    width: 100%;
+  }
+  .orchSubmitBtn {
+    width: 100%;
+    text-align: center;
+    padding: 9px;
+  }
+  .orchActiveItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .itemControlBtns {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+}

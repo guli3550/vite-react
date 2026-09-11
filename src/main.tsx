@@ -52,6 +52,41 @@ class StorefrontErrorBoundary extends Component<Props, State> {
 }
 
 if (typeof window !== 'undefined') {
+  const patchPrecisionFormat = (proto: any) => {
+    if (!proto || typeof proto.getShaderPrecisionFormat !== 'function') return
+    if (proto.__safePrecisionPatched) return
+    const original = proto.getShaderPrecisionFormat
+    proto.getShaderPrecisionFormat = function (shaderType: number, precisionType: number) {
+      try {
+        const res = original ? original.call(this, shaderType, precisionType) : null
+        if (res && typeof res.precision === 'number') {
+          return res
+        }
+      } catch {}
+      return { rangeMin: 0, rangeMax: 0, precision: 0 }
+    }
+    proto.__safePrecisionPatched = true
+  }
+
+  if (typeof WebGLRenderingContext !== 'undefined' && WebGLRenderingContext.prototype) {
+    patchPrecisionFormat(WebGLRenderingContext.prototype)
+  }
+  if (typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype) {
+    patchPrecisionFormat(WebGL2RenderingContext.prototype)
+  }
+
+  window.addEventListener('error', (event) => {
+    const msg = typeof event?.message === 'string' ? event.message : ''
+    if (
+      msg.includes('ResizeObserver loop completed with undelivered notifications') ||
+      msg.includes('ResizeObserver loop limit exceeded') ||
+      msg.includes("Cannot read properties of null (reading 'precision')")
+    ) {
+      event.stopImmediatePropagation()
+      event.preventDefault()
+    }
+  })
+
   const webApp = window.Telegram?.WebApp
   try {
     webApp?.ready()

@@ -83,6 +83,13 @@ declare global {
             photo_url?: string;
           };
         };
+        BackButton?: {
+          show: () => void;
+          hide: () => void;
+          onClick: (callback: () => void) => void;
+          offClick: (callback: () => void) => void;
+          isVisible?: boolean;
+        };
         HapticFeedback?: {
           impactOccurred: (style: "light" | "medium" | "heavy") => void;
           notificationOccurred?: (
@@ -782,7 +789,12 @@ export default function App() {
       .join(" ") ||
     localStorage.getItem("guli_first_name") ||
     "GULI mijozi";
-  const avatar = authUser?.avatar_url || telegramUser?.photo_url || "";
+  const avatar =
+    authUser?.avatar_url ||
+    localStorage.getItem("guli_custom_avatar") ||
+    localStorage.getItem("guli_avatar_url") ||
+    telegramUser?.photo_url ||
+    "";
   const currentUserId = telegramUser?.id
     ? String(telegramUser.id)
     : authUser?.id || "guest-user";
@@ -1248,6 +1260,12 @@ export default function App() {
       localStorage.setItem("guli_auth_user", JSON.stringify(next));
       return next;
     });
+    if (updated.avatar_url) {
+      localStorage.setItem("guli_custom_avatar", updated.avatar_url);
+      localStorage.setItem("guli_avatar_url", updated.avatar_url);
+      localStorage.setItem("guli_customer_photo", updated.avatar_url);
+      localStorage.setItem("chat_user_avatar", updated.avatar_url);
+    }
     showToast("✓ Profil muvaffaqiyatli saqlandi!");
   };
 
@@ -1757,10 +1775,202 @@ export default function App() {
     try {
       tg()?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
-    setPreviousPage(page);
+    if (next !== page) {
+      setPreviousPage(page);
+      try {
+        window.history.pushState({ guliPage: next }, "", "");
+      } catch {}
+    }
     setPage(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  const handleDeviceBack = useCallback(() => {
+    try {
+      tg()?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+
+    // 1. Close any open modal
+    if (isCustomerAuthOpen) {
+      setIsCustomerAuthOpen(false);
+      setAuthGateCustomMessage({});
+      return true;
+    }
+    if (showCardPaymentModal) {
+      setShowCardPaymentModal(false);
+      setTimerActive(false);
+      return true;
+    }
+    if (isSettingsOpen) {
+      setIsSettingsOpen(false);
+      return true;
+    }
+    if (isHelpOpen) {
+      setIsHelpOpen(false);
+      return true;
+    }
+    if (isNotificationsOpen) {
+      setIsNotificationsOpen(false);
+      return true;
+    }
+    if (isSocialLinksOpen) {
+      setIsSocialLinksOpen(false);
+      return true;
+    }
+    if (isPromosOpen) {
+      setIsPromosOpen(false);
+      return true;
+    }
+    if (isDeliveryInfoOpen) {
+      setIsDeliveryInfoOpen(false);
+      return true;
+    }
+    if (isSizeGuideOpen) {
+      setIsSizeGuideOpen(false);
+      return true;
+    }
+    if (isAboutOpen) {
+      setIsAboutOpen(false);
+      return true;
+    }
+    if (selectedOrderId) {
+      setSelectedOrderId(null);
+      return true;
+    }
+
+    // 2. Product view -> return to previous page
+    if (page === "product" || selectedProduct) {
+      setSelectedProduct(null);
+      const target = previousPage && previousPage !== "product" ? previousPage : "home";
+      setPage(target);
+      return true;
+    }
+
+    // 3. Category or Search / Recommendation active -> Reset and return to Home
+    if (selectedCategory !== "Barchasi" || search.trim() !== "") {
+      setSelectedCategory("Barchasi");
+      setSearch("");
+      if (page !== "home") {
+        setPage("home");
+      }
+      return true;
+    }
+
+    // 4. Catalog page -> return to Home
+    if (page === "catalog") {
+      setSelectedCategory("Barchasi");
+      setSearch("");
+      setPage("home");
+      return true;
+    }
+
+    // 5. Any other page -> return to Home
+    if (page !== "home") {
+      setPage("home");
+      return true;
+    }
+
+    return false;
+  }, [
+    isCustomerAuthOpen,
+    showCardPaymentModal,
+    isSettingsOpen,
+    isHelpOpen,
+    isNotificationsOpen,
+    isSocialLinksOpen,
+    isPromosOpen,
+    isDeliveryInfoOpen,
+    isSizeGuideOpen,
+    isAboutOpen,
+    selectedOrderId,
+    page,
+    selectedProduct,
+    previousPage,
+    selectedCategory,
+    search,
+  ]);
+
+  // Browser / Hardware Back Navigation (PopState)
+  useEffect(() => {
+    try {
+      if (!window.history.state || !window.history.state.guliInit) {
+        window.history.replaceState({ guliInit: true, guliPage: page }, "", "");
+      }
+    } catch {}
+
+    const onPopState = () => {
+      const handled = handleDeviceBack();
+      if (handled) {
+        try {
+          window.history.pushState({ guliInit: true, guliPage: page }, "", "");
+        } catch {}
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [handleDeviceBack, page]);
+
+  // Telegram WebApp BackButton Integration
+  useEffect(() => {
+    const tgBackButton = window.Telegram?.WebApp?.BackButton;
+    if (!tgBackButton) return;
+
+    const hasOpenModal =
+      isCustomerAuthOpen ||
+      showCardPaymentModal ||
+      isSettingsOpen ||
+      isHelpOpen ||
+      isNotificationsOpen ||
+      isSocialLinksOpen ||
+      isPromosOpen ||
+      isDeliveryInfoOpen ||
+      isSizeGuideOpen ||
+      isAboutOpen ||
+      Boolean(selectedOrderId);
+
+    const isNonHomeState =
+      page !== "home" ||
+      selectedCategory !== "Barchasi" ||
+      search.trim() !== "" ||
+      selectedProduct !== null;
+
+    if (hasOpenModal || isNonHomeState) {
+      try {
+        tgBackButton.show();
+        const onTgBack = () => {
+          handleDeviceBack();
+        };
+        tgBackButton.onClick(onTgBack);
+        return () => {
+          tgBackButton.offClick(onTgBack);
+        };
+      } catch {}
+    } else {
+      try {
+        tgBackButton.hide();
+      } catch {}
+    }
+  }, [
+    handleDeviceBack,
+    isCustomerAuthOpen,
+    showCardPaymentModal,
+    isSettingsOpen,
+    isHelpOpen,
+    isNotificationsOpen,
+    isSocialLinksOpen,
+    isPromosOpen,
+    isDeliveryInfoOpen,
+    isSizeGuideOpen,
+    isAboutOpen,
+    selectedOrderId,
+    page,
+    selectedCategory,
+    search,
+    selectedProduct,
+  ]);
   const openProduct = (product: Product, from: Page = page) => {
     setPreviousPage(from);
     setSelectedProduct(product);
@@ -3004,91 +3214,6 @@ export default function App() {
   };
 
   const profilePage = () => {
-    if (!isCustomerAuthenticated) {
-      return (
-        <main className="page" style={{ padding: "36px 16px", textAlign: "center", maxWidth: "480px", margin: "0 auto" }}>
-          <div
-            style={{
-              backgroundColor: "var(--bg-card, #ffffff)",
-              borderRadius: "28px",
-              padding: "36px 22px",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.06)",
-              border: "1px solid var(--border-color, #f1f5f9)",
-            }}
-          >
-            <div
-              style={{
-                width: "72px",
-                height: "72px",
-                borderRadius: "50%",
-                backgroundColor: "rgba(190, 24, 93, 0.1)",
-                color: "#be185d",
-                fontSize: "32px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px",
-              }}
-            >
-              👤
-            </div>
-            <h2 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 8px", color: "var(--text-main, #1e293b)" }}>
-              GULI Profilingizga xush kelibsiz
-            </h2>
-            <p style={{ fontSize: "14px", color: "var(--text-muted, #64748b)", lineHeight: 1.5, margin: "0 0 24px" }}>
-              Profilingiz, buyurtmalar tarixi, bonus keshbek va shaxsiy chegirmalarni ochish uchun avval Google yoki Email orqali tizimga kiring.
-            </p>
-
-            <button
-              onClick={() => {
-                setAuthGateCustomMessage({
-                  title: "GULI hisobingizga kiring",
-                  subtitle: "Profil va barcha funksiyalarni ochish uchun kiring",
-                });
-                setIsCustomerAuthOpen(true);
-              }}
-              style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: "16px",
-                border: "none",
-                background: "linear-gradient(135deg, #be185d, #ec4899)",
-                color: "#ffffff",
-                fontSize: "15px",
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 4px 14px rgba(190, 24, 93, 0.3)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                marginBottom: "12px",
-              }}
-            >
-              <span>🔑</span> Google / Email orqali kirish
-            </button>
-
-            <button
-              onClick={() => go("home")}
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "14px",
-                border: "1px solid var(--border-color, #e2e8f0)",
-                backgroundColor: "transparent",
-                color: "var(--text-main, #475569)",
-                fontSize: "13px",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Asosiy sahifaga qaytish
-            </button>
-          </div>
-        </main>
-      );
-    }
-
     return (
       <main className="page" style={{ padding: "0 0 40px" }}>
         <ModernProfileView
@@ -3118,6 +3243,10 @@ export default function App() {
           onLogout={handleLogout}
           onUpdateProfile={handleUpdateProfile}
           onSelectOrderFilter={(f) => setOrderFilter(f)}
+          onOpenAuth={(tab) => {
+            setAuthInitialTab(tab || "signup");
+            setIsCustomerAuthOpen(true);
+          }}
           t={t}
         />
         <div
@@ -4272,12 +4401,12 @@ export default function App() {
 
       {/* Modern Customer Auth Modal (Google + Email) */}
       <CustomerAuthModal
-        isOpen={isCustomerAuthOpen || ((page === "profile" || page === "orders") && !isCustomerAuthenticated)}
+        isOpen={isCustomerAuthOpen}
         onClose={() => {
           setIsCustomerAuthOpen(false);
           setAuthGateCustomMessage({});
         }}
-        forceGate={(page === "profile" || page === "orders") && !isCustomerAuthenticated}
+        forceGate={false}
         onSuccess={(user) => {
           setAuthUser(user);
           setIsCustomerAuthOpen(false);
