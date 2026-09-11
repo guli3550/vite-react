@@ -12,6 +12,7 @@ const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
 const RECEIPT_BUCKET = 'payment-receipts';
+const TELEGRAM_INITDATA_TTL = 24 * 60 * 60;
 
 function safeEqual(a, b) {
   const aa = Buffer.from(String(a || ''));
@@ -24,6 +25,9 @@ function verifyTelegramInitData(raw) {
   try {
     const params = new URLSearchParams(String(raw));
     const received = params.get('hash') || '';
+    const authDate = Number(params.get('auth_date'));
+    if (!received || !Number.isFinite(authDate)) return null;
+    if (Math.abs(Math.floor(Date.now() / 1000) - authDate) > TELEGRAM_INITDATA_TTL) return null;
     params.delete('hash');
     const dataCheck = [...params.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
