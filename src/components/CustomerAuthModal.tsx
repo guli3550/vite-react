@@ -1,59 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { getSupabase, syncCustomerProfile, loadSupabaseConfigAsync, BACKEND_API_URL } from "../lib/supabaseClient";
+import React, { useEffect, useState } from "react";
+import { BACKEND_API_URL, syncCustomerProfile } from "../lib/supabaseClient";
 import type { Language } from "../utils/translations";
-
-async function callAuthApi<T = any>(endpointPath: string, body: Record<string, any>): Promise<T> {
-  const candidateUrls = [
-    `${BACKEND_API_URL}${endpointPath}`,
-    endpointPath,
-  ];
-
-  let lastError: Error | null = null;
-
-  for (const url of candidateUrls) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        lastError = new Error(`Serverdan kutilmagan javob keldi (${res.status}). Qaytadan urinib ko'ring.`);
-        continue;
-      }
-
-      let json: any = null;
-      try {
-        json = await res.json();
-      } catch {
-        lastError = new Error("Server bilan bog'lanishda xatolik yuz berdi.");
-        continue;
-      }
-
-      if (!res.ok || !json || !json.success) {
-        throw new Error(json?.message || "Xatolik yuz berdi. Qaytadan urinib ko'ring.");
-      }
-      return json;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("is not valid JSON") || msg.includes("Unexpected token") || msg.includes("<!DOCTYPE")) {
-        lastError = new Error("Server bilan bog'lanishda xatolik yuz berdi.");
-      } else {
-        lastError = err instanceof Error ? err : new Error(msg);
-        if (!lastError.message.startsWith("Serverdan kutilmagan javob") && !lastError.message.startsWith("Server bilan bog'lanishda")) {
-          throw lastError;
-        }
-      }
-    }
-  }
-
-  throw lastError || new Error("Server bilan bog'lanish imkoni bo'lmadi.");
-}
 
 export interface AuthUser {
   id: string;
@@ -76,1402 +23,207 @@ interface CustomerAuthModalProps {
   customSubtitle?: string;
 }
 
-type AuthView = "choice" | "otp_verify" | "set_password" | "signin" | "forgot_request" | "forgot_verify";
+type AuthView = "choice" | "otp_verify" | "signin" | "signup" | "signup_otp" | "forgot_request" | "forgot_verify";
+type ApiResult = { success: boolean; message?: string; data?: any };
 
-export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
-  isOpen,
-  onClose,
-  onSuccess,
-  initialTab = "otp",
-  forceGate = false,
-  customTitle,
-  customSubtitle,
-}) => {
-  const [view, setView] = useState<AuthView>("choice");
+async function callAuthApi<T extends ApiResult = ApiResult>(path: string, body: Record<string, unknown>): Promise<T> {
+  const urls = [`${BACKEND_API_URL}${path}`, path];
+  let last: Error | null = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+      const type = res.headers.get("content-type") || "";
+      const text = await res.text();
+      if (!type.includes("application/json")) {
+        last = new Error(res.status >= 500 ? "Server vaqtincha ishlamayapti. Birozdan so‘ng qayta urinib ko‘ring." : "Serverdan noto‘g‘ri javob keldi.");
+        continue;
+      }
+      let json: T;
+      try { json = JSON.parse(text) as T; } catch { last = new Error("Server bilan bog‘lanishda xatolik yuz berdi."); continue; }
+      if (!res.ok || !json.success) throw new Error(json.message || "So‘rov bajarilmadi.");
+      return json;
+    } catch (e) {
+      last = e instanceof Error ? e : new Error(String(e));
+      if (last.message.includes("fetch") || last.message.includes("Failed") || last.message === "Serverdan noto‘g‘ri javob keldi." || last.message.includes("Server vaqtincha")) continue;
+      throw last;
+    }
+  }
+  throw last || new Error("Server bilan bog‘lanish imkoni bo‘lmadi.");
+}
 
-  // Form fields
+const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+const inputStyle: React.CSSProperties = { width: "100%", padding: "12px 14px", borderRadius: 12, border: "1px solid #cbd5e1", fontSize: 14, outline: "none", boxSizing: "border-box" };
+const buttonStyle: React.CSSProperties = { width: "100%", padding: 13, borderRadius: 14, border: "none", background: "#4f46e5", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" };
+const linkStyle: React.CSSProperties = { background: "none", border: "none", color: "#4f46e5", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" };
+
+export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, onClose, onSuccess, initialTab = "otp", forceGate = false, customTitle, customSubtitle }) => {
+  const [view, setView] = useState<AuthView>(initialTab === "signin" ? "signin" : initialTab === "signup" ? "signup" : "choice");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-
-  // OTP Verification state
-  const [otpCode, setOtpCode] = useState("");
-  const [otpTimer, setOtpTimer] = useState(0);
-
-  // Forgot password state
+  const [otp, setOtp] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotToken, setForgotToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
-
-  // Verified user holder for optional password set
-  const [verifiedUser, setVerifiedUser] = useState<{ user: AuthUser; token: string } | null>(null);
-
-  // Status
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [timer, setTimer] = useState(0);
+  const googleConfigured = Boolean((import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim());
 
-  // Ensure Supabase client config is loaded
   useEffect(() => {
-    loadSupabaseConfigAsync();
-  }, []);
-
-  // Clean legacy plain text credentials if present
-  useEffect(() => {
-    localStorage.removeItem("guli_registered_users");
-  }, []);
-
-  // Timer countdown
-  useEffect(() => {
-    if (otpTimer <= 0) return;
-    const interval = setInterval(() => {
-      setOtpTimer((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [otpTimer]);
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setError(null);
-      setSuccessMsg(null);
-      setOtpCode("");
-      setOtpTimer(0);
-      setVerifiedUser(null);
-      if (initialTab === "signin") {
-        setView("signin");
-      } else {
-        setView("choice");
-      }
-    }
+    if (!isOpen) return;
+    setError(null); setSuccess(null); setOtp(""); setTimer(0);
+    setView(initialTab === "signin" ? "signin" : initialTab === "signup" ? "signup" : "choice");
   }, [isOpen, initialTab]);
 
+  useEffect(() => {
+    if (!timer) return;
+    const id = window.setInterval(() => setTimer(v => Math.max(0, v - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, [timer]);
+
   if (!isOpen) return null;
+  const resetMessages = () => { setError(null); setSuccess(null); };
+  const go = (next: AuthView) => { resetMessages(); setView(next); };
 
-  // 1. Google OAuth (Real Supabase Auth)
-  const handleGoogleAuth = async () => {
-    setError(null);
-    setGoogleLoading(true);
-
-    try {
-      const client = getSupabase();
-      if (client) {
-        const { error: oauthErr } = await client.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: window.location.origin,
-          },
-        });
-        if (oauthErr) throw oauthErr;
-        return;
-      }
-
-      // Fallback via backend OAuth redirect
-      window.location.href = `${BACKEND_API_URL}/api/auth/google`;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Google orqali kirishda xatolik yuz berdi.";
-      setError(message);
-      setGoogleLoading(false);
-    }
+  const finish = async (data: any, fallbackProvider: "email" = "email") => {
+    const session = data?.session || data;
+    const token = session?.access_token || data?.access_token;
+    const user = data?.user || session?.user;
+    if (!token || !user?.id) throw new Error("Sessiya yaratilmadi. Qaytadan urinib ko‘ring.");
+    const authUser: AuthUser = {
+      id: user.id,
+      email: user.email || email,
+      full_name: user.user_metadata?.full_name || fullName.trim() || (user.email || email).split("@")[0],
+      phone: user.user_metadata?.phone || phone.trim() || null,
+      avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+      provider: user.app_metadata?.provider === "google" ? "google" : fallbackProvider,
+      created_at: user.created_at,
+    };
+    localStorage.setItem("guli_access_token", token);
+    localStorage.setItem("guli_auth_user", JSON.stringify(authUser));
+    localStorage.setItem("guli_email", authUser.email || "");
+    await syncCustomerProfile(user, token, { full_name: authUser.full_name || "", phone: authUser.phone || "", auth_provider: authUser.provider || fallbackProvider });
+    onSuccess(authUser, token);
   };
 
-  // 2. Email OTP Request (Real 6-digit code via Supabase + Resend SMTP)
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setError("Iltimos, haqiqiy email manzilingizni kiriting.");
-      return;
-    }
-
+  const sendOtp = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    const clean = email.trim().toLowerCase();
+    if (!emailOk(clean)) { setError("Iltimos, haqiqiy email manzilingizni kiriting."); return; }
     setLoading(true);
-
     try {
-      const client = getSupabase();
-      if (client) {
-        const { error: otpErr } = await client.auth.signInWithOtp({
-          email: cleanEmail,
-          options: { shouldCreateUser: true },
-        });
-        if (otpErr) throw otpErr;
-      } else {
-        const json = await callAuthApi("/api/auth/email/start", { email: cleanEmail });
-        if (!json.success) {
-          throw new Error(json.message || "Tasdiqlash kodi yuborilmadi.");
-        }
-      }
-
-      setView("otp_verify");
-      setOtpTimer(60);
-      setSuccessMsg(`✓ 6 xonali tasdiqlash kodi ${cleanEmail} pochtasiga yuborildi. Pochtangizni tekshiring.`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Emailga kod yuborishda xatolik yuz berdi.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+      await callAuthApi("/api/auth/email/start", { email: clean });
+      setEmail(clean); setTimer(60); setView("otp_verify");
+      setSuccess(`6 xonali kod ${clean} pochtasiga yuborildi.`);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : "Tasdiqlash kodi yuborilmadi.";
+      setError(/email|smtp|confirmation|send/i.test(m) ? "Tasdiqlash kodi yuborilmadi. Email/SMTP xizmati sozlamasini tekshirish kerak." : m);
+    } finally { setLoading(false); }
   };
 
-  // 3. Email OTP Verify (Real verification via Supabase Auth)
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanCode = otpCode.trim().replace(/\s+/g, "");
-
-    if (!cleanCode || cleanCode.length < 6) {
-      setError("Iltimos, pochtangizga kelgan 6 xonali tasdiqlash kodini to'liq kiriting.");
-      return;
-    }
-
+  const verifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    if (!/^\d{6}$/.test(otp)) { setError("6 xonali kodni to‘liq kiriting."); return; }
     setLoading(true);
-
-    try {
-      const client = getSupabase();
-      let sessionData = null;
-      let userData = null;
-
-      if (client) {
-        let verifyRes = await client.auth.verifyOtp({
-          email: cleanEmail,
-          token: cleanCode,
-          type: "email",
-        });
-
-        if (verifyRes.error) {
-          verifyRes = await client.auth.verifyOtp({
-            email: cleanEmail,
-            token: cleanCode,
-            type: "signup",
-          });
-        }
-
-        if (verifyRes.error || !verifyRes.data?.session) {
-          throw new Error(verifyRes.error?.message || "Tasdiqlash kodi noto'g'ri yoki muddati tugagan.");
-        }
-
-        sessionData = verifyRes.data.session;
-        userData = verifyRes.data.user;
-      } else {
-        const json = await callAuthApi("/api/auth/email/verify", {
-          email: cleanEmail,
-          token: cleanCode,
-        });
-        const extractedSession = json.data?.session || (json.data?.access_token ? json.data : null);
-        if (!json.success || !extractedSession) {
-          throw new Error(json.message || "Tasdiqlash kodi noto'g'ri yoki muddati tugagan.");
-        }
-
-        sessionData = extractedSession;
-        userData = json.data?.user || json.data;
-      }
-
-      if (!sessionData?.access_token || !userData) {
-        throw new Error("Sessiya yaratilmadi. Qaytadan urinib ko'ring.");
-      }
-
-      const token = sessionData.access_token;
-      const authUserData: AuthUser = {
-        id: userData.id,
-        email: cleanEmail,
-        full_name: userData.user_metadata?.full_name || fullName.trim() || cleanEmail.split("@")[0],
-        phone: userData.user_metadata?.phone || phone.trim() || null,
-        avatar_url: userData.user_metadata?.avatar_url || null,
-        provider: "email",
-        created_at: userData.created_at || new Date().toISOString(),
-      };
-
-      // Real storage & backend sync
-      localStorage.setItem("guli_access_token", token);
-      localStorage.setItem("guli_auth_user", JSON.stringify(authUserData));
-      if (authUserData.full_name) localStorage.setItem("guli_first_name", authUserData.full_name);
-      if (authUserData.email) localStorage.setItem("guli_email", authUserData.email);
-
-      await syncCustomerProfile(userData, token, {
-        full_name: authUserData.full_name || "",
-        phone: authUserData.phone || "",
-        auth_provider: "email",
-      });
-
-      setVerifiedUser({ user: authUserData, token });
-      setSuccessMsg("✓ Email muvaffaqiyatli tasdiqlandi! Istasangiz parol o'rnatishingiz mumkin.");
-      setView("set_password");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Tasdiqlash kodi noto'g'ri.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    try { const r = await callAuthApi("/api/auth/email/verify", { email: email.trim().toLowerCase(), token: otp }); await finish(r.data); }
+    catch (e) { setError(e instanceof Error ? e.message : "Tasdiqlash kodi noto‘g‘ri yoki muddati o‘tgan."); }
+    finally { setLoading(false); }
   };
 
-  // 4. Set Password (Optional or post-verification password creation)
-  const handleSetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!verifiedUser) return;
-    setError(null);
-
-    if (password.length < 8) {
-      setError("Parol kamida 8 ta belgidan iborat bo'lishi kerak.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Parollar bir-biriga mos kelmadi.");
-      return;
-    }
-
+  const signup = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    const clean = email.trim().toLowerCase();
+    if (!emailOk(clean)) { setError("Email manzilini to‘g‘ri kiriting."); return; }
+    if (password.length < 8) { setError("Parol kamida 8 ta belgidan iborat bo‘lsin."); return; }
+    if (password !== confirmPassword) { setError("Parollar bir-biriga mos kelmadi."); return; }
     setLoading(true);
-
     try {
-      const client = getSupabase();
-      if (client) {
-        const { error: updateErr } = await client.auth.updateUser({
-          password,
-          data: {
-            full_name: fullName.trim() || undefined,
-            phone: phone.trim() || undefined,
-          },
-        });
-        if (updateErr) throw updateErr;
-      }
-
-      const updatedUser: AuthUser = {
-        ...verifiedUser.user,
-        full_name: fullName.trim() || verifiedUser.user.full_name,
-        phone: phone.trim() || verifiedUser.user.phone,
-      };
-
-      await syncCustomerProfile(
-        { id: updatedUser.id, email: updatedUser.email } as any,
-        verifiedUser.token,
-        {
-          full_name: updatedUser.full_name || "",
-          phone: updatedUser.phone || "",
-        }
-      );
-
-      setSuccessMsg("✓ Parolingiz muvaffaqiyatli o'rnatildi!");
-      setTimeout(() => {
-        onSuccess(updatedUser, verifiedUser.token);
-      }, 700);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Parolni saqlashda xatolik yuz berdi.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+      const r = await callAuthApi("/api/auth/password/signup", { email: clean, password, full_name: fullName.trim(), phone: phone.trim() });
+      if (r.data?.session || r.data?.access_token) { await finish(r.data); return; }
+      setEmail(clean); setTimer(60); setView("signup_otp");
+      setSuccess(`Hisob yaratildi. ${clean} pochtasiga tasdiqlash kodi yuborildi.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "Ro‘yxatdan o‘tishda xatolik yuz berdi."); }
+    finally { setLoading(false); }
   };
 
-  // 5. Email Password Sign In (Real Supabase Auth)
-  const handlePasswordSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setError("Iltimos, haqiqiy email manzilingizni kiriting.");
-      return;
-    }
-
-    if (!password) {
-      setError("Iltimos, parolingizni kiriting.");
-      return;
-    }
-
+  const verifySignup = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    if (!/^\d{6}$/.test(otp)) { setError("6 xonali kodni to‘liq kiriting."); return; }
     setLoading(true);
-
-    try {
-      const client = getSupabase();
-      let sessionData = null;
-      let userData = null;
-
-      if (client) {
-        const { data, error: signInErr } = await client.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-        if (signInErr || !data.session) {
-          throw new Error(signInErr?.message || "Email yoki parol noto'g'ri.");
-        }
-        sessionData = data.session;
-        userData = data.user;
-      } else {
-        let json;
-        try {
-          json = await callAuthApi("/api/auth/password/login", { email: cleanEmail, password });
-        } catch (loginErr) {
-          try {
-            json = await callAuthApi("/api/auth/signin", { email: cleanEmail, password });
-          } catch (signinErr: unknown) {
-            const rawMsg = signinErr instanceof Error ? signinErr.message : String(signinErr);
-            if (/invalid login credentials/i.test(rawMsg)) {
-              throw new Error("Email yoki parol noto'g'ri.");
-            }
-            if (rawMsg && !rawMsg.startsWith("Serverdan kutilmagan javob") && !rawMsg.startsWith("Server bilan bog'lanishda")) {
-              throw signinErr;
-            }
-            throw loginErr;
-          }
-        }
-
-        const extractedSession = json.data?.session || (json.data?.access_token ? json.data : null);
-        if (!json.success || !extractedSession) {
-          throw new Error(json.message || "Email yoki parol noto'g'ri.");
-        }
-        sessionData = extractedSession;
-        userData = json.data?.user || json.data;
-      }
-
-      const token = sessionData.access_token;
-      const authUserData: AuthUser = {
-        id: userData.id,
-        email: cleanEmail,
-        full_name: userData.user_metadata?.full_name || cleanEmail.split("@")[0],
-        phone: userData.user_metadata?.phone || null,
-        avatar_url: userData.user_metadata?.avatar_url || null,
-        provider: "email",
-        created_at: userData.created_at || new Date().toISOString(),
-      };
-
-      localStorage.setItem("guli_access_token", token);
-      localStorage.setItem("guli_auth_user", JSON.stringify(authUserData));
-      if (authUserData.full_name) localStorage.setItem("guli_first_name", authUserData.full_name);
-      if (authUserData.email) localStorage.setItem("guli_email", authUserData.email);
-
-      await syncCustomerProfile(userData, token);
-
-      setSuccessMsg("✓ Xush kelibsiz! Tizimga kirdingiz.");
-      setTimeout(() => {
-        onSuccess(authUserData, token);
-      }, 600);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Kirishda xatolik yuz berdi.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    try { const r = await callAuthApi("/api/auth/email/verify", { email: email.trim().toLowerCase(), token: otp }); await finish(r.data); }
+    catch (e) { setError(e instanceof Error ? e.message : "Tasdiqlash kodi noto‘g‘ri yoki muddati o‘tgan."); }
+    finally { setLoading(false); }
   };
 
-  // 6. Forgot Password - Request Recovery Code
-  const handleSendResetCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = forgotEmail.trim().toLowerCase();
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setError("Iltimos, to'g'ri email manzilini kiriting.");
-      return;
-    }
-
+  const signIn = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    const clean = email.trim().toLowerCase();
+    if (!emailOk(clean) || !password) { setError("Email va parolni to‘liq kiriting."); return; }
     setLoading(true);
-
-    try {
-      const client = getSupabase();
-      if (client) {
-        const { error: resetErr } = await client.auth.resetPasswordForEmail(cleanEmail, {
-          redirectTo: window.location.origin,
-        });
-        if (resetErr) throw resetErr;
-      } else {
-        const json = await callAuthApi("/api/auth/password/reset-start", { email: cleanEmail });
-        if (!json.success) throw new Error(json.message || "Parolni tiklash so'rovi qabul qilinmadi.");
-      }
-
-      setView("forgot_verify");
-      setSuccessMsg(`✓ ${cleanEmail} pochtasiga parolni tiklash kodi yuborildi.`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Tiklash kodini yuborishda xatolik yuz berdi.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    try { const r = await callAuthApi("/api/auth/password/login", { email: clean, password }); await finish(r.data); }
+    catch (e) { setError(e instanceof Error ? e.message : "Email yoki parol noto‘g‘ri."); }
+    finally { setLoading(false); }
   };
 
-  // 7. Forgot Password - Verify Recovery OTP and Set New Password
-  const handleResetPasswordVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    const cleanEmail = forgotEmail.trim().toLowerCase();
-    const cleanToken = forgotToken.trim().replace(/\s+/g, "");
-
-    if (!cleanToken || cleanToken.length < 6) {
-      setError("Iltimos, pochtangizga borgan 6 xonali tiklash kodini to'liq kiriting.");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError("Yangi parol kamida 8 ta belgidan iborat bo'lishi kerak.");
-      return;
-    }
-
-    if (newPassword !== confirmNewPassword) {
-      setError("Yangi parollar bir-biriga mos kelmadi.");
-      return;
-    }
-
+  const sendReset = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    const clean = forgotEmail.trim().toLowerCase();
+    if (!emailOk(clean)) { setError("Iltimos, to‘g‘ri email manzilini kiriting."); return; }
     setLoading(true);
-
-    try {
-      const client = getSupabase();
-      if (client) {
-        const verifyRes = await client.auth.verifyOtp({
-          email: cleanEmail,
-          token: cleanToken,
-          type: "recovery",
-        });
-        if (verifyRes.error) throw verifyRes.error;
-
-        const { error: updateErr } = await client.auth.updateUser({ password: newPassword });
-        if (updateErr) throw updateErr;
-      } else {
-        const json = await callAuthApi("/api/auth/password/reset-verify", {
-          email: cleanEmail,
-          token: cleanToken,
-          password: newPassword,
-        });
-        if (!json.success) throw new Error(json.message || "Parolni yangilashda xatolik.");
-      }
-
-      setSuccessMsg("✓ Parolingiz muvaffaqiyatli yangilandi! Endi yangi parol bilan kirishingiz mumkin.");
-      setTimeout(() => {
-        setEmail(cleanEmail);
-        setPassword(newPassword);
-        setView("signin");
-      }, 1200);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Parolni yangilashda xatolik yuz berdi.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    try { await callAuthApi("/api/auth/password/reset-start", { email: clean }); setForgotEmail(clean); setTimer(60); setView("forgot_verify"); setSuccess(`Tiklash kodi ${clean} pochtasiga yuborildi.`); }
+    catch (e) { setError(e instanceof Error ? e.message : "Tiklash kodi yuborilmadi. Email/SMTP xizmati sozlamasini tekshiring."); }
+    finally { setLoading(false); }
   };
 
-  return (
-    <div
-      className="modalBackdrop"
-      id="customer-auth-modal-backdrop"
-      onClick={(e) => {
-        if (!forceGate && e.target === e.currentTarget && onClose) {
-          onClose();
-        }
-      }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(15, 23, 42, 0.7)",
-        backdropFilter: "blur(8px)",
-        zIndex: 99999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "16px",
-      }}
-    >
-      <div
-        id="customer-auth-modal-card"
-        style={{
-          width: "100%",
-          maxWidth: "420px",
-          backgroundColor: "#ffffff",
-          borderRadius: "24px",
-          padding: "28px 24px",
-          boxShadow: "0 20px 60px -15px rgba(0, 0, 0, 0.3)",
-          position: "relative",
-          maxHeight: "92vh",
-          overflowY: "auto",
-        }}
-      >
-        {/* Close button if not forced gate */}
-        {!forceGate && onClose && (
-          <button
-            id="auth-modal-close-btn"
-            onClick={onClose}
-            style={{
-              position: "absolute",
-              top: "18px",
-              right: "18px",
-              background: "none",
-              border: "none",
-              fontSize: "22px",
-              color: "#64748b",
-              cursor: "pointer",
-              padding: "4px 8px",
-              borderRadius: "50%",
-              lineHeight: 1,
-            }}
-            aria-label="Yopish"
-          >
-            ✕
-          </button>
-        )}
+  const resetPassword = async (e: React.FormEvent) => {
+    e.preventDefault(); resetMessages();
+    if (!/^\d{6}$/.test(forgotToken)) { setError("6 xonali tiklash kodini kiriting."); return; }
+    if (newPassword.length < 8) { setError("Yangi parol kamida 8 ta belgidan iborat bo‘lsin."); return; }
+    if (newPassword !== confirmNewPassword) { setError("Yangi parollar bir-biriga mos kelmadi."); return; }
+    setLoading(true);
+    try { await callAuthApi("/api/auth/password/reset-verify", { email: forgotEmail.trim().toLowerCase(), token: forgotToken, password: newPassword }); setEmail(forgotEmail); setPassword(newPassword); setSuccess("Parol muvaffaqiyatli yangilandi. Endi kirishingiz mumkin."); setTimeout(() => go("signin"), 700); }
+    catch (e) { setError(e instanceof Error ? e.message : "Parolni yangilashda xatolik yuz berdi."); }
+    finally { setLoading(false); }
+  };
 
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              borderRadius: "16px",
-              background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-              color: "#ffffff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "22px",
-              margin: "0 auto 12px",
-              boxShadow: "0 8px 16px -4px rgba(79, 70, 229, 0.4)",
-            }}
-          >
-            🔒
-          </div>
-          <h3
-            style={{
-              margin: "0 0 6px",
-              fontSize: "20px",
-              fontWeight: 800,
-              color: "#0f172a",
-              letterSpacing: "-0.3px",
-            }}
-          >
-            {customTitle || (view === "signin" ? "Tizimga kirish" : view === "otp_verify" ? "Emailni tasdiqlash" : view === "set_password" ? "Parol yaratish" : view === "forgot_request" || view === "forgot_verify" ? "Parolni tiklash" : "GULI hisobingiz")}
-          </h3>
-          <p
-            style={{
-              margin: 0,
-              fontSize: "14px",
-              color: "#64748b",
-              lineHeight: 1.5,
-            }}
-          >
-            {customSubtitle || (view === "choice" ? "Buyurtmalar va profilingizni barcha qurilmalarda saqlash uchun kiring" : view === "otp_verify" ? `${email} pochtasiga yuborilgan 6 xonali kodni kiriting` : view === "signin" ? "Email va parolingiz bilan davom eting" : "Xavfsiz autentifikatsiya")}
-          </p>
-        </div>
+  const google = () => {
+    resetMessages();
+    if (!googleConfigured) { setError("Google orqali kirish hali sozlanmagan. Google OAuth Client ID va Supabase Google provider konfiguratsiyasi kerak."); return; }
+    window.location.href = `${BACKEND_API_URL}/api/auth/google`;
+  };
 
-        {/* Status Alerts */}
-        {error && (
-          <div
-            id="auth-error-alert"
-            style={{
-              padding: "12px 14px",
-              borderRadius: "12px",
-              backgroundColor: "#fef2f2",
-              border: "1px solid #fecaca",
-              color: "#dc2626",
-              fontSize: "13px",
-              fontWeight: 500,
-              marginBottom: "16px",
-              lineHeight: 1.4,
-            }}
-          >
-            ⚠️ {error}
-          </div>
-        )}
+  const title = customTitle || (view === "signin" ? "Tizimga kirish" : view === "signup" ? "Ro‘yxatdan o‘tish" : view === "forgot_request" || view === "forgot_verify" ? "Parolni tiklash" : view === "otp_verify" || view === "signup_otp" ? "Emailni tasdiqlash" : "GULI hisobingiz");
+  const subtitle = customSubtitle || (view === "choice" ? "Buyurtmalar va profilingizni barcha qurilmalarda saqlash uchun kiring" : view === "signup" ? "Yangi GULI hisobini yarating" : view === "signin" ? "Email va parolingiz bilan davom eting" : "Xavfsiz autentifikatsiya");
+  const Field = ({ label, value, onChange, type = "text", placeholder, required = true }: any) => <div style={{ marginBottom: 13 }}><label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>{label}</label><input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} required={required} style={inputStyle} /></div>;
 
-        {successMsg && (
-          <div
-            id="auth-success-alert"
-            style={{
-              padding: "12px 14px",
-              borderRadius: "12px",
-              backgroundColor: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              color: "#16a34a",
-              fontSize: "13px",
-              fontWeight: 500,
-              marginBottom: "16px",
-              lineHeight: 1.4,
-            }}
-          >
-            {successMsg}
-          </div>
-        )}
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.7)", backdropFilter: "blur(8px)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={(e) => { if (!forceGate && e.target === e.currentTarget) onClose?.(); }}>
+    <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 24, padding: "28px 24px", boxShadow: "0 20px 60px -15px rgba(0,0,0,.3)", position: "relative", maxHeight: "92vh", overflowY: "auto" }}>
+      {!forceGate && onClose && <button onClick={onClose} aria-label="Yopish" style={{ position: "absolute", top: 18, right: 18, background: "none", border: 0, fontSize: 22, color: "#64748b", cursor: "pointer" }}>✕</button>}
+      <div style={{ textAlign: "center", marginBottom: 20 }}><div style={{ width: 48, height: 48, borderRadius: 16, background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, margin: "0 auto 12px" }}>🔒</div><h3 style={{ margin: "0 0 6px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{title}</h3><p style={{ margin: 0, fontSize: 14, color: "#64748b", lineHeight: 1.5 }}>{subtitle}</p></div>
+      {error && <div style={{ padding: "12px 14px", borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: 13, marginBottom: 16 }}>⚠️ {error}</div>}
+      {success && <div style={{ padding: "12px 14px", borderRadius: 12, background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d", fontSize: 13, marginBottom: 16 }}>✓ {success}</div>}
 
-        {/* VIEW 1: AUTH CHOICE (Google + Email OTP) */}
-        {view === "choice" && (
-          <div>
-            {/* Real Google Button */}
-            <button
-              id="google-auth-btn"
-              type="button"
-              disabled={googleLoading || loading}
-              onClick={handleGoogleAuth}
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                borderRadius: "14px",
-                border: "1px solid #e2e8f0",
-                backgroundColor: "#ffffff",
-                color: "#1e293b",
-                fontSize: "14px",
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "10px",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>{googleLoading ? "Google ulanmoqda..." : "Google orqali davom etish"}</span>
-            </button>
+      {view === "choice" && <>
+        <button type="button" onClick={google} disabled={!googleConfigured || loading} style={{ ...buttonStyle, background: "#fff", color: "#1e293b", border: "1px solid #e2e8f0", marginBottom: 12, opacity: googleConfigured ? 1 : .65 }}>{googleConfigured ? "🌐  Google orqali davom etish" : "🌐  Google orqali kirish (sozlanmoqda)"}</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "14px 0" }}><div style={{ flex: 1, height: 1, background: "#e2e8f0" }}/><span style={{ fontSize: 12, color: "#94a3b8" }}>YOKI</span><div style={{ flex: 1, height: 1, background: "#e2e8f0" }}/></div>
+        <form onSubmit={sendOtp}><Field label="Email pochtangiz:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kod yuborilmoqda..." : "Davom etish"}</button></form>
+        <div style={{ textAlign: "center", marginTop: 15 }}><button type="button" onClick={() => go("signup")} style={linkStyle}>Ro‘yxatdan o‘tish</button><span style={{ color: "#cbd5e1", margin: "0 9px" }}>•</span><button type="button" onClick={() => go("signin")} style={linkStyle}>Parol orqali kirish</button></div>
+      </>}
 
-            {/* Clean Divider */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                margin: "20px 0",
-                gap: "12px",
-              }}
-            >
-              <div style={{ flex: 1, height: "1px", backgroundColor: "#e2e8f0" }} />
-              <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600, textTransform: "uppercase" }}>yoki</span>
-              <div style={{ flex: 1, height: "1px", backgroundColor: "#e2e8f0" }} />
-            </div>
+      {(view === "otp_verify" || view === "signup_otp") && <form onSubmit={view === "otp_verify" ? verifyOtp : verifySignup}><div style={{ textAlign: "center", marginBottom: 14 }}><b>{email}</b><p style={{ fontSize: 12, color: "#64748b" }}>Emailingizga yuborilgan 6 xonali kodni kiriting</p></div><Field label="6 xonali kod:" value={otp} onChange={(v: string) => setOtp(v.replace(/\D/g, "").slice(0, 6))} placeholder="123456"/><button type="submit" disabled={loading || otp.length !== 6} style={buttonStyle}>{loading ? "Tekshirilmoqda..." : "Kodni tasdiqlash"}</button><div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}><button type="button" disabled={timer > 0 || loading} onClick={() => sendOtp({ preventDefault() {} } as React.FormEvent)} style={linkStyle}>{timer ? `Qayta yuborish (${timer}s)` : "Kodni qayta yuborish"}</button><button type="button" onClick={() => go(view === "signup_otp" ? "signup" : "choice")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Orqaga</button></div></form>}
 
-            {/* Email OTP Form */}
-            <form onSubmit={handleSendOtp}>
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="auth-email-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Email pochtangiz:
-                </label>
-                <input
-                  id="auth-email-input"
-                  type="email"
-                  required
-                  placeholder="masalan: user@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+      {view === "signup" && <form onSubmit={signup}><Field label="Ism va familiya:" value={fullName} onChange={setFullName} placeholder="Ism Familiya"/><Field label="Telefon:" value={phone} onChange={setPhone} type="tel" placeholder="+998 90 123 45 67" required={false}/><Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="Kamida 8 belgi"/><Field label="Parolni takrorlang:" value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="••••••••"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Hisob yaratilmoqda..." : "Ro‘yxatdan o‘tish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={linkStyle}>Hisobingiz bormi? Kirish</button></div></form>}
 
-              <button
-                id="auth-email-continue-btn"
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  transition: "background 0.2s",
-                }}
-              >
-                {loading ? "Tasdiqlash kodi yuborilmoqda..." : "Davom etish"}
-              </button>
-            </form>
+      {view === "signin" && <form onSubmit={signIn}><Field label="Email:" value={email} onChange={setEmail} type="email" placeholder="user@gmail.com"/><Field label="Parol:" value={password} onChange={setPassword} type="password" placeholder="••••••••"/><div style={{ textAlign: "right", marginBottom: 12 }}><button type="button" onClick={() => { setForgotEmail(email); go("forgot_request"); }} style={linkStyle}>Parolni unutdingizmi?</button></div><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kirilmoqda..." : "Kirish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signup")} style={linkStyle}>Hisobingiz yo‘qmi? Ro‘yxatdan o‘tish</button></div><div style={{ textAlign: "center", marginTop: 10 }}><button type="button" onClick={() => go("choice")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Boshqa usul</button></div></form>}
 
-            {/* Switch to Password Login */}
-            <div style={{ textAlign: "center", marginTop: "18px" }}>
-              <button
-                id="switch-to-signin-btn"
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setSuccessMsg(null);
-                  setView("signin");
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#4f46e5",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                Parol orqali kirish
-              </button>
-            </div>
-          </div>
-        )}
+      {view === "forgot_request" && <form onSubmit={sendReset}><Field label="Email manzilingiz:" value={forgotEmail} onChange={setForgotEmail} type="email" placeholder="user@gmail.com"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Kod yuborilmoqda..." : "Tiklash kodini yuborish"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Kirishga qaytish</button></div></form>}
 
-        {/* VIEW 2: OTP VERIFICATION */}
-        {view === "otp_verify" && (
-          <div>
-            <form onSubmit={handleVerifyOtp}>
-              <div style={{ marginBottom: "16px", textAlign: "center" }}>
-                <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e293b" }}>{email}</span>
-                <p style={{ margin: "4px 0 12px", fontSize: "12px", color: "#64748b" }}>
-                  Emailingizga yuborilgan 6 xonali tasdiqlash kodini kiriting
-                </p>
-                <input
-                  id="auth-otp-code-input"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  required
-                  placeholder="· · · · · ·"
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                  style={{
-                    width: "100%",
-                    maxWidth: "200px",
-                    margin: "0 auto",
-                    padding: "12px",
-                    textAlign: "center",
-                    fontSize: "24px",
-                    letterSpacing: "6px",
-                    fontWeight: 800,
-                    borderRadius: "14px",
-                    border: "2px solid #6366f1",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                id="auth-otp-verify-btn"
-                type="submit"
-                disabled={loading || otpCode.length < 6}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  opacity: otpCode.length < 6 ? 0.7 : 1,
-                  marginBottom: "12px",
-                }}
-              >
-                {loading ? "Tasdiqlanmoqda..." : "Kodni tasdiqlash"}
-              </button>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
-                <button
-                  type="button"
-                  disabled={otpTimer > 0 || loading}
-                  onClick={handleSendOtp}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: otpTimer > 0 ? "#94a3b8" : "#4f46e5",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    cursor: otpTimer > 0 ? "default" : "pointer",
-                  }}
-                >
-                  {otpTimer > 0 ? `Kodni qayta yuborish (${otpTimer}s)` : "Kodni qayta yuborish"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setView("choice");
-                  }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  ← Boshqa email
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* VIEW 3: SET PASSWORD AFTER OTP VERIFICATION */}
-        {view === "set_password" && verifiedUser && (
-          <div>
-            <form onSubmit={handleSetPassword}>
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="set-name-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Ism va familiyangiz:
-                </label>
-                <input
-                  id="set-name-input"
-                  type="text"
-                  placeholder="Ismingiz (masalan: Lola Karimova)"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="set-phone-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Telefon raqamingiz (ixtiyoriy):
-                </label>
-                <input
-                  id="set-phone-input"
-                  type="tel"
-                  placeholder="+998 90 123 45 67"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="set-password-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Yangi parol (kamida 8 belgi):
-                </label>
-                <input
-                  id="set-password-input"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  htmlFor="confirm-password-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Parolni takrorlang:
-                </label>
-                <input
-                  id="confirm-password-input"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <input
-                  type="checkbox"
-                  id="show-pass-check"
-                  checked={showPassword}
-                  onChange={(e) => setShowPassword(e.target.checked)}
-                />
-                <label htmlFor="show-pass-check" style={{ fontSize: "13px", color: "#64748b", cursor: "pointer" }}>
-                  Parolni ko'rsatish
-                </label>
-              </div>
-
-              <button
-                id="save-password-continue-btn"
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginBottom: "10px",
-                }}
-              >
-                {loading ? "Saqlanmoqda..." : "Parolni saqlash va davom etish"}
-              </button>
-
-              <button
-                id="skip-password-btn"
-                type="button"
-                onClick={() => {
-                  onSuccess(verifiedUser.user, verifiedUser.token);
-                }}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "12px",
-                  border: "1px solid #e2e8f0",
-                  backgroundColor: "#f8fafc",
-                  color: "#64748b",
-                  fontSize: "13px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                O'tkazib yuborish
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* VIEW 4: EMAIL + PASSWORD LOGIN */}
-        {view === "signin" && (
-          <div>
-            <form onSubmit={handlePasswordSignIn}>
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="signin-email-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Email:
-                </label>
-                <input
-                  id="signin-email-input"
-                  type="email"
-                  required
-                  placeholder="user@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <label
-                    htmlFor="signin-password-input"
-                    style={{
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      color: "#334155",
-                    }}
-                  >
-                    Parol:
-                  </label>
-                  <button
-                    id="forgot-password-link"
-                    type="button"
-                    onClick={() => {
-                      setError(null);
-                      setSuccessMsg(null);
-                      setForgotEmail(email);
-                      setView("forgot_request");
-                    }}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#4f46e5",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                  >
-                    Parolni unutdingizmi?
-                  </button>
-                </div>
-                <input
-                  id="signin-password-input"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                id="signin-submit-btn"
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginBottom: "14px",
-                }}
-              >
-                {loading ? "Kirilmoqda..." : "Kirish"}
-              </button>
-
-              <div style={{ textAlign: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setView("choice");
-                  }}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  ← OTP orqali davom etish
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* VIEW 5: FORGOT PASSWORD REQUEST */}
-        {view === "forgot_request" && (
-          <div>
-            <form onSubmit={handleSendResetCode}>
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  htmlFor="forgot-email-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Email manzilingiz:
-                </label>
-                <input
-                  id="forgot-email-input"
-                  type="email"
-                  required
-                  placeholder="user@gmail.com"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                id="send-reset-code-btn"
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginBottom: "12px",
-                }}
-              >
-                {loading ? "Kod yuborilmoqda..." : "Tiklash kodini yuborish"}
-              </button>
-
-              <div style={{ textAlign: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => setView("signin")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  ← Kirishga qaytish
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* VIEW 6: FORGOT PASSWORD VERIFY & NEW PASSWORD */}
-        {view === "forgot_verify" && (
-          <div>
-            <form onSubmit={handleResetPasswordVerify}>
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="forgot-token-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  6 xonali tiklash kodi:
-                </label>
-                <input
-                  id="forgot-token-input"
-                  type="text"
-                  required
-                  maxLength={6}
-                  placeholder="· · · · · ·"
-                  value={forgotToken}
-                  onChange={(e) => setForgotToken(e.target.value.replace(/\D/g, ""))}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "18px",
-                    letterSpacing: "4px",
-                    textAlign: "center",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label
-                  htmlFor="new-pass-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Yangi parol (kamida 8 belgi):
-                </label>
-                <input
-                  id="new-pass-input"
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "16px" }}>
-                <label
-                  htmlFor="confirm-new-pass-input"
-                  style={{
-                    display: "block",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    marginBottom: "6px",
-                  }}
-                >
-                  Yangi parolni takrorlang:
-                </label>
-                <input
-                  id="confirm-new-pass-input"
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={confirmNewPassword}
-                  onChange={(e) => setConfirmNewPassword(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: "12px",
-                    border: "1px solid #cbd5e1",
-                    fontSize: "14px",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <button
-                id="reset-pass-verify-btn"
-                type="submit"
-                disabled={loading}
-                style={{
-                  width: "100%",
-                  padding: "13px",
-                  borderRadius: "14px",
-                  border: "none",
-                  backgroundColor: "#4f46e5",
-                  color: "#ffffff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginBottom: "12px",
-                }}
-              >
-                {loading ? "Parol yangilanmoqda..." : "Parolni yangilash"}
-              </button>
-
-              <div style={{ textAlign: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => setView("signin")}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#64748b",
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  ← Kirishga qaytish
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </div>
+      {view === "forgot_verify" && <form onSubmit={resetPassword}><Field label="6 xonali tiklash kodi:" value={forgotToken} onChange={(v: string) => setForgotToken(v.replace(/\D/g, "").slice(0, 6))} placeholder="123456"/><Field label="Yangi parol:" value={newPassword} onChange={setNewPassword} type="password" placeholder="Kamida 8 belgi"/><Field label="Yangi parolni takrorlang:" value={confirmNewPassword} onChange={setConfirmNewPassword} type="password" placeholder="••••••••"/><button type="submit" disabled={loading} style={buttonStyle}>{loading ? "Parol yangilanmoqda..." : "Parolni yangilash"}</button><div style={{ textAlign: "center", marginTop: 14 }}><button type="button" onClick={() => go("signin")} style={{ ...linkStyle, color: "#64748b", textDecoration: "none" }}>← Kirishga qaytish</button></div></form>}
     </div>
-  );
+  </div>;
 };
