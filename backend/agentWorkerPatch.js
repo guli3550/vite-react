@@ -14,9 +14,11 @@ async function tick() {
     const { data: candidates, error } = await supabase.from("agent_tasks").select("id").eq("status", "queued").order("created_at", { ascending: true }).limit(MAX_PER_TICK);
     if (error) throw error;
     for (const candidate of candidates || []) {
-      const result = await executeTask(candidate.id, "worker");
-      if (result?.ok || result?.message === "Agent tool bajarilmadi") {
-        try { await advanceWorkflow(candidate.id); } catch (error) { console.error("Agent workflow handoff error:", error); }
+      try {
+        await executeTask(candidate.id, "worker");
+        await advanceWorkflow(candidate.id);
+      } catch (error) {
+        console.error("Agent task/workflow execution error:", error);
       }
     }
   } catch (error) {
