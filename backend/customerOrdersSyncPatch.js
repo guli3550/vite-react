@@ -73,7 +73,7 @@ function mapOrder(row) {
     status: row.status || '⏳ Buyurtma kutilmoqda',
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || undefined,
-    statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
+    statusUpdatedAt: row.updated_at || undefined,
   };
 }
 
@@ -84,7 +84,7 @@ async function listOrders(req, res) {
   try {
     const { data, error } = await supabase
       .from('orders')
-      .select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at,status_updated_at')
+      .select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
       .eq('telegram_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100);
