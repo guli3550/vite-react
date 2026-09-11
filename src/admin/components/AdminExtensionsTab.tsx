@@ -1,18 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { MetricCard } from "./AdminUIComponents";
 import { AgentOffice3D } from "./AgentOffice3D";
+import { AgentOrchestratorPanel } from "./AgentOrchestratorPanel";
 
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 type Agent = { id: string; name: string; role: string; capabilities: string[]; status: "working" | "idle" };
 type AgentTask = { id: string; agent_id: string; command: string; status: string; created_at: string; finished_at?: string; error?: string; result?: unknown };
 type AgentEvent = { id: string; task_id: string; agent_id: string; event_type: string; message?: string; created_at: string };
-const TOOLS = [
-  ["catalog_check", "Catalog check", "read-only catalog holati"],
-  ["order_lookup", "Order lookup", "buyurtma ma'lumotlari"],
-  ["payment_status", "Payment status", "to'lov holati"],
-  ["chat_inspect", "Chat inspect", "mijoz chat tarixi"],
-  ["security_audit", "Security audit", "xavfsizlik konfiguratsiyasi"],
-] as const;
+const TOOLS = [["catalog_check", "Catalog check"], ["order_lookup", "Order lookup"], ["payment_status", "Payment status"], ["chat_inspect", "Chat inspect"], ["security_audit", "Security audit"]] as const;
 
 export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) {
   const [sheetsSync, setSheetsSync] = useState(true), [telegramWebhook, setTelegramWebhook] = useState(true), [smsGateway, setSmsGateway] = useState(false);
@@ -20,68 +15,21 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
   const [selectedAgent, setSelectedAgent] = useState("orchestrator"), [tool, setTool] = useState("catalog_check"), [identifier, setIdentifier] = useState("");
   const [loadingAgents, setLoadingAgents] = useState(false), [runningId, setRunningId] = useState(""), [selectedTaskId, setSelectedTaskId] = useState("");
   const token = sessionStorage.getItem("guli_admin_token") || "";
-
-  const request = useCallback(async (path: string, options: RequestInit = {}) => {
-    const response = await fetch(`${API}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
-    const json = await response.json().catch(() => ({}));
-    if (!response.ok || json.success === false) throw new Error(json.message || "Server xatosi");
-    return json;
-  }, [token]);
-
-  const loadAgents = useCallback(async (silent = false) => {
-    if (!token) return;
-    if (!silent) setLoadingAgents(true);
-    try { const data = await request("/api/admin/agents"); setAgents(data.data || []); setTasks(data.tasks || []); setEvents(data.events || []); }
-    catch (error) { if (!silent) notify(error instanceof Error ? error.message : "Agentlar yuklanmadi"); }
-    finally { if (!silent) setLoadingAgents(false); }
-  }, [notify, request, token]);
-
+  const request = useCallback(async (path: string, options: RequestInit = {}) => { const response = await fetch(`${API}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) } }); const json = await response.json().catch(() => ({})); if (!response.ok || json.success === false) throw new Error(json.message || "Server xatosi"); return json; }, [token]);
+  const loadAgents = useCallback(async (silent = false) => { if (!token) return; if (!silent) setLoadingAgents(true); try { const data = await request("/api/admin/agents"); setAgents(data.data || []); setTasks(data.tasks || []); setEvents(data.events || []); } catch (error) { if (!silent) notify(error instanceof Error ? error.message : "Agentlar yuklanmadi"); } finally { if (!silent) setLoadingAgents(false); } }, [notify, request, token]);
   useEffect(() => { loadAgents(); const timer = window.setInterval(() => loadAgents(true), 5000); return () => window.clearInterval(timer); }, [loadAgents]);
-
-  const createTask = async () => {
-    if (!selectedAgent || !tool) return notify("Agent va tool tanlang");
-    const input: Record<string, string> = {};
-    if (identifier.trim()) { if (tool === "chat_inspect") input.telegram_id = identifier.trim(); else input.order_number = identifier.trim(); }
-    try {
-      const result = await request("/api/admin/agents/tasks", { method: "POST", body: JSON.stringify({ agent_id: selectedAgent, command: JSON.stringify({ type: tool, input }) }) });
-      setTasks((current) => [result.data, ...current]); notify("Agent task navbatga qo‘yildi ✓"); setIdentifier(""); await loadAgents(true);
-    } catch (error) { notify(error instanceof Error ? error.message : "Task yaratilmadi"); }
-  };
-
-  const runTask = async (id: string) => {
-    setRunningId(id);
-    try { const result = await request(`/api/admin/agents/tasks/${id}/run`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task bajarildi ✓"); await loadAgents(true); }
-    catch (error) { notify(error instanceof Error ? error.message : "Agent task bajarilmadi"); }
-    finally { setRunningId(""); }
-  };
-
-  const stopTask = async (id: string) => {
-    try { const result = await request(`/api/admin/agents/tasks/${id}/stop`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task to‘xtatildi"); await loadAgents(true); }
-    catch (error) { notify(error instanceof Error ? error.message : "Task to‘xtatilmadi"); }
-  };
-
-  const retryTask = async (task: AgentTask) => {
-    try {
-      const result = await request("/api/admin/agents/tasks", { method: "POST", body: JSON.stringify({ agent_id: task.agent_id, command: task.command }) });
-      setTasks((current) => [result.data, ...current]); notify("Task yangi urinish sifatida navbatga qo‘yildi ✓"); await loadAgents(true);
-    } catch (error) { notify(error instanceof Error ? error.message : "Retry yaratilmadi"); }
-  };
-
+  const createTask = async () => { if (!selectedAgent || !tool) return notify("Agent va tool tanlang"); const input: Record<string, string> = {}; if (identifier.trim()) { if (tool === "chat_inspect") input.telegram_id = identifier.trim(); else input.order_number = identifier.trim(); } try { const result = await request("/api/admin/agents/tasks", { method: "POST", body: JSON.stringify({ agent_id: selectedAgent, command: JSON.stringify({ type: tool, input }) }) }); setTasks((current) => [result.data, ...current]); notify("Agent task navbatga qo‘yildi ✓"); setIdentifier(""); await loadAgents(true); } catch (error) { notify(error instanceof Error ? error.message : "Task yaratilmadi"); } };
+  const runTask = async (id: string) => { setRunningId(id); try { const result = await request(`/api/admin/agents/tasks/${id}/run`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task bajarildi ✓"); await loadAgents(true); } catch (error) { notify(error instanceof Error ? error.message : "Agent task bajarilmadi"); } finally { setRunningId(""); } };
+  const stopTask = async (id: string) => { try { const result = await request(`/api/admin/agents/tasks/${id}/stop`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task to‘xtatildi"); await loadAgents(true); } catch (error) { notify(error instanceof Error ? error.message : "Task to‘xtatilmadi"); } };
+  const retryTask = async (task: AgentTask) => { try { const result = await request("/api/admin/agents/tasks", { method: "POST", body: JSON.stringify({ agent_id: task.agent_id, command: task.command }) }); setTasks((current) => [result.data, ...current]); notify("Task yangi urinish sifatida navbatga qo‘yildi ✓"); await loadAgents(true); } catch (error) { notify(error instanceof Error ? error.message : "Retry yaratilmadi"); } };
   const toolNeedsIdentifier = tool === "order_lookup" || tool === "payment_status" || tool === "chat_inspect";
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId);
-  const selectedTaskEvents = selectedTaskId ? events.filter((event) => event.task_id === selectedTaskId) : [];
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId), selectedTaskEvents = selectedTaskId ? events.filter((event) => event.task_id === selectedTaskId) : [];
 
   return <div className="dash">
-    <div className="metricGrid">
-      <MetricCard label="AI Agentlar" value={`${agents.length || 6} ta`} icon="🤖" tone="rose" />
-      <MetricCard label="Ishlayapti" value={`${agents.filter((a) => a.status === "working").length} ta`} icon="⚡" />
-      <MetricCard label="Navbatdagi tasklar" value={`${tasks.filter((t) => t.status === "queued").length} ta`} icon="📋" />
-      <MetricCard label="Audit eventlar" value={`${events.length} ta`} icon="🛡️" />
-    </div>
+    <div className="metricGrid"><MetricCard label="AI Agentlar" value={`${agents.length || 6} ta`} icon="🤖" tone="rose" /><MetricCard label="Ishlayapti" value={`${agents.filter((a) => a.status === "working").length} ta`} icon="⚡" /><MetricCard label="Navbatdagi tasklar" value={`${tasks.filter((t) => t.status === "queued").length} ta`} icon="📋" /><MetricCard label="Audit eventlar" value={`${events.length} ta`} icon="🛡️" /></div>
     <AgentOffice3D agents={agents} tasks={tasks} events={events} />
-
-    <section className="proPanel">
-      <div className="panelHead"><div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div><button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button></div>
+    <AgentOrchestratorPanel api={API} token={token} tasks={tasks} onChanged={() => loadAgents(true)} notify={notify} />
+    <section className="proPanel"><div className="panelHead"><div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div><button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button></div>
       <div className="metricGrid">{agents.map((agent) => <div className="extensionCard" key={agent.id} style={{ alignItems: "flex-start", flexDirection: "column" }}><div className="extInfo"><span className="extIcon">{agent.status === "working" ? "⚡" : "🤖"}</span><div><b>{agent.name}</b><p>{agent.role} · {agent.status === "working" ? "Ishlayapti" : "Bo‘sh"}</p></div></div><small>{agent.capabilities.join(" · ")}</small></div>)}</div>
       <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="extInfo"><span className="extIcon">🎯</span><div><b>Controlled Tool Runner</b><p>Faqat ruxsat etilgan deterministic read-only tool’lar. Erkin shell, SQL va kod bajarish yo‘q.</p></div></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginTop: 14 }}><select value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><select value={tool} onChange={(e) => setTool(e.target.value)}>{TOOLS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input value={identifier} onChange={(e) => setIdentifier(e.target.value)} disabled={!toolNeedsIdentifier} placeholder={tool === "chat_inspect" ? "Telegram ID" : "Order number / ID"} /><button type="button" className="proPrimary miniBtn" onClick={createTask}>Task berish</button></div></div>
       <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="panelHead"><div><b>Task queue</b><p>5 soniyada avtomatik yangilanadi. Taskni tanlab natija va audit eventlarini ko‘rish mumkin.</p></div></div>{tasks.length === 0 ? <p>Hozircha task yo‘q.</p> : <div className="tableWrap"><table><thead><tr><th>Agent</th><th>Tool</th><th>Status</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{tasks.slice(0, 12).map((task) => { let label = task.command; try { label = JSON.parse(task.command).type; } catch {} return <tr key={task.id} onClick={() => setSelectedTaskId(task.id)} style={{ cursor: "pointer" }}><td>{task.agent_id}</td><td>{label}</td><td><span className="statusPill">{task.status}</span></td><td>{new Date(task.created_at).toLocaleString("uz-UZ")}</td><td>{task.status === "queued" ? <><button type="button" className="proPrimary miniBtn" onClick={(event) => { event.stopPropagation(); runTask(task.id); }} disabled={runningId === task.id}>{runningId === task.id ? "Ishlamoqda…" : "▶ Ishga tushirish"}</button> <button type="button" className="mgmtBtn" onClick={(event) => { event.stopPropagation(); stopTask(task.id); }}>To‘xtatish</button></> : <><button type="button" className="mgmtBtn" onClick={(event) => { event.stopPropagation(); retryTask(task); }}>↻ Retry</button> <span style={{ marginLeft: 8 }}>Batafsil →</span></>}</td></tr>; })}</tbody></table></div>}</div>
