@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { MetricCard } from "./AdminUIComponents";
 import { AgentOffice3D } from "./AgentOffice3D";
 import { AgentOrchestratorPanel } from "./AgentOrchestratorPanel";
+import { AgentWorkflowPanel } from "./AgentWorkflowPanel";
 
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 type Agent = { id: string; name: string; role: string; capabilities: string[]; status: "working" | "idle" };
@@ -28,6 +29,7 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
     <div className="metricGrid"><MetricCard label="AI Agentlar" value={`${agents.length || 6} ta`} icon="🤖" tone="rose" /><MetricCard label="Ishlayapti" value={`${agents.filter((a) => a.status === "working").length} ta`} icon="⚡" /><MetricCard label="Navbatdagi tasklar" value={`${tasks.filter((t) => t.status === "queued").length} ta`} icon="📋" /><MetricCard label="Audit eventlar" value={`${events.length} ta`} icon="🛡️" /></div>
     <AgentOffice3D agents={agents} tasks={tasks} events={events} />
     <AgentOrchestratorPanel api={API} token={token} tasks={tasks} onChanged={() => loadAgents(true)} notify={notify} />
+    <AgentWorkflowPanel api={API} token={token} notify={notify} />
     <section className="proPanel"><div className="panelHead"><div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div><button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button></div>
       <div className="metricGrid">{agents.map((agent) => <div className="extensionCard" key={agent.id} style={{ alignItems: "flex-start", flexDirection: "column" }}><div className="extInfo"><span className="extIcon">{agent.status === "working" ? "⚡" : "🤖"}</span><div><b>{agent.name}</b><p>{agent.role} · {agent.status === "working" ? "Ishlayapti" : "Bo‘sh"}</p></div></div><small>{agent.capabilities.join(" · ")}</small></div>)}</div>
       <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="extInfo"><span className="extIcon">🎯</span><div><b>Controlled Tool Runner</b><p>Faqat ruxsat etilgan deterministic read-only tool’lar. Erkin shell, SQL va kod bajarish yo‘q.</p></div></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginTop: 14 }}><select value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><select value={tool} onChange={(e) => setTool(e.target.value)}>{TOOLS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><input value={identifier} onChange={(e) => setIdentifier(e.target.value)} disabled={!toolNeedsIdentifier} placeholder={tool === "chat_inspect" ? "Telegram ID" : "Order number / ID"} /><button type="button" className="proPrimary miniBtn" onClick={createTask}>Task berish</button></div></div>
