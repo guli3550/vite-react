@@ -40,7 +40,6 @@ function mergeAndBroadcast(items: any[]) {
   try {
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     if (Array.isArray(current)) {
-      // Clean up any previously stored empty messages
       for (const item of current) {
         if (isMessageValid(item)) messages.push(item);
       }
@@ -73,7 +72,19 @@ function telegramInitData() { return window.Telegram?.WebApp?.initData || ""; }
 function linkedTelegramId() { const raw = String(localStorage.getItem(LINKED_ID_KEY) || "").trim(); return /^\d+$/.test(raw) ? raw : ""; }
 function linkedTelegramToken() { return String(localStorage.getItem(LINKED_TOKEN_KEY) || "").trim(); }
 function getGuestId() { const existing = Number(localStorage.getItem(GUEST_ID_KEY) || 0); if (Number.isSafeInteger(existing) && existing < 0) return String(existing); const id = -Math.floor(100000000000000 + Math.random() * 800000000000000); localStorage.setItem(GUEST_ID_KEY, String(id)); return String(id); }
-async function ensureGuestSession() { if (isAdmin() || telegramInitData() || linkedTelegramId()) return; const id = getGuestId(); if (localStorage.getItem(GUEST_TOKEN_KEY)) return; try { const res = await nativeFetch(`${API_URL}/api/chat/guest-session/${encodeURIComponent(id)}`, { cache: "no-store" }); const json = await res.json(); if (json?.success && json.token) localStorage.setItem(GUEST_TOKEN_KEY, String(json.token)); } catch (e) { console.warn("[Chat realtime] guest session failed", e); } }
+async function ensureGuestSession() {
+  if (isAdmin() || telegramInitData() || linkedTelegramId()) return;
+  if (localStorage.getItem(GUEST_TOKEN_KEY)) return;
+  try {
+    const res = await nativeFetch(`${API_URL}/api/chat/guest-session`, { cache: "no-store" });
+    const json = await res.json();
+    const guestId = Number(json?.guest_id);
+    if (res.ok && json?.success && json?.token && Number.isSafeInteger(guestId) && guestId < 0) {
+      localStorage.setItem(GUEST_ID_KEY, String(guestId));
+      localStorage.setItem(GUEST_TOKEN_KEY, String(json.token));
+    }
+  } catch (e) { console.warn("[Chat realtime] guest session failed", e); }
+}
 function authHeaders(): Record<string, string> { const headers: Record<string, string> = {}; const tg = telegramInitData(); if (tg) headers["X-Telegram-Init-Data"] = tg; const adminToken = sessionStorage.getItem("guli_admin_token") || ""; if (isAdmin() && adminToken) headers.Authorization = `Bearer ${adminToken}`; const linkedToken = linkedTelegramToken(); if (!isAdmin() && !tg && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken; const guestToken = localStorage.getItem(GUEST_TOKEN_KEY) || ""; if (!isAdmin() && !tg && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken; return headers; }
 async function fetchHistory(id: string) { try { const path = id === "all" ? "/api/admin/chat/messages" : `/api/chat/messages/${encodeURIComponent(id)}`; const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() }); if (!res.ok) return; const json = await res.json(); if (json?.success && Array.isArray(json.data)) mergeAndBroadcast(json.data); } catch (e) { console.warn("[Chat realtime] history failed", e); } }
 async function connect(id: string) { if (id === "all") { if (!authHeaders().Authorization) return; } else if (!telegramInitData() && !linkedTelegramToken() && !localStorage.getItem(GUEST_TOKEN_KEY)) return; await fetchHistory(id); for (;;) { if (document.visibilityState === "hidden") { await new Promise(r => setTimeout(r, 1500)); continue; } try { const response = await fetch(`${API_URL}/api/chat/stream/${encodeURIComponent(id)}`, { headers: authHeaders(), cache: "no-store" }); if (!response.ok || !response.body) throw new Error(`stream ${response.status}`); const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; for (;;) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const chunks = buffer.split("\n\n"); buffer = chunks.pop() || ""; for (const chunk of chunks) { const dataLine = chunk.split("\n").find(line => line.startsWith("data:")); if (!dataLine) continue; try { mergeAndBroadcast([JSON.parse(dataLine.slice(5).trim())]); } catch {} } } } catch (e) { console.warn("[Chat realtime] stream reconnect", e); } await new Promise(r => setTimeout(r, 1500)); } }
@@ -82,7 +93,7 @@ async function startForCurrentContext() { let id = ""; let key = ""; if (isAdmin
 const OriginalBroadcastChannel = window.BroadcastChannel;
 const nativeFetch = window.fetch.bind(window);
 void ensureGuestSession();
-if (OriginalBroadcastChannel) { const originalAdd = OriginalBroadcastChannel.prototype.addEventListener; OriginalBroadcastChannel.prototype.addEventListener = function(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) { if (listener === null) return; return originalAdd.call(this, type, listener, options); }; }
+if (OriginalBroadcastChannel) { const originalAdd = OriginalBroadcastChannel.prototype.addEventListener; OriginalBroadcastChannel.prototype.addEventListener = function(type: string, listener: EventListener | EventListenerObject | null, options?: boolean | AddEventListenerOptions) { if (listener === null) return; return originalAdd.call(this, type, listener, options); }; }
 window.addEventListener("guli_chat_updated", () => { void syncGuestMessages(); });
 installAuthFetch();
 setTimeout(() => void startForCurrentContext(), 250);
