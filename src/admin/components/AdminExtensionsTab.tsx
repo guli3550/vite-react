@@ -19,6 +19,7 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
   const [identifier, setIdentifier] = useState("");
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [runningId, setRunningId] = useState("");
+  const [selectedTaskId, setSelectedTaskId] = useState("");
 
   const token = sessionStorage.getItem("guli_admin_token") || "";
   const request = useCallback(async (path: string, options: RequestInit = {}) => {
@@ -31,22 +32,26 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
     return json;
   }, [token]);
 
-  const loadAgents = useCallback(async () => {
+  const loadAgents = useCallback(async (silent = false) => {
     if (!token) return;
-    setLoadingAgents(true);
+    if (!silent) setLoadingAgents(true);
     try {
       const data = await request("/api/admin/agents");
       setAgents(data.data || []);
       setTasks(data.tasks || []);
       setEvents(data.events || []);
     } catch (error) {
-      notify(error instanceof Error ? error.message : "Agentlar yuklanmadi");
+      if (!silent) notify(error instanceof Error ? error.message : "Agentlar yuklanmadi");
     } finally {
-      setLoadingAgents(false);
+      if (!silent) setLoadingAgents(false);
     }
   }, [notify, request, token]);
 
-  useEffect(() => { loadAgents(); }, [loadAgents]);
+  useEffect(() => {
+    loadAgents();
+    const timer = window.setInterval(() => loadAgents(true), 5000);
+    return () => window.clearInterval(timer);
+  }, [loadAgents]);
 
   const createTask = async () => {
     const input: Record<string, string> = {};
@@ -62,7 +67,7 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
       setTasks((current) => [result.data, ...current]);
       notify("Agent task navbatga qo‘yildi ✓");
       setIdentifier("");
-      await loadAgents();
+      await loadAgents(true);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Task yaratilmadi");
     }
@@ -74,7 +79,7 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
       const result = await request(`/api/admin/agents/tasks/${id}/run`, { method: "POST" });
       setTasks((current) => current.map((task) => task.id === id ? result.data : task));
       notify("Agent task bajarildi ✓");
-      await loadAgents();
+      await loadAgents(true);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Agent task bajarilmadi");
     } finally {
@@ -87,13 +92,15 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
       const result = await request(`/api/admin/agents/tasks/${id}/stop`, { method: "POST" });
       setTasks((current) => current.map((task) => task.id === id ? result.data : task));
       notify("Agent task to‘xtatildi");
-      await loadAgents();
+      await loadAgents(true);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Task to‘xtatilmadi");
     }
   };
 
   const toolNeedsIdentifier = tool === "order_lookup" || tool === "payment_status" || tool === "chat_inspect";
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId);
+  const selectedTaskEvents = selectedTaskId ? events.filter((event) => event.task_id === selectedTaskId) : [];
 
   return (
     <div className="dash">
@@ -107,7 +114,7 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
       <section className="proPanel">
         <div className="panelHead">
           <div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div>
-          <button type="button" className="mgmtBtn" onClick={loadAgents} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button>
+          <button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button>
         </div>
 
         <div className="metricGrid">
@@ -136,9 +143,17 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
         </div>
 
         <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
-          <div className="panelHead"><div><b>Task queue</b><p>Agent ishlarini real vaqtga yaqin holatda nazorat qilish.</p></div></div>
-          {tasks.length === 0 ? <p>Hozircha task yo‘q.</p> : <div className="tableWrap"><table><thead><tr><th>Agent</th><th>Tool</th><th>Status</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{tasks.slice(0, 12).map((task) => { let label = task.command; try { label = JSON.parse(task.command).type; } catch {} return <tr key={task.id}><td>{task.agent_id}</td><td>{label}</td><td><span className="statusPill">{task.status}</span></td><td>{new Date(task.created_at).toLocaleString("uz-UZ")}</td><td>{task.status === "queued" ? <><button type="button" className="proPrimary miniBtn" onClick={() => runTask(task.id)} disabled={runningId === task.id}>{runningId === task.id ? "Ishlamoqda…" : "▶ Ishga tushirish"}</button> <button type="button" className="mgmtBtn" onClick={() => stopTask(task.id)}>To‘xtatish</button></> : "—"}</td></tr>; })}</tbody></table></div>}
+          <div className="panelHead"><div><b>Task queue</b><p>5 soniyada avtomatik yangilanadi. Taskni tanlab natija va audit eventlarini ko‘rish mumkin.</p></div></div>
+          {tasks.length === 0 ? <p>Hozircha task yo‘q.</p> : <div className="tableWrap"><table><thead><tr><th>Agent</th><th>Tool</th><th>Status</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{tasks.slice(0, 12).map((task) => { let label = task.command; try { label = JSON.parse(task.command).type; } catch {} return <tr key={task.id} onClick={() => setSelectedTaskId(task.id)} style={{ cursor: "pointer" }}><td>{task.agent_id}</td><td>{label}</td><td><span className="statusPill">{task.status}</span></td><td>{new Date(task.created_at).toLocaleString("uz-UZ")}</td><td>{task.status === "queued" ? <><button type="button" className="proPrimary miniBtn" onClick={(event) => { event.stopPropagation(); runTask(task.id); }} disabled={runningId === task.id}>{runningId === task.id ? "Ishlamoqda…" : "▶ Ishga tushirish"}</button> <button type="button" className="mgmtBtn" onClick={(event) => { event.stopPropagation(); stopTask(task.id); }}>To‘xtatish</button></> : "Batafsil →"}</td></tr>; })}</tbody></table></div>}
         </div>
+
+        {selectedTask && (
+          <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
+            <div className="panelHead"><div><b>Task detail</b><p>{selectedTask.agent_id} · {selectedTask.status} · {selectedTask.id}</p></div><button type="button" className="mgmtBtn" onClick={() => setSelectedTaskId("")}>Yopish</button></div>
+            <pre style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ command: (() => { try { return JSON.parse(selectedTask.command); } catch { return selectedTask.command; } })(), result: selectedTask.result || null, error: selectedTask.error || null, finished_at: selectedTask.finished_at || null }, null, 2)}</pre>
+            <div style={{ marginTop: 12 }}><b>Task audit events</b>{selectedTaskEvents.length === 0 ? <p>Bu task uchun event topilmadi.</p> : <div style={{ display: "grid", gap: 8, marginTop: 8 }}>{selectedTaskEvents.map((event) => <div key={event.id} style={{ padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 10 }}><b>{event.event_type}</b><small style={{ display: "block" }}>{event.message || ""} · {new Date(event.created_at).toLocaleString("uz-UZ")}</small></div>)}</div>}</div>
+          </div>
+        )}
 
         <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
           <div className="panelHead"><div><b>Audit timeline</b><p>Agent harakatlarining append-only eventlari.</p></div></div>
@@ -150,8 +165,8 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
         <div className="panelHead"><div><span className="proEyebrow">EXTRA MODULES & INTEGRATIONS</span><h2>Qo‘shimcha Modullar va Tizim Servislari</h2></div></div>
         <div className="extensionsList">
           <div className="extensionCard"><div className="extInfo"><span className="extIcon">📊</span><div><b>Google Sheets Avto-Sinxronizatsiya</b><p>Buyurtmalar va mijozlar ma'lumotlarini real-vaqtda Google Sheets jadvaliga uzatadi.</p></div></div><button type="button" className={sheetsSync ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSheetsSync(!sheetsSync); notify(sheetsSync ? "Google Sheets pauzaga qo'yildi" : "Google Sheets faollashtirildi ✓"); }}>{sheetsSync ? "Faol ✓" : "Yoqish"}</button></div>
-          <div className="extensionCard"><div className="extInfo"><span className="extIcon">✈️</span><div><b>Telegram Webhook Bot Engine</b><p>Telegram Bot orqali keladigan buyurtmalarni admin panel bilan sinxronlaydi.</p></div></div><button type="button" className={telegramWebhook ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setTelegramWebhook(!telegramWebhook); notify(telegramWebhook ? "Webhook to'xtatildi" : "Webhook qayta yoqildi ✓"); }}>{telegramWebhook ? "Faol ✓" : "Yoqish"}</button></div>
-          <div className="extensionCard"><div className="extInfo"><span className="extIcon">💬</span><div><b>SMS Bildirishnomalar Gateway</b><p>Buyurtma holati o'zgarganda mijoz telefoniga SMS xabarnoma yuborish.</p></div></div><button type="button" className={smsGateway ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSmsGateway(!smsGateway); notify(smsGateway ? "SMS gateway o'chirildi" : "SMS gateway faollashtirildi ✓"); }}>{smsGateway ? "Faol ✓" : "Yoqish"}</button></div>
+          <div className="extensionCard"><div className="extInfo"><span className="extIcon">✈️</span><div><b>Telegram Webhook Bot Engine</b><p>Telegram Bot orqali keladigan buyurtmalarni admin panel bilan sinxronlaydi.</p></div><button type="button" className={telegramWebhook ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setTelegramWebhook(!telegramWebhook); notify(telegramWebhook ? "Webhook to'xtatildi" : "Webhook qayta yoqildi ✓"); }}>{telegramWebhook ? "Faol ✓" : "Yoqish"}</button></div>
+          <div className="extensionCard"><div className="extInfo"><span className="extIcon">💬</span><div><b>SMS Bildirishnomalar Gateway</b><p>Buyurtma holati o'zgarganda mijoz telefoniga SMS xabarnoma yuborish.</p></div><button type="button" className={smsGateway ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSmsGateway(!smsGateway); notify(smsGateway ? "SMS gateway o'chirildi" : "SMS gateway faollashtirildi ✓"); }}>{smsGateway ? "Faol ✓" : "Yoqish"}</button></div>
         </div>
       </section>
     </div>
