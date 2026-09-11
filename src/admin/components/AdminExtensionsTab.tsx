@@ -2,31 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import { MetricCard } from "./AdminUIComponents";
 
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
-
 type Agent = { id: string; name: string; role: string; capabilities: string[]; status: "working" | "idle" };
 type AgentTask = { id: string; agent_id: string; command: string; status: string; created_at: string; finished_at?: string; error?: string; result?: unknown };
 type AgentEvent = { id: string; task_id: string; agent_id: string; event_type: string; message?: string; created_at: string };
 
 export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) {
-  const [sheetsSync, setSheetsSync] = useState(true);
-  const [telegramWebhook, setTelegramWebhook] = useState(true);
-  const [smsGateway, setSmsGateway] = useState(false);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState("orchestrator");
-  const [tool, setTool] = useState("catalog_check");
-  const [identifier, setIdentifier] = useState("");
-  const [loadingAgents, setLoadingAgents] = useState(false);
-  const [runningId, setRunningId] = useState("");
-  const [selectedTaskId, setSelectedTaskId] = useState("");
-
+  const [sheetsSync, setSheetsSync] = useState(true), [telegramWebhook, setTelegramWebhook] = useState(true), [smsGateway, setSmsGateway] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]), [tasks, setTasks] = useState<AgentTask[]>([]), [events, setEvents] = useState<AgentEvent[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState("orchestrator"), [tool, setTool] = useState("catalog_check"), [identifier, setIdentifier] = useState("");
+  const [loadingAgents, setLoadingAgents] = useState(false), [runningId, setRunningId] = useState(""), [selectedTaskId, setSelectedTaskId] = useState("");
   const token = sessionStorage.getItem("guli_admin_token") || "";
+
   const request = useCallback(async (path: string, options: RequestInit = {}) => {
-    const response = await fetch(`${API}${path}`, {
-      ...options,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) },
-    });
+    const response = await fetch(`${API}${path}`, { ...options, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
     const json = await response.json().catch(() => ({}));
     if (!response.ok || json.success === false) throw new Error(json.message || "Server xatosi");
     return json;
@@ -35,140 +23,63 @@ export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) 
   const loadAgents = useCallback(async (silent = false) => {
     if (!token) return;
     if (!silent) setLoadingAgents(true);
-    try {
-      const data = await request("/api/admin/agents");
-      setAgents(data.data || []);
-      setTasks(data.tasks || []);
-      setEvents(data.events || []);
-    } catch (error) {
-      if (!silent) notify(error instanceof Error ? error.message : "Agentlar yuklanmadi");
-    } finally {
-      if (!silent) setLoadingAgents(false);
-    }
+    try { const data = await request("/api/admin/agents"); setAgents(data.data || []); setTasks(data.tasks || []); setEvents(data.events || []); }
+    catch (error) { if (!silent) notify(error instanceof Error ? error.message : "Agentlar yuklanmadi"); }
+    finally { if (!silent) setLoadingAgents(false); }
   }, [notify, request, token]);
 
-  useEffect(() => {
-    loadAgents();
-    const timer = window.setInterval(() => loadAgents(true), 5000);
-    return () => window.clearInterval(timer);
-  }, [loadAgents]);
+  useEffect(() => { loadAgents(); const timer = window.setInterval(() => loadAgents(true), 5000); return () => window.clearInterval(timer); }, [loadAgents]);
 
   const createTask = async () => {
     const input: Record<string, string> = {};
-    if (identifier.trim()) {
-      if (tool === "chat_inspect") input.telegram_id = identifier.trim();
-      else input.order_number = identifier.trim();
-    }
+    if (identifier.trim()) { if (tool === "chat_inspect") input.telegram_id = identifier.trim(); else input.order_number = identifier.trim(); }
     try {
-      const result = await request("/api/admin/agents/tasks", {
-        method: "POST",
-        body: JSON.stringify({ agent_id: selectedAgent, command: JSON.stringify({ type: tool, input }) }),
-      });
-      setTasks((current) => [result.data, ...current]);
-      notify("Agent task navbatga qo‘yildi ✓");
-      setIdentifier("");
-      await loadAgents(true);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Task yaratilmadi");
-    }
+      const result = await request("/api/admin/agents/tasks", { method: "POST", body: JSON.stringify({ agent_id: selectedAgent, command: JSON.stringify({ type: tool, input }) }) });
+      setTasks((current) => [result.data, ...current]); notify("Agent task navbatga qo‘yildi ✓"); setIdentifier(""); await loadAgents(true);
+    } catch (error) { notify(error instanceof Error ? error.message : "Task yaratilmadi"); }
   };
 
   const runTask = async (id: string) => {
     setRunningId(id);
-    try {
-      const result = await request(`/api/admin/agents/tasks/${id}/run`, { method: "POST" });
-      setTasks((current) => current.map((task) => task.id === id ? result.data : task));
-      notify("Agent task bajarildi ✓");
-      await loadAgents(true);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Agent task bajarilmadi");
-    } finally {
-      setRunningId("");
-    }
+    try { const result = await request(`/api/admin/agents/tasks/${id}/run`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task bajarildi ✓"); await loadAgents(true); }
+    catch (error) { notify(error instanceof Error ? error.message : "Agent task bajarilmadi"); }
+    finally { setRunningId(""); }
   };
 
   const stopTask = async (id: string) => {
-    try {
-      const result = await request(`/api/admin/agents/tasks/${id}/stop`, { method: "POST" });
-      setTasks((current) => current.map((task) => task.id === id ? result.data : task));
-      notify("Agent task to‘xtatildi");
-      await loadAgents(true);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Task to‘xtatilmadi");
-    }
+    try { const result = await request(`/api/admin/agents/tasks/${id}/stop`, { method: "POST" }); setTasks((current) => current.map((task) => task.id === id ? result.data : task)); notify("Agent task to‘xtatildi"); await loadAgents(true); }
+    catch (error) { notify(error instanceof Error ? error.message : "Task to‘xtatilmadi"); }
   };
 
   const toolNeedsIdentifier = tool === "order_lookup" || tool === "payment_status" || tool === "chat_inspect";
   const selectedTask = tasks.find((task) => task.id === selectedTaskId);
   const selectedTaskEvents = selectedTaskId ? events.filter((event) => event.task_id === selectedTaskId) : [];
 
-  return (
-    <div className="dash">
-      <div className="metricGrid">
-        <MetricCard label="AI Agentlar" value={`${agents.length || 6} ta`} icon="🤖" tone="rose" />
-        <MetricCard label="Ishlayapti" value={`${agents.filter((a) => a.status === "working").length} ta`} icon="⚡" />
-        <MetricCard label="Navbatdagi tasklar" value={`${tasks.filter((t) => t.status === "queued").length} ta`} icon="📋" />
-        <MetricCard label="Audit eventlar" value={`${events.length} ta`} icon="🛡️" />
-      </div>
-
-      <section className="proPanel">
-        <div className="panelHead">
-          <div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div>
-          <button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button>
-        </div>
-
-        <div className="metricGrid">
-          {agents.map((agent) => (
-            <div className="extensionCard" key={agent.id} style={{ alignItems: "flex-start", flexDirection: "column" }}>
-              <div className="extInfo"><span className="extIcon">{agent.status === "working" ? "⚡" : "🤖"}</span><div><b>{agent.name}</b><p>{agent.role} · {agent.status === "working" ? "Ishlayapti" : "Bo‘sh"}</p></div></div>
-              <small>{agent.capabilities.join(" · ")}</small>
-            </div>
-          ))}
-        </div>
-
-        <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
-          <div className="extInfo"><span className="extIcon">🎯</span><div><b>Controlled Tool Runner</b><p>Faqat ruxsat etilgan deterministic read-only tool’lar bajariladi. Shell, SQL va erkin kod bajarish yo‘q.</p></div></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginTop: 14 }}>
-            <select value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select>
-            <select value={tool} onChange={(e) => setTool(e.target.value)}>
-              <option value="catalog_check">Catalog check</option>
-              <option value="order_lookup">Order lookup</option>
-              <option value="payment_status">Payment status</option>
-              <option value="chat_inspect">Chat inspect</option>
-              <option value="security_audit">Security audit</option>
-            </select>
-            <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} disabled={!toolNeedsIdentifier} placeholder={tool === "chat_inspect" ? "Telegram ID" : "Order number / ID"} />
-            <button type="button" className="proPrimary miniBtn" onClick={createTask}>Task berish</button>
-          </div>
-        </div>
-
-        <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
-          <div className="panelHead"><div><b>Task queue</b><p>5 soniyada avtomatik yangilanadi. Taskni tanlab natija va audit eventlarini ko‘rish mumkin.</p></div></div>
-          {tasks.length === 0 ? <p>Hozircha task yo‘q.</p> : <div className="tableWrap"><table><thead><tr><th>Agent</th><th>Tool</th><th>Status</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{tasks.slice(0, 12).map((task) => { let label = task.command; try { label = JSON.parse(task.command).type; } catch {} return <tr key={task.id} onClick={() => setSelectedTaskId(task.id)} style={{ cursor: "pointer" }}><td>{task.agent_id}</td><td>{label}</td><td><span className="statusPill">{task.status}</span></td><td>{new Date(task.created_at).toLocaleString("uz-UZ")}</td><td>{task.status === "queued" ? <><button type="button" className="proPrimary miniBtn" onClick={(event) => { event.stopPropagation(); runTask(task.id); }} disabled={runningId === task.id}>{runningId === task.id ? "Ishlamoqda…" : "▶ Ishga tushirish"}</button> <button type="button" className="mgmtBtn" onClick={(event) => { event.stopPropagation(); stopTask(task.id); }}>To‘xtatish</button></> : "Batafsil →"}</td></tr>; })}</tbody></table></div>}
-        </div>
-
-        {selectedTask && (
-          <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
-            <div className="panelHead"><div><b>Task detail</b><p>{selectedTask.agent_id} · {selectedTask.status} · {selectedTask.id}</p></div><button type="button" className="mgmtBtn" onClick={() => setSelectedTaskId("")}>Yopish</button></div>
-            <pre style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ command: (() => { try { return JSON.parse(selectedTask.command); } catch { return selectedTask.command; } })(), result: selectedTask.result || null, error: selectedTask.error || null, finished_at: selectedTask.finished_at || null }, null, 2)}</pre>
-            <div style={{ marginTop: 12 }}><b>Task audit events</b>{selectedTaskEvents.length === 0 ? <p>Bu task uchun event topilmadi.</p> : <div style={{ display: "grid", gap: 8, marginTop: 8 }}>{selectedTaskEvents.map((event) => <div key={event.id} style={{ padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 10 }}><b>{event.event_type}</b><small style={{ display: "block" }}>{event.message || ""} · {new Date(event.created_at).toLocaleString("uz-UZ")}</small></div>)}</div>}</div>
-          </div>
-        )}
-
-        <div className="extensionCard" style={{ marginTop: 16, display: "block" }}>
-          <div className="panelHead"><div><b>Audit timeline</b><p>Agent harakatlarining append-only eventlari.</p></div></div>
-          {events.length === 0 ? <p>Hozircha event yo‘q.</p> : <div style={{ display: "grid", gap: 8 }}>{events.slice(0, 20).map((event) => <div key={event.id} style={{ padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 10 }}><b>{event.event_type}</b> · {event.agent_id}<small style={{ display: "block" }}>{event.message || ""} · {new Date(event.created_at).toLocaleString("uz-UZ")}</small></div>)}</div>}
-        </div>
-      </section>
-
-      <section className="proPanel">
-        <div className="panelHead"><div><span className="proEyebrow">EXTRA MODULES & INTEGRATIONS</span><h2>Qo‘shimcha Modullar va Tizim Servislari</h2></div></div>
-        <div className="extensionsList">
-          <div className="extensionCard"><div className="extInfo"><span className="extIcon">📊</span><div><b>Google Sheets Avto-Sinxronizatsiya</b><p>Buyurtmalar va mijozlar ma'lumotlarini real-vaqtda Google Sheets jadvaliga uzatadi.</p></div></div><button type="button" className={sheetsSync ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSheetsSync(!sheetsSync); notify(sheetsSync ? "Google Sheets pauzaga qo'yildi" : "Google Sheets faollashtirildi ✓"); }}>{sheetsSync ? "Faol ✓" : "Yoqish"}</button></div>
-          <div className="extensionCard"><div className="extInfo"><span className="extIcon">✈️</span><div><b>Telegram Webhook Bot Engine</b><p>Telegram Bot orqali keladigan buyurtmalarni admin panel bilan sinxronlaydi.</p></div><button type="button" className={telegramWebhook ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setTelegramWebhook(!telegramWebhook); notify(telegramWebhook ? "Webhook to'xtatildi" : "Webhook qayta yoqildi ✓"); }}>{telegramWebhook ? "Faol ✓" : "Yoqish"}</button></div>
-          <div className="extensionCard"><div className="extInfo"><span className="extIcon">💬</span><div><b>SMS Bildirishnomalar Gateway</b><p>Buyurtma holati o'zgarganda mijoz telefoniga SMS xabarnoma yuborish.</p></div><button type="button" className={smsGateway ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSmsGateway(!smsGateway); notify(smsGateway ? "SMS gateway o'chirildi" : "SMS gateway faollashtirildi ✓"); }}>{smsGateway ? "Faol ✓" : "Yoqish"}</button></div>
-        </div>
-      </section>
+  return <div className="dash">
+    <div className="metricGrid">
+      <MetricCard label="AI Agentlar" value={`${agents.length || 6} ta`} icon="🤖" tone="rose" />
+      <MetricCard label="Ishlayapti" value={`${agents.filter((a) => a.status === "working").length} ta`} icon="⚡" />
+      <MetricCard label="Navbatdagi tasklar" value={`${tasks.filter((t) => t.status === "queued").length} ta`} icon="📋" />
+      <MetricCard label="Audit eventlar" value={`${events.length} ta`} icon="🛡️" />
     </div>
-  );
+
+    <section className="proPanel">
+      <div className="panelHead"><div><span className="proEyebrow">GULI AI OPERATIONS CENTER</span><h2>Agentlar boshqaruv markazi</h2><p>Ichki agentlarni kuzatish, xavfsiz tool ishga tushirish va audit eventlarini ko‘rish.</p></div><button type="button" className="mgmtBtn" onClick={() => loadAgents()} disabled={loadingAgents}>{loadingAgents ? "Yuklanmoqda…" : "↻ Yangilash"}</button></div>
+      <div className="metricGrid">{agents.map((agent) => <div className="extensionCard" key={agent.id} style={{ alignItems: "flex-start", flexDirection: "column" }}><div className="extInfo"><span className="extIcon">{agent.status === "working" ? "⚡" : "🤖"}</span><div><b>{agent.name}</b><p>{agent.role} · {agent.status === "working" ? "Ishlayapti" : "Bo‘sh"}</p></div></div><small>{agent.capabilities.join(" · ")}</small></div>)}</div>
+
+      <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="extInfo"><span className="extIcon">🎯</span><div><b>Controlled Tool Runner</b><p>Faqat ruxsat etilgan deterministic read-only tool’lar bajariladi. Shell, SQL va erkin kod bajarish yo‘q.</p></div></div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, marginTop: 14 }}><select value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><select value={tool} onChange={(e) => setTool(e.target.value)}><option value="catalog_check">Catalog check</option><option value="order_lookup">Order lookup</option><option value="payment_status">Payment status</option><option value="chat_inspect">Chat inspect</option><option value="security_audit">Security audit</option></select><input value={identifier} onChange={(e) => setIdentifier(e.target.value)} disabled={!toolNeedsIdentifier} placeholder={tool === "chat_inspect" ? "Telegram ID" : "Order number / ID"} /><button type="button" className="proPrimary miniBtn" onClick={createTask}>Task berish</button></div></div>
+
+      <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="panelHead"><div><b>Task queue</b><p>5 soniyada avtomatik yangilanadi. Taskni tanlab natija va audit eventlarini ko‘rish mumkin.</p></div></div>{tasks.length === 0 ? <p>Hozircha task yo‘q.</p> : <div className="tableWrap"><table><thead><tr><th>Agent</th><th>Tool</th><th>Status</th><th>Sana</th><th>Amal</th></tr></thead><tbody>{tasks.slice(0, 12).map((task) => { let label = task.command; try { label = JSON.parse(task.command).type; } catch {} return <tr key={task.id} onClick={() => setSelectedTaskId(task.id)} style={{ cursor: "pointer" }}><td>{task.agent_id}</td><td>{label}</td><td><span className="statusPill">{task.status}</span></td><td>{new Date(task.created_at).toLocaleString("uz-UZ")}</td><td>{task.status === "queued" ? <><button type="button" className="proPrimary miniBtn" onClick={(event) => { event.stopPropagation(); runTask(task.id); }} disabled={runningId === task.id}>{runningId === task.id ? "Ishlamoqda…" : "▶ Ishga tushirish"}</button> <button type="button" className="mgmtBtn" onClick={(event) => { event.stopPropagation(); stopTask(task.id); }}>To‘xtatish</button></> : "Batafsil →"}</td></tr>; })}</tbody></table></div>}</div>
+
+      {selectedTask && <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="panelHead"><div><b>Task detail</b><p>{selectedTask.agent_id} · {selectedTask.status} · {selectedTask.id}</p></div><button type="button" className="mgmtBtn" onClick={() => setSelectedTaskId("")}>Yopish</button></div><pre style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ command: (() => { try { return JSON.parse(selectedTask.command); } catch { return selectedTask.command; } })(), result: selectedTask.result || null, error: selectedTask.error || null, finished_at: selectedTask.finished_at || null }, null, 2)}</pre><div style={{ marginTop: 12 }}><b>Task audit events</b>{selectedTaskEvents.length === 0 ? <p>Bu task uchun event topilmadi.</p> : <div style={{ display: "grid", gap: 8, marginTop: 8 }}>{selectedTaskEvents.map((event) => <div key={event.id} style={{ padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 10 }}><b>{event.event_type}</b><small style={{ display: "block" }}>{event.message || ""} · {new Date(event.created_at).toLocaleString("uz-UZ")}</small></div>)}</div>}</div></div>}
+
+      <div className="extensionCard" style={{ marginTop: 16, display: "block" }}><div className="panelHead"><div><b>Audit timeline</b><p>Agent harakatlarining append-only eventlari.</p></div></div>{events.length === 0 ? <p>Hozircha event yo‘q.</p> : <div style={{ display: "grid", gap: 8 }}>{events.slice(0, 20).map((event) => <div key={event.id} style={{ padding: "9px 11px", border: "1px solid var(--line)", borderRadius: 10 }}><b>{event.event_type}</b> · {event.agent_id}<small style={{ display: "block" }}>{event.message || ""} · {new Date(event.created_at).toLocaleString("uz-UZ")}</small></div>)}</div>}</div>
+    </section>
+
+    <section className="proPanel"><div className="panelHead"><div><span className="proEyebrow">EXTRA MODULES & INTEGRATIONS</span><h2>Qo‘shimcha Modullar va Tizim Servislari</h2></div></div><div className="extensionsList">
+      <div className="extensionCard"><div className="extInfo"><span className="extIcon">📊</span><div><b>Google Sheets Avto-Sinxronizatsiya</b><p>Buyurtmalar va mijozlar ma'lumotlarini real-vaqtda Google Sheets jadvaliga uzatadi.</p></div></div><button type="button" className={sheetsSync ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSheetsSync(!sheetsSync); notify(sheetsSync ? "Google Sheets pauzaga qo'yildi" : "Google Sheets faollashtirildi ✓"); }}>{sheetsSync ? "Faol ✓" : "Yoqish"}</button></div>
+      <div className="extensionCard"><div className="extInfo"><span className="extIcon">✈️</span><div><b>Telegram Webhook Bot Engine</b><p>Telegram Bot orqali keladigan buyurtmalarni admin panel bilan sinxronlaydi.</p></div></div><button type="button" className={telegramWebhook ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setTelegramWebhook(!telegramWebhook); notify(telegramWebhook ? "Webhook to'xtatildi" : "Webhook qayta yoqildi ✓"); }}>{telegramWebhook ? "Faol ✓" : "Yoqish"}</button></div>
+      <div className="extensionCard"><div className="extInfo"><span className="extIcon">💬</span><div><b>SMS Bildirishnomalar Gateway</b><p>Buyurtma holati o'zgarganda mijoz telefoniga SMS xabarnoma yuborish.</p></div></div><button type="button" className={smsGateway ? "proPrimary miniBtn" : "mgmtBtn"} onClick={() => { setSmsGateway(!smsGateway); notify(smsGateway ? "SMS gateway o'chirildi" : "SMS gateway faollashtirildi ✓"); }}>{smsGateway ? "Faol ✓" : "Yoqish"}</button></div>
+    </div></section>
+  </div>;
 }
