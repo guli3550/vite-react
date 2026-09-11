@@ -62,9 +62,6 @@ const buttonStyle: React.CSSProperties = { width: "100%", padding: 13, borderRad
 const secondaryButtonStyle: React.CSSProperties = { ...buttonStyle, background: "#f1f5f9", color: "#334155" };
 const linkStyle: React.CSSProperties = { background: "none", border: "none", color: "#4f46e5", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "underline" };
 
-// IMPORTANT: Keep this component at module scope. Defining it inside CustomerAuthModal
-// recreates it on every keystroke, causing React to unmount/remount the <input> and
-// mobile keyboards to close after the first character.
 interface FieldProps {
   label: string;
   value: string;
@@ -72,8 +69,12 @@ interface FieldProps {
   type?: string;
   placeholder?: string;
   required?: boolean;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }
-const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", placeholder, required = true }) => (
+
+// Keep Field at module scope. A component declared inside CustomerAuthModal is
+// recreated on every keystroke, so React remounts the input and mobile keyboards close.
+const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", placeholder, required = true, inputMode }) => (
   <div style={{ marginBottom: 13 }}>
     <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>{label}</label>
     <input
@@ -82,6 +83,7 @@ const Field: React.FC<FieldProps> = ({ label, value, onChange, type = "text", pl
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       required={required}
+      inputMode={inputMode}
       autoComplete={type === "password" ? "new-password" : type === "email" ? "email" : type === "tel" ? "tel" : "on"}
       style={inputStyle}
     />
@@ -293,13 +295,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ isOpen, on
 
         {view === "forgot_verify" && <form onSubmit={resetPassword}>
           <div style={{ marginBottom: 13 }}><label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Email</label><input value={forgotEmail} readOnly style={{ ...inputStyle, background: "#f8fafc" }} /></div>
-          <Field label="6 xonali kod:" value={forgotToken} onChange={setForgotToken} placeholder="123456" />
+          <Field label="6 xonali kod:" value={forgotToken} onChange={setForgotToken} inputMode="numeric" placeholder="123456" />
           <Field label="Yangi parol:" value={newPassword} onChange={setNewPassword} type="password" placeholder="Kamida 8 belgi" />
           <Field label="Yangi parolni takrorlang:" value={confirmNewPassword} onChange={setConfirmNewPassword} type="password" placeholder="Parolni takrorlang" />
           <button type="submit" disabled={loading} style={{ ...buttonStyle, opacity: loading ? .65 : 1 }}>{loading ? "Yangilanmoqda..." : "Parolni yangilash"}</button>
         </form>}
-
-        {view !== "choice" && view !== "signin" && view !== "signup" && view !== "forgot_request" && view !== "forgot_verify" && null}
       </div>
     </div>
   );
