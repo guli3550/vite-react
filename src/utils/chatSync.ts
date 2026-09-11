@@ -214,7 +214,17 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   saveChatMessages([...allMessages, newMsg]);
 
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
-  const backendId = user?.id ? String(user.id) : String(localStorage.getItem("guli_chat_guest_id") || "");
+  let guestId = localStorage.getItem("guli_chat_guest_id") || "";
+  if (!guestId) {
+    const existing = Number(localStorage.getItem("guli_chat_guest_id") || 0);
+    if (Number.isSafeInteger(existing) && existing < 0) {
+      guestId = String(existing);
+    } else {
+      guestId = String(-Math.floor(100000000000000 + Math.random() * 800000000000000));
+      try { localStorage.setItem("guli_chat_guest_id", guestId); } catch {}
+    }
+  }
+  const backendId = user?.id ? String(user.id) : guestId;
   if (backendId) {
     try {
       await fetch(`${API_URL}/api/chat/messages`, {

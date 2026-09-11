@@ -230,7 +230,185 @@ app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "To‘lov statusini yangilashda xatolik" });
   }
 });
-app.get("/api/admin/users",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,updated_at").order("updated_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Mijozlarni yuklashda xatolik"})}});
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 300, 1000);
+    const usersMap = new Map();
+
+    // 1. Load Telegram users
+    try {
+      const { data: tgUsers, error: tgErr } = await supabase
+        .from("telegram_users")
+        .select("telegram_id,username,first_name,last_name,telegram_phone,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+      if (!tgErr && Array.isArray(tgUsers)) {
+        for (const u of tgUsers) {
+          const key = `tg_${u.telegram_id}`;
+          usersMap.set(key, {
+            id: key,
+            telegram_id: Number(u.telegram_id),
+            provider: "telegram",
+            username: u.username || "",
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            telegram_phone: u.telegram_phone || "",
+            phone: u.telegram_phone || "",
+            updated_at: u.updated_at || new Date().toISOString(),
+            orders_count: 0,
+            total_spent: 0,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("CRM: tgUsers load issue", e.message);
+    }
+
+    // 2. Load Supabase Auth registered users (Email + Google)
+    try {
+      if (supabase?.auth?.admin?.listUsers) {
+        const { data: authUsers, error: authErr } = await supabase.auth.admin.listUsers({ page: 1, perPage: limit });
+        if (!authErr && Array.isArray(authUsers?.users)) {
+          for (const u of authUsers.users) {
+            const provider = u.app_metadata?.provider || u.identities?.[0]?.provider || "email";
+            const email = u.email || "";
+            const metaName = u.user_metadata?.full_name || u.user_metadata?.name || "";
+            const parts = metaName.trim().split(" ");
+            const firstName = parts[0] || (email ? email.split("@")[0] : "");
+            const lastName = parts.slice(1).join(" ") || "";
+            const phone = u.phone || u.user_metadata?.phone || "";
+            const photo = u.user_metadata?.avatar_url || u.user_metadata?.picture || null;
+            const key = `auth_${u.id}`;
+
+            usersMap.set(key, {
+              id: key,
+              auth_user_id: u.id,
+              telegram_id: null,
+              provider: provider === "google" ? "google" : "email",
+              email,
+              username: email ? email.split("@")[0] : "",
+              first_name: firstName,
+              last_name: lastName,
+              telegram_phone: phone,
+              phone,
+              photo_url: photo,
+              created_at: u.created_at,
+              updated_at: u.last_sign_in_at || u.updated_at || u.created_at,
+              orders_count: 0,
+              total_spent: 0,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("CRM: authUsers load issue", e.message);
+    }
+
+    // 2b. Load unified customers table (Email, Google, and Telegram customers)
+    try {
+      const { data: dbCustomers, error: custErr } = await supabase
+        .from("customers")
+        .select("id,auth_user_id,telegram_id,email,full_name,phone,avatar_url,auth_provider,created_at,updated_at")
+        .limit(limit);
+      if (!custErr && Array.isArray(dbCustomers)) {
+        for (const c of dbCustomers) {
+          const key = c.auth_user_id ? `auth_${c.auth_user_id}` : c.telegram_id ? `tg_${c.telegram_id}` : `cust_${c.id}`;
+          if (!usersMap.has(key)) {
+            const parts = (c.full_name || "").trim().split(" ");
+            usersMap.set(key, {
+              id: key,
+              auth_user_id: c.auth_user_id || null,
+              telegram_id: c.telegram_id ? Number(c.telegram_id) : null,
+              provider: c.auth_provider || (c.telegram_id ? "telegram" : "email"),
+              email: c.email || "",
+              username: c.email ? c.email.split("@")[0] : "",
+              first_name: parts[0] || (c.email ? c.email.split("@")[0] : ""),
+              last_name: parts.slice(1).join(" ") || "",
+              telegram_phone: c.phone || "",
+              phone: c.phone || "",
+              photo_url: c.avatar_url || null,
+              created_at: c.created_at,
+              updated_at: c.updated_at || c.created_at,
+              orders_count: 0,
+              total_spent: 0,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("CRM: dbCustomers table note", e.message);
+    }
+
+    // 3. Aggregate Orders to update spend, order counts, and discover order-only customers
+    try {
+      const { data: orders, error: ordersErr } = await supabase
+        .from("orders")
+        .select("id,order_number,telegram_id,auth_user_id,customer_name,first_name,last_name,username,phone,total,status,created_at")
+        .order("created_at", { ascending: false })
+        .limit(2000);
+
+      if (!ordersErr && Array.isArray(orders)) {
+        for (const o of orders) {
+          const total = Number(o.total || 0);
+          let matched = false;
+
+          // Match by telegram_id
+          if (o.telegram_id && usersMap.has(`tg_${o.telegram_id}`)) {
+            const u = usersMap.get(`tg_${o.telegram_id}`);
+            u.orders_count += 1;
+            u.total_spent += total;
+            matched = true;
+          }
+
+          // Match by auth_user_id
+          if (o.auth_user_id && usersMap.has(`auth_${o.auth_user_id}`)) {
+            const u = usersMap.get(`auth_${o.auth_user_id}`);
+            u.orders_count += 1;
+            u.total_spent += total;
+            matched = true;
+          }
+
+          // If not matched, check by phone or create an order-customer entry
+          if (!matched && (o.phone || o.customer_name || o.telegram_id)) {
+            const phoneKey = o.phone ? `phone_${o.phone.replace(/\D/g, "")}` : `order_${o.id}`;
+            if (!usersMap.has(phoneKey)) {
+              usersMap.set(phoneKey, {
+                id: phoneKey,
+                telegram_id: o.telegram_id ? Number(o.telegram_id) : null,
+                provider: o.telegram_id ? "telegram" : "email",
+                username: o.username || "",
+                first_name: o.first_name || (o.customer_name ? o.customer_name.split(" ")[0] : ""),
+                last_name: o.last_name || (o.customer_name ? o.customer_name.split(" ").slice(1).join(" ") : ""),
+                telegram_phone: o.phone || "",
+                phone: o.phone || "",
+                updated_at: o.created_at || new Date().toISOString(),
+                orders_count: 1,
+                total_spent: total,
+              });
+            } else {
+              const u = usersMap.get(phoneKey);
+              u.orders_count += 1;
+              u.total_spent += total;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("CRM: orders aggregation issue", e.message);
+    }
+
+    const unifiedList = Array.from(usersMap.values()).sort((a, b) => {
+      const ta = new Date(a.updated_at || a.created_at || 0).getTime();
+      const tb = new Date(b.updated_at || b.created_at || 0).getTime();
+      return tb - ta;
+    });
+
+    res.json({ success: true, data: unifiedList.slice(0, limit) });
+  } catch (error) {
+    console.error("Admin users list error:", error);
+    res.status(500).json({ success: false, message: "Mijozlarni yuklashda xatolik" });
+  }
+});
 
 app.get("/api/admin/promos", requireAdmin, async (req,res) => {
   try {

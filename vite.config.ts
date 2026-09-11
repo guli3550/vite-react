@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+declare const process: { env: Record<string, string | undefined> };
+
 // Small source-level compatibility fixes for the legacy admin screens.
 // Private payment receipts live in a private Supabase bucket, so the browser
 // must use the admin endpoint to obtain a short-lived signed URL.
@@ -60,6 +62,13 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_URL || 'https://guli-lingerie-api.onrender.com',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
   preview: {
     host: '0.0.0.0',

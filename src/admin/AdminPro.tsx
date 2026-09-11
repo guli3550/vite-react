@@ -114,14 +114,22 @@ function formatBirthDate(v?: string): string {
 }
 
 type User = {
-  telegram_id: number;
+  id?: string;
+  telegram_id?: number | null;
+  auth_user_id?: string | null;
+  provider?: "telegram" | "google" | "email";
+  email?: string | null;
   username?: string;
   first_name?: string;
   last_name?: string;
   telegram_phone?: string;
+  phone?: string;
   updated_at?: string;
+  created_at?: string;
   photo_url?: string;
   telegram_photo?: string;
+  orders_count?: number;
+  total_spent?: number;
 };
 
 type Promo = {
@@ -321,8 +329,8 @@ export default function AdminPro() {
         .then((j) => {
           if (!cancelled && j?.success && j?.data?.photos?.length) {
             const pUrl = j.data.photos[0]?.url;
-            if (pUrl) {
-              setUserPhotosMap((prev) => ({ ...prev, [u.telegram_id]: pUrl }));
+            if (pUrl && u.telegram_id) {
+              setUserPhotosMap((prev) => ({ ...prev, [String(u.telegram_id)]: pUrl }));
             }
           }
         })
@@ -578,9 +586,9 @@ export default function AdminPro() {
   const usersFiltered = useMemo(
     () =>
       users.filter((u) =>
-        `${u.telegram_id} ${u.username || ""} ${u.first_name || ""} ${
+        `${u.telegram_id || ""} ${u.email || ""} ${u.username || ""} ${u.first_name || ""} ${
           u.last_name || ""
-        } ${u.telegram_phone || ""}`
+        } ${u.telegram_phone || u.phone || ""}`
           .toLowerCase()
           .includes(query.toLowerCase())
       ),
@@ -928,6 +936,23 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
           </div>
 
           <small style={{ marginTop: "14px" }}>Admin tokeni xavfsiz holda sessionStorage’da saqlanadi.</small>
+
+          <div style={{ marginTop: "14px", paddingTop: "10px", borderTop: "1px solid #f2e2e6" }}>
+            <a
+              href="/"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                color: "#c9526b",
+                fontSize: "12px",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              ← Asosiy web app do‘koniga qaytish
+            </a>
+          </div>
         </form>
       </div>
     );
@@ -1345,12 +1370,16 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                   download(
                     "guli-customers.csv",
                     csv([
-                      ["Telegram ID", "Ism", "Username", "Telefon", "Yangilangan"],
+                      ["Turi", "Ism", "Email", "Username", "Telegram ID", "Telefon", "Buyurtmalar", "Jami xarid", "Yangilangan"],
                       ...usersFiltered.map((u) => [
-                        u.telegram_id,
+                        u.provider === "google" ? "Google" : u.provider === "email" ? "Email" : "Telegram",
                         [u.first_name, u.last_name].filter(Boolean).join(" "),
+                        u.email || "",
                         u.username ? `@${u.username}` : "",
-                        u.telegram_phone || "",
+                        u.telegram_id || "",
+                        u.telegram_phone || u.phone || "",
+                        u.orders_count || 0,
+                        u.total_spent || 0,
                         u.updated_at || "",
                       ]),
                     ])
@@ -1365,62 +1394,105 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                 <thead>
                   <tr>
                     <th>Mijoz</th>
-                    <th>Telegram ID</th>
-                    <th>Username</th>
+                    <th>Turi</th>
+                    <th>Email / Aloqa</th>
                     <th>Telefon</th>
+                    <th>Buyurtmalar</th>
                     <th>Yangilangan</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {usersFiltered.map((u) => (
-                    <tr
-                      key={u.telegram_id}
-                      className="clickable"
-                      onClick={() => setSelectedUser(u)}
-                    >
-                      <td>
-                        <div
-                          className="avatarMini"
-                          style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: "50%",
-                            overflow: "hidden",
-                            display: "inline-grid",
-                            placeItems: "center",
-                            background: "#f8fafc",
-                            border: "1.5px solid #be123c",
-                            boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                            padding: 0,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {(userPhotosMap[u.telegram_id] || (u as any).photo_url || (u as any).telegram_photo) ? (
-                            <img
-                              src={userPhotosMap[u.telegram_id] || (u as any).photo_url || (u as any).telegram_photo}
-                              alt={u.first_name || ""}
-                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                  {usersFiltered.map((u, idx) => {
+                    const provider = u.provider || (u.email ? "email" : "telegram");
+                    return (
+                      <tr
+                        key={u.id || (u.telegram_id ? `tg_${u.telegram_id}` : `usr_${idx}`)}
+                        className="clickable"
+                        onClick={() => setSelectedUser(u)}
+                      >
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div
+                              className="avatarMini"
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: "50%",
+                                overflow: "hidden",
+                                display: "inline-grid",
+                                placeItems: "center",
+                                background: "#f8fafc",
+                                border: provider === "google" ? "1.5px solid #0284c7" : provider === "email" ? "1.5px solid #d97706" : "1.5px solid #be123c",
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                                padding: 0,
+                                flexShrink: 0,
                               }}
-                            />
+                            >
+                              {(u.photo_url || (u.telegram_id && userPhotosMap[u.telegram_id]) || (u as any).telegram_photo) ? (
+                                <img
+                                  src={u.photo_url || (u.telegram_id ? userPhotosMap[u.telegram_id] : "") || (u as any).telegram_photo}
+                                  alt={u.first_name || ""}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                                  }}
+                                />
+                              ) : (
+                                <span style={{ fontSize: 14, fontWeight: 800, color: provider === "google" ? "#0284c7" : provider === "email" ? "#d97706" : "#be123c" }}>
+                                  {(u.first_name || u.username || u.email || "G").slice(0, 1).toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <b style={{ display: "block", fontSize: 14 }}>
+                                {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
+                                  (u.email ? u.email.split("@")[0] : "Noma’lum mijoz")}
+                              </b>
+                              {u.username && <small style={{ color: "#64748b" }}>@{u.username}</small>}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          {provider === "google" ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#e0f2fe", color: "#0369a1", fontSize: 12, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>
+                              🌐 Google
+                            </span>
+                          ) : provider === "email" ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fef3c7", color: "#b45309", fontSize: 12, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>
+                              ✉️ Email
+                            </span>
                           ) : (
-                            <span style={{ fontSize: 14, fontWeight: 800, color: "#be123c" }}>
-                              {(u.first_name || u.username || "G").slice(0, 1).toUpperCase()}
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#e0e7ff", color: "#4338ca", fontSize: 12, fontWeight: 700, padding: "3px 8px", borderRadius: 6 }}>
+                              💬 Telegram
                             </span>
                           )}
-                        </div>
-                        <b>
-                          {[u.first_name, u.last_name].filter(Boolean).join(" ") ||
-                            "Noma’lum"}
-                        </b>
-                      </td>
-                      <td>{u.telegram_id}</td>
-                      <td>{u.username ? `@${u.username}` : "—"}</td>
-                      <td>{u.telegram_phone || "—"}</td>
-                      <td>{u.updated_at ? date(u.updated_at) : "—"}</td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td>
+                          {u.email ? (
+                            <span style={{ fontWeight: 600, color: "#1e293b" }}>{u.email}</span>
+                          ) : u.username ? (
+                            `@${u.username}`
+                          ) : u.telegram_id ? (
+                            <span style={{ color: "#64748b" }}>TG #{u.telegram_id}</span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>{u.phone || u.telegram_phone || "—"}</td>
+                        <td>
+                          <span style={{ fontWeight: 700, color: "#0f172a" }}>
+                            {u.orders_count || 0} ta
+                          </span>
+                          {u.total_spent ? (
+                            <small style={{ display: "block", color: "#e11d48", fontWeight: 600 }}>
+                              {money(u.total_spent)}
+                            </small>
+                          ) : null}
+                        </td>
+                        <td>{u.updated_at ? date(u.updated_at) : "—"}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2503,12 +2575,17 @@ function UserDrawer({
   );
   const mine = orders.filter(
     (o) =>
-      o.telegram_id === user.telegram_id ||
+      (user.telegram_id && o.telegram_id === user.telegram_id) ||
+      (user.auth_user_id && (o as any).auth_user_id === user.auth_user_id) ||
+      (user.email && (o as any).email?.toLowerCase() === user.email.toLowerCase()) ||
+      (user.phone && (o.phone === user.phone || (o as any).telegram_phone === user.phone)) ||
+      (user.telegram_phone && (o.phone === user.telegram_phone || (o as any).telegram_phone === user.telegram_phone)) ||
       (user.username && o.username === user.username)
   );
   const spend = mine.reduce((s, o) => s + Number(o.total || 0), 0);
   const userFullName =
     [user.first_name, user.last_name].filter(Boolean).join(" ") ||
+    (user.email ? user.email.split("@")[0] : "") ||
     user.username ||
     "Mijoz";
   const userDob =
@@ -2547,7 +2624,13 @@ function UserDrawer({
             <span className="proEyebrow">CRM MIJOZ</span>
             <h2>{userFullName}</h2>
             <small>
-              {user.username ? `@${user.username}` : "Telegram foydalanuvchisi"}
+              {user.provider === "google"
+                ? "🌐 Google hisobi orqali ulangan"
+                : user.provider === "email"
+                ? "✉️ Email hisobi orqali ulangan"
+                : user.username
+                ? `@${user.username}`
+                : "Telegram foydalanuvchisi"}
             </small>
           </div>
           <button type="button" onClick={onClose} aria-label="Yopish">
@@ -2563,14 +2646,14 @@ function UserDrawer({
                   height: 56,
                   borderRadius: "50%",
                   overflow: "hidden",
-                  background: "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
+                  background: user.provider === "google" ? "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)" : user.provider === "email" ? "linear-gradient(135deg, #d97706 0%, #fbbf24 100%)" : "linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#ffffff",
                   fontSize: 22,
                   fontWeight: 700,
-                  boxShadow: "0 3px 10px rgba(244, 63, 94, 0.25)",
+                  boxShadow: "0 3px 10px rgba(0,0,0,0.15)",
                   flexShrink: 0,
                   border: "2px solid #ffffff",
                 }}
@@ -2583,13 +2666,15 @@ function UserDrawer({
                     onError={() => setUserPhoto("")}
                   />
                 ) : (
-                  (user.first_name || "G").slice(0, 1).toUpperCase()
+                  (user.first_name || user.username || user.email || "G").slice(0, 1).toUpperCase()
                 )}
               </div>
               <div>
-                <b style={{ fontSize: 16 }}>{user.telegram_phone || userFullName}</b>
+                <b style={{ fontSize: 16 }}>{user.phone || user.telegram_phone || user.email || userFullName}</b>
                 <small style={{ color: "var(--muted, #64748b)", display: "block", marginTop: 2 }}>
-                  TG ID: {user.telegram_id} {user.username ? `· @${user.username}` : ""}
+                  {user.provider === "google" ? "🌐 Google mijoz" : user.provider === "email" ? "✉️ Email mijoz" : `TG ID: ${user.telegram_id || "—"}`}
+                  {user.email ? ` · ${user.email}` : ""}
+                  {user.username ? ` · @${user.username}` : ""}
                 </small>
               </div>
             </div>
@@ -2600,6 +2685,18 @@ function UserDrawer({
               <span className="rowLabel">👤 Ism Familiya</span>
               <span className="rowValue">{userFullName}</span>
             </div>
+            {user.email ? (
+              <div className="orderDetailRow">
+                <span className="rowLabel">✉️ Email</span>
+                <span className="rowValue" style={{ fontWeight: 600 }}>{user.email}</span>
+              </div>
+            ) : null}
+            {user.phone || user.telegram_phone ? (
+              <div className="orderDetailRow">
+                <span className="rowLabel">📞 Telefon</span>
+                <span className="rowValue" style={{ fontWeight: 600 }}>{user.phone || user.telegram_phone}</span>
+              </div>
+            ) : null}
             <div className="orderDetailRow">
               <span className="rowLabel">🎂 Tug‘ilgan sana</span>
               <span className="rowValue" style={{ color: userDob ? "inherit" : "var(--muted)" }}>
