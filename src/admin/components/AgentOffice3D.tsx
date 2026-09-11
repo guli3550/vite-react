@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
-import { AgentOrchestratorPanel } from "./AgentOrchestratorPanel";
 
 type Agent = { id: string; name: string; role: string; capabilities: string[]; status: "working" | "idle" };
-type AgentTask = { id: string; agent_id: string; command: string; status: string; created_at: string };
+type AgentTask = { id: string; agent_id: string; status: string; created_at: string };
 type AgentEvent = { id: string; task_id: string; agent_id: string; event_type: string; created_at: string };
 
 const FALLBACK_AGENTS = [
@@ -18,8 +17,6 @@ export function AgentOffice3D({ agents, tasks, events }: { agents: Agent[]; task
   const taskCount = (id: string) => tasks.filter((t) => t.agent_id === id && ["queued", "running"].includes(t.status)).length;
   const eventCount = (id: string) => events.filter((e) => e.agent_id === id).length;
   const tone = (id: string) => status(id) === "working" ? "#35a56b" : "#b7a4aa";
-  const api = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
-  const token = sessionStorage.getItem("guli_admin_token") || "";
 
   return <section className="proPanel" style={{ overflow: "hidden" }}>
     <div className="panelHead">
@@ -48,6 +45,5 @@ export function AgentOffice3D({ agents, tasks, events }: { agents: Agent[]; task
         <div style={{ marginTop: 18, padding: 11, borderRadius: 13, background: "#fbf4f5", fontSize: 11, lineHeight: 1.5 }}><b>Safety boundary</b><br />Faqat ichki, ruxsat etilgan deterministic tool’lar. Mijozga avtonom AI javoblari hozircha yoqilmagan.</div>
       </aside>
     </div>
-    <div style={{ marginTop: 16 }}><AgentOrchestratorPanel api={api} token={token} tasks={tasks} onChanged={() => window.dispatchEvent(new CustomEvent("guli-agent-refresh"))} notify={(message) => window.alert(message)} /></div>
   </section>;
 }
