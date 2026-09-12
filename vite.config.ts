@@ -30,8 +30,7 @@ function guliSourceFixes() {
       }
       if (id.endsWith('/src/components/ModernProfileView.tsx')) {
         out = out.replace('authUser ? "🔑 Hisobni almashtirish" : "✨ Ro‘yxatdan o‘tish"', '"✨ Ro‘yxatdan o‘tish"')
-        out = out.replace('onClick={() => onOpenAuth?.(authUser ? "signin" : "signup")}', 'onClick={() => onOpenAuth?.("signup")}')
-        out = out.replace('{authUser && <button', '{authUser ? <button')
+        out = out.replace('onClick={() => onOpenAuth?.(authUser ? "signin" : "signup")}', 'onClick={() => !authUser && onOpenAuth?.("signup")}')
         return { code: out, map: null }
       }
       if (id.endsWith('/src/App.tsx')) {
