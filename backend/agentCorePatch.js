@@ -1,9 +1,9 @@
-const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
+const { verifyAdminToken, requireAdmin } = require("./adminAuth");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim().replace(/^['"]|['"]$/g, "");
+const requireAgentAdmin = requireAdmin;
 
 const AGENTS = Object.freeze([
   { id: "orchestrator", name: "GULI Orchestrator", role: "orchestrator", capabilities: ["plan", "dispatch", "inspect"] },
@@ -14,24 +14,6 @@ const AGENTS = Object.freeze([
   { id: "security", name: "Security Agent", role: "security", capabilities: ["audit", "risk_review"] }
 ]);
 
-function safeEqual(a, b) { const left = Buffer.from(String(a || "")); const right = Buffer.from(String(b || "")); return left.length === right.length && crypto.timingSafeEqual(left, right); }
-function verifyAdminToken(token) {
-  try {
-    if (!ADMIN_SECRET || !token) return false;
-    const [body, signature] = String(token).split(".");
-    if (!body || !signature) return false;
-    const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url");
-    if (!safeEqual(signature, expected)) return false;
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    return payload.role === "admin" && Number(payload.exp) > Date.now();
-  } catch { return false; }
-}
-function requireAgentAdmin(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!verifyAdminToken(token)) return res.status(401).json({ success: false, message: "Admin sessiyasi yaroqsiz yoki tugagan" });
-  next();
-}
 async function emitEvent({ taskId = null, agentId, eventType, message = null, metadata = {}, createdBy = "system" }) {
   try {
     const { error } = await supabase.from("agent_events").insert({ task_id: taskId, agent_id: agentId, event_type: eventType, message, metadata, created_by: createdBy });
