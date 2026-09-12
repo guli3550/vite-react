@@ -83,6 +83,17 @@ jobs:
           [[ "$code" == "401" ]]
           echo "Customer auth guard OK"
 
+      - name: Check authenticated card checkout routes are mounted and protected
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /api/auth/orders /api/auth/payment/card-info; do
+            code="$(curl -sS -o /tmp/auth-route.json -w '%{http_code}' --max-time 30 "${BACKEND_URL}${path}")"
+            cat /tmp/auth-route.json
+            [[ "$code" == "401" ]]
+          done
+          echo "Authenticated card checkout routes OK"
+
       - name: Complete job
         if: ${{ always() }}
         shell: bash
