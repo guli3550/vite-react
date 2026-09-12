@@ -1,7 +1,6 @@
 // Authenticated browser card checkout bridge.
 // Anonymous guest checkout remains disabled; authenticated Supabase users use auth_user_id.
 const { createClient } = require("@supabase/supabase-js");
-const express = require("express");
 const crypto = require("crypto");
 const { install } = require("./routeRegistry.js");
 
@@ -58,9 +57,6 @@ async function ensureBucket() {
   if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
 }
 
-// Keep the existing secure pricing/stock/promo validation by delegating to the
-// canonical Telegram checkout RPC, then immediately bind the created order to
-// the authenticated Supabase user and clear the temporary Telegram identity.
 function stableBridgeId(userId) {
   const hex = crypto.createHash("sha256").update(String(userId)).digest("hex").slice(0, 13);
   const value = Number.parseInt(hex, 16) % 899999999999;
@@ -80,28 +76,19 @@ install("post", "/api/auth/orders", async (req, res) => {
       order_number: null,
       username: user.user_metadata?.username || user.email?.split("@")[0] || null,
       first_name: user.user_metadata?.full_name || user.user_metadata?.name || null,
-      phone: String(phone).trim(),
-      items,
-      address: address || null,
-      payment: "card_manual",
-      status: "⏳ Buyurtma kutilmoqda",
+      phone: String(phone).trim(), items, address: address || null,
+      payment: "card_manual", status: "⏳ Buyurtma kutilmoqda",
       promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "",
     };
     const bridgeId = stableBridgeId(user.id);
-    const { data: created, error } = await supabase.rpc("create_secure_order", {
-      p_order: order,
-      p_telegram_id: bridgeId,
-    });
+    const { data: created, error } = await supabase.rpc("create_secure_order", { p_order: order, p_telegram_id: bridgeId });
     if (error) throw error;
     const row = Array.isArray(created) ? created[0] : created;
     if (!row?.id) throw new Error("Buyurtma yaratildi, ammo identifikatori qaytmadi");
 
     const { data: bound, error: bindError } = await supabase.from("orders")
       .update({ auth_user_id: user.id, telegram_id: null, updated_at: new Date().toISOString() })
-      .eq("id", row.id)
-      .eq("telegram_id", bridgeId)
-      .select("*")
-      .single();
+      .eq("id", row.id).eq("telegram_id", bridgeId).select("*").single();
     if (bindError) throw bindError;
     return res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data: bound });
   } catch (error) {
@@ -119,33 +106,23 @@ install("post", "/api/auth/orders/:orderNumber/receipt", async (req, res) => {
     const orderNumber = String(req.params.orderNumber || "").trim();
     const { data: order, error: orderError } = await supabase.from("orders")
       .select("id,order_number,total,auth_user_id,payment,payment_status")
-      .eq("order_number", orderNumber)
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
+      .eq("order_number", orderNumber).eq("auth_user_id", user.id).maybeSingle();
     if (orderError) throw orderError;
     if (!order) return fail(res, 404, "Buyurtma topilmadi");
     if (String(order.payment || "") !== "card_manual") return fail(res, 400, "Bu buyurtma karta orqali to‘lov uchun yaratilmagan");
 
     const { data, mimeType } = req.body || {};
     if (!data || typeof data !== "string") return fail(res, 400, "Chek rasmi topilmadi");
-    if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") {
-      return fail(res, 400, "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin");
-    }
+    if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") return fail(res, 400, "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin");
     const buffer = decodeReceipt(data, mimeType);
     await ensureBucket();
     const path = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext(mimeType)}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, buffer, {
-      contentType: mimeType,
-      cacheControl: "31536000",
-      upsert: false,
-    });
+    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
     if (uploadError) throw uploadError;
     const { data: updated, error: updateError } = await supabase.from("orders")
       .update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq("id", order.id)
-      .eq("auth_user_id", user.id)
-      .select("id,order_number,total,payment_status,payment_receipt_path")
-      .single();
+      .eq("id", order.id).eq("auth_user_id", user.id)
+      .select("id,order_number,total,payment_status,payment_receipt_path").single();
     if (updateError) throw updateError;
     return res.json({ success: true, message: "Chek muvaffaqiyatli yuborildi. Admin tekshiradi.", data: updated });
   } catch (error) {
@@ -156,8 +133,6 @@ install("post", "/api/auth/orders/:orderNumber/receipt", async (req, res) => {
   }
 });
 
-// This route intentionally does not mint a guest identity. It exposes card data
-// only to an authenticated Supabase user (Telegram keeps its existing route).
 install("get", "/api/auth/payment/card-info", async (req, res) => {
   const user = await customer(req);
   if (!user) return fail(res, 401, "Mijoz sessiyasi topilmadi. Email yoki Google orqali qayta kiring.");
@@ -166,17 +141,6 @@ install("get", "/api/auth/payment/card-info", async (req, res) => {
   if (!/^\d{16}$/.test(cardNumber) || !holder) return fail(res, 503, "Karta to‘lovi rekvizitlari backend environment'da sozlanmagan.");
   const holderInitials = holder.split(/\s+/).filter(Boolean).map((part) => part.slice(0, 2).toUpperCase()).join(" ");
   return res.json({ success: true, data: { card_number: cardNumber, holder_initials: holderInitials } });
-});
-
-// Register replacement routes before index.js mounts its legacy guest endpoints.
-for (const method of ["post", "get"]) {
-  const original = express.application[method];
-  express.application[method] = function authenticatedCardRoutes(path, ...handlers) {
-    if (path === "/api/guest-session" || path === "/api/guest/orders" || path === "/api/guest/orders/:orderNumber/receipt") {
-      return original.call(this, path, ...handlers);
-    }
-    return original.call(this, path, ...handlers);
-  };
 }
 
 console.log("[GULI Payment] Authenticated browser card checkout routes registered.");
