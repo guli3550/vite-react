@@ -6,27 +6,17 @@
     : '';
   let busy = false;
 
-  const getGuestToken = () => localStorage.getItem('guli_guest_token') || '';
-
-  async function ensureGuestSession() {
-    const current = getGuestToken();
-    if (current) return current;
-    const r = await fetch(`${API}/api/guest-session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.success || !j.data?.token) {
-      throw new Error(j.message || 'Brauzer sessiyasini yaratib bo‘lmadi');
-    }
-    localStorage.setItem('guli_guest_token', j.data.token);
-    return j.data.token;
+  function getAccessToken() {
+    const token = String(localStorage.getItem('guli_access_token') || '').trim();
+    return token;
   }
 
-  const headers = (token) => ({
-    'Content-Type': 'application/json',
-    'X-Guli-Guest-Token': token,
-  });
+  const authHeaders = () => {
+    const token = getAccessToken();
+    return token
+      ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+      : { 'Content-Type': 'application/json' };
+  };
 
   const readFile = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -76,6 +66,9 @@
 
   async function submitBrowserCardOrder(button) {
     if (busy) return;
+    const accessToken = getAccessToken();
+    if (!accessToken) return toast('Karta orqali to‘lov uchun avval Google/Email orqali kiring.');
+
     const phone = document.querySelector('.checkoutPage input[type="tel"]')?.value?.trim() || localStorage.getItem('guli_phone') || '';
     const items = cart();
     const addr = address();
@@ -94,10 +87,9 @@
     button.textContent = '⏳ Buyurtma saqlanmoqda…';
 
     try {
-      const token = await ensureGuestSession();
-      const orderResponse = await fetch(`${API}/api/guest/orders`, {
+      const orderResponse = await fetch(`${API}/api/auth/orders`, {
         method: 'POST',
-        headers: headers(token),
+        headers: authHeaders(),
         body: JSON.stringify({
           phone,
           items,
@@ -118,9 +110,9 @@
       button.textContent = '⏳ Chek yuborilmoqda…';
       const data = await readFile(file);
       const extension = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const receiptResponse = await fetch(`${API}/api/orders/${encodeURIComponent(order.order_number)}/receipt`, {
+      const receiptResponse = await fetch(`${API}/api/auth/orders/${encodeURIComponent(order.order_number)}/receipt`, {
         method: 'POST',
-        headers: headers(token),
+        headers: authHeaders(),
         body: JSON.stringify({ data, mimeType: file.type, extension }),
       });
       const receiptResult = await receiptResponse.json().catch(() => ({}));
@@ -147,7 +139,7 @@
     if (!button || button.dataset.guliBrowserCardFix === '1') return;
     button.dataset.guliBrowserCardFix = '1';
     button.addEventListener('click', (event) => {
-      // Only replace the browser flow. Telegram has verified initData and keeps the native flow.
+      // Telegram keeps the native Mini App checkout flow.
       if (window.Telegram?.WebApp?.initData) return;
       event.preventDefault();
       event.stopPropagation();
