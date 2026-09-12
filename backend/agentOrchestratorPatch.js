@@ -1,9 +1,8 @@
-const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
+const { requireAdmin } = require("./adminAuth");
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim().replace(/^['"]|['"]$/g, "");
 
 const ROUTES = Object.freeze({
   sales: { agentId: "sales", tool: "catalog_check", words: ["mahsulot", "tovar", "catalog", "katalog", "narx", "stock", "ombor"] },
@@ -13,24 +12,6 @@ const ROUTES = Object.freeze({
   security: { agentId: "security", tool: "security_audit", words: ["audit", "xavfsizlik", "security", "risk", "tekshiruv"] },
 });
 
-function safeEqual(a, b) { const left = Buffer.from(String(a || "")); const right = Buffer.from(String(b || "")); return left.length === right.length && crypto.timingSafeEqual(left, right); }
-function verifyAdminToken(token) {
-  try {
-    if (!ADMIN_SECRET || !token) return false;
-    const [body, signature] = String(token).split(".");
-    if (!body || !signature) return false;
-    const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url");
-    if (!safeEqual(signature, expected)) return false;
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    return payload.role === "admin" && Number(payload.exp) > Date.now();
-  } catch { return false; }
-}
-function auth(req, res, next) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!verifyAdminToken(token)) return res.status(401).json({ success: false, message: "Admin sessiyasi yaroqsiz yoki tugagan" });
-  next();
-}
 function clean(value) { return String(value == null ? "" : value).trim(); }
 function routeTask(text, explicitTool) {
   const tool = clean(explicitTool);
@@ -57,7 +38,7 @@ async function emit(taskId, agentId, eventType, message, metadata = {}) {
   catch (error) { console.error("Orchestrator event error:", error); }
 }
 
-install("post", "/api/admin/agents/dispatch", auth, async (req, res) => {
+install("post", "/api/admin/agents/dispatch", requireAdmin, async (req, res) => {
   try {
     const text = clean(req.body?.task);
     const routed = routeTask(text, req.body?.tool);
@@ -87,7 +68,7 @@ async function changeTask(req, res, next, action) {
     res.json({ success: true, data });
   } catch (error) { console.error(`Orchestrator ${action} error:`, error); res.status(500).json({ success: false, message: "Task holati o‘zgartirilmadi" }); }
 }
-install("post", "/api/admin/agents/tasks/:id/pause", auth, (req, res, next) => changeTask(req, res, next, "pause"));
-install("post", "/api/admin/agents/tasks/:id/resume", auth, (req, res, next) => changeTask(req, res, next, "resume"));
+install("post", "/api/admin/agents/tasks/:id/pause", requireAdmin, (req, res, next) => changeTask(req, res, next, "pause"));
+install("post", "/api/admin/agents/tasks/:id/resume", requireAdmin, (req, res, next) => changeTask(req, res, next, "resume"));
 
 module.exports = { routeTask };
