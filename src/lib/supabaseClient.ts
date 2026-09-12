@@ -39,6 +39,27 @@ export function getSupabase(): SupabaseClient | null {
         storageKey: "guli_supabase_auth_token",
       },
     });
+
+    // Supabase can silently refresh the JWT while the app is open. Keep the
+    // legacy GULI token mirrors synchronized so backend API calls do not keep
+    // sending an expired access token.
+    cachedClient.auth.onAuthStateChange((_event, session) => {
+      try {
+        if (session?.access_token) {
+          localStorage.setItem("guli_access_token", session.access_token);
+          if (session.refresh_token) {
+            localStorage.setItem("guli_refresh_token", session.refresh_token);
+          }
+        } else if (_event === "SIGNED_OUT") {
+          localStorage.removeItem("guli_access_token");
+          localStorage.removeItem("guli_refresh_token");
+          localStorage.removeItem("guli_auth_user");
+        }
+      } catch {
+        // Storage can be unavailable in restricted browser contexts.
+      }
+    });
+
     return cachedClient;
   } catch (err) {
     console.error("Failed to initialize Supabase client:", err);
