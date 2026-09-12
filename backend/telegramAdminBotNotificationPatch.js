@@ -50,6 +50,23 @@ async function notify(text, extra = {}) {
 
 globalThis.__GULI_ADMIN_BOT_NOTIFY__ = notify;
 
+function adminStartText(chat) {
+  const fullName = [chat.first_name, chat.last_name].filter(Boolean).join(" ") || "Noma'lum";
+  const username = chat.username ? `@${chat.username}` : "username mavjud emas";
+  const language = chat.language_code || "aniqlanmadi";
+  const now = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+  return `👤 GULI ADMIN MA'LUMOTI\n\n` +
+    `Ism: ${fullName}\n` +
+    `Username: ${username}\n` +
+    `Telegram ID: ${chat.id}\n` +
+    `Chat ID: ${chat.id}\n` +
+    `Til: ${language}\n` +
+    `Chat turi: ${chat.type || "private"}\n` +
+    `Holat: ✅ Admin botga ulangan\n` +
+    `Ulangan vaqt: ${now}\n\n` +
+    `🔐 Ushbu chat GULI admin bildirishnomalarini olish uchun saqlandi.`;
+}
+
 async function discoverAdminChats() {
   if (!BOT_TOKEN || !supabase) return;
   try {
@@ -73,7 +90,8 @@ async function discoverAdminChats() {
       console.log(`[Admin Telegram bot] admin chat discovered: ${chat.id}`);
       await telegram("sendMessage", {
         chat_id: chat.id,
-        text: "✅ GULI admin bot ulandi. Yangi buyurtmalar, chatlar, to‘lovlar va muhim hodisalar shu yerga keladi."
+        text: adminStartText(chat),
+        disable_web_page_preview: true
       });
     }
     globalThis.__GULI_ADMIN_BOT_UPDATE_STATE__ = state;
