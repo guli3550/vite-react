@@ -6,6 +6,7 @@ import {
   markSingleMessageAsRead,
   getStoredChatMessages,
 } from "../utils/chatSync";
+import { checkReceiptDelayed } from "../utils/delivery";
 
 type NotificationModalProps = {
   language: Language;
@@ -122,6 +123,24 @@ export function NotificationModal({
 
     // 2. Orders updates
     orders.forEach((ord) => {
+      const receiptCheck = checkReceiptDelayed(ord.createdAt, ord.status, ord.receipt_url);
+      if (receiptCheck.isPending && receiptCheck.isDelayed) {
+        list.push({
+          id: `order-delay-${ord.id}`,
+          rawId: `delay-${ord.id}`,
+          category: "orders",
+          title: `Buyurtma #${ord.id} • To‘lov kutilmoqda`,
+          text: "To‘lovingiz admin tomonidan tasdiqlash kutilmoqda, tez orada tasdiqlanadi kuting yoki qo‘llab quvvatlash markazi bilan bog‘laning.",
+          timestamp: ord.createdAt || new Date().toISOString(),
+          read: false,
+          icon: "⏳",
+          badgeBg: "#fef3c7",
+          badgeColor: "#b45309",
+          actionText: "Bog‘lanish →",
+          type: "order",
+        });
+      }
+
       const isNewOrActive =
         ord.status === "Qabul qilindi" ||
         ord.status === "Tayyorlanmoqda" ||

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Address, CartItem } from "../types";
 import { formatColorName } from "../utils/colorHelpers";
+import { getDeliveryEstimate } from "../utils/delivery";
 
 interface CheckoutViewProps {
   onBack: () => void;
@@ -110,6 +111,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   };
 
   const missingTip = getMissingFieldsTip();
+  const deliveryEst = getDeliveryEstimate(address.region, address.district);
 
   return (
     <main className="page checkoutPage modernCheckoutContainer">
@@ -816,11 +818,16 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           <b style={{ color: "var(--text-main)" }}>{formatPrice(subtotal || total)}</b>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
           <span>Yetkazib berish xizmati:</span>
-          <b style={{ color: deliveryFee > 0 ? "var(--text-main)" : "#059669" }}>
-            {deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul"}
+          <b style={{ color: deliveryFee && deliveryFee > 0 ? "var(--text-main)" : "#059669" }}>
+            {deliveryFee && deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul (600 000+ so‘m)"}
           </b>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", marginBottom: 10, background: "var(--bg-card-sub)", padding: "7px 10px", borderRadius: "10px" }}>
+          <span>🕒 Yetkazib berish muddati:</span>
+          <b style={{ color: "var(--primary)", fontWeight: 700 }}>{deliveryEst.badge}</b>
         </div>
 
         <div
@@ -842,14 +849,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           <span
             style={{
               fontSize: "11px",
-              color: "var(--success-badge-color, #059669)",
-              background: "var(--success-badge-bg, rgba(16,185,129,0.1))",
+              color: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-color, #059669)" : "#b45309",
+              background: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-bg, rgba(16,185,129,0.1))" : "#fef3c7",
               padding: "4px 8px",
               borderRadius: "8px",
               fontWeight: "750",
             }}
           >
-            ✓ Yetkazib berish bepul
+            {(!deliveryFee || deliveryFee === 0) ? "✓ Yetkazib berish bepul" : "600 000+ so‘mda bepul"}
           </span>
         </div>
       </div>
@@ -884,10 +891,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "850", color: "var(--text-main)" }}>
-              To‘lov usuli
+              To‘lov usuli (Uzcard / Humo)
             </h3>
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-              Uzcard va Humo kartalari orqali xavfsiz to‘lov
+              Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar faqat plastik karta orqali
             </p>
           </div>
         </div>
@@ -919,7 +926,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <b style={{ fontSize: "14px", color: "var(--text-main)" }}>Karta (Uzcard / Humo)</b>
+              <b style={{ fontSize: "14px", color: "var(--text-main)" }}>Plastik karta (Uzcard / Humo)</b>
               <span
                 style={{
                   fontSize: "10px",
@@ -934,7 +941,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               </span>
             </div>
             <small style={{ fontSize: "11.5px", color: "var(--text-muted)", display: "block", marginTop: 2 }}>
-              Istalgan Uzcard yoki Humo kartasi orqali onlayn to‘lov
+              Click, Payme, Beepul va boshqa barcha ilovalardan faqat Uzcard/Humo kartaga to‘lov qilinadi va chek yuklanadi
             </small>
           </div>
 
@@ -956,7 +963,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, padding: "8px 12px", borderRadius: "12px", background: "var(--bg-card-sub)", fontSize: "11px", color: "var(--text-muted)" }}>
+        {/* 2-Hour SLA Notification box */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: "12px", background: "rgba(217, 119, 6, 0.08)", border: "1px solid rgba(217, 119, 6, 0.2)", fontSize: "11px", color: "#b45309" }}>
+          <span>⏱️</span>
+          <span><b>Muhim:</b> Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi.</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "8px 12px", borderRadius: "12px", background: "var(--bg-card-sub)", fontSize: "11px", color: "var(--text-muted)" }}>
           <span>🛡️</span>
           <span>To‘lovlar 256-bitli SSL orqali to‘liq himoyalangan va xavfsiz.</span>
         </div>

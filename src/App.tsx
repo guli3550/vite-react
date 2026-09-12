@@ -61,6 +61,7 @@ import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
 import { getSupabase, signOutEverywhere, syncCustomerProfile } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
+import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 
 declare global {
   interface Window {
@@ -1251,6 +1252,19 @@ export default function App() {
   const handleLogout = async () => {
     await signOutEverywhere();
     setAuthUser(null);
+    setOrders([]);
+    setWishlist([]);
+    localStorage.removeItem("orders");
+    localStorage.removeItem("guli_orders");
+    localStorage.removeItem("guli_wishlist");
+    localStorage.removeItem("guli_phone");
+    localStorage.removeItem("guli_first_name");
+    localStorage.removeItem("guli_last_name");
+    localStorage.removeItem("guli_birth_date");
+    localStorage.removeItem("guli_email");
+    localStorage.removeItem("guli_custom_avatar");
+    localStorage.removeItem("guli_avatar_url");
+    localStorage.removeItem("guli_customer_photo");
     showToast("✓ Hisobingizdan chiqdingiz. Qayta kirishingiz mumkin.");
   };
 
@@ -1260,11 +1274,9 @@ export default function App() {
       localStorage.setItem("guli_auth_user", JSON.stringify(next));
       return next;
     });
-    if (updated.avatar_url) {
-      localStorage.setItem("guli_custom_avatar", updated.avatar_url);
-      localStorage.setItem("guli_avatar_url", updated.avatar_url);
-      localStorage.setItem("guli_customer_photo", updated.avatar_url);
-      localStorage.setItem("chat_user_avatar", updated.avatar_url);
+    const key = authUser?.id || currentUserId;
+    if (updated.avatar_url && key) {
+      localStorage.setItem(`guli_avatar_${key}`, updated.avatar_url);
     }
     showToast("✓ Profil muvaffaqiyatli saqlandi!");
   };
@@ -1700,12 +1712,19 @@ export default function App() {
 
   const loadOrders = useCallback(
     async (silent = false) => {
-      if (!telegramUser?.id) return [];
+      const token = localStorage.getItem("guli_access_token") || "";
+      if (!telegramUser?.id && !token) return [];
       if (!silent) setOrdersLoading(true);
       try {
-        const r = await fetch(
-          `${API_URL}/api/orders?telegram_id=${telegramUser.id}`,
-        );
+        const url = telegramUser?.id
+          ? `${API_URL}/api/orders?telegram_id=${telegramUser.id}`
+          : `${API_URL}/api/customer/orders`;
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const tgData = (window as any).Telegram?.WebApp?.initData;
+        if (tgData) headers["X-Telegram-Init-Data"] = tgData;
+
+        const r = await fetch(url, { headers });
         if (!r.ok) throw new Error("Buyurtmalarni yuklashda xatolik");
         const j = await r.json();
         if (!j.success || !Array.isArray(j.data)) return [];
@@ -1730,7 +1749,25 @@ export default function App() {
           updatedAt: row.updated_at || undefined,
           statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
         }));
-        setOrders(list);
+        setOrders((prev) => {
+          const map = new Map<string, Order>();
+          list.forEach((o) => map.set(String(o.order_number || o.id), o));
+          // keep any pending local orders not yet on server
+          prev.forEach((o) => {
+            const key = String(o.order_number || o.id);
+            if (!map.has(key)) map.set(key, o);
+          });
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const ta = new Date(a.createdAt || 0).getTime();
+            const tb = new Date(b.createdAt || 0).getTime();
+            return tb - ta;
+          });
+          try {
+            localStorage.setItem("orders", JSON.stringify(merged));
+            localStorage.setItem("guli_orders", JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
         return list;
       } catch (e) {
         console.error("Failed to load orders", e);
@@ -1747,14 +1784,15 @@ export default function App() {
   }, [loadProducts]);
 
   useEffect(() => {
-    if (telegramUser?.id) {
+    const token = localStorage.getItem("guli_access_token");
+    if (telegramUser?.id || token || authUser) {
       loadOrders(false).catch(() => {});
       const interval = setInterval(() => {
         loadOrders(true).catch(() => {});
       }, 6000);
       return () => clearInterval(interval);
     }
-  }, [telegramUser?.id, loadOrders]);
+  }, [telegramUser?.id, authUser, loadOrders]);
   useEffect(() => {
     const w = tg();
     if (!w?.onEvent || !telegramUser?.id) return;
@@ -2024,7 +2062,10 @@ export default function App() {
       return {};
     }
   }, [settingsVersion]);
-  const freeDeliveryThreshold = Number(adminSettings.freeDeliveryThreshold) || 300000;
+  const freeDeliveryThreshold =
+    Number(adminSettings.freeDeliveryThreshold) === 300000
+      ? 600000
+      : Number(adminSettings.freeDeliveryThreshold) || 600000;
   const standardDeliveryFee = adminSettings.standardDeliveryFee !== undefined ? Number(adminSettings.standardDeliveryFee) : 20000;
   const delivery = subtotal >= freeDeliveryThreshold ? 0 : standardDeliveryFee;
   const discount = promoApplied ? Math.min(subtotal, promoDiscount) : 0;
@@ -2285,10 +2326,17 @@ export default function App() {
     const id = orderNumber();
     const now = new Date().toISOString();
     const customerFullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+    const token = localStorage.getItem("guli_access_token") || "";
+    const tgData = (window as any).Telegram?.WebApp?.initData;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (tgData) headers["X-Telegram-Init-Data"] = tgData;
+
     const payload = {
       order_number: id,
-      telegram_id: telegramUser?.id,
-      username: telegramUser?.username,
+      telegram_id: telegramUser?.id || undefined,
+      auth_user_id: authUser?.id || undefined,
+      username: telegramUser?.username || undefined,
       first_name: firstName.trim() || telegramUser?.first_name || "",
       last_name: lastName.trim() || telegramUser?.last_name || "",
       customer_name: customerFullName || telegramUser?.first_name || "Mijoz",
@@ -2304,17 +2352,44 @@ export default function App() {
       payment: "Karta (Uzcard / Humo)",
       status: "⏳ To'lovni tasdiqlash kutilmoqda",
       receipt_url: uploadedReceipt,
+      data: uploadedReceipt,
+      mimeType: "image/jpeg",
       promo_code: promoApplied ? promo.trim().toUpperCase() : null,
     };
     try {
-      const r = await fetch(`${API_URL}/api/orders`, {
+      let r = await fetch(`${API_URL}/api/customer/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
+      if (!r.ok) {
+        r = await fetch(`${API_URL}/api/orders`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
       const j = await r.json();
       if (!r.ok || !j.success)
         throw new Error(j.message || "Buyurtma yuborilmadi");
+
+      const createdOrderNumber = String(j.data?.order_number || id);
+      const createdOrderId = String(j.data?.id || createdOrderNumber);
+
+      if (uploadedReceipt) {
+        fetch(`${API_URL}/api/orders/${encodeURIComponent(createdOrderNumber)}/receipt`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ receipt_url: uploadedReceipt, data: uploadedReceipt, mimeType: "image/jpeg" }),
+        }).catch(() => {
+          fetch(`${API_URL}/api/customer/orders/${encodeURIComponent(createdOrderNumber)}/receipt`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ receipt_url: uploadedReceipt, data: uploadedReceipt, mimeType: "image/jpeg" }),
+          }).catch(() => {});
+        });
+      }
+
       if (telegramUser?.id && address.latitude)
         fetch(`${API_URL}/api/save-address`, {
           method: "POST",
@@ -2334,8 +2409,8 @@ export default function App() {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const createdOrder: Order = {
-        id: String(j.data?.order_number || id),
-        order_number: id,
+        id: createdOrderId,
+        order_number: createdOrderNumber,
         items: cart,
         subtotal,
         delivery,
@@ -2351,17 +2426,22 @@ export default function App() {
         statusUpdatedAt: now,
       };
 
-      setOrders((x) => [createdOrder, ...x]);
+      setOrders((x) => {
+        const next = [createdOrder, ...x.filter((o) => o.id !== createdOrder.id && o.order_number !== createdOrder.order_number)];
+        try {
+          localStorage.setItem("orders", JSON.stringify(next));
+          localStorage.setItem("guli_orders", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
 
       // Explicitly store order and receipt in localStorage for admin payments tab
       try {
-        const existingGuli = JSON.parse(localStorage.getItem("guli_orders") || "[]");
-        localStorage.setItem("guli_orders", JSON.stringify([createdOrder, ...existingGuli]));
-
         if (uploadedReceipt) {
           const receiptsMap = JSON.parse(localStorage.getItem("guli_receipts") || "{}");
           receiptsMap[id] = uploadedReceipt;
-          receiptsMap[createdOrder.id] = uploadedReceipt;
+          receiptsMap[createdOrderId] = uploadedReceipt;
+          receiptsMap[createdOrderNumber] = uploadedReceipt;
           localStorage.setItem("guli_receipts", JSON.stringify(receiptsMap));
         }
       } catch {}
@@ -3076,18 +3156,49 @@ export default function App() {
                                   🏢 <b>Mo‘ljal:</b> {o.address.landmark}
                                 </div>
                               ) : null}
+                              <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--primary)", fontWeight: 600 }}>
+                                🚚 Yetkazib berish muddati: {getDeliveryEstimate(o.address.region, o.address.district).label}
+                              </div>
                             </div>
                           ) : null}
                           {/* To'lov cheki bo'limi va aynan ushbu buyurtma uchun qayta yuklash knopkasi */}
-                          <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "12px", background: "rgba(0,0,0,0.025)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
-                              <small style={{ fontWeight: 700, fontSize: "12px", color: "var(--text-color)" }}>
-                                🧾 To‘lov cheki (Kvitansiya):
-                              </small>
-                              <span style={{ fontSize: "11px", fontWeight: 700, color: o.receipt_url ? "#059669" : "#d97706", background: o.receipt_url ? "#ecfdf5" : "#fef3c7", padding: "2px 8px", borderRadius: "6px" }}>
-                                {o.receipt_url ? "Chek yuklangan ✓" : "Chek yuklanmagan"}
-                              </span>
-                            </div>
+                          {(() => {
+                            const receiptCheck = checkReceiptDelayed(o.createdAt, o.status, o.receipt_url);
+                            return (
+                              <div className="orderReceiptUserView" style={{ marginTop: "12px", padding: "12px", background: "rgba(0,0,0,0.025)", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "6px" }}>
+                                  <small style={{ fontWeight: 700, fontSize: "12px", color: "var(--text-color)" }}>
+                                    🧾 To‘lov cheki (Kvitansiya):
+                                  </small>
+                                  <span style={{ fontSize: "11px", fontWeight: 700, color: o.receipt_url ? "#059669" : "#d97706", background: o.receipt_url ? "#ecfdf5" : "#fef3c7", padding: "2px 8px", borderRadius: "6px" }}>
+                                    {o.receipt_url ? "Chek yuklangan ✓" : "Chek yuklanmagan"}
+                                  </span>
+                                </div>
+
+                                {receiptCheck.isPending && (
+                                  <div
+                                    style={{
+                                      padding: "8px 10px",
+                                      borderRadius: "8px",
+                                      fontSize: "11.5px",
+                                      lineHeight: 1.45,
+                                      marginBottom: "10px",
+                                      background: receiptCheck.isDelayed ? "rgba(220, 38, 38, 0.08)" : "rgba(217, 119, 6, 0.08)",
+                                      border: `1px solid ${receiptCheck.isDelayed ? "rgba(220, 38, 38, 0.25)" : "rgba(217, 119, 6, 0.2)"}`,
+                                      color: receiptCheck.isDelayed ? "#b91c1c" : "#b45309",
+                                    }}
+                                  >
+                                    {receiptCheck.isDelayed ? (
+                                      <>
+                                        <b>⚠️ Eslatma:</b> To‘lovingiz admin tomonidan tasdiqlash kutilmoqda, tez orada tasdiqlanadi kuting yoki qo‘llab quvvatlash markazi bilan bog‘laning.
+                                      </>
+                                    ) : (
+                                      <>
+                                        <b>⏱️ Chek tekshiruvi:</b> Yuborilgan to‘lov cheki 2 soat ichida admin tomonidan tasdiqlanadi.
+                                      </>
+                                    )}
+                                  </div>
+                                )}
 
                             {o.receipt_url ? (
                               <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "10px", flexWrap: "wrap" }}>
@@ -3156,6 +3267,8 @@ export default function App() {
                               </label>
                             </div>
                           </div>
+                        );
+                      })()}
                           {isCompleted ? (
                             <div className="orderReorderBar">
                               <button
@@ -3300,20 +3413,6 @@ export default function App() {
           </span>
         </button>
         <div className="headerActions">
-          <a
-            href="/admin"
-            className="topbarAdminBtn"
-            id="topbar-admin-btn"
-            title="Admin paneliga o'tish"
-            aria-label="Admin paneliga o'tish"
-            onClick={(e) => {
-              e.preventDefault();
-              window.location.href = "/admin";
-            }}
-          >
-            <span className="adminCrownIcon">👑</span>
-            <span className="adminBtnText">Admin</span>
-          </a>
           <button
             className={`iconButton notifBellBtn ${unreadMessages.length > 0 ? "hasUnread" : ""}`}
             id="topbar-notifications-btn"
@@ -3432,32 +3531,6 @@ export default function App() {
 
 
             </section>
-
-            {/* Admin paneliga tezkor o'tish tugmasi / kartasi */}
-            <div className="homeAdminQuickBanner">
-              <div className="homeAdminQuickLeft">
-                <span className="homeAdminQuickIcon">👑</span>
-                <div>
-                  <b className="homeAdminQuickTitle">Admin Boshqaruv Markazi</b>
-                  <p className="homeAdminQuickDesc">
-                    Mahsulotlar, buyurtmalar, to'lovlar va sozlamalarni boshqarish
-                  </p>
-                </div>
-              </div>
-              <a
-                href="/admin"
-                className="homeAdminQuickBtn"
-                id="home-admin-quick-btn"
-                title="Admin paneliga o'tish"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.location.href = "/admin";
-                }}
-              >
-                <span>Admin paneli</span>
-                <i>→</i>
-              </a>
-            </div>
 
             <RotatingCategoriesSection
               categories={allCategories}
@@ -4285,9 +4358,12 @@ export default function App() {
               ) : !timerActive ? (
                 <>
                   <div className="paymentNoticeBox">
-                    <div className="noticeTitle">⚠️ Diqqat! To‘lov haqida ogohlantirish</div>
+                    <div className="noticeTitle">💳 To‘lov usuli va qoidalari</div>
                     <p>
-                      "💸 To‘lov qilish" tugmasini bosganingizdan so‘ng karta rekvizitlari ko‘rinadi. To‘lov muddati <b>10 minut</b> bo‘lib, ushbu muddat ichida to‘lovni amalga oshirib, chek rasmini yuklaysiz.
+                      Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat <b>Uzcard / Humo plastik kartasi</b> orqali amalga oshiriladi.
+                    </p>
+                    <p style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-muted)" }}>
+                      "💸 To‘lov qilish" tugmasini bosganingizdan so‘ng karta rekvizitlari ko‘rinadi. Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi.
                     </p>
                   </div>
 
@@ -4348,6 +4424,11 @@ export default function App() {
                           {formatTimer(paymentTimer)}
                         </strong>
                       </div>
+                    </div>
+
+                    <div style={{ padding: "8px 12px", background: "rgba(217, 119, 6, 0.08)", border: "1px solid rgba(217, 119, 6, 0.2)", borderRadius: "10px", fontSize: "11.5px", color: "#b45309", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>⏱️</span>
+                      <span><b>Eslatma:</b> Yuborilgan chek 2 soat ichida admin tomonidan tasdiqlanadi.</span>
                     </div>
 
                     <div className="receiptUploadBox">

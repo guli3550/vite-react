@@ -1,37 +1,18 @@
-import { useState, type FC } from "react";
+import { useState, useEffect, type FC } from "react";
 import type { Language } from "../utils/translations";
 
-interface PromoItem {
+interface AdminPromo {
+  id?: string | number;
   code: string;
-  discount: string;
-  description: string;
-  minSpend?: string;
-  tag?: string;
+  discount_type: "percent" | "fixed";
+  discount_value: number;
+  min_order_amount?: number | null;
+  max_discount_amount?: number | null;
+  starts_at?: string | null;
+  expires_at?: string | null;
+  status: "active" | "expired" | "upcoming" | "exhausted" | "inactive";
+  statusLabel: string;
 }
-
-const AVAILABLE_PROMOS: PromoItem[] = [
-  {
-    code: "GULI10",
-    discount: "10% Chegirma",
-    description: "Barcha nozik to‘plamlar va byustgalterlar uchun",
-    minSpend: "Cheklovsiz",
-    tag: "Ommabop"
-  },
-  {
-    code: "YANGI2026",
-    discount: "15% Chegirma",
-    description: "Birinchi buyurtmangiz uchun maxsus sovg‘a chegirmasi",
-    minSpend: "250 000 so'mdan yuqori",
-    tag: "Yangi mijozlar"
-  },
-  {
-    code: "BEPUL",
-    discount: "Bepul Yetkazish",
-    description: "O‘zbekiston bo‘ylab istalgan viloyatga bepul yetkazib berish",
-    minSpend: "200 000 so'mdan yuqori",
-    tag: "Yetkazib berish"
-  }
-];
 
 export const PromosModal: FC<{
   language: Language;
@@ -40,8 +21,34 @@ export const PromosModal: FC<{
   onShowToast: (msg: string) => void;
 }> = ({ onClose, onApplyPromo, onShowToast }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [promos, setPromos] = useState<AdminPromo[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleCopy = (code: string) => {
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/promos")
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.success && Array.isArray(data.data)) {
+          setPromos(data.data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load admin promos:", err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCopy = (code: string, isActive: boolean) => {
+    if (!isActive) {
+      onShowToast("Bu promokod muddati tugagan yoki nofaol");
+      return;
+    }
     if (navigator.clipboard) {
       navigator.clipboard.writeText(code);
     }
@@ -53,17 +60,31 @@ export const PromosModal: FC<{
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
+  const formatExpiry = (isoString?: string | null) => {
+    if (!isoString) return "Muddatsiz (doimiy)";
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleDateString("uz-UZ", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return isoString;
+    }
+  };
+
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
       <div
         className="modalCard profileExtraModal"
         role="dialog"
         aria-modal="true"
-        onMouseDown={e => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="modalHeader">
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">MAXSUS TAKLIFLAR</span>
+            <span className="modalEyebrow">RASMIY TAKLIFLAR</span>
             <h2>Promokodlar va Kuponlar</h2>
           </div>
           <button className="modalCloseBtn" onClick={onClose} aria-label="Yopish">
@@ -73,37 +94,163 @@ export const PromosModal: FC<{
 
         <div className="modalBodyContent">
           <p className="modalIntroText">
-            Buyurtma rasmiylashtirishda ushbu promokodlardan foydalanib chegirmaga ega bo‘ling:
+            Admin tomonidan tasdiqlangan rasmiy promokodlar ro‘yxati. Chegirmadan foydalanish uchun kodni nusxalang:
           </p>
 
-          <div className="promoCardsList">
-            {AVAILABLE_PROMOS.map(p => (
-              <div className="profilePromoCard" key={p.code}>
-                <div className="promoCardLeft">
-                  <div className="promoCodeHeader">
-                    <span className="promoCodeBadge">{p.code}</span>
-                    {p.tag && <span className="promoTagPill">{p.tag}</span>}
-                  </div>
-                  <strong className="promoDiscountText">{p.discount}</strong>
-                  <p className="promoDescText">{p.description}</p>
-                  {p.minSpend && (
-                    <small className="promoMinSpend">Shart: {p.minSpend}</small>
-                  )}
-                </div>
-                <div className="promoCardRight">
-                  <button
-                    className={`promoCopyBtn ${copiedCode === p.code ? "copied" : ""}`}
-                    onClick={() => {
-                      handleCopy(p.code);
-                      if (onApplyPromo) onApplyPromo(p.code);
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "30px 10px", color: "#64748b" }}>
+              <div style={{ fontSize: "24px", marginBottom: "8px" }}>⏳</div>
+              <p style={{ margin: 0, fontSize: "13px" }}>Promokodlar tekshirilmoqda...</p>
+            </div>
+          ) : promos.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "36px 16px",
+                backgroundColor: "#f8fafc",
+                borderRadius: "20px",
+                border: "1px dashed #cbd5e1",
+                margin: "12px 0",
+              }}
+            >
+              <div style={{ fontSize: "36px", marginBottom: "10px" }}>🎟️</div>
+              <h4 style={{ margin: "0 0 6px", fontSize: "15px", color: "#334155", fontWeight: 700 }}>
+                Hozircha faol promokodlar yo‘q
+              </h4>
+              <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: 1.5 }}>
+                Admin tomonidan e'lon qilinadigan yangi kuponlar va maxsus chegirmalar shu yerda ko‘rinadi.
+              </p>
+            </div>
+          ) : (
+            <div className="promoCardsList">
+              {promos.map((p) => {
+                const isActive = p.status === "active";
+                const discountText =
+                  p.discount_type === "percent"
+                    ? `${p.discount_value}% Chegirma`
+                    : `${Number(p.discount_value).toLocaleString("uz-UZ")} so'm chegirma`;
+
+                return (
+                  <div
+                    className="profilePromoCard"
+                    key={p.code}
+                    style={{
+                      opacity: isActive ? 1 : 0.68,
+                      border: isActive ? "1.5px solid #fbcfe8" : "1px solid #e2e8f0",
+                      backgroundColor: isActive ? "#ffffff" : "#f8fafc",
                     }}
                   >
-                    {copiedCode === p.code ? "✓ Nusxalandi" : "Nusxalash"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                    <div className="promoCardLeft">
+                      <div className="promoCodeHeader" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <span className="promoCodeBadge" style={{ fontWeight: 800, letterSpacing: "1px" }}>
+                          {p.code}
+                        </span>
+                        {/* Real Status Pill on the edge */}
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "3px 8px",
+                            borderRadius: "12px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            backgroundColor:
+                              p.status === "active"
+                                ? "#dcfce7"
+                                : p.status === "expired"
+                                ? "#fee2e2"
+                                : p.status === "exhausted"
+                                ? "#ffedd5"
+                                : "#f1f5f9",
+                            color:
+                              p.status === "active"
+                                ? "#15803d"
+                                : p.status === "expired"
+                                ? "#b91c1c"
+                                : p.status === "exhausted"
+                                ? "#c2410c"
+                                : "#64748b",
+                            border: `1px solid ${
+                              p.status === "active"
+                                ? "#86efac"
+                                : p.status === "expired"
+                                ? "#fca5a5"
+                                : p.status === "exhausted"
+                                ? "#fdba74"
+                                : "#cbd5e1"
+                            }`,
+                          }}
+                        >
+                          {p.status === "active" && "● Faol"}
+                          {p.status === "expired" && "✕ Muddati tugagan"}
+                          {p.status === "exhausted" && "⚠ Limit tugagan"}
+                          {p.status === "inactive" && "⏸ Nofaol"}
+                          {p.status === "upcoming" && "⏳ Tez orada"}
+                        </span>
+                      </div>
+
+                      <strong className="promoDiscountText" style={{ color: isActive ? "#be185d" : "#475569", marginTop: "4px" }}>
+                        {discountText}
+                      </strong>
+
+                      <div style={{ marginTop: "4px", fontSize: "11px", color: "#64748b", display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span>
+                          📅 <b>Amal qilish muddati:</b> {formatExpiry(p.expires_at)}
+                        </span>
+                        {p.min_order_amount ? (
+                          <span>
+                            🛒 <b>Minimal xarid:</b> {Number(p.min_order_amount).toLocaleString("uz-UZ")} so‘m
+                          </span>
+                        ) : (
+                          <span>🛒 <b>Minimal xarid:</b> Cheklovsiz</span>
+                        )}
+                        {p.max_discount_amount && (
+                          <span>
+                            🛡️ <b>Maksimal chegirma:</b> {Number(p.max_discount_amount).toLocaleString("uz-UZ")} so‘m
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="promoCardRight" style={{ display: "flex", alignItems: "center" }}>
+                      {isActive ? (
+                        <button
+                          className={`promoCopyBtn ${copiedCode === p.code ? "copied" : ""}`}
+                          onClick={() => {
+                            handleCopy(p.code, true);
+                            if (onApplyPromo) onApplyPromo(p.code);
+                          }}
+                          style={{
+                            padding: "8px 16px",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {copiedCode === p.code ? "✓ Nusxalandi" : "Nusxalash"}
+                        </button>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: "#94a3b8",
+                            fontWeight: 600,
+                            padding: "6px 10px",
+                            backgroundColor: "#f1f5f9",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          Yaroqsiz
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="modalFooterSingle">
@@ -140,26 +287,38 @@ export const DeliveryTermsModal: FC<{
 
         <div className="modalBodyContent termsList">
           <div className="termItem">
-            <div className="termIcon">🚚</div>
+            <div className="termIcon">🎁</div>
             <div>
-              <b>Tezkor yetkazib berish</b>
-              <p>Toshkent shahri bo‘ylab 24 soat ichida, O‘zbekistonning barcha viloyatlari va tumanlariga 1–3 kun ichida yetkaziladi.</p>
+              <b>Bepul yetkazib berish (600 000 so‘m+)</b>
+              <p>Bepul yetkazib berish faqatgina <b>600 000 so‘mdan oshgan</b> buyurtmalar uchun butun O‘zbekiston bo‘ylab amal qiladi. 600 000 so‘mgacha bo‘lgan buyurtmalar uchun standart yetkazib berish narxi 20 000 so‘m.</p>
             </div>
           </div>
 
           <div className="termItem">
-            <div className="termIcon">🎁</div>
+            <div className="termIcon">🚚</div>
             <div>
-              <b>Bepul yetkazish chegarasi</b>
-              <p>300 000 so‘mdan yuqori har qanday buyurtma O‘zbekiston bo‘ylab mutlaqo bepul yetkazib beriladi.</p>
+              <b>Yetkazib berish muddatlari</b>
+              <ul style={{ margin: "6px 0 0", paddingLeft: "18px", fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                <li><b>Qo‘qon ichida:</b> 1 ish kuni</li>
+                <li><b>Toshkent, Andijon, Namangan, Farg‘onaga:</b> 3 ish kuni</li>
+                <li><b>Voha viloyatlariga:</b> 5 ish kuni</li>
+              </ul>
             </div>
           </div>
 
           <div className="termItem">
             <div className="termIcon">💳</div>
             <div>
-              <b>Qulay to‘lov usullari</b>
-              <p>Buyurtmani qabul qilishda naqd pul bilan yoki Uzcard/Humo karta orqali to‘lashingiz mumkin.</p>
+              <b>To‘lov usuli (Uzcard / Humo)</b>
+              <p>Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat rasmiy <b>Uzcard / Humo plastik kartasi</b> orqali amalga oshiriladi.</p>
+            </div>
+          </div>
+
+          <div className="termItem">
+            <div className="termIcon">⏱️</div>
+            <div>
+              <b>Chekni tasdiqlash (2 soat ichida)</b>
+              <p>Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi. Agar tasdiqlash vaqti uzayib ketsa, mijozga 1 marta bildirishnoma («To‘lovingiz admin tomonidan tasdiqlanishi kutilmoqda, tez orada tasdiqlanadi. Iltimos kuting yoki qo‘llab-quvvatlash markazi bilan bog‘laning») yuboriladi.</p>
             </div>
           </div>
 

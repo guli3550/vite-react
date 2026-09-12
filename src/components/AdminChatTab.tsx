@@ -113,8 +113,8 @@ const QUICK_REPLIES = [
 const TEMPLATE_MAP: Record<string, string> = {
   "🔎 Buyurtmani tekshirish": "Buyurtmangiz tekshirilmoqda, 5 daqiqa ichida holati haqida xabar beramiz ⏳",
   "👗 Mahsulotlar": "Bizdagi barcha o'lchamlar xalqaro standartlarga mos keladi. Sizga qaysi o'lcham mos kelishini aniqlashda yordam beraymi? 🌸",
-  "🚚 Yetkazib berish": "Toshkent bo'ylab 1 kunda (20 000 so'm), 300 000 so'mdan yuqori xaridda BEPUL yetkaziladi 🚚",
-  "💳 To‘lov": "To'lovni Click, Payme, Uzum Bank yoki kuryerga NAQD topshirishingiz mumkin 💳",
+  "🚚 Yetkazib berish": "Yetkazib berish muddatlari: Qo‘qon ichida 1 ish kuni, Toshkent, Andijon, Namangan, Farg‘onaga 3 ish kuni, Voha viloyatlariga 5 ish kuni. 600 000 so‘mdan oshgan orderlar uchun BEPUL yetkaziladi 🚚",
+  "💳 To‘lov": "To‘lov Click, Payme, Beepul va barcha moliyaviy ilovalardan qat'i nazar faqat rasmiy Uzcard/Humo kartamizga amalga oshiriladi va chek yuklanadi. Chek 2 soat ichida admin tomonidan tasdiqlanadi 💳",
   "🌷 Qutlov": "Assalomu alaykum! GULI Lingerie brendiga xush kelibsiz. Sizga qanday yordam bera olamiz? ✨",
   "📞 Qo‘ng‘iroq": "Mutaxassisimiz siz bilan bog'lanishi uchun telefon raqamingizni qoldiring 📞",
 };

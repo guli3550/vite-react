@@ -27,7 +27,7 @@ export const translations = {
     hero_btn: "Kolleksiyani ko‘rish →",
     featured_title: "Tanlanganlar",
     see_all: "Barchasi",
-    delivery_banner_title: "300 000 so‘mdan yuqori buyurtma — bepul yetkazib berish",
+    delivery_banner_title: "600 000 so‘mdan yuqori buyurtma — bepul yetkazib berish",
     delivery_banner_desc: "O‘zbekiston bo‘ylab qulay yetkazib berish.",
 
     // Catalog Page
@@ -225,7 +225,7 @@ export const translations = {
     hero_btn: "Смотреть коллекцию →",
     featured_title: "Избранные модели",
     see_all: "Все",
-    delivery_banner_title: "Заказы от 300 000 сум — бесплатная доставка",
+    delivery_banner_title: "Заказы от 600 000 сум — бесплатная доставка",
     delivery_banner_desc: "Быстрая доставка по всему Узбекистану.",
 
     // Catalog Page
@@ -423,7 +423,7 @@ export const translations = {
     hero_btn: "Explore Collection →",
     featured_title: "Featured Items",
     see_all: "View All",
-    delivery_banner_title: "Free delivery on orders over 300,000 UZS",
+    delivery_banner_title: "Free delivery on orders over 600,000 UZS",
     delivery_banner_desc: "Fast & convenient delivery across Uzbekistan.",
 
     // Catalog Page

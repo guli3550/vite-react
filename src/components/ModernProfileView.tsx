@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { Order } from "../App";
 import type { Language } from "../utils/translations";
 import type { Currency } from "../utils/currency";
@@ -64,63 +64,105 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
-  // Avatar resolution & state
-  const savedCustomAvatar = localStorage.getItem("guli_custom_avatar") || localStorage.getItem("guli_avatar_url") || "";
-  const initialAvatar = savedCustomAvatar || authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
+  const isAuthenticated = Boolean(authUser?.id || telegramUser?.id);
+  const userKey = authUser?.id || (telegramUser?.id ? `tg_${telegramUser.id}` : "");
+
+  // Clean up legacy global avatar keys so they do not leak across accounts
+  try {
+    localStorage.removeItem("guli_custom_avatar");
+    localStorage.removeItem("guli_avatar_url");
+    localStorage.removeItem("guli_customer_photo");
+  } catch {}
+
+  const savedUserAvatar = userKey ? localStorage.getItem(`guli_avatar_${userKey}`) : "";
+  const initialAvatar = authUser?.avatar_url || savedUserAvatar || customAvatar || telegramUser?.photo_url || "";
   const [currentAvatar, setCurrentAvatar] = useState(initialAvatar);
   const [editAvatar, setEditAvatar] = useState(initialAvatar);
 
-  // Edit fields
-  const [editName, setEditName] = useState(authUser?.full_name || telegramUser?.first_name || "");
-  const [editPhone, setEditPhone] = useState(authUser?.phone || localStorage.getItem("guli_phone") || "");
-  const [editBirthDate, setEditBirthDate] = useState(localStorage.getItem("guli_birth_date") || "");
+  // Edit fields scoped to authenticated user
+  const [editName, setEditName] = useState(
+    authUser?.full_name || telegramUser?.first_name || (userKey ? localStorage.getItem(`guli_name_${userKey}`) || "" : "")
+  );
+  const [editPhone, setEditPhone] = useState(
+    authUser?.phone || (userKey ? localStorage.getItem(`guli_phone_${userKey}`) || "" : "")
+  );
+  const [editBirthDate, setEditBirthDate] = useState(
+    userKey ? localStorage.getItem(`guli_dob_${userKey}`) || "" : ""
+  );
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Derive display values
   const displayName = authUser?.full_name || 
     [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(" ") || 
-    localStorage.getItem("guli_first_name") || 
-    "GULI Mijozi";
+    (userKey ? localStorage.getItem(`guli_name_${userKey}`) : "") || 
+    "Mijoz";
 
-  const userEmail = authUser?.email || localStorage.getItem("guli_email") || (telegramUser?.username ? `@${telegramUser.username}` : "Hisob ulangan");
-  const userPhone = authUser?.phone || localStorage.getItem("guli_phone") || "+998 -- --- -- --";
+  const userEmail = authUser?.email || (telegramUser?.username ? `@${telegramUser.username}` : (userKey ? localStorage.getItem(`guli_email_${userKey}`) : "") || "");
+  const userPhone = authUser?.phone || (userKey ? localStorage.getItem(`guli_phone_${userKey}`) : "") || "+998 -- --- -- --";
   const userAvatar = currentAvatar || authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
   const isGoogle = authUser?.provider === "google" || (authUser?.email && authUser.email.endsWith("@gmail.com"));
 
-  // Calculate order stats
+  // Price formatter helper
+  const formatPrice = (val: number) => `${Number(val || 0).toLocaleString("uz-UZ")} so'm`;
+
+  // Real verified orders calculation (no fake numbers)
   const pendingOrders = orders.filter((o) => o.status !== "Yetkazildi" && o.status !== "Bekor qilindi");
-  const completedOrders = orders.filter((o) => o.status === "Yetkazildi");
-  const totalSpent = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-  const cashbackBalance = Math.round(totalSpent * 0.03) + 25000; // 3% cashback bonus + 25,000 welcome gift
+  const completedOrders = orders.filter(
+    (o) =>
+      o.status === "Yetkazildi" ||
+      o.status === "Qabul qilindi" ||
+      o.status === "To'lov tasdiqlandi" ||
+      o.status === "Yo‘lda" ||
+      o.status === "Tayyorlanmoqda"
+  );
+
+  // Real total money spent
+  const realTotalSpent = completedOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  // Real 2% Cashback strictly calculated
+  const REAL_CASHBACK_PERCENT = 0.02; // exactly 2%
+  const realCashbackEarned = Math.round(realTotalSpent * REAL_CASHBACK_PERCENT);
+  const usedCashback = orders.reduce((sum, o) => sum + (Number((o as any).cashback_used) || 0), 0);
+  const cashbackBalance = Math.max(0, realCashbackEarned - usedCashback);
+
+  // Real VIP threshold: 2,000,000 UZS
+  const VIP_THRESHOLD = 2000000;
+  const isVip = realTotalSpent >= VIP_THRESHOLD;
+  const vipProgressPercent = Math.min(100, Math.round((realTotalSpent / VIP_THRESHOLD) * 100));
+  const remainingForVip = Math.max(0, VIP_THRESHOLD - realTotalSpent);
+
+  // Real active admin promos count
+  const [activePromosCount, setActivePromosCount] = useState<number | null>(null);
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/promos")
+      .then((r) => r.json())
+      .then((d) => {
+        if (isMounted && d.success && Array.isArray(d.data)) {
+          const activeList = d.data.filter((p: any) => p.status === "active");
+          setActivePromosCount(activeList.length);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingProfile(true);
     try {
-      localStorage.setItem("guli_first_name", editName);
-      localStorage.setItem("guli_phone", editPhone);
-      localStorage.setItem("guli_birth_date", editBirthDate);
-      if (editAvatar) {
-        localStorage.setItem("guli_custom_avatar", editAvatar);
-        localStorage.setItem("guli_avatar_url", editAvatar);
-        localStorage.setItem("guli_customer_photo", editAvatar);
-        localStorage.setItem("chat_user_avatar", editAvatar);
-      } else {
-        localStorage.removeItem("guli_custom_avatar");
-        localStorage.removeItem("guli_avatar_url");
-        localStorage.removeItem("guli_customer_photo");
+      if (userKey) {
+        localStorage.setItem(`guli_name_${userKey}`, editName);
+        localStorage.setItem(`guli_phone_${userKey}`, editPhone);
+        localStorage.setItem(`guli_dob_${userKey}`, editBirthDate);
+        if (editAvatar) {
+          localStorage.setItem(`guli_avatar_${userKey}`, editAvatar);
+        } else {
+          localStorage.removeItem(`guli_avatar_${userKey}`);
+        }
       }
-
-      // Sync across multi-user photos storage for Admin and Chat consistency
-      try {
-        const synced = JSON.parse(localStorage.getItem("guli_synced_user_photos") || "{}");
-        if (authUser?.id) synced[authUser.id] = editAvatar;
-        if (authUser?.email) synced[authUser.email] = editAvatar;
-        if (authUser?.phone) synced[authUser.phone] = editAvatar;
-        if (editPhone) synced[editPhone] = editAvatar;
-        if (editName) synced[editName] = editAvatar;
-        localStorage.setItem("guli_synced_user_photos", JSON.stringify(synced));
-      } catch {}
 
       // Dispatch real-time avatar event
       window.dispatchEvent(new CustomEvent("guli_avatar_updated", { detail: { avatar: editAvatar } }));
@@ -128,20 +170,20 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
       // Call backend update if session token exists
       const token = localStorage.getItem("guli_access_token");
-      if (token) {
-        await fetch("/api/customer/profile", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            full_name: editName,
-            phone: editPhone,
-            avatar_url: editAvatar,
-          }),
-        }).catch(() => null);
-      }
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const tgData = (window as any).Telegram?.WebApp?.initData;
+      if (tgData) headers["X-Telegram-Init-Data"] = tgData;
+
+      await fetch("/api/customer/profile", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          full_name: editName,
+          phone: editPhone,
+          avatar_url: editAvatar || null,
+        }),
+      }).catch(() => null);
 
       onUpdateProfile({
         full_name: editName,
@@ -205,271 +247,647 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
   return (
     <main className="page modernProfilePage" style={{ paddingBottom: "110px", maxWidth: "680px", margin: "0 auto" }}>
-      {/* 1. VIP Customer Card - Modern Online Market Style */}
-      <section
-        style={{
-          background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4338ca 100%)",
-          borderRadius: "28px",
-          padding: "24px 20px",
-          color: "#ffffff",
-          boxShadow: "0 14px 34px -10px rgba(49, 46, 129, 0.45)",
-          position: "relative",
-          overflow: "hidden",
-          marginBottom: "18px",
-        }}
-      >
-        {/* Background glow effects */}
-        <div
+      {!isAuthenticated ? (
+        /* Bright, Radiant, Beautiful Guest Card */
+        <section
           style={{
-            position: "absolute",
-            top: "-40px",
-            right: "-40px",
-            width: "160px",
-            height: "160px",
-            borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(236, 72, 153, 0.35) 0%, rgba(236, 72, 153, 0) 70%)",
-            pointerEvents: "none",
+            background: "linear-gradient(135deg, #9d174d 0%, #be123c 35%, #e11d48 70%, #fb7185 100%)",
+            borderRadius: "28px",
+            padding: "32px 22px",
+            color: "#ffffff",
+            boxShadow: "0 18px 40px -10px rgba(225, 29, 72, 0.45), 0 0 24px rgba(251, 113, 133, 0.35)",
+            position: "relative",
+            overflow: "hidden",
+            marginBottom: "22px",
+            textAlign: "center",
+            border: "1.5px solid rgba(255, 255, 255, 0.3)",
           }}
-        />
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
-          {/* Badge & ID */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span
-              style={{
-                backgroundColor: "rgba(251, 191, 36, 0.2)",
-                border: "1px solid rgba(251, 191, 36, 0.4)",
-                color: "#fbbf24",
-                padding: "4px 10px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: 800,
-                letterSpacing: "0.5px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-              }}
-            >
-              👑 GOLD VIP CLUB
-            </span>
-            {isGoogle && (
-              <span
-                style={{
-                  backgroundColor: "rgba(255, 255, 255, 0.15)",
-                  color: "#ffffff",
-                  padding: "4px 9px",
-                  borderRadius: "20px",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                ✓ Google ulangan
-              </span>
-            )}
-          </div>
-
-          {/* Quick Edit Profile Button */}
-          <button
-            onClick={() => {
-              setEditName(displayName);
-              setEditPhone(userPhone === "+998 -- --- -- --" ? "" : userPhone);
-              setIsEditModalOpen(true);
-            }}
-            style={{
-              backgroundColor: "rgba(255, 255, 255, 0.15)",
-              border: "1px solid rgba(255, 255, 255, 0.25)",
-              color: "#ffffff",
-              padding: "6px 12px",
-              borderRadius: "14px",
-              fontSize: "12px",
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              backdropFilter: "blur(4px)",
-              transition: "background 0.2s",
-            }}
-          >
-            <span>✏️</span> Tahrirlash
-          </button>
-        </div>
-
-        {/* User Info Row */}
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          {/* Avatar with gradient ring */}
+        >
+          {/* Ambient luminous spots */}
           <div
             style={{
-              position: "relative",
+              position: "absolute",
+              top: "-50px",
+              right: "-50px",
+              width: "180px",
+              height: "180px",
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 70%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              bottom: "-40px",
+              left: "-40px",
+              width: "140px",
+              height: "140px",
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(253, 164, 175, 0.3) 0%, rgba(253, 164, 175, 0) 70%)",
+              pointerEvents: "none",
+            }}
+          />
+
+          {/* Official Web App Logo in glowing circular rim */}
+          <div
+            style={{
               width: "68px",
               height: "68px",
+              minWidth: "68px",
+              minHeight: "68px",
+              aspectRatio: "1 / 1",
               borderRadius: "50%",
-              padding: "3px",
-              background: "linear-gradient(135deg, #fbbf24, #ec4899, #60a5fa)",
-              flexShrink: 0,
-            }}
-          >
-            {userAvatar ? (
-              <img
-                src={userAvatar}
-                alt={displayName}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  borderRadius: "50%",
-                  backgroundColor: "#ffffff",
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  borderRadius: "50%",
-                  backgroundColor: "#be185d",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#ffffff",
-                  fontSize: "24px",
-                  fontWeight: 800,
-                }}
-              >
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span
-              style={{
-                position: "absolute",
-                bottom: "0",
-                right: "0",
-                width: "20px",
-                height: "20px",
-                backgroundColor: "#10b981",
-                border: "2.5px solid #1e1b4b",
-                borderRadius: "50%",
-              }}
-              title="Faol mijoz"
-            />
-          </div>
-
-          {/* Name & Contacts */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1
-              style={{
-                fontSize: "20px",
-                fontWeight: 800,
-                margin: "0 0 4px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "#ffffff",
-              }}
-            >
-              {displayName}
-            </h1>
-            <p
-              style={{
-                fontSize: "13px",
-                margin: "0 0 2px",
-                opacity: 0.85,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              ✉️ {userEmail}
-            </p>
-            <p style={{ fontSize: "12px", margin: 0, opacity: 0.75 }}>
-              📞 {userPhone}
-            </p>
-          </div>
-        </div>
-
-        {/* Level progress bar */}
-        <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", marginBottom: "6px", opacity: 0.85 }}>
-            <span>VIP Daraja: <b>Platinumga 2 ta buyurtma qoldi</b></span>
-            <span>80%</span>
-          </div>
-          <div style={{ height: "6px", width: "100%", backgroundColor: "rgba(255, 255, 255, 0.18)", borderRadius: "3px", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: "80%", background: "linear-gradient(90deg, #fbbf24, #ec4899)", borderRadius: "3px" }} />
-          </div>
-        </div>
-      </section>
-
-      {/* Profile Registration / Login trigger button card */}
-      <section
-        style={{
-          marginBottom: "18px",
-          background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fdf2f8 100%)",
-          borderRadius: "22px",
-          padding: "16px 18px",
-          border: "1px solid rgba(225, 29, 72, 0.18)",
-          boxShadow: "0 6px 20px rgba(225, 29, 72, 0.08)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "12px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "220px" }}>
-          <div
-            style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "14px",
-              background: "linear-gradient(135deg, #e11d48, #be123c)",
-              color: "#ffffff",
+              overflow: "hidden",
+              margin: "0 auto 16px auto",
+              boxShadow: "0 10px 26px rgba(0, 0, 0, 0.22)",
+              border: "3px solid #ffffff",
+              backgroundColor: "#ffffff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "22px",
-              flexShrink: 0,
-              boxShadow: "0 4px 12px rgba(225, 29, 72, 0.3)",
             }}
           >
-            {authUser ? "👤" : "🎁"}
+            <img
+              src="/guli_logo.jpg"
+              alt="GULI Logo"
+              style={{
+                width: "100%",
+                height: "100%",
+                aspectRatio: "1 / 1",
+                objectFit: "cover",
+                borderRadius: "50%",
+                display: "block",
+              }}
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = "none";
+              }}
+            />
           </div>
-          <div>
-            <div style={{ fontSize: "14px", fontWeight: 800, color: "#881337" }}>
-              {authUser ? "GULI Shaxsiy hisobingiz" : "GULI Shaxsiy profilingiz"}
-            </div>
-            <div style={{ fontSize: "12px", color: "#9f1239", marginTop: "2px" }}>
-              {authUser
-                ? `Ulangan: ${userEmail}`
-                : "Ro‘yxatdan o‘ting va 25,000 so‘m xush kelibsiz bonusiga ega bo‘ling"}
-            </div>
-          </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => onOpenAuth?.(authUser ? "signin" : "signup")}
-          style={{
-            padding: "11px 20px",
-            borderRadius: "14px",
-            border: "none",
-            background: "linear-gradient(135deg, #e11d48 0%, #be123c 100%)",
-            color: "#ffffff",
-            fontSize: "13px",
-            fontWeight: 700,
-            cursor: "pointer",
-            boxShadow: "0 4px 14px rgba(225, 29, 72, 0.35)",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "transform 0.15s ease",
-          }}
-        >
-          <span>{authUser ? "🔑 Hisobni almashtirish" : "✨ Ro‘yxatdan o‘tish"}</span>
-        </button>
-      </section>
+          <h2 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 8px 0", textShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
+            GULI Shaxsiy hisobingizga xush kelibsiz!
+          </h2>
+          <p style={{ fontSize: "13.5px", color: "rgba(255, 255, 255, 0.92)", margin: "0 auto 20px auto", lineHeight: 1.55, maxWidth: "460px" }}>
+            Har bir muvaffaqiyatli xaridingizdan <b>2% real keshbek</b>, buyurtmalar tarixi, to‘lov cheklari va VIP imtiyozlarni boshqarish uchun tizimga kiring:
+          </p>
+
+          {/* Key Advantages Pills */}
+          <div style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap", marginBottom: "22px" }}>
+            <span
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.2)",
+                backdropFilter: "blur(6px)",
+                padding: "5px 12px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+              }}
+            >
+              💰 2% Real Keshbek
+            </span>
+            <span
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.2)",
+                backdropFilter: "blur(6px)",
+                padding: "5px 12px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+              }}
+            >
+              👑 2 000 000 so'mda VIP maqom
+            </span>
+            <span
+              style={{
+                backgroundColor: "rgba(255, 255, 255, 0.2)",
+                backdropFilter: "blur(6px)",
+                padding: "5px 12px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+              }}
+            >
+              🧾 To‘lov cheklari nazorati
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => onOpenAuth?.("signin")}
+              style={{
+                backgroundColor: "#ffffff",
+                color: "#be123c",
+                border: "none",
+                borderRadius: "16px",
+                padding: "13px 24px",
+                fontSize: "14px",
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.18s ease",
+                flex: "1 1 0",
+              }}
+            >
+              <span>🔑</span> Tizimga kirish
+            </button>
+            <button
+              onClick={() => onOpenAuth?.("signup")}
+              style={{
+                backgroundColor: "#ffffff",
+                color: "#be123c",
+                border: "none",
+                borderRadius: "16px",
+                padding: "13px 24px",
+                fontSize: "14px",
+                fontWeight: 800,
+                cursor: "pointer",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.18s ease",
+                flex: "1 1 0",
+              }}
+            >
+              <span>✨</span> Ro‘yxatdan o‘tish
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          {/* Customer Profile Card (Standard vs Glowing VIP Card) */}
+          {isVip ? (
+            /* GLOWING & SHINING LUXURY VIP CARD (Spent >= 2,000,000 UZS) */
+            <section
+              className="vipGlowingCard"
+              style={{
+                background: "linear-gradient(135deg, #181206 0%, #2e1e05 35%, #422d08 70%, #1a1306 100%)",
+                borderRadius: "28px",
+                padding: "26px 22px",
+                color: "#ffffff",
+                border: "2px solid #fbbf24",
+                boxShadow: "0 0 35px rgba(245, 158, 11, 0.45), 0 16px 36px -8px rgba(217, 119, 6, 0.5)",
+                position: "relative",
+                overflow: "hidden",
+                marginBottom: "20px",
+              }}
+            >
+              {/* Pulsating radiant golden ring background */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "-40px",
+                  right: "-40px",
+                  width: "180px",
+                  height: "180px",
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(251, 191, 36, 0.35) 0%, rgba(251, 191, 36, 0) 70%)",
+                  pointerEvents: "none",
+                }}
+              />
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px", position: "relative", zIndex: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <span
+                    style={{
+                      background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+                      color: "#1e1403",
+                      padding: "5px 12px",
+                      borderRadius: "20px",
+                      fontSize: "12px",
+                      fontWeight: 900,
+                      letterSpacing: "0.8px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 4px 14px rgba(245, 158, 11, 0.5)",
+                    }}
+                  >
+                    👑 OLTIN VIP MAQOMI
+                  </span>
+                  <span
+                    style={{
+                      backgroundColor: "rgba(251, 191, 36, 0.16)",
+                      border: "1px solid rgba(251, 191, 36, 0.4)",
+                      color: "#fde68a",
+                      padding: "4px 9px",
+                      borderRadius: "18px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                    }}
+                  >
+                    ✨ 2 000 000+ so'm tasdiqlangan
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setEditName(displayName);
+                    setEditPhone(userPhone === "+998 -- --- -- --" ? "" : userPhone);
+                    setIsEditModalOpen(true);
+                  }}
+                  style={{
+                    backgroundColor: "rgba(251, 191, 36, 0.18)",
+                    border: "1px solid rgba(251, 191, 36, 0.35)",
+                    color: "#fef08a",
+                    padding: "6px 12px",
+                    borderRadius: "14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    backdropFilter: "blur(4px)",
+                  }}
+                >
+                  <span>✏️</span> Tahrirlash
+                </button>
+              </div>
+
+              {/* VIP Member Info Row */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", position: "relative", zIndex: 2 }}>
+                <div
+                  style={{
+                    position: "relative",
+                    width: "70px",
+                    height: "70px",
+                    minWidth: "70px",
+                    minHeight: "70px",
+                    aspectRatio: "1 / 1",
+                    borderRadius: "50%",
+                    padding: "3px",
+                    background: "linear-gradient(135deg, #fde047, #f59e0b, #d97706)",
+                    boxShadow: "0 0 16px rgba(251, 191, 36, 0.6)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt={displayName}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        aspectRatio: "1 / 1",
+                        objectFit: "cover",
+                        borderRadius: "50%",
+                        backgroundColor: "#ffffff",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        backgroundColor: "#854d0e",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#fef08a",
+                        fontSize: "26px",
+                        fontWeight: 900,
+                      }}
+                    >
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span
+                    style={{
+                      position: "absolute",
+                      bottom: "0",
+                      right: "0",
+                      width: "22px",
+                      height: "22px",
+                      backgroundColor: "#fbbf24",
+                      color: "#1e1403",
+                      fontSize: "11px",
+                      fontWeight: 900,
+                      border: "2px solid #181206",
+                      borderRadius: "50%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    title="VIP a'zo"
+                  >
+                    ★
+                  </span>
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1
+                    style={{
+                      fontSize: "21px",
+                      fontWeight: 900,
+                      margin: "0 0 4px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: "#fef08a",
+                      textShadow: "0 2px 8px rgba(0,0,0,0.4)",
+                    }}
+                  >
+                    {displayName}
+                  </h1>
+                  <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.9, color: "#fde68a" }}>
+                    ✉️ {userEmail}
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0, opacity: 0.85, color: "#fef9c3" }}>
+                    📞 {userPhone}
+                  </p>
+                </div>
+              </div>
+
+              {/* VIP Extra Privileges Grid (Qo'shimcha Imkoniyatlar) */}
+              <div
+                style={{
+                  marginTop: "18px",
+                  paddingTop: "16px",
+                  borderTop: "1px solid rgba(251, 191, 36, 0.25)",
+                  position: "relative",
+                  zIndex: 2,
+                }}
+              >
+                <div style={{ fontSize: "12px", fontWeight: 800, color: "#fbbf24", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>👑 VIP A'ZONING MAXSUS IMTIYOZLARI:</span>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                    fontSize: "11.5px",
+                    color: "#fef9c3",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(251, 191, 36, 0.1)", padding: "7px 10px", borderRadius: "10px" }}>
+                    <span>🚀</span> Bepul Ekspress Yetkazish
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(251, 191, 36, 0.1)", padding: "7px 10px", borderRadius: "10px" }}>
+                    <span>💎</span> Shaxsiy VIP Menejer
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(251, 191, 36, 0.1)", padding: "7px 10px", borderRadius: "10px" }}>
+                    <span>⚡</span> Navbatsiz Birinchi Yig'ish
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", backgroundColor: "rgba(251, 191, 36, 0.1)", padding: "7px 10px", borderRadius: "10px" }}>
+                    <span>🎁</span> Yopiq VIP Aksiyalar
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", fontSize: "12px", color: "#fde68a" }}>
+                  <span>Tasdiqlangan xaridlar: <b>{formatPrice(realTotalSpent)}</b></span>
+                  <span>Keshbek: <b style={{ color: "#fbbf24" }}>{formatPrice(cashbackBalance)}</b></span>
+                </div>
+              </div>
+            </section>
+          ) : (
+            /* STANDARD CUSTOMER CARD (Spent < 2,000,000 UZS) */
+            <section
+              style={{
+                background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+                borderRadius: "28px",
+                padding: "24px 20px",
+                color: "#ffffff",
+                boxShadow: "0 14px 34px -10px rgba(15, 23, 42, 0.5)",
+                position: "relative",
+                overflow: "hidden",
+                marginBottom: "18px",
+                border: "1px solid rgba(148, 163, 184, 0.2)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span
+                    style={{
+                      backgroundColor: "rgba(148, 163, 184, 0.15)",
+                      border: "1px solid rgba(148, 163, 184, 0.3)",
+                      color: "#cbd5e1",
+                      padding: "4px 10px",
+                      borderRadius: "20px",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      letterSpacing: "0.5px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                    }}
+                  >
+                    🛡️ STANDART MIJOZ
+                  </span>
+                  {isGoogle && (
+                    <span
+                      style={{
+                        backgroundColor: "rgba(255, 255, 255, 0.15)",
+                        color: "#ffffff",
+                        padding: "4px 9px",
+                        borderRadius: "20px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      ✓ Google ulangan
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setEditName(displayName);
+                    setEditPhone(userPhone === "+998 -- --- -- --" ? "" : userPhone);
+                    setIsEditModalOpen(true);
+                  }}
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    border: "1px solid rgba(255, 255, 255, 0.25)",
+                    color: "#ffffff",
+                    padding: "6px 12px",
+                    borderRadius: "14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    backdropFilter: "blur(4px)",
+                  }}
+                >
+                  <span>✏️</span> Tahrirlash
+                </button>
+              </div>
+
+              {/* Standard Member Info Row */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div
+                  style={{
+                    position: "relative",
+                    width: "66px",
+                    height: "66px",
+                    minWidth: "66px",
+                    minHeight: "66px",
+                    aspectRatio: "1 / 1",
+                    borderRadius: "50%",
+                    padding: "3px",
+                    background: "linear-gradient(135deg, #94a3b8, #64748b)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt={displayName}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        aspectRatio: "1 / 1",
+                        objectFit: "cover",
+                        borderRadius: "50%",
+                        backgroundColor: "#ffffff",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        borderRadius: "50%",
+                        backgroundColor: "#475569",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#ffffff",
+                        fontSize: "24px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span
+                    style={{
+                      position: "absolute",
+                      bottom: "0",
+                      right: "0",
+                      width: "18px",
+                      height: "18px",
+                      backgroundColor: "#10b981",
+                      border: "2px solid #0f172a",
+                      borderRadius: "50%",
+                    }}
+                    title="Faol a'zo"
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h1
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: 800,
+                      margin: "0 0 4px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      color: "#ffffff",
+                    }}
+                  >
+                    {displayName}
+                  </h1>
+                  <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.85, color: "#cbd5e1" }}>
+                    ✉️ {userEmail}
+                  </p>
+                  <p style={{ fontSize: "12px", margin: 0, opacity: 0.75, color: "#94a3b8" }}>
+                    📞 {userPhone}
+                  </p>
+                </div>
+              </div>
+
+              {/* Real VIP Progression: 2,000,000 UZS target */}
+              <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", marginBottom: "6px", color: "#cbd5e1" }}>
+                  <span>
+                    VIP Maqomi: <b>{vipProgressPercent}%</b> (Xarid: {formatPrice(realTotalSpent)})
+                  </span>
+                  <span>Maqsad: 2 000 000 so'm</span>
+                </div>
+                <div style={{ height: "7px", width: "100%", backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: "4px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${vipProgressPercent}%`,
+                      background: "linear-gradient(90deg, #f59e0b, #fbbf24)",
+                      borderRadius: "4px",
+                      transition: "width 0.4s ease",
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.4 }}>
+                  VIP maqomi va bepul ekspress yetkazish uchun yana <b>{formatPrice(remainingForVip)}</b> lik xarid yetarli.
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Account status note */}
+          <section
+            style={{
+              marginBottom: "18px",
+              background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fdf2f8 100%)",
+              borderRadius: "22px",
+              padding: "16px 18px",
+              border: "1px solid rgba(225, 29, 72, 0.18)",
+              boxShadow: "0 6px 20px rgba(225, 29, 72, 0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "220px" }}>
+              <div
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  minWidth: "44px",
+                  minHeight: "44px",
+                  aspectRatio: "1 / 1",
+                  borderRadius: "14px",
+                  background: "linear-gradient(135deg, #e11d48, #be123c)",
+                  color: "#ffffff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "22px",
+                  flexShrink: 0,
+                  boxShadow: "0 4px 12px rgba(225, 29, 72, 0.3)",
+                }}
+              >
+                👤
+              </div>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#881337" }}>
+                  GULI Shaxsiy hisobingiz
+                </div>
+                <div style={{ fontSize: "12px", color: "#9f1239", marginTop: "2px" }}>
+                  Ulangan hisob: {userEmail} • Har bir xariddan 2% keshbek
+                </div>
+              </div>
+            </div>
+          </section>
 
       {/* 2. Wallet & Loyalty Points Widget (Uzum / Amazon Market Style) */}
       <section
@@ -516,7 +934,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         >
           <span style={{ fontSize: "20px", display: "block", marginBottom: "4px" }}>🎟️</span>
           <b style={{ fontSize: "14px", display: "block", color: "#d97706" }}>
-            3 ta faol
+            {activePromosCount !== null ? `${activePromosCount} ta faol` : "Kuponlar"}
           </b>
           <span style={{ fontSize: "11px", color: "var(--text-muted, #64748b)" }}>Promokodlar</span>
         </div>
@@ -798,6 +1216,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           <i>›</i>
         </button>
       </section>
+      </>
+      )}
 
       {/* 5. Mijozlarga Xizmat Ko'rsatish (Customer Care) */}
       <section className="profileSection" style={{ marginBottom: "16px" }}>
@@ -810,7 +1230,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         >
           <span className="profileSticker3D">💬</span>
           <div>
-            <b>GULI Jonli Chat</b>
+            <b>GULI Chat</b>
             {unreadChatCount > 0 ? (
               <span className="badgePill" style={{ backgroundColor: "#ef4444" }}>{unreadChatCount} yangi</span>
             ) : null}
@@ -891,25 +1311,6 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
         <button
           className="menuRow"
-          id="profile-admin-panel-btn"
-          onClick={() => {
-            window.location.href = "/admin";
-          }}
-          style={{
-            background: "linear-gradient(135deg, rgba(217, 119, 6, 0.08), rgba(236, 72, 153, 0.05))",
-            borderLeft: "4px solid #d97706",
-          }}
-        >
-          <span className="profileSticker3D">👑</span>
-          <div>
-            <b style={{ color: "var(--primary, #be185d)" }}>Admin Boshqaruv Paneli</b>
-            <small>Do'kon tovarlari, buyurtmalar, keshbek va to'lovlar</small>
-          </div>
-          <i>›</i>
-        </button>
-
-        <button
-          className="menuRow"
           id="profile-settings-btn"
           onClick={onOpenSettings}
         >
@@ -962,23 +1363,25 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           <i>›</i>
         </button>
 
-        {/* Safe Logout Button */}
-        <button
-          className="menuRow"
-          id="profile-logout-btn"
-          onClick={() => setIsLogoutConfirmOpen(true)}
-          style={{
-            borderLeft: "4px solid #ef4444",
-            backgroundColor: "rgba(239, 68, 68, 0.04)",
-          }}
-        >
-          <span style={{ fontSize: "20px" }}>🚪</span>
-          <div>
-            <b style={{ color: "#ef4444" }}>Tizimdan chiqish (Hisobni yopish)</b>
-            <small>Boshqa hisobga kirish yoki sessiyani yakunlash</small>
-          </div>
-          <i style={{ color: "#ef4444" }}>›</i>
-        </button>
+        {/* Safe Logout Button - Only for authenticated users */}
+        {authUser && (
+          <button
+            className="menuRow"
+            id="profile-logout-btn"
+            onClick={() => setIsLogoutConfirmOpen(true)}
+            style={{
+              borderLeft: "4px solid #ef4444",
+              backgroundColor: "rgba(239, 68, 68, 0.04)",
+            }}
+          >
+            <span style={{ fontSize: "20px" }}>🚪</span>
+            <div>
+              <b style={{ color: "#ef4444" }}>Tizimdan chiqish (Hisobni yopish)</b>
+              <small>Boshqa hisobga kirish yoki sessiyani yakunlash</small>
+            </div>
+            <i style={{ color: "#ef4444" }}>›</i>
+          </button>
+        )}
       </section>
 
       {/* Watermark */}
@@ -1307,10 +1710,43 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 margin: "12px 0 16px",
               }}
             >
-              {cashbackBalance.toLocaleString()} so'm
+              {formatPrice(cashbackBalance)}
             </div>
-            <p style={{ fontSize: "13px", color: "#64748b", lineHeight: 1.5, margin: "0 0 20px" }}>
-              Siz har bir muvaffaqiyatli buyurtmangizdan <b>3% keshbek</b> olasiz. Ushbu mablag'ni keyingi xaridlarda chegirma sifatida ishlatishingiz mumkin!
+
+            <div
+              style={{
+                backgroundColor: "#f8fafc",
+                borderRadius: "16px",
+                padding: "14px",
+                textAlign: "left",
+                marginBottom: "16px",
+                border: "1px solid #e2e8f0",
+                fontSize: "12px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#64748b" }}>Tasdiqlangan xaridlar:</span>
+                <b>{formatPrice(realTotalSpent)}</b>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#64748b" }}>2% Keshbek darajasi:</span>
+                <b style={{ color: "#16a34a" }}>+{formatPrice(realCashbackEarned)}</b>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#64748b" }}>Avval ishlatilgan:</span>
+                <b style={{ color: "#dc2626" }}>-{formatPrice(usedCashback)}</b>
+              </div>
+              <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                <span style={{ fontWeight: 700, color: "#1e293b" }}>Mavjud foydalanish balansi:</span>
+                <b style={{ color: "#be185d", fontWeight: 800 }}>{formatPrice(cashbackBalance)}</b>
+              </div>
+            </div>
+
+            <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.5, margin: "0 0 18px" }}>
+              Har bir xaridingizdan <b>2% kafolatlangan keshbek</b> hisoblanadi. Buyurtma rasmiylashtirishda ushbu summani to‘lovdan chegirib tovar sotib olishingiz mumkin!
             </p>
             <button
               onClick={() => setIsWalletModalOpen(false)}
@@ -1319,8 +1755,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 padding: "12px",
                 borderRadius: "14px",
                 border: "none",
-                backgroundColor: "#f1f5f9",
-                color: "#1e293b",
+                backgroundColor: "#1e293b",
+                color: "#ffffff",
                 fontSize: "14px",
                 fontWeight: 700,
                 cursor: "pointer",

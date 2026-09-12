@@ -211,17 +211,29 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Automatic User Profile Photo detection
+  // Automatic User Profile Photo detection from all profile and authentication sources
   const [userAvatarUrl, setUserAvatarUrl] = useState<string>(() => {
     if (telegramUser?.photo_url) return telegramUser.photo_url;
-    const saved = localStorage.getItem("guli_user_photo") || localStorage.getItem("guli_avatar_url");
-    if (saved) return saved;
+    try {
+      const authUser = JSON.parse(localStorage.getItem("guli_auth_user") || "{}");
+      if (authUser?.photo_url || authUser?.avatar) return authUser.photo_url || authUser.avatar;
+    } catch {}
+    const userKey = String(telegramUser?.id || localStorage.getItem("guli_phone") || "guest");
+    const savedCustom = localStorage.getItem(`guli_avatar_${userKey}`) || localStorage.getItem("guli_user_photo") || localStorage.getItem("guli_avatar_url");
+    if (savedCustom) return savedCustom;
     return "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80";
   });
 
   useEffect(() => {
     if (telegramUser?.photo_url) {
       setUserAvatarUrl(telegramUser.photo_url);
+    } else {
+      try {
+        const authUser = JSON.parse(localStorage.getItem("guli_auth_user") || "{}");
+        if (authUser?.photo_url || authUser?.avatar) {
+          setUserAvatarUrl(authUser.photo_url || authUser.avatar);
+        }
+      } catch {}
     }
   }, [telegramUser?.photo_url]);
 

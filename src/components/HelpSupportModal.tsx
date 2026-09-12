@@ -124,10 +124,10 @@ export function HelpSupportModal({
     {
       q: t("quick_q1"),
       a: language === "ru"
-        ? "Доставка по Ташкенту осуществляется в течение 2-4 часов, по областям Узбекистана — 1-2 рабочих дня. При заказе от 300 000 сум доставка бесплатная!"
+        ? "Сроки доставки: по Коканду — 1 рабочий день; Ташкент, Андижан, Наманган, Фергана — 3 рабочих дня; регионы Вохи — 5 рабочих дней. При заказе от 600 000 сум доставка бесплатная!"
         : language === "en"
-        ? "Delivery within Tashkent takes 2-4 hours, and across Uzbekistan regions 1-2 business days. Free delivery for orders over 300,000 UZS!"
-        : "Toshkent shahri bo‘ylab yetkazib berish 2-4 soatda, viloyatlar bo‘ylab 1-2 ish kunida amalga oshiriladi. 300 000 so‘mdan yuqori buyurtmalarda yetkazib berish mutlaqo bepul!"
+        ? "Delivery terms: within Kokand — 1 business day; Tashkent, Andijan, Namangan, Fergana — 3 business days; Voha regions — 5 business days. Free delivery for orders over 600,000 UZS!"
+        : "Yetkazib berish muddatlari: Qo‘qon ichida — 1 ish kuni; Toshkent, Andijon, Namangan, Farg‘onaga — 3 ish kuni; Voha viloyatlariga — 5 ish kuni. Bepul yetkazib berish faqatgina 600 000 so‘mdan oshgan orderlar uchun amal qiladi!"
     },
     {
       q: t("quick_q2"),
@@ -140,10 +140,10 @@ export function HelpSupportModal({
     {
       q: t("quick_q3"),
       a: language === "ru"
-        ? "Вы можете оплатить заказ наличными при получении курьеру, либо онлайн через Uzcard/Humo/Visa/Mastercard."
+        ? "Способ оплаты: независимо от используемого приложения (Click, Payme, Beepul и др.), оплата производится исключительно на пластиковую карту Uzcard / Humo с загрузкой чека. Чек подтверждается администратором в течение 2 часов."
         : language === "en"
-        ? "You can pay with Cash on delivery upon receiving your package, or via online card payment (Uzcard / Humo / Visa)."
-        : "Buyurtmani qabul qilib olganingizda kuryerga naqd pulda yoki bank kartasi (Uzcard, Humo, Visa) orqali to‘lashingiz mumkin."
+        ? "Payment method: regardless of Click, Payme, Beepul, or other fintech apps, payment is processed strictly via Uzcard / Humo plastic card with receipt upload. Receipts are verified by admin within 2 hours."
+        : "To‘lov usuli: Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat plastik karta (Uzcard / Humo) orqali amalga oshiriladi. Yuborilgan to‘lov cheki 2 soat ichida admin tomonidan tasdiqlanadi."
     },
     {
       q: t("quick_q4"),

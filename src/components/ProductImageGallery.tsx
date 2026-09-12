@@ -184,25 +184,6 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
           </>
         )}
       </div>
-
-      {/* Detail view thumbnail strip */}
-      {detail && imageList.length > 1 && (
-        <div className="galleryThumbnails" onClick={(e) => e.stopPropagation()}>
-          {imageList.map((img, i) => (
-            <button
-              type="button"
-              key={i}
-              className={`galleryThumbBtn ${i === index ? "active" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setIndex(i);
-              }}
-            >
-              <img src={formatImageUrl(img)} alt={`Thumbnail ${i + 1}`} />
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

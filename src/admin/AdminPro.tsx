@@ -133,17 +133,18 @@ type User = {
   total_spent?: number;
 };
 
-function getResolvedCustomerPhoto(u: any, photosMap?: Record<number, string>): string {
+function getResolvedCustomerPhoto(u: any, photosMap?: Record<string | number, string>): string {
   if (!u) return "";
-  const direct = u.avatar_url || u.photo_url || (u.telegram_id && photosMap ? photosMap[u.telegram_id] : "") || u.telegram_photo || "";
-  if (direct) return direct;
-  
-  // Local stored profile avatar check
-  try {
-    const savedCustom = localStorage.getItem("guli_custom_avatar") || localStorage.getItem("guli_avatar_url");
-    if (savedCustom) return savedCustom;
-  } catch {}
-  return "";
+  const tgId = u.telegram_id ? String(u.telegram_id) : "";
+  const fromMap = tgId && photosMap ? (photosMap[tgId] || (photosMap as any)[u.telegram_id]) : "";
+  const direct =
+    u.avatar_url ||
+    u.photo_url ||
+    fromMap ||
+    u.telegram_photo ||
+    u.customer_avatar ||
+    "";
+  return direct || "";
 }
 
 type Promo = {
@@ -1944,7 +1945,10 @@ function OrderDrawer({
     if (orderId && adminToken) {
       setLoadingReceipt(true);
       fetch(`${base}/api/admin/orders/${encodeURIComponent(orderId)}/payment-receipt`, {
-        headers: { Authorization: `Bearer ${adminToken}` },
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "X-Guli-Payment-Context": "payments",
+        },
       })
         .then((r) => r.json().catch(() => null))
         .then((j) => {

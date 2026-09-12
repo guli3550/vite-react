@@ -7,10 +7,12 @@ if (!express.application.__guliReceiptPaymentsOnlyPatched) {
   express.application.get = function patchedGet(path, ...handlers) {
     if (typeof path === "string" && RECEIPT_PATH_RE.test(path)) {
       const guard = (req, res, next) => {
-        if (req.get("X-Guli-Payment-Context") !== "payments") {
-          return res.status(403).json({ success: false, message: "Chek faqat To'lovlar bo'limida ko'riladi" });
+        const ctx = req.get("X-Guli-Payment-Context");
+        const auth = String(req.headers.authorization || "");
+        if (ctx === "payments" || ctx === "orders" || ctx === "admin" || auth.startsWith("Bearer ")) {
+          return next();
         }
-        return next();
+        return res.status(403).json({ success: false, message: "Chek faqat to‘lov yoki buyurtma bo‘limida ko‘riladi" });
       };
       return originalGet.call(this, path, guard, ...handlers);
     }

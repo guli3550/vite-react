@@ -439,20 +439,46 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 18,
-              background: "linear-gradient(135deg, #e11d48 0%, #be123c 60%, #881337 100%)",
-              color: "#ffffff",
+              width: 56,
+              height: 56,
+              minWidth: 56,
+              minHeight: 56,
+              maxWidth: 56,
+              maxHeight: 56,
+              aspectRatio: "1 / 1",
+              borderRadius: "50%",
+              overflow: "hidden",
+              margin: "0 auto 12px",
+              boxShadow: "0 8px 24px rgba(225, 29, 72, 0.28)",
+              border: "2.5px solid #ffffff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 24,
-              margin: "0 auto 12px",
-              boxShadow: "0 8px 20px rgba(225, 29, 72, 0.35)",
+              backgroundColor: "#fff1f2",
+              flexShrink: 0,
             }}
           >
-            🌸
+            <img
+              src="/guli_logo.jpg"
+              alt="GULI Logo"
+              style={{
+                width: "100%",
+                height: "100%",
+                minWidth: "100%",
+                minHeight: "100%",
+                aspectRatio: "1 / 1",
+                objectFit: "cover",
+                borderRadius: "50%",
+                display: "block",
+              }}
+              onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement;
+                target.style.display = "none";
+                if (target.parentElement) {
+                  target.parentElement.innerHTML = '<span style="font-size: 22px; font-weight: 900; color: #be185d;">G</span>';
+                }
+              }}
+            />
           </div>
           <h3 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>
             {title}

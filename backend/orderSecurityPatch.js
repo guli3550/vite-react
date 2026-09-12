@@ -65,8 +65,42 @@ async function calculateOrder(body) {
     promo = data;
   }
   const delivery = Math.max(0, Number(body?.delivery) || 0);
-  const total = Math.max(0, subtotal + delivery - discount);
-  return { subtotal, delivery, discount, total, normalizedItems, promo };
+  const payableBeforeCashback = Math.max(0, subtotal + delivery - discount);
+
+  // Real 2% Cashback validation and hacker protection
+  let cashbackUsed = 0;
+  const requestedCashback = Number(body?.cashback_used || 0);
+  if (requestedCashback > 0) {
+    try {
+      const phone = String(body?.phone || "").trim();
+      const tgId = body?.telegram_id || null;
+      let query = supabase.from("orders").select("total, status, cashback_used");
+      if (tgId) {
+        query = query.eq("telegram_id", tgId);
+      } else if (phone) {
+        query = query.eq("phone", phone);
+      }
+      const { data: pastOrders } = await query;
+      if (pastOrders && pastOrders.length > 0) {
+        const eligibleOrders = pastOrders.filter((o) =>
+          o.status === "Yetkazildi" || o.status === "Qabul qilindi" || o.status === "To'lov tasdiqlandi" || o.status === "Yo‘lda" || o.status === "Tayyorlanmoqda"
+        );
+        const totalDelivered = eligibleOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+        const earnedCashback = Math.round(totalDelivered * 0.02); // 2% real cashback
+        const alreadyUsedCashback = pastOrders.reduce((sum, o) => sum + (Number(o.cashback_used) || 0), 0);
+        const maxUsable = Math.max(0, earnedCashback - alreadyUsedCashback);
+        cashbackUsed = Math.min(requestedCashback, maxUsable, payableBeforeCashback);
+      } else {
+        cashbackUsed = 0;
+      }
+    } catch (cbErr) {
+      console.error("Server cashback check error:", cbErr);
+      cashbackUsed = 0;
+    }
+  }
+
+  const total = Math.max(0, payableBeforeCashback - cashbackUsed);
+  return { subtotal, delivery, discount, cashback_used: cashbackUsed, total, normalizedItems, promo };
 }
 
 async function tryAtomicOrder(req, res) {
@@ -91,7 +125,7 @@ if (!installed) {
             if (atomic) return atomic;
           }
           const calculated = await calculateOrder(req.body || {});
-          req.body = { ...req.body, items: calculated.normalizedItems, subtotal: calculated.subtotal, delivery: calculated.delivery, discount: calculated.discount, total: calculated.total, promo_code: calculated.promo?.code || null };
+          req.body = { ...req.body, items: calculated.normalizedItems, subtotal: calculated.subtotal, delivery: calculated.delivery, discount: calculated.discount, cashback_used: calculated.cashback_used, total: calculated.total, promo_code: calculated.promo?.code || null };
           return original.call(this, req, res, next);
         } catch (error) {
           console.error("Server-side order validation error:", error);

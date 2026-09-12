@@ -116,7 +116,14 @@
 
   app.get("/api/admin/orders/:id/payment-receipt", requireAdmin, async (req, res) => {
     try {
-      const { data: order, error } = await supabase.from("orders").select("id,order_number,total,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at").eq("id", req.params.id).maybeSingle();
+      const param = String(req.params.id || "").trim();
+      let query = supabase.from("orders").select("id,order_number,total,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at");
+      if (/^\d+$/.test(param)) {
+        query = query.or(`id.eq.${param},order_number.eq.${param}`);
+      } else {
+        query = query.eq("order_number", param);
+      }
+      const { data: order, error } = await query.maybeSingle();
       if (error) throw error;
       if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
       if (!order.payment_receipt_path) return res.status(404).json({ success: false, message: "Bu buyurtmaga chek yuborilmagan" });
@@ -135,7 +142,14 @@
       if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Chek rasmi topilmadi" });
       if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || "")) && mimeType !== "application/pdf") return res.status(400).json({ success: false, message: "Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin" });
       const buffer = decodeReceiptData(data, mimeType);
-      const { data: order, error: orderError } = await supabase.from("orders").select("id,order_number,payment,payment_status,payment_receipt_path").eq("id", req.params.id).maybeSingle();
+      const param = String(req.params.id || "").trim();
+      let query = supabase.from("orders").select("id,order_number,payment,payment_status,payment_receipt_path");
+      if (/^\d+$/.test(param)) {
+        query = query.or(`id.eq.${param},order_number.eq.${param}`);
+      } else {
+        query = query.eq("order_number", param);
+      }
+      const { data: order, error: orderError } = await query.maybeSingle();
       if (orderError) throw orderError;
       if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
       await ensureReceiptBucket();

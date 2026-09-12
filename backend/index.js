@@ -178,6 +178,43 @@ app.post("/api/promo/validate", async (req, res) => {
   } catch (error) { console.error("Promo validation error:", error); res.status(500).json({ success: false, message: "Promo kodni tekshirishda xatolik" }); }
 });
 
+app.get("/api/promos", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("promo_codes")
+      .select("id, code, discount_type, discount_value, min_order_amount, max_discount_amount, starts_at, expires_at, usage_limit, used_count, active, created_at")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const now = Date.now();
+    const promosWithStatus = (data || []).map((p) => {
+      let status = "active";
+      let statusLabel = "Aktiv";
+      if (!p.active) {
+        status = "inactive";
+        statusLabel = "Nofaol";
+      } else if (p.expires_at && new Date(p.expires_at).getTime() < now) {
+        status = "expired";
+        statusLabel = "Muddati o‘tgan";
+      } else if (p.starts_at && new Date(p.starts_at).getTime() > now) {
+        status = "upcoming";
+        statusLabel = "Kutilmoqda";
+      } else if (p.usage_limit != null && Number(p.used_count || 0) >= Number(p.usage_limit)) {
+        status = "exhausted";
+        statusLabel = "Limit tugagan";
+      }
+      return {
+        ...p,
+        status,
+        statusLabel,
+      };
+    });
+    res.json({ success: true, data: promosWithStatus });
+  } catch (e) {
+    console.error("Public promos fetch error:", e);
+    res.status(500).json({ success: false, message: "Promokodlarni yuklashda xatolik" });
+  }
+});
+
 app.post("/api/admin/upload-image", requireAdmin, async (req, res) => { try { const { data, mimeType, extension } = req.body || {}; if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" }); if (!String(mimeType || "").startsWith("image/")) return res.status(400).json({ success: false, message: "Faqat rasm fayli yuklash mumkin" }); if (data.length > 3200000) return res.status(413).json({ success: false, message: "Rasm hajmi juda katta" }); const bucket = "product-images"; const existing = await supabase.storage.getBucket(bucket); if (existing.error) { const created = await supabase.storage.createBucket(bucket, { public: true, allowedMimeTypes: ["image/*"], fileSizeLimit: "3MB" }); if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error; } const cleanExt = String(extension || "webp").replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp"; const path = `products/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`; const buffer = Buffer.from(data, "base64"); const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false }); if (error) throw error; const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path); res.json({ success: true, data: { path, url: publicData.publicUrl } }); } catch (error) { console.error("Admin image upload error:", error); res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" }); } });
 app.post("/api/admin/login", (req, res) => {
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) {

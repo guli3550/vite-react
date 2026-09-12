@@ -54,7 +54,11 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const [storeName, setStoreName] = useState(localStorage.getItem("guli_store_name") || saved.storeName || "Guli premium");
   const [workHours, setWorkHours] = useState(saved.workHours || "09:00 - 21:00 (Har kuni)");
   const [storeAddress, setStoreAddress] = useState(saved.storeAddress || "Toshkent sh., Navoiy ko'chasi 14");
-  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(saved.freeDeliveryThreshold || "300000");
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(
+    saved.freeDeliveryThreshold && saved.freeDeliveryThreshold !== "300000"
+      ? saved.freeDeliveryThreshold
+      : "600000"
+  );
   const [standardDeliveryFee, setStandardDeliveryFee] = useState(saved.standardDeliveryFee || "20000");
   const [clickMerchantId, setClickMerchantId] = useState(saved.clickMerchantId || "38102");
   const [paymeMerchantId, setPaymeMerchantId] = useState(saved.paymeMerchantId || "64a821901a");
