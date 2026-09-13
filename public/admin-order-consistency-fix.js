@@ -1,6 +1,5 @@
 (() => {
   'use strict';
-
   const originalFetch = window.fetch.bind(window);
   let installed = false;
 
@@ -12,38 +11,35 @@
     }
     const source = value.location && typeof value.location === 'object' ? { ...value, ...value.location } : { ...value };
     const addressText = String(source.formatted_address || source.formattedAddress || source.address || source.delivery_address || '').trim();
-    const out = {
-      ...source,
-      region: source.region || source.region_name || source.state || source.province || '',
-      district: source.district || source.district_name || source.county || '',
-      street: source.street || source.street_name || source.road || addressText || '',
-      house: source.house || source.house_number || source.building || '',
-      apartment: source.apartment || source.flat || source.unit || '',
-      landmark: source.landmark || source.reference || '',
-      latitude: source.latitude ?? source.lat ?? source.location?.lat ?? source.location?.latitude,
-      longitude: source.longitude ?? source.lng ?? source.location?.lng ?? source.location?.longitude,
-      address: addressText,
-      formatted_address: addressText,
-    };
-    return out;
+    return { ...source, region: source.region || source.region_name || source.state || source.province || '', district: source.district || source.district_name || source.county || '', street: source.street || source.street_name || source.road || addressText || '', house: source.house || source.house_number || source.building || '', apartment: source.apartment || source.flat || source.unit || '', landmark: source.landmark || source.reference || '', latitude: source.latitude ?? source.lat ?? source.location?.lat ?? source.location?.latitude, longitude: source.longitude ?? source.lng ?? source.location?.lng ?? source.location?.longitude, address: addressText, formatted_address: addressText };
   }
 
   function normalizeOrder(order) {
     if (!order || typeof order !== 'object') return order;
     const o = { ...order };
-    const rawAddress = o.address || o.delivery_address || o.deliveryAddress || o.location;
-    const address = normalizeAddress(rawAddress);
+    const address = normalizeAddress(o.address || o.delivery_address || o.deliveryAddress || o.location);
     if (address) {
       o.address = address;
       o.delivery_address = address;
       o.deliveryAddress = address;
       o.address_text = [address.region, address.district, address.street, address.house, address.apartment].filter(Boolean).join(', ') || address.formatted_address || address.address || '';
     }
-    if (typeof o.items === 'string') {
-      try { o.items = JSON.parse(o.items); } catch { o.items = []; }
-    }
-    o.payment = ['card_manual', 'card_manual_transfer', 'uzcard_humo', 'card'].includes(String(o.payment || '').toLowerCase()) ? 'card' : (o.payment || 'cash');
-    if (o.payment_receipt_path && !o.receipt_url && !o.receiptUrl) o.receipt_pending = true;
+    if (typeof o.items === 'string') { try { o.items = JSON.parse(o.items); } catch { o.items = []; } }
+
+    // Canonical payment rendering: every card variant, or any order with a
+    // receipt/payment-review state, must render as Uzcard/Humo instead of Naqd.
+    const rawPayment = String(o.payment || o.payment_method || '').trim().toLowerCase();
+    const card = ['card_manual','card_manual_transfer','uzcard_humo','card','karta (uzcard / humo)','karta o‘tkazmasi','karta otkazmasi'].includes(rawPayment) || /karta|card|uzcard|humo/i.test(rawPayment);
+    const paymentStatus = String(o.payment_status || '').toLowerCase();
+    if (card || o.payment_receipt_path || ['receipt_uploaded','verified','rejected'].includes(paymentStatus)) o.payment = 'card';
+    else if (!o.payment) o.payment = 'cash';
+
+    // The database total is authoritative. Never recompute a displayed order
+    // total from stale cart/local delivery values.
+    o.total = Number(o.total || 0);
+    o.subtotal = Number(o.subtotal || 0);
+    o.delivery = Number(o.delivery || 0);
+    o.discount = Number(o.discount || 0);
     try { window.__GULI_LAST_ADMIN_ORDER = o; } catch {}
     return o;
   }
@@ -72,27 +68,12 @@
       const headers = new Headers(response.headers);
       headers.delete('content-length');
       return new Response(JSON.stringify(normalized), { status: response.status, statusText: response.statusText, headers });
-    } catch {
-      return response;
-    }
+    } catch { return response; }
   }
 
   if (!installed) {
-    try {
-      Object.defineProperty(window, 'fetch', {
-        value: patchedFetch,
-        writable: true,
-        configurable: true,
-      });
-    } catch {
-      try {
-        window.fetch = patchedFetch;
-      } catch {
-        try {
-          globalThis.fetch = patchedFetch;
-        } catch {}
-      }
-    }
+    try { Object.defineProperty(window, 'fetch', { value: patchedFetch, writable: true, configurable: true }); }
+    catch { try { window.fetch = patchedFetch; } catch { try { globalThis.fetch = patchedFetch; } catch {} } }
     installed = true;
   }
 })();
