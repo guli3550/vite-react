@@ -1,6 +1,8 @@
-// GULI admin Telegram bot: one persistent order message per admin chat.
-// Product images + receipt image are composed into one photo when possible.
-// Order/payment/status changes edit that same message; no message spam.
+// GULI admin Telegram bot: receipt-first order notification.
+// There is intentionally NO "YANGI ORDER" admin notification.
+// The first admin notification for a card order is the receipt-upload event.
+// That notification contains product image(s) + receipt image and the payment buttons.
+// The same message is edited after admin verification/rejection.
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 
@@ -33,7 +35,7 @@ function name(o) { return o?.customer_name || [o?.first_name, o?.last_name].filt
 function pay(o) { const p = String(o?.payment || "").toLowerCase(); return p === "card_manual" ? "💳 Karta o‘tkazmasi" : p === "click" ? "📲 Click" : p === "payme" ? "📱 Payme" : o?.payment || "—"; }
 function payStatus(o) { const p = String(o?.payment_status || "pending").toLowerCase(); return p === "verified" ? "✅ Tasdiqlangan" : p === "rejected" ? "❌ Rad etilgan" : p === "receipt_uploaded" ? "🧾 Chek yuklangan — tekshiruv kutilmoqda" : "⏳ Kutilmoqda"; }
 function items(o) { return (Array.isArray(o?.items) ? o.items : []).slice(0, 12).map((x, i) => `${i + 1}. ${x?.name || x?.title || x?.product_name || "Mahsulot"} × ${Number(x?.quantity || x?.qty || 1)}${x?.price != null ? ` — ${money(x.price)}` : ""}`); }
-function text(o, title) {
+function text(o, title = "🧾 CHEK YUKLANDI") {
   const lines = items(o);
   return `${title}\n\n🛒 №: ${o?.order_number || o?.id || "—"}\n👤 Mijoz: ${name(o)}\n📞 Telefon: ${o?.phone || "—"}\n💰 Jami: ${money(o?.total)}\n💳 To‘lov: ${pay(o)}\n🔎 To‘lov holati: ${payStatus(o)}\n📦 Status: ${o?.status || "⏳ Buyurtma kutilmoqda"}\n📍 Manzil: ${typeof o?.address === "string" ? o.address : "Buyurtmada mavjud"}${lines.length ? `\n\n${lines.join("\n")}` : ""}`;
 }
@@ -56,17 +58,20 @@ async function getImage(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!r.ok || !String(r.headers.get("content-type") || "").toLowerCase().startsWith("image/")) return null;
-    const b = Buffer.from(await r.arrayBuffer()); return b.length ? b : null;
+    const b = Buffer.from(await r.arrayBuffer());
+    return b.length ? b : null;
   } catch { return null; }
 }
 async function orderImage(o) {
   const urls = [];
   const seen = new Set();
   for (const item of Array.isArray(o?.items) ? o.items : []) {
-    const u = imageUrl(item); if (u && !seen.has(u)) { seen.add(u); urls.push(u); }
+    const u = imageUrl(item);
+    if (u && !seen.has(u)) { seen.add(u); urls.push(u); }
     if (urls.length >= 8) break;
   }
-  const receipt = await receiptUrl(o); if (receipt && !seen.has(receipt)) urls.push(receipt);
+  const receipt = await receiptUrl(o);
+  if (receipt && !seen.has(receipt)) urls.push(receipt);
   const buffers = [];
   for (const u of urls.slice(0, 9)) { const b = await getImage(u); if (b) buffers.push(b); }
   if (!buffers.length) return null;
@@ -82,9 +87,11 @@ async function sendPhoto(chatId, image, caption, markup) {
   form.append("chat_id", String(chatId)); form.append("caption", caption.slice(0, 1024)); form.append("reply_markup", JSON.stringify(markup));
   form.append("photo", new Blob([image], { type: "image/jpeg" }), `guli_${Date.now()}.jpg`);
   const r = await fetch(`https://api.telegram.org/bot${ADMIN_TOKEN}/sendPhoto`, { method: "POST", body: form });
-  const j = await r.json().catch(() => null); if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`); return j.result;
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`);
+  return j.result;
 }
-async function sendOrder(chatId, o, title) {
+async function sendOrder(chatId, o, title = "🧾 CHEK YUKLANDI") {
   const caption = text(o, title); const image = await orderImage(o);
   if (image) return sendPhoto(chatId, image, caption.slice(0, 1024), keyboard(o));
   return tg("sendMessage", { chat_id: chatId, text: caption, disable_web_page_preview: true, reply_markup: keyboard(o) });
@@ -135,7 +142,7 @@ async function callback(c) {
       await tg("answerCallbackQuery", { callback_query_id: c.id, text: "To‘lov bo‘yicha qaror allaqachon qabul qilingan", show_alert: false }); return;
     }
     const { error } = await db.rpc("admin_payment_decision", { p_order_id: orderId, p_payment_status: decision }); if (error) throw error;
-    const o = await getOrder(orderId); if (!o) throw new Error("Yangilangan buyurtma topilmadi");
+    const o = await getOrder(orderId);
     await claim(`order:${o.id}:${signature(o)}:${chatId}`, "order", o.id);
     state.orders.set(String(o.id), signature(o));
     await saveMessage(o.id, chatId, c?.message?.message_id);
@@ -169,23 +176,23 @@ async function poll() {
   const ids = await adminIds(); if (!ids.length) return;
   for (const o of os || []) {
     const id = String(o.id), sig = signature(o), prev = state.orders.get(id);
-    if (prev === undefined) {
-      state.orders.set(id, sig);
-      for (const chatId of ids) {
-        const key = `order:${id}:${sig}:${chatId}`; if (!(await claim(key, "order", id))) continue;
-        try { const sent = await sendOrder(chatId, o, "🛒 YANGI ORDER"); await saveMessage(id, chatId, sent?.message_id); } catch (e) { await release(key); console.warn("[Admin bot] order send:", e.message); }
-      }
-    } else if (prev !== sig) {
+    // IMPORTANT: order creation is intentionally silent for admins.
+    // Only a receipt upload creates the admin notification.
+    if (prev === undefined) { state.orders.set(id, sig); continue; }
+    if (prev !== sig) {
       state.orders.set(id, sig);
       let p = {}; try { p = JSON.parse(prev); } catch {}
       const paymentChanged = p.payment_status !== o.payment_status;
-      const title = paymentChanged ? (o.payment_status === "verified" ? "💳 TO‘LOV TASDIQLANDI" : o.payment_status === "rejected" ? "💳 TO‘LOV RAD ETILDI" : "🧾 CHEK YUKLANDI") : "📦 ORDER STATUS O‘ZGARDI";
+      const receiptUploaded = String(o.payment_status || "").toLowerCase() === "receipt_uploaded" && String(o.payment_receipt_path || "").trim();
+      const title = receiptUploaded ? "🧾 CHEK YUKLANDI" : paymentChanged ? (o.payment_status === "verified" ? "💳 TO‘LOV TASDIQLANDI" : o.payment_status === "rejected" ? "💳 TO‘LOV RAD ETILDI" : "🧾 CHEK YUKLANDI") : "📦 ORDER STATUS O‘ZGARDI";
       for (const chatId of ids) {
-        const key = `order:${id}:${sig}:${chatId}`; if (!(await claim(key, "order", id))) continue;
+        const key = `order:${id}:${sig}:${chatId}`; if (!(await claim(key, "order", o.id))) continue;
         try {
+          // Receipt upload has no previous admin message, so create the receipt-first message.
+          // Later verification/rejection edits this exact message.
           const mid = await findMessage(id, chatId);
           if (mid) await editPhoto(chatId, mid, o, title);
-          else { const sent = await sendOrder(chatId, o, title); await saveMessage(id, chatId, sent?.message_id); }
+          else if (receiptUploaded || paymentChanged) { const sent = await sendOrder(chatId, o, title); await saveMessage(id, chatId, sent?.message_id); }
         } catch (e) { await release(key); console.warn("[Admin bot] order update:", e.message); }
       }
     }
@@ -201,7 +208,7 @@ async function poll() {
   }
 }
 if (ADMIN_TOKEN && db) {
-  console.log("[Admin Telegram bot] single-message order bridge enabled.");
+  console.log("[Admin Telegram bot] receipt-first single-message order bridge enabled.");
   setTimeout(() => { void updates().catch(e => console.warn("[Admin bot] updates:", e.message)); void poll().catch(e => console.warn("[Admin bot] poll:", e.message)); }, 1500);
   setInterval(() => void updates().catch(e => console.warn("[Admin bot] updates:", e.message)), 3000);
   setInterval(() => void poll().catch(e => console.warn("[Admin bot] poll:", e.message)), 2500);
