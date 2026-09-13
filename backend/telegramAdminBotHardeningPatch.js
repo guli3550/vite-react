@@ -11,10 +11,11 @@
   if (!nativeFetch || globalThis.__GULI_ADMIN_BOT_HARDENING__) return;
   globalThis.__GULI_ADMIN_BOT_HARDENING__ = true;
 
-  async function claimChatText(text) {
+  async function claimChatText(chatId, text) {
     const normalized = String(text || '').trim();
     if (!db || !/^💬 ONLINE CHAT/i.test(normalized)) return true;
-    const key = `admin-online-chat:${crypto.createHash('sha256').update(normalized).digest('hex')}`;
+    const minute = Math.floor(Date.now() / 60000);
+    const key = `admin-online-chat:${crypto.createHash('sha256').update(`${chatId}|${minute}|${normalized}`).digest('hex')}`;
     try {
       const { error } = await db.from('telegram_admin_bot_events').insert({ event_key: key, event_type: 'online_chat', order_id: null });
       if (!error) return true;
@@ -49,7 +50,7 @@
         const raw = typeof init.body === 'string' ? init.body : '';
         const payload = raw ? JSON.parse(raw) : null;
         if (payload?.text && /^💬 ONLINE CHAT/i.test(String(payload.text).trim())) {
-          const allow = await claimChatText(payload.text);
+          const allow = await claimChatText(payload.chat_id, payload.text);
           if (!allow) return new Response(JSON.stringify({ ok: true, result: { message_id: 0, __guli_duplicate: true } }), { status: 200, headers: { 'content-type': 'application/json' } });
         }
       } catch {}
