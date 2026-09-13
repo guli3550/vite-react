@@ -1,0 +1,20 @@
+/* Customer Buyurtmalarim: keep summary totals, remove the horizontal product image ribbon. */
+.ordersPageContainer .orderProductsListUnder {
+  display: none !important;
+}
+
+.ordersPageContainer .orderMain {
+  display: block !important;
+}
+
+/* Banner: restore image-first presentation without overlay copy/buttons. */
+.hero .heroBadge,
+.hero .heroTitle,
+.hero .heroSubtitle,
+.hero .heroCtaWrap,
+.heroSlideItem .heroBadge,
+.heroSlideItem .heroTitle,
+.heroSlideItem .heroSubtitle,
+.heroSlideItem .heroCtaWrap {
+  display: none !important;
+}
