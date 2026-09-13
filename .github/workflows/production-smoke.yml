@@ -78,10 +78,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl -sS -o /tmp/orders.json -w '%{http_code}' --max-time 30 "${GATEWAY_URL}/api/orders")"
-          cat /tmp/orders.json
-          [[ "$code" == "401" ]]
-          echo "Customer auth guard OK"
+          for attempt in {1..12}; do
+            code="$(curl -sS -o /tmp/orders.json -w '%{http_code}' --max-time 30 "${GATEWAY_URL}/api/orders")"
+            echo "Customer order auth check attempt ${attempt}: HTTP ${code}"
+            cat /tmp/orders.json
+            if [[ "$code" == "401" ]]; then
+              echo "Customer auth guard OK"
+              exit 0
+            fi
+            if [[ "$attempt" -lt 12 ]]; then
+              echo "Backend deployment may still be propagating; retrying in 10s..."
+              sleep 10
+            fi
+          done
+          echo "Customer auth guard did not reach HTTP 401 after deployment propagation window."
+          exit 1
 
       - name: Check authenticated card checkout routes are mounted and protected
         shell: bash
