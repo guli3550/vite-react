@@ -1,5 +1,5 @@
-// Secure customer order history for browser guests and Telegram customers.
-// This endpoint is read-only and scopes results strictly to the authenticated customer id.
+// Secure customer order history for browser-authenticated users, Telegram customers, and legacy guest sessions.
+// The same canonical /api/orders route serves all supported customer identities.
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
@@ -32,7 +32,7 @@ function telegramUser(raw) {
     if (!safeEqual(hash, expected)) return null;
     const user = JSON.parse(p.get('user') || '{}');
     const id = Number(user.id);
-    return Number.isSafeInteger(id) && id > 0 ? { id } : null;
+    return Number.isSafeInteger(id) && id > 0 ? { type: 'telegram', id } : null;
   } catch { return null; }
 }
 
@@ -45,12 +45,24 @@ function guestUser(token) {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     const id = Number(data.guestId);
     if (!Number.isSafeInteger(id) || id >= 0 || Number(data.exp) < Date.now()) return null;
-    return { id };
+    return { type: 'guest', id };
   } catch { return null; }
 }
 
-function customer(req) {
-  return telegramUser(req.headers['x-telegram-init-data'] || '') || guestUser(req.headers['x-guli-guest-token'] || '');
+async function browserUser(req) {
+  if (!supabase) return null;
+  const header = String(req.headers.authorization || '');
+  if (!header.startsWith('Bearer ')) return null;
+  const token = header.slice(7).trim();
+  if (!token) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  return error || !data?.user?.id ? null : { type: 'auth', id: String(data.user.id) };
+}
+
+async function customer(req) {
+  return telegramUser(req.headers['x-telegram-init-data'] || '')
+    || guestUser(req.headers['x-guli-guest-token'] || '')
+    || await browserUser(req);
 }
 
 function mapOrder(row) {
@@ -78,16 +90,20 @@ function mapOrder(row) {
 }
 
 async function listOrders(req, res) {
-  const user = customer(req);
+  const user = await customer(req);
   if (!user) return res.status(401).json({ success: false, message: 'Mijoz sessiyasi topilmadi.' });
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('orders')
       .select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
-      .eq('telegram_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100);
+
+    if (user.type === 'auth') query = query.eq('auth_user_id', user.id);
+    else query = query.eq('telegram_id', user.id);
+
+    const { data, error } = await query;
     if (error) throw error;
     res.setHeader('Cache-Control', 'private, no-store');
     return res.json({ success: true, data: (data || []).map(mapOrder) });
