@@ -21,6 +21,21 @@ export function getSupabaseConfig(): { url: string; anonKey: string } {
   return { url, anonKey };
 }
 
+function mirrorSession(session: { access_token?: string | null; refresh_token?: string | null } | null) {
+  try {
+    const accessToken = String(session?.access_token || "").trim();
+    if (accessToken) {
+      localStorage.setItem("guli_access_token", accessToken);
+      (window as any).__GULI_SUPABASE_ACCESS_TOKEN = accessToken;
+      if (session?.refresh_token) localStorage.setItem("guli_refresh_token", session.refresh_token);
+    } else {
+      delete (window as any).__GULI_SUPABASE_ACCESS_TOKEN;
+    }
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
 export function getSupabase(): SupabaseClient | null {
   if (cachedClient) return cachedClient;
 
@@ -40,13 +55,17 @@ export function getSupabase(): SupabaseClient | null {
       },
     });
 
+    // Immediately mirror the current Supabase session. This is intentionally
+    // exposed only in memory for browser runtime patches that cannot import TS.
+    void cachedClient.auth.getSession().then(({ data: { session } }) => mirrorSession(session));
+
     // Supabase can silently refresh the JWT while the app is open. Keep the
     // legacy GULI token mirrors synchronized so backend API calls do not keep
     // sending an expired access token.
     cachedClient.auth.onAuthStateChange((_event, session) => {
+      mirrorSession(session);
       try {
         if (session?.access_token) {
-          localStorage.setItem("guli_access_token", session.access_token);
           if (session.refresh_token) {
             localStorage.setItem("guli_refresh_token", session.refresh_token);
           }
@@ -162,6 +181,7 @@ export async function signOutEverywhere(): Promise<void> {
     localStorage.removeItem("guli_refresh_token");
     localStorage.removeItem("guli_auth_user");
     localStorage.removeItem("guli_supabase_auth_token");
+    try { delete (window as any).__GULI_SUPABASE_ACCESS_TOKEN; } catch {}
     // Clean up any legacy plain text passwords or tokens if found
     localStorage.removeItem("guli_registered_users");
     localStorage.removeItem("guli_guest_token");
