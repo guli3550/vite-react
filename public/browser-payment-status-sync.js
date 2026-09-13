@@ -38,12 +38,13 @@
       const raw = localStorage.getItem('guli_chat_messages');
       const list = raw ? JSON.parse(raw) : [];
       const messages = Array.isArray(list) ? list : [];
+      const number = String(order.order_number || order.id || '—');
       const text = kind === 'verified'
-        ? `✅ To‘lov tasdiqlandi!\n\nBuyurtma № ${order.id}\nSumma: ${Number(order.total || 0).toLocaleString('uz-UZ')} so‘m\n\nBuyurtma holati: ${order.status || 'Qabul qilindi'}`
+        ? `✅ To‘lov tasdiqlandi!\n\nBuyurtma № ${number}\nSumma: ${Number(order.total || 0).toLocaleString('uz-UZ')} so‘m\n\nBuyurtma holati: ${order.status || 'Qabul qilindi'}`
         : kind === 'rejected'
-          ? `⚠️ To‘lov cheki rad etildi.\n\nBuyurtma № ${order.id}\nIltimos, to‘lov chekini qayta yuboring.`
-          : `🧾 Chek qabul qilindi.\n\nBuyurtma № ${order.id}\nAdmin tekshiruvi kutilmoqda.`;
-      const key = `payment-${order.id}-${kind}-${order.updated_at || order.status}`;
+          ? `⚠️ To‘lov cheki rad etildi.\n\nBuyurtma № ${number}\nIltimos, to‘lov chekini qayta yuboring.`
+          : `🧾 Chek qabul qilindi.\n\nBuyurtma № ${number}\nAdmin tekshiruvi kutilmoqda.`;
+      const key = `payment-${number}-${kind}-${order.updated_at || order.status}`;
       if (!messages.some(m => String(m.id) === key)) {
         messages.push({ id: key, sender: 'admin', text, timestamp: new Date().toISOString(), read: false, userId: order.auth_user_id || undefined, type: 'text' });
         localStorage.setItem('guli_chat_messages', JSON.stringify(messages));
@@ -62,17 +63,18 @@
       if (!r.ok) return;
       const j = await r.json().catch(() => null);
       if (!j?.success || !Array.isArray(j.data)) return;
-      const current = j.data.map(o => ({ id: String(o.order_number || o.id || ''), status: String(o.status || ''), payment: String(o.payment || ''), payment_status: String(o.payment_status || 'pending'), updated_at: String(o.updated_at || ''), total: Number(o.total || 0), auth_user_id: o.auth_user_id || null })).filter(o => o.id);
+      const current = j.data.map(o => ({ ...o, id: String(o.id || ''), order_number: String(o.order_number || o.id || '') })).filter(o => o.order_number);
       let previous = [];
       try { previous = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch {}
       if (!Array.isArray(previous)) previous = [];
-      const oldMap = new Map(previous.map(o => [o.id, o]));
+      const oldMap = new Map(previous.map(o => [String(o.order_number || o.id), o]));
       for (const next of current) {
-        const old = oldMap.get(next.id);
+        const key = String(next.order_number);
+        const old = oldMap.get(key);
         if (!old || old.payment_status === next.payment_status) continue;
-        if (next.payment_status === 'verified') { toast(`✅ To‘lov tasdiqlandi\n${next.id}\nBuyurtma: ${next.status || 'Qabul qilindi'}`); pushWebNotification(next, 'verified'); }
-        else if (next.payment_status === 'rejected') { toast(`⚠️ To‘lov cheki rad etildi\n${next.id}\nChekni qayta yuboring.`); pushWebNotification(next, 'rejected'); }
-        else if (next.payment_status === 'receipt_uploaded') { toast(`🧾 Chek qabul qilindi\n${next.id}\nAdmin tekshiruvi kutilmoqda.`); pushWebNotification(next, 'receipt_uploaded'); }
+        if (next.payment_status === 'verified') { toast(`✅ To‘lov tasdiqlandi\n${key}\nBuyurtma: ${next.status || 'Qabul qilindi'}`); pushWebNotification(next, 'verified'); }
+        else if (next.payment_status === 'rejected') { toast(`⚠️ To‘lov cheki rad etildi\n${key}\nChekni qayta yuboring.`); pushWebNotification(next, 'rejected'); }
+        else if (next.payment_status === 'receipt_uploaded') { toast(`🧾 Chek qabul qilindi\n${key}\nAdmin tekshiruvi kutilmoqda.`); pushWebNotification(next, 'receipt_uploaded'); }
       }
       localStorage.setItem(KEY, JSON.stringify(current));
     } catch {} finally { running = false; }
