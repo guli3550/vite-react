@@ -7,8 +7,13 @@
   let busy = false;
 
   function getAccessToken() {
-    const token = String(localStorage.getItem('guli_access_token') || '').trim();
-    return token;
+    const direct = String(localStorage.getItem('guli_access_token') || '').trim();
+    if (direct) return direct;
+    try {
+      const raw = localStorage.getItem('guli_supabase_auth_token');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return String(parsed?.access_token || parsed?.currentSession?.access_token || '').trim();
+    } catch { return ''; }
   }
 
   const authHeaders = () => {
@@ -67,7 +72,7 @@
   async function submitBrowserCardOrder(button) {
     if (busy) return;
     const accessToken = getAccessToken();
-    if (!accessToken) return toast('Karta orqali to‘lov uchun avval Google/Email orqali kiring.');
+    if (!accessToken) return toast('Mijoz sessiyasi topilmadi. Email yoki Google orqali qayta kiring.');
 
     const phone = document.querySelector('.checkoutPage input[type="tel"]')?.value?.trim() || localStorage.getItem('guli_phone') || '';
     const items = cart();
@@ -90,19 +95,10 @@
       const orderResponse = await fetch(`${API}/api/auth/orders`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({
-          phone,
-          items,
-          address: addr,
-          payment: 'card_manual',
-          status: 'Qabul qilindi',
-          promo_code: promo() || null,
-        }),
+        body: JSON.stringify({ phone, items, address: addr, payment: 'card_manual', status: 'Qabul qilindi', promo_code: promo() || null }),
       });
       const orderResult = await orderResponse.json().catch(() => ({}));
-      if (!orderResponse.ok || !orderResult.success) {
-        throw new Error(orderResult.message || 'Buyurtmani yaratishda xatolik');
-      }
+      if (!orderResponse.ok || !orderResult.success) throw new Error(orderResult.message || 'Buyurtmani yaratishda xatolik');
 
       const order = Array.isArray(orderResult.data) ? orderResult.data[0] : orderResult.data;
       if (!order?.order_number) throw new Error('Buyurtma raqami qaytmadi.');
@@ -111,14 +107,10 @@
       const data = await readFile(file);
       const extension = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const receiptResponse = await fetch(`${API}/api/auth/orders/${encodeURIComponent(order.order_number)}/receipt`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ data, mimeType: file.type, extension }),
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ data, mimeType: file.type, extension }),
       });
       const receiptResult = await receiptResponse.json().catch(() => ({}));
-      if (!receiptResponse.ok || !receiptResult.success) {
-        throw new Error(receiptResult.message || 'Chekni yuborishda xatolik');
-      }
+      if (!receiptResponse.ok || !receiptResult.success) throw new Error(receiptResult.message || 'Chekni yuborishda xatolik');
 
       button.textContent = '✓ Qabul qilindi';
       localStorage.removeItem('cart');
@@ -129,9 +121,7 @@
       button.disabled = false;
       button.textContent = original;
       toast(error instanceof Error ? error.message : 'Buyurtma yaratishda xatolik');
-    } finally {
-      busy = false;
-    }
+    } finally { busy = false; }
   }
 
   function scan() {
@@ -139,11 +129,8 @@
     if (!button || button.dataset.guliBrowserCardFix === '1') return;
     button.dataset.guliBrowserCardFix = '1';
     button.addEventListener('click', (event) => {
-      // Telegram keeps the native Mini App checkout flow.
       if (window.Telegram?.WebApp?.initData) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation();
       void submitBrowserCardOrder(button);
     }, true);
   }
