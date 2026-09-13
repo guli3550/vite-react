@@ -7,13 +7,27 @@
   let busy = false;
 
   function getAccessToken() {
+    const memory = String(window.__GULI_SUPABASE_ACCESS_TOKEN || '').trim();
+    if (memory) return memory;
+
     const direct = String(localStorage.getItem('guli_access_token') || '').trim();
     if (direct) return direct;
+
     try {
-      const raw = localStorage.getItem('guli_supabase_auth_token');
-      const parsed = raw ? JSON.parse(raw) : null;
-      return String(parsed?.access_token || parsed?.currentSession?.access_token || '').trim();
-    } catch { return ''; }
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i) || '';
+        if (/supabase.*auth|auth.*token/i.test(key)) keys.push(key);
+      }
+      for (const key of ['guli_supabase_auth_token', ...keys]) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const token = String(parsed?.access_token || parsed?.currentSession?.access_token || parsed?.session?.access_token || '').trim();
+        if (token) return token;
+      }
+    } catch {}
+    return '';
   }
 
   const authHeaders = () => {
