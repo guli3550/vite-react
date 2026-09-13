@@ -9,7 +9,7 @@
   window.__GULI_ADMIN_SESSION_GUARD__ = true;
 
   var originalFetch = window.fetch;
-  window.fetch = async function () {
+  var customFetch = async function () {
     var response = await originalFetch.apply(this, arguments);
     try {
       var input = arguments[0];
@@ -27,4 +27,20 @@
     } catch (_) {}
     return response;
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true
+    });
+  } catch (_) {
+    try {
+      window.fetch = customFetch;
+    } catch (_) {
+      try {
+        globalThis.fetch = customFetch;
+      } catch (_) {}
+    }
+  }
 })();

@@ -26,12 +26,16 @@
   async function sendOrEditOrderMessage(order, telegramId, existingMessageId = null) {
     if (!telegramId || !order?.order_number) return null;
     const chatId = Number(telegramId), text = orderText(order);
-    try {
-      if (existingMessageId) {
+    if (existingMessageId) {
+      try {
         await telegramApi("editMessageText", { chat_id: chatId, message_id: Number(existingMessageId), text, parse_mode: "HTML", reply_markup: { inline_keyboard: [] }, disable_web_page_preview: true });
         return Number(existingMessageId);
+      } catch (err) {
+        if (/message is not modified/i.test(err.message)) return Number(existingMessageId);
+        console.warn("[Telegram bot] Edit in place failed, keeping single message:", err.message);
+        return Number(existingMessageId);
       }
-    } catch {}
+    }
     try {
       const sent = await telegramApi("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true });
       const messageId = Number(sent?.message_id || 0) || null;

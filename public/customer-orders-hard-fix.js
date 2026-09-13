@@ -33,12 +33,28 @@
     return response;
   }
 
-  window.fetch = async (input, init) => {
+  const customFetch = async (input, init) => {
     const url = String(typeof input === 'string' ? input : input?.url || '');
     const isOrders = /\/api\/(customer\/orders|orders)(?:[/?]|$)/.test(url);
     if (!isOrders) return nativeFetch(input, init);
     return patchResponse(await nativeFetch(input, init));
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true
+    });
+  } catch (_) {
+    try {
+      window.fetch = customFetch;
+    } catch (_) {
+      try {
+        globalThis.fetch = customFetch;
+      } catch (_) {}
+    }
+  }
 
   // Keep stale local order caches canonical as well.
   for (const key of ['guli_orders', 'orders']) {

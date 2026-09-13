@@ -38,7 +38,7 @@
   }
 
   var originalFetch = window.fetch.bind(window);
-  window.fetch = function (input, init) {
+  var customFetch = function (input, init) {
     if (!protectedCustomerUrl(input)) return originalFetch(input, init);
     var options = init ? Object.assign({}, init) : {};
     var headers = new Headers(options.headers || (input && input.headers) || {});
@@ -57,4 +57,20 @@
     options.cache = 'no-store';
     return originalFetch(input, options);
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true
+    });
+  } catch (_) {
+    try {
+      window.fetch = customFetch;
+    } catch (_) {
+      try {
+        globalThis.fetch = customFetch;
+      } catch (_) {}
+    }
+  }
 })();

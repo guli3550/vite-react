@@ -22,7 +22,7 @@
   }
 
   var nativeFetch = window.fetch.bind(window);
-  window.fetch = async function (input, init) {
+  var customFetch = async function (input, init) {
     var res = await nativeFetch(input, init);
     try {
       var url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -40,6 +40,22 @@
       return res;
     }
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: customFetch,
+      writable: true,
+      configurable: true
+    });
+  } catch (_) {
+    try {
+      window.fetch = customFetch;
+    } catch (_) {
+      try {
+        globalThis.fetch = customFetch;
+      } catch (_) {}
+    }
+  }
 
   // Repair stale local order cards created by older builds.
   function repairStorage() {

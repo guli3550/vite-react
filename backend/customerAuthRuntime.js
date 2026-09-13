@@ -425,22 +425,38 @@ async function createOrder(req, res) {
     try {
       const { data, error } = await supabase.rpc('create_secure_order', {
         p_order: body,
-        p_telegram_id: telegramId
+        p_telegram_id: telegramId ? Number(telegramId) : null
       });
       if (!error && data) order = Array.isArray(data) ? data[0] : data;
     } catch (_e) {}
 
     if (!order) {
       const orderNum = body.order_number || `GULI-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
-      const { data: inserted, error: insErr } = await supabase.from('orders').insert({
-        ...body,
+      const safeInsert = {
         order_number: orderNum,
-        telegram_id: telegramId,
-        auth_user_id: authUserId,
+        telegram_id: telegramId ? Number(telegramId) : null,
+        auth_user_id: authUserId || null,
+        username: body.username || null,
+        first_name: body.first_name || body.customer_name || 'Mijoz',
+        phone: String(body.phone || '').trim() || '—',
+        items: Array.isArray(body.items) ? body.items : [],
+        subtotal: Number(body.subtotal || body.total || 0),
+        delivery: Number(body.delivery || 0),
+        discount: Number(body.discount || 0),
+        total: Number(body.total || 0),
+        address: body.address || null,
+        payment: body.payment || 'card',
+        status: body.status || "⏳ To'lovni tasdiqlash kutilmoqda",
+        payment_status: body.payment_status || 'pending',
+        promo_code: body.promo_code || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }).select().single();
-      if (insErr) throw insErr;
+      };
+      const { data: inserted, error: insErr } = await supabase.from('orders').insert(safeInsert).select().single();
+      if (insErr) {
+        console.error('Order fallback insert error:', insErr);
+        throw insErr;
+      }
       order = inserted;
     } else if (order?.id && authUserId && !order.auth_user_id) {
       await supabase.from('orders').update({
@@ -499,11 +515,20 @@ async function createOrder(req, res) {
  */
 async function listOrders(req, res) {
   const u = await customer(req);
-  if (!u) return fail(res, 401, 'Mijoz autentifikatsiyasi talab qilinadi.');
+  const orderNumsQuery = String(req.query.order_numbers || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (!u && !orderNumsQuery.length) {
+    return fail(res, 401, 'Mijoz autentifikatsiyasi talab qilinadi.');
+  }
+
   try {
-    const canonical = await resolveCanonicalCustomer(u);
-    const tgId = u.kind === 'telegram' ? u.telegram_id : (canonical?.telegram_id || null);
-    const authId = u.kind === 'auth' ? u.auth_user_id : (canonical?.auth_user_id || null);
+    const canonical = u ? await resolveCanonicalCustomer(u) : null;
+    const tgId = u?.kind === 'telegram' ? u.telegram_id : (canonical?.telegram_id || null);
+    const authId = u?.kind === 'auth' ? u.auth_user_id : (canonical?.auth_user_id || null);
+    const phone = canonical?.phone || u?.user?.phone || null;
 
     let q = supabase
       .from('orders')
@@ -511,20 +536,45 @@ async function listOrders(req, res) {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (tgId && authId) {
-      q = q.or(`telegram_id.eq.${tgId},auth_user_id.eq.${authId}`);
-    } else if (tgId) {
-      q = q.eq('telegram_id', tgId);
-    } else if (authId) {
-      q = q.eq('auth_user_id', authId);
+    const orConditions = [];
+    if (tgId) orConditions.push(`telegram_id.eq.${tgId}`);
+    if (authId) orConditions.push(`auth_user_id.eq.${authId}`);
+    if (phone && phone.length >= 7) orConditions.push(`phone.eq.${phone}`);
+    if (orderNumsQuery.length) {
+      for (const num of orderNumsQuery.slice(0, 30)) {
+        orConditions.push(`order_number.eq.${num}`);
+      }
+    }
+
+    if (orConditions.length > 0) {
+      q = q.or(orConditions.join(','));
     } else {
       return res.json({ success: true, data: [] });
     }
 
     const { data, error } = await q;
     if (error) throw error;
+
+    const formatted = await Promise.all(
+      (data || []).map(async (row) => {
+        let receiptUrl = '';
+        if (row.payment_receipt_path) {
+          try {
+            const { data: sData } = await supabase.storage
+              .from(RECEIPT_BUCKET)
+              .createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400);
+            receiptUrl = sData?.signedUrl || '';
+          } catch {}
+        }
+        return {
+          ...row,
+          receipt_url: receiptUrl || undefined
+        };
+      })
+    );
+
     res.setHeader('Cache-Control', 'private, no-store');
-    return res.json({ success: true, data: data || [] });
+    return res.json({ success: true, data: formatted });
   } catch (e) {
     console.error('[List orders error]', e);
     return fail(res, 500, 'Buyurtmalarni yuklashda xatolik.');

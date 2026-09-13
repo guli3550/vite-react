@@ -132,7 +132,7 @@
     return candidates[candidates.length - 1] || null;
   }
 
-  window.fetch = async function chatMediaFetch(input, init) {
+  const chatMediaFetch = async function (input, init) {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input?.url || "";
     if (!url.startsWith(`${API}/api/chat/messages`) || String(init?.method || "GET").toUpperCase() !== "POST") {
       return baseFetch(input, init);
@@ -171,6 +171,22 @@
     }
     return baseFetch(input, init);
   };
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      value: chatMediaFetch,
+      writable: true,
+      configurable: true
+    });
+  } catch (_) {
+    try {
+      window.fetch = chatMediaFetch;
+    } catch (_) {
+      try {
+        globalThis.fetch = chatMediaFetch;
+      } catch (_) {}
+    }
+  }
 
   function normalizeEventMessages() {
     const source = read();

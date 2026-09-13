@@ -238,13 +238,116 @@ app.post("/api/admin/login", (req, res) => {
   const token = signAdminToken({ role: "admin", sub: username, iat: Date.now(), exp: Date.now() + ADMIN_TOKEN_TTL });
   res.json({ success: true, token, expiresIn: ADMIN_TOKEN_TTL });
 });
-app.get("/api/admin/dashboard", requireAdmin, async (req, res) => { try { const [{ count: productsCount }, { count: ordersCount }, { count: usersCount }, revenueResult, todayResult, statusResult, lowStockResult, recentResult] = await Promise.all([supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),supabase.from("orders").select("id", { count: "exact", head: true }),supabase.from("telegram_users").select("telegram_id", { count: "exact", head: true }),supabase.from("orders").select("total"),supabase.from("orders").select("total").gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString()),supabase.from("orders").select("status"),supabase.from("products").select("id,name,stock").eq("active", true).lt("stock", 5).order("stock", { ascending: true }).limit(10),supabase.from("orders").select("id,order_number,first_name,username,total,status,created_at").order("created_at", { ascending: false }).limit(8)]); const sum=rows=>(rows||[]).reduce((n,r)=>n+Number(r.total||0),0); const statusCounts=(statusResult.data||[]).reduce((a,r)=>{a[r.status||"Noma’lum"]=(a[r.status||"Noma’lum"]||0)+1;return a},{}); res.json({success:true,data:{productsCount:productsCount||0,ordersCount:ordersCount||0,usersCount:usersCount||0,revenue:sum(revenueResult.data),todayRevenue:sum(todayResult.data),statusCounts,lowStock:lowStockResult.data||[],recentOrders:recentResult.data||[]}}); } catch(error){console.error("Admin dashboard error:",error);res.status(500).json({success:false,message:"Dashboardni yuklashda xatolik"})} });
+app.get("/api/admin/dashboard", requireAdmin, async (req, res) => { try { const [{ count: productsCount }, { count: ordersCount }, { count: usersCount }, revenueResult, todayResult, statusResult, lowStockResult, recentResult] = await Promise.all([supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),supabase.from("orders").select("id", { count: "exact", head: true }),supabase.from("telegram_users").select("telegram_id", { count: "exact", head: true }),supabase.from("orders").select("total"),supabase.from("orders").select("total").gte("created_at", new Date(new Date().setHours(0,0,0,0)).toISOString()),supabase.from("orders").select("status"),supabase.from("products").select("id,name,stock").eq("active", true).lt("stock", 5).order("stock", { ascending: true }).limit(10),supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(8)]); const sum=rows=>(rows||[]).reduce((n,r)=>n+Number(r.total||0),0); const statusCounts=(statusResult.data||[]).reduce((a,r)=>{a[r.status||"Noma’lum"]=(a[r.status||"Noma’lum"]||0)+1;return a},{}); res.json({success:true,data:{productsCount:productsCount||0,ordersCount:ordersCount||0,usersCount:usersCount||0,revenue:sum(revenueResult.data),todayRevenue:sum(todayResult.data),statusCounts,lowStock:lowStockResult.data||[],recentOrders:recentResult.data||[]}}); } catch(error){console.error("Admin dashboard error:",error);res.status(500).json({success:false,message:"Dashboardni yuklashda xatolik"})} });
 app.get("/api/admin/products", requireAdmin, async (req,res)=>{try{const {data,error}=await supabase.from("products").select("*").order("sort_order",{ascending:true}).order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Admin mahsulotlarini yuklashda xatolik"})}});
 app.post("/api/admin/products",requireAdmin,async(req,res)=>{try{const payload=productPayload(req.body);payload.product_code=await ensureProductCode(payload);if(!payload.name||payload.price<0)return res.status(400).json({success:false,message:"Mahsulot nomi va narxi noto‘g‘ri"});const {data,error}=await supabase.from("products").insert([payload]).select("*").single();if(error)throw error;res.status(201).json({success:true,data})}catch(error){console.error(error);res.status(500).json({success:false,message:"Mahsulot yaratishda xatolik"})}});
 app.put("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const payload=productPayload(req.body);payload.product_code=await ensureProductCode(payload);const {data,error}=await supabase.from("products").update(payload).eq("id",req.params.id).select("*").single();if(error)throw error;res.json({success:true,data})}catch(error){console.error(error);res.status(500).json({success:false,message:"Mahsulotni yangilashda xatolik"})}});
 app.delete("/api/admin/products/:id",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("products").update({active:false,updated_at:new Date().toISOString()}).eq("id",req.params.id).select("*").single();if(error)throw error;res.json({success:true,data})}catch(error){res.status(500).json({success:false,message:"Mahsulotni yashirishda xatolik"})}});
-app.get("/api/admin/orders",requireAdmin,async(req,res)=>{try{const {data,error}=await supabase.from("orders").select("*").order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));if(error)throw error;res.json({success:true,data:data||[]})}catch(error){res.status(500).json({success:false,message:"Admin buyurtmalarini yuklashda xatolik"})}});
-app.put("/api/admin/orders/:id",requireAdmin,async(req,res)=>{try{const status=ADMIN_STATUSES.includes(String(req.body?.status))?String(req.body.status):"Qabul qilindi";const {data,error}=await supabase.from("orders").update({status,updated_at:new Date().toISOString()}).eq("id",req.params.id).select("*").single();if(error)throw error;res.json({success:true,data})}catch(error){res.status(500).json({success:false,message:"Buyurtma statusini yangilashda xatolik"})}});
+function normalizeAdminItems(items) {
+  if (!items) return [];
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch { return []; }
+  }
+  if (!Array.isArray(items)) return [];
+  return items.map(it => {
+    if (!it) return it;
+    const prod = it.product || it.product_data || it.productDetails || {};
+    const img = it.image || it.image_url || it.photo || prod.image || prod.image_url || (Array.isArray(prod.images) ? prod.images[0] : '') || (Array.isArray(it.images) ? it.images[0] : '') || '';
+    const name = it.name || it.title || prod.name || prod.title || 'Mahsulot';
+    const code = it.product_code || prod.product_code || '';
+    const price = Number(it.price != null ? it.price : prod.price || 0);
+    return {
+      ...it,
+      image: img,
+      name,
+      product_code: code,
+      price,
+      product: {
+        ...prod,
+        name: prod.name || name,
+        image: prod.image || img,
+        price: prod.price != null ? prod.price : price,
+        product_code: prod.product_code || code,
+      }
+    };
+  });
+}
+
+app.get("/api/admin/orders", requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(Math.min(Number(req.query.limit) || 200, 500));
+    if (error) throw error;
+    const formatted = (data || []).map(row => ({
+      ...row,
+      items: normalizeAdminItems(row.items)
+    }));
+    res.json({ success: true, data: formatted });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Admin buyurtmalarini yuklashda xatolik" });
+  }
+});
+
+app.get("/api/admin/orders/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    let { data, error } = await supabase.from("orders").select("*").eq("id", id).maybeSingle();
+    if (!data) {
+      const byNum = await supabase.from("orders").select("*").eq("order_number", id).maybeSingle();
+      data = byNum.data;
+    }
+    if (!data) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
+    data.items = normalizeAdminItems(data.items);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Buyurtmani olishda xatolik" });
+  }
+});
+
+app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => {
+  try {
+    const status = ADMIN_STATUSES.includes(String(req.body?.status)) ? String(req.body.status) : "Qabul qilindi";
+    const nowIso = new Date().toISOString();
+    const updatePayload = {
+      status,
+      updated_at: nowIso,
+      status_updated_at: nowIso,
+    };
+    if (status === "Qabul qilindi") {
+      updatePayload.payment_status = "verified";
+      updatePayload.payment_verified_at = nowIso;
+    }
+
+    let { data, error } = await supabase
+      .from("orders")
+      .update(updatePayload)
+      .eq("id", req.params.id)
+      .select("*")
+      .maybeSingle();
+
+    if (!data) {
+      const byNum = await supabase
+        .from("orders")
+        .update(updatePayload)
+        .eq("order_number", req.params.id)
+        .select("*")
+        .maybeSingle();
+      data = byNum.data;
+      error = byNum.error;
+    }
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
+    data.items = normalizeAdminItems(data.items);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error("Update admin order error:", error);
+    res.status(500).json({ success: false, message: "Buyurtma statusini yangilashda xatolik" });
+  }
+});
 
 app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
   try {

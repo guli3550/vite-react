@@ -1713,12 +1713,35 @@ export default function App() {
   const loadOrders = useCallback(
     async (silent = false) => {
       const token = localStorage.getItem("guli_access_token") || "";
-      if (!telegramUser?.id && !token) return [];
+      const localOrdersRaw = localStorage.getItem("guli_orders") || localStorage.getItem("orders") || "[]";
+      let localOrderNumbers: string[] = [];
+      try {
+        const parsed = JSON.parse(localOrdersRaw);
+        if (Array.isArray(parsed)) {
+          localOrderNumbers = parsed
+            .map((x: any) => String(x.order_number || x.id || ""))
+            .filter((v: string) => v && v !== "undefined" && v !== "null");
+        }
+      } catch {}
+
+      if (!telegramUser?.id && !token && !localOrderNumbers.length) return [];
       if (!silent) setOrdersLoading(true);
       try {
-        const url = telegramUser?.id
-          ? `${API_URL}/api/orders?telegram_id=${telegramUser.id}`
-          : `${API_URL}/api/customer/orders`;
+        let url = "";
+        const queryParams = new URLSearchParams();
+        if (localOrderNumbers.length) {
+          queryParams.set("order_numbers", localOrderNumbers.slice(0, 30).join(","));
+        }
+
+        if (telegramUser?.id) {
+          queryParams.set("telegram_id", String(telegramUser.id));
+          url = `${API_URL}/api/orders?${queryParams.toString()}`;
+        } else if (token) {
+          url = `${API_URL}/api/customer/orders${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+        } else {
+          url = `${API_URL}/api/orders?${queryParams.toString()}`;
+        }
+
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
         const tgData = (window as any).Telegram?.WebApp?.initData;
@@ -1784,15 +1807,18 @@ export default function App() {
   }, [loadProducts]);
 
   useEffect(() => {
-    const token = localStorage.getItem("guli_access_token");
-    if (telegramUser?.id || token || authUser) {
+    loadOrders(false).catch(() => {});
+    const interval = setInterval(() => {
+      loadOrders(true).catch(() => {});
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [loadOrders]);
+
+  useEffect(() => {
+    if (page === "orders") {
       loadOrders(false).catch(() => {});
-      const interval = setInterval(() => {
-        loadOrders(true).catch(() => {});
-      }, 6000);
-      return () => clearInterval(interval);
     }
-  }, [telegramUser?.id, authUser, loadOrders]);
+  }, [page, loadOrders]);
   useEffect(() => {
     const w = tg();
     if (!w?.onEvent || !telegramUser?.id) return;
@@ -2431,6 +2457,9 @@ export default function App() {
         try {
           localStorage.setItem("orders", JSON.stringify(next));
           localStorage.setItem("guli_orders", JSON.stringify(next));
+          const nums = JSON.parse(localStorage.getItem("guli_my_order_numbers") || "[]");
+          const updatedNums = [...new Set([createdOrderNumber, createdOrderId, ...(Array.isArray(nums) ? nums : [])])];
+          localStorage.setItem("guli_my_order_numbers", JSON.stringify(updatedNums));
         } catch {}
         return next;
       });
@@ -2678,7 +2707,7 @@ export default function App() {
   };
 
   const ordersPage = () => {
-    if (!isCustomerAuthenticated) {
+    if (!isCustomerAuthenticated && orders.length === 0 && !ordersLoading) {
       return (
         <main className="page" style={{ padding: "36px 16px", textAlign: "center", maxWidth: "480px", margin: "0 auto" }}>
           <div
@@ -2963,29 +2992,84 @@ export default function App() {
                     <div
                       className="orderMain"
                       onClick={() => {
-                        const item = o.items?.[0];
-                        if (item?.product) openProduct(item.product, "orders");
+                        setSelectedOrderId(selectedOrderId === o.id ? null : o.id);
                       }}
+                      style={{ cursor: "pointer" }}
                     >
-                      <div className="orderThumbGroup">
-                        <div className="orderThumb">
-                          {o.items?.[0]?.product ? (
-                            <img
-                              src={imageUrl(o.items[0].product)}
-                              alt={o.items[0].product.name}
-                            />
-                          ) : null}
-                        </div>
-                        {o.items && o.items.length > 1 ? (
-                          <span className="moreItemsPill">
-                            +{o.items.length - 1}
-                          </span>
-                        ) : null}
+                      <div
+                        className="orderThumbGroup"
+                        style={{
+                          display: "flex",
+                          gap: "8px",
+                          overflowX: "auto",
+                          maxWidth: "100%",
+                          paddingBottom: "4px",
+                          alignItems: "center",
+                        }}
+                      >
+                        {(o.items || []).map((it, idx) => {
+                          const prod = it.product;
+                          const img = prod ? imageUrl(prod) : ((it as any).image || "");
+                          return (
+                            <div
+                              key={idx}
+                              className="orderThumb"
+                              style={{
+                                flexShrink: 0,
+                                position: "relative",
+                                width: "64px",
+                                height: "72px",
+                                borderRadius: "8px",
+                                overflow: "hidden",
+                                border: "1px solid var(--border-color)",
+                                background: "#f8fafc",
+                                display: "grid",
+                                placeItems: "center",
+                              }}
+                              onClick={(e) => {
+                                if (prod) {
+                                  e.stopPropagation();
+                                  openProduct(prod, "orders");
+                                }
+                              }}
+                              title={prod?.name || (it as any).name || "Mahsulot"}
+                            >
+                              {img ? (
+                                <img
+                                  src={img}
+                                  alt={prod?.name || "Mahsulot"}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                />
+                              ) : (
+                                <span style={{ fontSize: "20px" }}>👗</span>
+                              )}
+                              {it.quantity && it.quantity > 1 ? (
+                                <span
+                                  style={{
+                                    position: "absolute",
+                                    bottom: "2px",
+                                    right: "2px",
+                                    background: "rgba(15, 23, 42, 0.8)",
+                                    color: "#ffffff",
+                                    fontSize: "10px",
+                                    padding: "1px 5px",
+                                    borderRadius: "4px",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  ×{it.quantity}
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
 
-                      <div className="orderInfoCol">
+                      <div className="orderInfoCol" style={{ marginTop: "4px" }}>
                         <h3 className="orderItemTitle">
-                          {o.items?.[0]?.product?.name || "Buyurtma"}
+                          {(o.items || []).length > 1
+                            ? `${o.items?.[0]?.product?.name || (o.items?.[0] as any)?.name || "Mahsulot"} va yana ${(o.items || []).length - 1} ta mahsulot`
+                            : o.items?.[0]?.product?.name || (o.items?.[0] as any)?.name || "Buyurtma"}
                         </h3>
                         <p className="orderMetaSummary">
                           {totalItemCount} ta mahsulot ·{" "}
@@ -2999,7 +3083,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="orderBottom">
+                    <div className="orderBottom" style={{ flexWrap: "wrap", gap: "8px" }}>
                       <span
                         className={`orderStatus ${recent ? "recent" : ""} status-${(o.status || "").toLowerCase().replace(/\s+/g, "-")}`}
                       >
@@ -3015,7 +3099,49 @@ export default function App() {
                           </span>
                         ) : null}
                       </span>
-                      <div className="orderActions">
+                      <div className="orderActions" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                        {/* Tezkor Chek yuklash / qayta yuklash tugmasi (Mijozga doim ochiq ko'rinadi) */}
+                        {o.payment === "card" || o.receipt_url ? (
+                          <label
+                            htmlFor={`quick-receipt-upload-${o.id}`}
+                            className="orderReceiptQuickBtn"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              padding: "6px 12px",
+                              borderRadius: "8px",
+                              background: o.receipt_url ? "rgba(16, 185, 129, 0.1)" : "var(--primary-gradient, linear-gradient(135deg, #c9526b 0%, #a83d54 100%))",
+                              color: o.receipt_url ? "#059669" : "#ffffff",
+                              border: o.receipt_url ? "1px solid #10b981" : "none",
+                              fontSize: "11.5px",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                              boxShadow: o.receipt_url ? "none" : "0 2px 6px rgba(201, 82, 107, 0.25)",
+                            }}
+                            title={o.receipt_url ? "Chekni qayta yuklash yoki yangilash" : "To‘lov chekini yuklash"}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span>{reuploadingOrderId === o.id ? "⏳" : o.receipt_url ? "🔄" : "🧾"}</span>
+                            <span>{reuploadingOrderId === o.id ? "Yuklanmoqda..." : o.receipt_url ? "Chekni qayta yuklash" : "Chek yuklash"}</span>
+                            <input
+                              id={`quick-receipt-upload-${o.id}`}
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              disabled={reuploadingOrderId === o.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handleOrderReceiptReupload(o.id, file);
+                                }
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        ) : null}
+
                         {isCompleted ? (
                           <button
                             className="reorderButton"
@@ -3134,6 +3260,123 @@ export default function App() {
                               <small>Jami</small>
                               <b>{formatPrice(o.total)}</b>
                             </div>
+                          </div>
+
+                          {/* Xarid qilingan barcha mahsulotlar to'liq ro'yxati */}
+                          <div
+                            className="orderItemsDetailList"
+                            style={{
+                              marginTop: "12px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "8px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "12.5px",
+                                fontWeight: 750,
+                                color: "var(--text-color)",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                paddingBottom: "4px",
+                                borderBottom: "1px solid var(--border-color)",
+                              }}
+                            >
+                              <span>👗 Xarid qilingan mahsulotlar:</span>
+                              <span style={{ fontSize: "11px", color: "var(--muted-color)", fontWeight: 600 }}>
+                                {(o.items || []).length} xil mahsulot
+                              </span>
+                            </div>
+                            {(o.items || []).map((it, idx) => {
+                              const itemAny = it as any;
+                              const prod = it.product || itemAny.product_data || itemAny.productDetails;
+                              const img = prod ? imageUrl(prod) : (itemAny.image || "");
+                              const name = prod?.name || itemAny.name || "Mahsulot";
+                              const code = prod?.product_code || itemAny.product_code || "";
+                              const size = itemAny.selected_size || it.size || itemAny.size || "";
+                              const color = itemAny.selected_color || it.color || itemAny.color || "";
+                              const price = itemAny.price || prod?.price || 0;
+                              const qty = it.quantity || 1;
+
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "8px 10px",
+                                    borderRadius: "10px",
+                                    background: "rgba(0,0,0,0.02)",
+                                    border: "1px solid var(--border-color)",
+                                    cursor: prod ? "pointer" : "default",
+                                  }}
+                                  onClick={() => {
+                                    if (prod) openProduct(prod, "orders");
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: "48px",
+                                      height: "56px",
+                                      borderRadius: "8px",
+                                      overflow: "hidden",
+                                      flexShrink: 0,
+                                      background: "#f1f5f9",
+                                      display: "grid",
+                                      placeItems: "center",
+                                      border: "1px solid var(--border-color)",
+                                    }}
+                                  >
+                                    {img ? (
+                                      <img
+                                        src={img}
+                                        alt={name}
+                                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                      />
+                                    ) : (
+                                      <span style={{ fontSize: "20px" }}>👗</span>
+                                    )}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        fontSize: "13px",
+                                        fontWeight: 700,
+                                        whiteSpace: "nowrap",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        color: "var(--text-color)",
+                                      }}
+                                    >
+                                      {name}
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "var(--muted-color)", marginTop: "2px" }}>
+                                      {code ? (
+                                        <span style={{ color: "var(--primary)", fontWeight: 700 }}>
+                                          Kod: {code} ·{" "}
+                                        </span>
+                                      ) : null}
+                                      {size ? `O‘lcham: ${size} · ` : ""}
+                                      {color ? `Rang: ${color} · ` : ""}
+                                      Soni: {qty} dona
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                    <div style={{ fontSize: "13px", fontWeight: 800, color: "var(--text-color)" }}>
+                                      {formatPrice(price * qty)}
+                                    </div>
+                                    {qty > 1 && (
+                                      <div style={{ fontSize: "10.5px", color: "var(--muted-color)" }}>
+                                        {formatPrice(price)} / dona
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                           {o.address ? (
                             <div className="orderAddress" style={{ marginTop: "10px", padding: "10px 12px", background: "rgba(0,0,0,0.02)", borderRadius: "10px", border: "1px solid var(--border-color)" }}>

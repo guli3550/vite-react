@@ -5,7 +5,7 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
   (globalThis as any).__guliCustomerFetchPatched = true;
 
   const nativeFetch = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const customFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(
       typeof input === "string"
         ? input
@@ -30,6 +30,24 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
     }
     return nativeFetch(input, init);
   };
+
+  try {
+    Object.defineProperty(window, "fetch", {
+      value: customFetch,
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    try {
+      (window as any).fetch = customFetch;
+    } catch {
+      try {
+        (globalThis as any).fetch = customFetch;
+      } catch (err) {
+        console.warn("[GULI] Could not intercept fetch:", err);
+      }
+    }
+  }
 
   const tg = (window as any).Telegram?.WebApp?.initData || "";
   if (tg) {

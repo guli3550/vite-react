@@ -1928,6 +1928,7 @@ function OrderDrawer({
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [copiedCoords, setCopiedCoords] = useState(false);
   const codes = productCodes(order);
+  const [currentOrder, setCurrentOrder] = useState<Order>(order);
   const [realReceiptUrl, setRealReceiptUrl] = useState<string>(
     (order as any).receiptUrl || (order as any).receipt_url || ""
   );
@@ -1935,6 +1936,33 @@ function OrderDrawer({
   const [customerPhoto, setCustomerPhoto] = useState<string>(
     getResolvedCustomerPhoto(order)
   );
+
+  useEffect(() => {
+    setCurrentOrder(order);
+  }, [order]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const orderId = String(order.id || order.order_number || "");
+    const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
+
+    if (orderId && adminToken) {
+      fetch(`${base}/api/admin/orders/${encodeURIComponent(orderId)}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((j) => {
+          if (!cancelled && j?.success && j?.data) {
+            setCurrentOrder(j.data);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [order.id, order.order_number]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2450,50 +2478,95 @@ function OrderDrawer({
           </div>
 
           {/* Mahsulotlar Ro'yxati */}
-          <div className="orderDetailCard">
-            <h3 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 750 }}>
-              👗 Buyurtma mahsulotlari ({order.items?.length || 0} ta)
-            </h3>
-            {(order.items || []).map((it: any, i: number) => (
-              <div className="lineItem" key={i}>
-                {it.product?.image ? (
-                  <img
-                    src={it.product.image}
-                    alt={it.product?.name || "Mahsulot"}
-                    style={{ width: 48, height: 56, objectFit: "cover", borderRadius: 8 }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 48,
-                      height: 56,
-                      borderRadius: 8,
-                      background: "var(--bg-card-sub, #f1f5f9)",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: 20,
-                    }}
-                  >
-                    👗
+          {(() => {
+            const rawOrderItems = currentOrder.items || (currentOrder as any).products || order.items || [];
+            const parsedList = typeof rawOrderItems === "string"
+              ? (() => { try { return JSON.parse(rawOrderItems); } catch { return []; } })()
+              : (Array.isArray(rawOrderItems) ? rawOrderItems : []);
+            const normalizedList = parsedList.map((it: any) => {
+              const prod = it?.product || it?.product_data || it?.productDetails || {};
+              const img = it?.image || it?.image_url || it?.photo || prod.image || prod.image_url || (Array.isArray(prod.images) ? prod.images[0] : "") || "";
+              const name = it?.name || it?.title || prod.name || prod.title || "Mahsulot";
+              const code = it?.product_code || prod.product_code || "";
+              const price = Number(it?.price != null ? it.price : prod.price || 0);
+              const size = it?.selected_size || it?.size || prod.size || "";
+              const color = it?.selected_color || it?.color || prod.color || "";
+              const qty = it?.quantity || it?.qty || it?.count || 1;
+              return {
+                ...it,
+                image: img,
+                name,
+                product_code: code,
+                price,
+                size,
+                color,
+                quantity: qty,
+                product: {
+                  ...prod,
+                  name: prod.name || name,
+                  image: prod.image || img,
+                  product_code: prod.product_code || code,
+                  price: prod.price != null ? prod.price : price,
+                },
+              };
+            });
+
+            return (
+              <div className="orderDetailCard">
+                <h3 style={{ margin: "0 0 10px", fontSize: 13.5, fontWeight: 750 }}>
+                  👗 Buyurtma mahsulotlari ({normalizedList.length} ta)
+                </h3>
+                {normalizedList.length === 0 ? (
+                  <div style={{ padding: "12px", textAlign: "center", color: "var(--muted, #64748b)", fontSize: 12 }}>
+                    Mahsulot ma'lumotlari mavjud emas
                   </div>
+                ) : (
+                  normalizedList.map((it: any, i: number) => {
+                    const itemImg = it.image || it.product?.image;
+                    return (
+                      <div className="lineItem" key={i}>
+                        {itemImg ? (
+                          <img
+                            src={itemImg}
+                            alt={it.product?.name || "Mahsulot"}
+                            style={{ width: 48, height: 56, objectFit: "cover", borderRadius: 8 }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 48,
+                              height: 56,
+                              borderRadius: 8,
+                              background: "var(--bg-card-sub, #f1f5f9)",
+                              display: "grid",
+                              placeItems: "center",
+                              fontSize: 20,
+                            }}
+                          >
+                            👗
+                          </div>
+                        )}
+                        <div>
+                          <b style={{ fontSize: 13.5 }}>{it.product?.name || it.name || "Mahsulot"}</b>
+                          <small style={{ color: "var(--muted, #64748b)", fontSize: 11, marginTop: 4, display: "block" }}>
+                            {it.product?.product_code ? (
+                              <span style={{ color: "var(--rose, #e11d48)", fontWeight: 700 }}>
+                                Kod: {it.product.product_code} ·{" "}
+                              </span>
+                            ) : null}
+                            O‘lcham: {it.size || "—"} · Rang: {formatColorName(it.color) || "—"} · Soni: {it.quantity || 1} dona
+                          </small>
+                        </div>
+                        <strong style={{ fontSize: 13.5, color: "var(--ink, #0f172a)", whiteSpace: "nowrap" }}>
+                          {money(Number(it.product?.price || it.price || 0) * Number(it.quantity || 1))}
+                        </strong>
+                      </div>
+                    );
+                  })
                 )}
-                <div>
-                  <b style={{ fontSize: 13.5 }}>{it.product?.name || "Mahsulot"}</b>
-                  <small style={{ color: "var(--muted, #64748b)", fontSize: 11, marginTop: 4, display: "block" }}>
-                    {it.product?.product_code ? (
-                      <span style={{ color: "var(--rose, #e11d48)", fontWeight: 700 }}>
-                        Kod: {it.product.product_code} ·{" "}
-                      </span>
-                    ) : null}
-                    O‘lcham: {it.size || "—"} · Rang: {formatColorName(it.color) || "—"} · Soni: {it.quantity || 1} dona
-                  </small>
-                </div>
-                <strong style={{ fontSize: 13.5, color: "var(--ink, #0f172a)", whiteSpace: "nowrap" }}>
-                  {money(Number(it.product?.price || 0) * Number(it.quantity || 1))}
-                </strong>
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* To'liq Yetkazib Berish Manzili Qatorlari */}
           <div className="orderDetailCard">

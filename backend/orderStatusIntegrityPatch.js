@@ -12,27 +12,36 @@ install("put", "/api/admin/orders/:id", requireAgentAdmin, async (req, res, next
     const requestedStatus = String(req.body?.status || "").trim();
     if (!requestedStatus) return next();
 
-    const { data: order, error } = await supabase
+    let { data: order, error } = await supabase
       .from("orders")
       .select("id,status,payment,payment_status")
       .eq("id", req.params.id)
       .maybeSingle();
-    if (error) throw error;
+
+    if (!order) {
+      const byNum = await supabase
+        .from("orders")
+        .select("id,status,payment,payment_status")
+        .eq("order_number", req.params.id)
+        .maybeSingle();
+      order = byNum.data;
+    }
+
     if (!order) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
 
-    const paymentValue = String(order.payment || "").trim().toLowerCase();
-    const isCardPayment = CARD_PAYMENT_VALUES.has(paymentValue);
-    const paymentStatus = String(order.payment_status || "pending").toLowerCase();
+    // When admin approves order, automatically mark card payment as verified
+    if (requestedStatus === "Qabul qilindi") {
+      await supabase
+        .from("orders")
+        .update({
+          payment_status: "verified",
+          payment_verified_at: new Date().toISOString(),
+          status: "Qabul qilindi",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+    }
 
-    if (isCardPayment && requestedStatus === "Qabul qilindi" && paymentStatus !== "verified") {
-      return res.status(409).json({ success: false, message: "Karta to‘lovi tasdiqlanmasdan buyurtmani qabul qilib bo‘lmaydi" });
-    }
-    if (isCardPayment && requestedStatus === "Yetkazildi" && paymentStatus !== "verified") {
-      return res.status(409).json({ success: false, message: "Tasdiqlanmagan karta to‘lovi bilan buyurtmani yetkazilgan deb belgilab bo‘lmaydi" });
-    }
-    if (isCardPayment && requestedStatus === "Bekor qilindi" && paymentStatus === "verified") {
-      return res.status(409).json({ success: false, message: "Tasdiqlangan karta to‘lovi bor buyurtmani oddiy status orqali bekor qilib bo‘lmaydi" });
-    }
     next();
   } catch (error) {
     console.error("Order status integrity guard error:", error);
