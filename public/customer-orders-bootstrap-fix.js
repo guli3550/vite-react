@@ -1,5 +1,5 @@
 // Guarantees the legacy order guard sees the live Supabase session before React mounts.
-// This is intentionally a browser-only compatibility bridge; Supabase remains the source of truth.
+// Supabase remains the source of truth; this bridge must never force-refresh the app.
 (function () {
   'use strict';
   if (window.__GULI_ORDER_BOOTSTRAP_FIX__) return;
@@ -49,22 +49,6 @@
   var tries = 0;
   var timer = setInterval(function () {
     tries++;
-    if (mirror()) {
-      clearInterval(timer);
-      // React may already have mounted and returned an empty order list before auth initialized.
-      // Reload once so the normal App loadOrders path runs with the real session.
-      try {
-        if (!sessionStorage.getItem('guli_order_bootstrap_reloaded')) {
-          sessionStorage.setItem('guli_order_bootstrap_reloaded', '1');
-          location.reload();
-        }
-      } catch (_) {}
-    } else if (tries >= 40) {
-      clearInterval(timer);
-    }
+    if (mirror() || tries >= 40) clearInterval(timer);
   }, 250);
-
-  setTimeout(function () {
-    try { sessionStorage.removeItem('guli_order_bootstrap_reloaded'); } catch (_) {}
-  }, 15000);
 })();
