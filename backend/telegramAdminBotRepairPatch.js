@@ -1,0 +1,130 @@
+// Repairs the persistent admin order message after order/receipt changes.
+// Also guarantees customer payment notifications for admin-panel decisions.
+const { createClient } = require('@supabase/supabase-js');
+const sharp = require('sharp');
+
+const ADMIN_TOKEN = String(process.env.TELEGRAM_ADMIN_BOT_TOKEN || '').trim();
+const CUSTOMER_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
+const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
+const db = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+const state = globalThis.__GULI_ADMIN_BOT_REPAIR_STATE__ || { started: false, signatures: new Map() };
+globalThis.__GULI_ADMIN_BOT_REPAIR_STATE__ = state;
+
+async function tg(method, body, token = ADMIN_TOKEN) {
+  if (!token) return null;
+  const r = await fetch(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`);
+  return j.result;
+}
+function signature(o) { return JSON.stringify({ status: o?.status || '', payment_status: o?.payment_status || '', receipt: o?.payment_receipt_path || '' }); }
+function imageUrl(item) {
+  const product = item?.product || item?.product_data || item?.productDetails || {};
+  const xs = [item?.image, item?.image_url, item?.photo, ...(Array.isArray(item?.images) ? item.images : []), product?.image, product?.image_url, product?.photo, ...(Array.isArray(product?.images) ? product.images : [])];
+  return xs.map(v => String(v || '').trim()).find(v => /^https?:\/\//i.test(v)) || '';
+}
+async function receiptUrl(o) {
+  const path = String(o?.payment_receipt_path || '').replace(/^\/+/, '');
+  if (!path || !db || /\.pdf$/i.test(path)) return '';
+  const { data } = await db.storage.from('payment-receipts').createSignedUrl(path, 3600);
+  return data?.signedUrl || '';
+}
+async function getImage(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!r.ok || !String(r.headers.get('content-type') || '').toLowerCase().startsWith('image/')) return null;
+    return Buffer.from(await r.arrayBuffer());
+  } catch { return null; }
+}
+async function compose(o) {
+  const urls = [], seen = new Set();
+  for (const item of Array.isArray(o?.items) ? o.items : []) {
+    const u = imageUrl(item); if (u && !seen.has(u)) { seen.add(u); urls.push(u); }
+    if (urls.length >= 8) break;
+  }
+  const receipt = await receiptUrl(o); if (receipt && !seen.has(receipt)) urls.push(receipt);
+  const buffers = [];
+  for (const u of urls.slice(0, 9)) { const b = await getImage(u); if (b) buffers.push(b); }
+  if (!buffers.length) return null;
+  const size = 560, cols = buffers.length === 1 ? 1 : 2, rows = Math.ceil(buffers.length / cols), layers = [];
+  for (let i = 0; i < buffers.length; i++) {
+    const b = await sharp(buffers[i]).rotate().resize(size, size, { fit: 'cover' }).jpeg({ quality: 88 }).toBuffer();
+    layers.push({ input: b, left: (i % cols) * size, top: Math.floor(i / cols) * size });
+  }
+  return sharp({ create: { width: cols * size, height: rows * size, channels: 3, background: { r: 255, g: 255, b: 255 } } }).composite(layers).jpeg({ quality: 88 }).toBuffer();
+}
+function caption(o) {
+  const p = String(o?.payment_status || 'pending').toLowerCase();
+  const ps = p === 'verified' ? '✅ Tasdiqlangan' : p === 'rejected' ? '❌ Rad etilgan' : p === 'receipt_uploaded' ? '🧾 Chek yuklangan — tekshiruv kutilmoqda' : '⏳ Kutilmoqda';
+  const pay = String(o?.payment || '').toLowerCase() === 'card_manual' ? '💳 Karta o‘tkazmasi' : String(o?.payment || '—');
+  const nm = o?.customer_name || [o?.first_name, o?.last_name].filter(Boolean).join(' ') || o?.username || 'Mijoz';
+  const items = (Array.isArray(o?.items) ? o.items : []).slice(0, 12).map((x, i) => `${i + 1}. ${x?.name || x?.title || x?.product_name || x?.product?.name || 'Mahsulot'} × ${Number(x?.quantity || x?.qty || 1)}`).join('\n');
+  return `🛒 ${o?.order_number || o?.id || '—'}\n👤 Mijoz: ${nm}\n📞 Telefon: ${o?.phone || '—'}\n💰 Jami: ${Math.round(Number(o?.total || 0)).toLocaleString('uz-UZ')} so‘m\n💳 To‘lov: ${pay}\n🔎 To‘lov holati: ${ps}\n📦 Status: ${o?.status || '⏳ Buyurtma kutilmoqda'}\n📍 Manzil: ${typeof o?.address === 'string' ? o.address : 'Buyurtmada mavjud'}${items ? `\n\n${items}` : ''}`.slice(0, 1024);
+}
+function keyboard(o) {
+  const ps = String(o?.payment_status || 'pending').toLowerCase();
+  if (String(o?.payment || '').toLowerCase() !== 'card_manual' || !['pending', 'receipt_uploaded'].includes(ps) || !o?.id) return { inline_keyboard: [] };
+  return { inline_keyboard: [[{ text: '✅ Tasdiqlash', callback_data: `guli_pay:verified:${o.id}` }, { text: '❌ Rad etish', callback_data: `guli_pay:rejected:${o.id}` }]] };
+}
+async function editStored(chatId, messageId, o) {
+  const image = await compose(o);
+  if (!image) return false;
+  const form = new FormData();
+  form.append('chat_id', String(chatId)); form.append('message_id', String(messageId));
+  form.append('media', JSON.stringify({ type: 'photo', media: 'attach://order.jpg', caption: caption(o) }));
+  form.append('reply_markup', JSON.stringify(keyboard(o)));
+  form.append('photo', new Blob([image], { type: 'image/jpeg' }), 'order.jpg');
+  const r = await fetch(`https://api.telegram.org/bot${ADMIN_TOKEN}/editMessageMedia`, { method: 'POST', body: form });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`);
+  return true;
+}
+async function customerNotice(o, decision) {
+  const id = Number(o?.telegram_id || 0); if (!id || !CUSTOMER_TOKEN) return;
+  const msg = decision === 'verified'
+    ? `✅ To‘lov tasdiqlandi!\n\nBuyurtma № ${o.order_number}\nSumma: ${Math.round(Number(o.total || 0)).toLocaleString('uz-UZ')} so‘m\n\nBuyurtma holati: ${o.status || 'Qabul qilindi'}`
+    : `⚠️ To‘lov cheki rad etildi.\n\nBuyurtma № ${o.order_number}\nIltimos, to‘lov chekini qayta yuboring.`;
+  await tg('sendMessage', { chat_id: id, text: msg, disable_web_page_preview: true }, CUSTOMER_TOKEN);
+}
+async function notifyWebChat(o, decision) {
+  const id = Number(o?.telegram_id || 0); if (!id || !db) return;
+  const text = decision === 'verified'
+    ? `✅ To‘lov tasdiqlandi!\n\nBuyurtma № ${o.order_number}\nSumma: ${Math.round(Number(o.total || 0)).toLocaleString('uz-UZ')} so‘m\n\nBuyurtma holati: ${o.status || 'Qabul qilindi'}`
+    : `⚠️ To‘lov cheki rad etildi.\n\nBuyurtma № ${o.order_number}\nIltimos, to‘lov chekini qayta yuboring.`;
+  await db.from('chat_messages').insert({ telegram_id: id, sender: 'admin', text, metadata: { source: 'payment', orderNumber: o.order_number, type: 'text' } });
+}
+async function paymentEventExists(o) {
+  const keys = [`order:${o.id}:${signature(o)}:${Number(o.telegram_id || 0)}`];
+  const { data } = await db.from('telegram_admin_bot_events').select('event_key').in('event_key', keys).limit(1);
+  return Boolean(data?.length);
+}
+async function process() {
+  if (!db || !ADMIN_TOKEN) return;
+  const { data: orders } = await db.from('orders').select('*').order('updated_at', { ascending: false }).limit(100);
+  const { data: chats } = await db.from('telegram_admin_bot_order_messages').select('order_id,chat_id,message_id').order('updated_at', { ascending: false }).limit(1000);
+  const mappings = new Map((chats || []).map(x => [`${x.order_id}:${x.chat_id}`, x]));
+  for (const o of orders || []) {
+    const sig = signature(o); const prev = state.signatures.get(String(o.id)); state.signatures.set(String(o.id), sig);
+    for (const row of mappings.values()) {
+      if (String(row.order_id) !== String(o.id)) continue;
+      try { await editStored(row.chat_id, row.message_id, o); } catch (e) { if (!/message is not modified/i.test(String(e.message))) console.warn('[Admin bot repair]', e.message); }
+    }
+    if (!prev || prev === sig) continue;
+    const ps = String(o.payment_status || '').toLowerCase();
+    if (!['verified', 'rejected'].includes(ps)) continue;
+    if (await paymentEventExists(o)) continue; // Telegram-admin callback already sent the customer notice.
+    const key = `customer-payment-notice:${o.id}:${ps}`;
+    const { error } = await db.from('telegram_admin_bot_events').insert({ event_key: key, event_type: 'customer_payment_notice', order_id: o.id });
+    if (error) continue;
+    await customerNotice(o, ps).catch(e => console.warn('[Admin bot customer telegram]', e.message));
+    await notifyWebChat(o, ps).catch(e => console.warn('[Admin bot web chat]', e.message));
+  }
+}
+async function start() {
+  if (state.started || !db || !ADMIN_TOKEN) return;
+  state.started = true;
+  await process().catch(() => {});
+  setInterval(() => process().catch(() => {}), 5000);
+}
+start();
