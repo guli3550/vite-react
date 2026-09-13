@@ -2,8 +2,8 @@
 // Always prefer the live Supabase session token over stale legacy mirrors.
 (function () {
   'use strict';
-  if (window.__GULI_CUSTOMER_ORDER_SESSION_BRIDGE_V2__) return;
-  window.__GULI_CUSTOMER_ORDER_SESSION_BRIDGE_V2__ = true;
+  if (window.__GULI_CUSTOMER_ORDER_SESSION_BRIDGE_V3__) return;
+  window.__GULI_CUSTOMER_ORDER_SESSION_BRIDGE_V3__ = true;
 
   function liveToken() {
     var memory = String(window.__GULI_SUPABASE_ACCESS_TOKEN || '').trim();
@@ -18,6 +18,19 @@
     } catch (_) {}
     return String(localStorage.getItem('guli_access_token') || '').trim();
   }
+
+  // App.tsx has an early authenticated-order guard that historically checked
+  // only the legacy mirror. Bridge the active Supabase session into that
+  // mirror before React mounts, without inventing or generating a token.
+  try {
+    var bootToken = liveToken();
+    if (bootToken) {
+      window.__GULI_SUPABASE_ACCESS_TOKEN = bootToken;
+      if (localStorage.getItem('guli_access_token') !== bootToken) {
+        localStorage.setItem('guli_access_token', bootToken);
+      }
+    }
+  } catch (_) {}
 
   function protectedCustomerUrl(input) {
     var url = typeof input === 'string' ? input : (input && input.url) || '';
