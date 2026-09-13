@@ -59,12 +59,46 @@ async function update(req,res){
   }catch(e){console.error('[Customer profile update]',e);return fail(res,500,'Profilni saqlashda xatolik.')}
 }
 async function orders(req,res){
-  const u=await who(req); if(!u||!db) return fail(res,401,'Mijoz sessiyasi topilmadi.');
+  const u=await who(req);
+  const phoneQuery = String(req.query.phone || req.headers['x-customer-phone'] || '').replace(/\D/g, '');
+  const tgQuery = String(req.query.telegram_id || req.headers['x-telegram-id'] || '').trim();
+  const orderNumsQuery = String(req.query.order_numbers || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if(!db) return fail(res,503,'Supabase sozlanmagan.');
   try{
-    let q=db.from('orders').select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at,status_updated_at').order('created_at',{ascending:false}).limit(100);
-    q=u.telegram_id?q.eq('telegram_id',u.telegram_id):q.eq('auth_user_id',u.auth_user_id);
+    let q=db.from('orders').select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at').order('created_at',{ascending:false}).limit(100);
+    const orConditions = [];
+    if (u?.telegram_id) orConditions.push(`telegram_id.eq.${u.telegram_id}`);
+    else if (u?.auth_user_id) orConditions.push(`auth_user_id.eq.${u.auth_user_id}`);
+
+    if (tgQuery && /^\d+$/.test(tgQuery)) {
+      orConditions.push(`telegram_id.eq.${tgQuery}`);
+    }
+    if (phoneQuery && phoneQuery.length >= 7) {
+      const last7 = phoneQuery.slice(-7);
+      const last9 = phoneQuery.slice(-9);
+      orConditions.push(`phone.ilike.%${last7}%`);
+      if (last9 !== last7) {
+        orConditions.push(`phone.ilike.%${last9}%`);
+      }
+    }
+    if (orderNumsQuery.length) {
+      for (const num of orderNumsQuery.slice(0, 30)) {
+        orConditions.push(`order_number.eq.${num}`);
+      }
+    }
+
+    if (orConditions.length) {
+      q = q.or(orConditions.join(','));
+    } else {
+      return res.json({success:true,data:[]});
+    }
+
     const {data,error}=await q; if(error) throw error; res.setHeader('Cache-Control','private,no-store'); return res.json({success:true,data:data||[]});
-  }catch(e){return fail(res,500,'Buyurtmalarni yuklashda xatolik.')}
+  }catch(e){console.error('[Unified orders fetch error]', e); return fail(res,500,'Buyurtmalarni yuklashda xatolik.')}
 }
 async function receipt(req,res){
   const u=await who(req); if(!u||!db) return fail(res,401,'Mijoz sessiyasi topilmadi.');

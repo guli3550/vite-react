@@ -1,4 +1,4 @@
-import { useState, useEffect, type FC } from "react";
+import { useState, useEffect, useMemo, type FC } from "react";
 import type { Language } from "../utils/translations";
 
 interface AdminPromo {
@@ -21,16 +21,43 @@ export const PromosModal: FC<{
   onShowToast: (msg: string) => void;
 }> = ({ onClose, onApplyPromo, onShowToast }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [promos, setPromos] = useState<AdminPromo[]>([]);
+  const [adminPromos, setAdminPromos] = useState<AdminPromo[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Search & Management State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResult, setSearchResult] = useState<{
+    status: "found" | "not_found";
+    promo?: AdminPromo;
+    searchedCode?: string;
+  } | null>(null);
+
+  // User deleted & added promo codes
+  const [deletedCodes, setDeletedCodes] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("guli_deleted_promos") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  const [customAddedPromos, setCustomAddedPromos] = useState<AdminPromo[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("guli_added_promos") || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  // Fetch admin created promos
   useEffect(() => {
     let isMounted = true;
     fetch("/api/promos")
       .then((res) => res.json())
       .then((data) => {
         if (isMounted && data.success && Array.isArray(data.data)) {
-          setPromos(data.data);
+          setAdminPromos(data.data);
         }
       })
       .catch((err) => {
@@ -43,6 +70,22 @@ export const PromosModal: FC<{
       isMounted = false;
     };
   }, []);
+
+  // Compute active displayed promos
+  const combinedPromos = useMemo(() => {
+    const map = new Map<string, AdminPromo>();
+    for (const p of adminPromos) {
+      if (!deletedCodes.includes(p.code.toUpperCase())) {
+        map.set(p.code.toUpperCase(), p);
+      }
+    }
+    for (const p of customAddedPromos) {
+      if (!deletedCodes.includes(p.code.toUpperCase())) {
+        map.set(p.code.toUpperCase(), p);
+      }
+    }
+    return Array.from(map.values());
+  }, [adminPromos, customAddedPromos, deletedCodes]);
 
   const handleCopy = (code: string, isActive: boolean) => {
     if (!isActive) {
@@ -60,6 +103,115 @@ export const PromosModal: FC<{
     setTimeout(() => setCopiedCode(null), 2500);
   };
 
+  // Search promo from admin system
+  const handleSearchPromo = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchQuery.trim().toUpperCase();
+    if (!query) {
+      onShowToast("Iltimos, promokod nomini kiriting");
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchResult(null);
+
+    try {
+      // 1. Check in already loaded admin promos list
+      const matched = adminPromos.find(
+        (p) => p.code.trim().toUpperCase() === query
+      );
+
+      if (matched) {
+        setSearchResult({
+          status: "found",
+          promo: matched,
+          searchedCode: query,
+        });
+        setIsSearching(false);
+        return;
+      }
+
+      // 2. Query backend validate endpoint
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: query, subtotal: 100000 }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success && data.data) {
+        const foundPromo: AdminPromo = {
+          id: data.data.id || query,
+          code: data.data.code || query,
+          discount_type: data.data.discount_type || "percent",
+          discount_value: Number(data.data.discount_value || data.data.discount || 10),
+          min_order_amount: data.data.min_order_amount || null,
+          max_discount_amount: data.data.max_discount_amount || null,
+          expires_at: data.data.expires_at || null,
+          status: "active",
+          statusLabel: "Faol",
+        };
+        setSearchResult({
+          status: "found",
+          promo: foundPromo,
+          searchedCode: query,
+        });
+      } else {
+        setSearchResult({
+          status: "not_found",
+          searchedCode: query,
+        });
+      }
+    } catch {
+      setSearchResult({
+        status: "not_found",
+        searchedCode: query,
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Add promo to user list
+  const handleAddPromo = (promoToAdd: AdminPromo) => {
+    const code = promoToAdd.code.toUpperCase();
+    // Remove from deleted list if it was deleted
+    const updatedDeleted = deletedCodes.filter((c) => c !== code);
+    setDeletedCodes(updatedDeleted);
+    localStorage.setItem("guli_deleted_promos", JSON.stringify(updatedDeleted));
+
+    // Add to custom added list if not present
+    if (!customAddedPromos.some((p) => p.code.toUpperCase() === code)) {
+      const updatedAdded = [...customAddedPromos, promoToAdd];
+      setCustomAddedPromos(updatedAdded);
+      localStorage.setItem("guli_added_promos", JSON.stringify(updatedAdded));
+    }
+
+    onShowToast(`✓ ${code} promokodi ro'yxatga qo'shildi!`);
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+    } catch {}
+    setSearchResult(null);
+    setSearchQuery("");
+  };
+
+  // Delete/Remove promo from user list
+  const handleDeletePromo = (code: string) => {
+    const upper = code.toUpperCase();
+    const nextDeleted = [...new Set([...deletedCodes, upper])];
+    setDeletedCodes(nextDeleted);
+    localStorage.setItem("guli_deleted_promos", JSON.stringify(nextDeleted));
+
+    const nextAdded = customAddedPromos.filter((p) => p.code.toUpperCase() !== upper);
+    setCustomAddedPromos(nextAdded);
+    localStorage.setItem("guli_added_promos", JSON.stringify(nextAdded));
+
+    onShowToast(`✓ ${code} promokodi ro‘yxatdan o‘chirildi`);
+    try {
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+  };
+
   const formatExpiry = (isoString?: string | null) => {
     if (!isoString) return "Muddatsiz (doimiy)";
     try {
@@ -75,55 +227,237 @@ export const PromosModal: FC<{
   };
 
   return (
-    <div className="modalBackdrop" onMouseDown={onClose}>
+    <div className="modalBackdrop modalBackdropCenter" onMouseDown={onClose}>
       <div
         className="modalCard profileExtraModal"
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          maxHeight: "88vh",
+          overflowY: "auto",
+          backgroundColor: "var(--bg-card, #ffffff)",
+          color: "var(--text-main, #0f172a)",
+          border: "1px solid var(--border-color, #e2e8f0)",
+          borderRadius: "24px",
+        }}
       >
-        <div className="modalHeader">
+        <div className="modalHeader" style={{ borderBottom: "1px solid var(--border-color, #f1f5f9)" }}>
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">RASMIY TAKLIFLAR</span>
-            <h2>Promokodlar va Kuponlar</h2>
+            <span className="modalEyebrow" style={{ color: "var(--primary, #e11d48)" }}>RASMIY TAKLIFLAR</span>
+            <h2 style={{ color: "var(--text-main, #0f172a)", margin: "4px 0 0" }}>Promokodlar va Kuponlar</h2>
           </div>
           <button className="modalCloseBtn" onClick={onClose} aria-label="Yopish">
             ×
           </button>
         </div>
 
-        <div className="modalBodyContent">
-          <p className="modalIntroText">
-            Admin tomonidan tasdiqlangan rasmiy promokodlar ro‘yxati. Chegirmadan foydalanish uchun kodni nusxalang:
-          </p>
+        <div className="modalBodyContent" style={{ padding: "4px 0" }}>
+          {/* SEARCH FOR PROMO SECTION */}
+          <form
+            onSubmit={handleSearchPromo}
+            style={{
+              marginBottom: "16px",
+              display: "flex",
+              gap: "8px",
+            }}
+          >
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Admin promokodini qidiring (masalan: GULI2025)..."
+              style={{
+                flex: 1,
+                padding: "12px 14px",
+                borderRadius: "14px",
+                border: "1px solid var(--border-color, #cbd5e1)",
+                backgroundColor: "var(--bg-card-hover, #f8fafc)",
+                color: "var(--text-main, #0f172a)",
+                fontSize: "13.5px",
+                outline: "none",
+              }}
+            />
+            <button
+              type="submit"
+              disabled={isSearching}
+              style={{
+                padding: "12px 18px",
+                borderRadius: "14px",
+                border: "none",
+                backgroundColor: "var(--primary, #e11d48)",
+                color: "#ffffff",
+                fontWeight: 700,
+                fontSize: "13.5px",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                whiteSpace: "nowrap",
+                opacity: isSearching ? 0.7 : 1,
+              }}
+            >
+              {isSearching ? "⏳ Qidirilmoqda..." : "🔍 Qidirish"}
+            </button>
+          </form>
+
+          {/* SEARCH RESULT DISPLAY (FOUND OR NOT FOUND) */}
+          {searchResult && (
+            <div style={{ marginBottom: "18px" }}>
+              {searchResult.status === "found" && searchResult.promo ? (
+                <div
+                  style={{
+                    padding: "16px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(22, 163, 74, 0.08) 0%, rgba(34, 197, 94, 0.12) 100%)",
+                    border: "1.5px solid #86efac",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                        <span
+                          style={{
+                            fontWeight: 900,
+                            letterSpacing: "1px",
+                            fontSize: "16px",
+                            color: "var(--text-main, #0f172a)",
+                            backgroundColor: "var(--bg-card, #ffffff)",
+                            padding: "4px 10px",
+                            borderRadius: "10px",
+                            border: "1px solid #86efac",
+                          }}
+                        >
+                          {searchResult.promo.code}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "3px 8px",
+                            borderRadius: "12px",
+                            backgroundColor: searchResult.promo.status === "active" ? "#dcfce7" : "#fee2e2",
+                            color: searchResult.promo.status === "active" ? "#15803d" : "#b91c1c",
+                            border: `1px solid ${searchResult.promo.status === "active" ? "#86efac" : "#fca5a5"}`,
+                          }}
+                        >
+                          {searchResult.promo.status === "active" ? "● Faol (Aktiv)" : "✕ Muddati tugagan"}
+                        </span>
+                      </div>
+
+                      <div style={{ marginTop: "8px", fontSize: "14px", fontWeight: 800, color: "var(--primary, #e11d48)" }}>
+                        {searchResult.promo.discount_type === "percent"
+                          ? `${searchResult.promo.discount_value}% Chegirma`
+                          : `${Number(searchResult.promo.discount_value).toLocaleString("uz-UZ")} so'm chegirma`}
+                      </div>
+
+                      <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-muted, #64748b)" }}>
+                        Amal qilish muddati: <b>{formatExpiry(searchResult.promo.expires_at)}</b>
+                        {searchResult.promo.min_order_amount ? (
+                          <span> • Min. xarid: <b>{Number(searchResult.promo.min_order_amount).toLocaleString("uz-UZ")} so'm</b></span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleAddPromo(searchResult.promo!)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: "12px",
+                          border: "none",
+                          backgroundColor: "#16a34a",
+                          color: "#ffffff",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        ➕ Ro'yxatga qo'shish
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleCopy(searchResult.promo!.code, searchResult.promo!.status === "active");
+                          if (onApplyPromo) onApplyPromo(searchResult.promo!.code);
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "12px",
+                          border: "1px solid var(--border-color, #cbd5e1)",
+                          backgroundColor: "var(--bg-card, #ffffff)",
+                          color: "var(--text-main, #334155)",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        📋 Nusxalash
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* NOT FOUND STATE */
+                <div
+                  style={{
+                    padding: "16px",
+                    borderRadius: "18px",
+                    background: "linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(248, 113, 113, 0.12) 100%)",
+                    border: "1.5px solid #fca5a5",
+                    textAlign: "center",
+                  }}
+                >
+                  <span style={{ fontSize: "28px", display: "block", marginBottom: "4px" }}>❌</span>
+                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#b91c1c", marginBottom: "4px" }}>
+                    "{searchResult.searchedCode}" promokodi topilmadi
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted, #64748b)" }}>
+                    Ushbu promokod mavjud emas yoki admin tomonidan kiritilmagan. Kodni to'g'ri kiritganingizni tekshiring.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 800, color: "var(--text-main, #0f172a)" }}>
+              Mavjud promokodlar ({combinedPromos.length})
+            </span>
+          </div>
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: "30px 10px", color: "#64748b" }}>
+            <div style={{ textAlign: "center", padding: "30px 10px", color: "var(--text-muted, #64748b)" }}>
               <div style={{ fontSize: "24px", marginBottom: "8px" }}>⏳</div>
               <p style={{ margin: 0, fontSize: "13px" }}>Promokodlar tekshirilmoqda...</p>
             </div>
-          ) : promos.length === 0 ? (
+          ) : combinedPromos.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
                 padding: "36px 16px",
-                backgroundColor: "#f8fafc",
+                backgroundColor: "var(--bg-card-hover, #f8fafc)",
                 borderRadius: "20px",
-                border: "1px dashed #cbd5e1",
+                border: "1px dashed var(--border-color, #cbd5e1)",
                 margin: "12px 0",
               }}
             >
               <div style={{ fontSize: "36px", marginBottom: "10px" }}>🎟️</div>
-              <h4 style={{ margin: "0 0 6px", fontSize: "15px", color: "#334155", fontWeight: 700 }}>
-                Hozircha faol promokodlar yo‘q
+              <h4 style={{ margin: "0 0 6px", fontSize: "15px", color: "var(--text-main, #334155)", fontWeight: 700 }}>
+                Hozircha saqlangan promokodlar yo‘q
               </h4>
-              <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: 1.5 }}>
-                Admin tomonidan e'lon qilinadigan yangi kuponlar va maxsus chegirmalar shu yerda ko‘rinadi.
+              <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted, #64748b)", lineHeight: 1.5 }}>
+                Admin promokodini yuqoridagi qidiruv maydoni orqali topib, ro'yxatingizga qo'shishingiz mumkin.
               </p>
             </div>
           ) : (
-            <div className="promoCardsList">
-              {promos.map((p) => {
+            <div className="promoCardsList" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {combinedPromos.map((p) => {
                 const isActive = p.status === "active";
                 const discountText =
                   p.discount_type === "percent"
@@ -135,17 +469,23 @@ export const PromosModal: FC<{
                     className="profilePromoCard"
                     key={p.code}
                     style={{
-                      opacity: isActive ? 1 : 0.68,
-                      border: isActive ? "1.5px solid #fbcfe8" : "1px solid #e2e8f0",
-                      backgroundColor: isActive ? "#ffffff" : "#f8fafc",
+                      opacity: isActive ? 1 : 0.72,
+                      border: isActive ? "1.5px solid var(--primary-light, #fbcfe8)" : "1px solid var(--border-color, #e2e8f0)",
+                      backgroundColor: "var(--bg-card, #ffffff)",
+                      padding: "14px 16px",
+                      borderRadius: "18px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
                     }}
                   >
-                    <div className="promoCardLeft">
+                    <div className="promoCardLeft" style={{ flex: 1, minWidth: "180px" }}>
                       <div className="promoCodeHeader" style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                         <span className="promoCodeBadge" style={{ fontWeight: 800, letterSpacing: "1px" }}>
                           {p.code}
                         </span>
-                        {/* Real Status Pill on the edge */}
                         <span
                           style={{
                             fontSize: "11px",
@@ -162,7 +502,7 @@ export const PromosModal: FC<{
                                 ? "#fee2e2"
                                 : p.status === "exhausted"
                                 ? "#ffedd5"
-                                : "#f1f5f9",
+                                : "var(--bg-card-hover, #f1f5f9)",
                             color:
                               p.status === "active"
                                 ? "#15803d"
@@ -170,7 +510,7 @@ export const PromosModal: FC<{
                                 ? "#b91c1c"
                                 : p.status === "exhausted"
                                 ? "#c2410c"
-                                : "#64748b",
+                                : "var(--text-muted, #64748b)",
                             border: `1px solid ${
                               p.status === "active"
                                 ? "#86efac"
@@ -178,7 +518,7 @@ export const PromosModal: FC<{
                                 ? "#fca5a5"
                                 : p.status === "exhausted"
                                 ? "#fdba74"
-                                : "#cbd5e1"
+                                : "var(--border-color, #cbd5e1)"
                             }`,
                           }}
                         >
@@ -190,11 +530,11 @@ export const PromosModal: FC<{
                         </span>
                       </div>
 
-                      <strong className="promoDiscountText" style={{ color: isActive ? "#be185d" : "#475569", marginTop: "4px" }}>
+                      <strong className="promoDiscountText" style={{ color: isActive ? "var(--primary, #be185d)" : "var(--text-muted, #475569)", marginTop: "4px", display: "block" }}>
                         {discountText}
                       </strong>
 
-                      <div style={{ marginTop: "4px", fontSize: "11px", color: "#64748b", display: "flex", flexDirection: "column", gap: "2px" }}>
+                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--text-muted, #64748b)", display: "flex", flexDirection: "column", gap: "2px" }}>
                         <span>
                           📅 <b>Amal qilish muddati:</b> {formatExpiry(p.expires_at)}
                         </span>
@@ -213,16 +553,17 @@ export const PromosModal: FC<{
                       </div>
                     </div>
 
-                    <div className="promoCardRight" style={{ display: "flex", alignItems: "center" }}>
+                    <div className="promoCardRight" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       {isActive ? (
                         <button
+                          type="button"
                           className={`promoCopyBtn ${copiedCode === p.code ? "copied" : ""}`}
                           onClick={() => {
                             handleCopy(p.code, true);
                             if (onApplyPromo) onApplyPromo(p.code);
                           }}
                           style={{
-                            padding: "8px 16px",
+                            padding: "8px 14px",
                             borderRadius: "12px",
                             fontSize: "12px",
                             fontWeight: 700,
@@ -235,16 +576,38 @@ export const PromosModal: FC<{
                         <span
                           style={{
                             fontSize: "11px",
-                            color: "#94a3b8",
+                            color: "var(--text-muted, #94a3b8)",
                             fontWeight: 600,
                             padding: "6px 10px",
-                            backgroundColor: "#f1f5f9",
+                            backgroundColor: "var(--bg-card-hover, #f1f5f9)",
                             borderRadius: "10px",
                           }}
                         >
                           Yaroqsiz
                         </span>
                       )}
+
+                      {/* Delete Promo Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePromo(p.code)}
+                        title="Promokodni o'chirish"
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: "12px",
+                          border: "1px solid var(--border-color, #cbd5e1)",
+                          backgroundColor: "var(--bg-card-hover, #f8fafc)",
+                          color: "#ef4444",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        🗑️ O'chirish
+                      </button>
                     </div>
                   </div>
                 );
@@ -253,7 +616,7 @@ export const PromosModal: FC<{
           )}
         </div>
 
-        <div className="modalFooterSingle">
+        <div className="modalFooterSingle" style={{ borderTop: "1px solid var(--border-color, #f1f5f9)", marginTop: "14px", paddingTop: "12px" }}>
           <button className="primaryButton" onClick={onClose}>
             Tushunarli
           </button>

@@ -140,18 +140,51 @@ function adminKeyboard(o) {
   return { inline_keyboard: [] };
 }
 
-function getFirstProductImage(o) {
+function getAllOrderImages(o) {
   const items = Array.isArray(o?.items) ? o.items : [];
+  const list = [];
   for (const it of items) {
     const p = it?.product || it?.product_data || it?.productDetails || {};
-    const candidates = [it?.image, it?.image_url, it?.photo, p?.image, p?.image_url, p?.photo];
+    const candidates = [
+      it?.image,
+      it?.image_url,
+      it?.photo,
+      p?.image,
+      p?.image_url,
+      p?.photo,
+      ...(Array.isArray(p?.images) ? p.images : [])
+    ];
     for (const c of candidates) {
       if (typeof c === 'string' && /^https?:\/\//i.test(c.trim())) {
-        return c.trim();
+        const clean = c.trim();
+        if (!list.includes(clean)) {
+          list.push(clean);
+          break; // 1 distinct photo per item
+        }
       }
     }
   }
-  return '';
+  return list;
+}
+
+async function getOrderReceiptUrl(o) {
+  if (o?.receipt_url && /^https?:\/\//i.test(o.receipt_url)) return o.receipt_url.trim();
+  if (o?.receipt && /^https?:\/\//i.test(o.receipt)) return o.receipt.trim();
+  if (o?.payment_receipt_path && db) {
+    try {
+      const cleanPath = String(o.payment_receipt_path).replace(/^\/+/, '');
+      const { data, error } = await db.storage.from('payment-receipts').createSignedUrl(cleanPath, 86400 * 7);
+      if (!error && data?.signedUrl) return data.signedUrl;
+    } catch (e) {
+      console.warn('[Admin bot] Signed receipt error:', e.message);
+    }
+  }
+  return null;
+}
+
+function getFirstProductImage(o) {
+  const all = getAllOrderImages(o);
+  return all.length > 0 ? all[0] : '';
 }
 
 async function findAdminMessage(orderId, chatId) {
@@ -212,18 +245,64 @@ async function editSingleMessage(chatId, messageId, o, title) {
   }
 }
 
-// Send the INITIAL single message (and never send a duplicate)
+// Send the INITIAL message with all product images and payment receipt
 async function sendInitialMessage(chatId, o, title) {
   const text = buildMessageText(o, title);
   const kb = adminKeyboard(o);
-  const photo = getFirstProductImage(o);
+  const productImages = getAllOrderImages(o);
+  const receiptUrl = await getOrderReceiptUrl(o);
+
+  // Combine media: products + payment receipt
+  const mediaUrls = [...productImages];
+  if (receiptUrl && !mediaUrls.includes(receiptUrl)) {
+    mediaUrls.push(receiptUrl);
+  }
 
   let sent = null;
-  if (photo) {
+
+  if (mediaUrls.length > 1) {
+    // Send full album of all product images and payment receipt
+    try {
+      const mediaGroup = mediaUrls.slice(0, 10).map((url, idx) => {
+        const isReceipt = url === receiptUrl;
+        const caption = isReceipt
+          ? `🧾 <b>TO‘LOV CHEKI — Buyurtma № ${o.order_number || o.id}</b>`
+          : idx === 0
+          ? `🛍️ <b>Buyurtma № ${o.order_number || o.id}</b> (${productImages.length} ta mahsulot)`
+          : undefined;
+        return {
+          type: 'photo',
+          media: url,
+          caption,
+          parse_mode: 'HTML'
+        };
+      });
+
+      await tg('sendMediaGroup', {
+        chat_id: chatId,
+        media: mediaGroup
+      });
+    } catch (albumErr) {
+      console.warn('[Admin bot] sendMediaGroup error, sending individual photo:', albumErr.message);
+    }
+
+    // Interactive card with action buttons (Tasdiqlash / Rad etish)
+    try {
+      sent = await tg('sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        reply_markup: kb
+      });
+    } catch (msgErr) {
+      console.warn('[Admin bot] sendMessage error:', msgErr.message);
+    }
+  } else if (mediaUrls.length === 1) {
     try {
       sent = await tg('sendPhoto', {
         chat_id: chatId,
-        photo,
+        photo: mediaUrls[0],
         caption: text,
         parse_mode: 'HTML',
         reply_markup: kb
@@ -449,6 +528,24 @@ async function syncOrders() {
             : '📦 BUYURTMA STATUSI YANGILANDI';
 
         await editSingleMessage(chatId, mid, o, title);
+
+        if (ps === 'receipt_uploaded' || o.payment_receipt_path) {
+          const receiptKey = `${chatId}:${o.id}:${o.payment_receipt_path || o.receipt_url}`;
+          if (!state.sentReceipts) state.sentReceipts = new Set();
+          if (!state.sentReceipts.has(receiptKey)) {
+            state.sentReceipts.add(receiptKey);
+            const receiptPhoto = await getOrderReceiptUrl(o);
+            if (receiptPhoto) {
+              await tg('sendPhoto', {
+                chat_id: chatId,
+                photo: receiptPhoto,
+                caption: `🧾 <b>YANGI TO‘LOV CHEKI YUKLANDI!</b>\nBuyurtma: <b>№ ${o.order_number || o.id}</b>\nMijoz: <b>${o.first_name || 'Mijoz'}</b> (${o.phone || ''})\nSumma: <b>${money(o.total)}</b>`,
+                parse_mode: 'HTML',
+                reply_markup: adminKeyboard(o)
+              }).catch(() => {});
+            }
+          }
+        }
 
         // Also update customer message in place if order changed
         await updateCustomerOrderMessageInPlace(o);

@@ -4770,4 +4770,50 @@ html[data-theme="dark"] .leaflet-popup-tip {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
 }
 
+/* Order Products Under-Images layout & Dark Mode */
+.orderProductsListUnder::-webkit-scrollbar {
+  height: 4px;
+}
+.orderProductsListUnder::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+html[data-theme="dark"] .orderProductCardUnder {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+}
+html[data-theme="dark"] .orderInfoSummaryBar {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+}
+html[data-theme="dark"] .cashbackCard {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+}
+
+/* Ensure Buttons and Badges maintain correct contrast in both light and dark modes */
+html[data-theme="dark"] .primaryButton,
+html[data-theme="dark"] .primaryButton b,
+html[data-theme="dark"] .primaryButton span {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] .notifBadge {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] .orderReceiptQuickBtn {
+  color: #ffffff !important;
+}
+
+/* Topbar Theme Toggle Button */
+.themeToggleBtn {
+  transition: transform 0.2s ease, background 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.themeToggleBtn:active {
+  transform: scale(0.92);
+}
+
 

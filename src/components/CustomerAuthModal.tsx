@@ -398,14 +398,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         style={{
           width: "100%",
           maxWidth: "420px",
-          background: "#ffffff",
+          background: "var(--bg-card, #ffffff)",
+          color: "var(--text-main, #0f172a)",
           borderRadius: "28px",
           padding: "28px 24px",
-          boxShadow: "0 25px 60px -15px rgba(225, 29, 72, 0.2), 0 10px 30px rgba(0, 0, 0, 0.12)",
+          boxShadow: "0 25px 60px -15px rgba(225, 29, 72, 0.25), 0 10px 30px rgba(0, 0, 0, 0.2)",
           position: "relative",
           maxHeight: "92vh",
           overflowY: "auto",
-          border: "1px solid rgba(225, 29, 72, 0.12)",
+          border: "1px solid var(--border-color, rgba(225, 29, 72, 0.15))",
           boxSizing: "border-box",
         }}
       >
@@ -421,10 +422,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               width: 32,
               height: 32,
               borderRadius: "50%",
-              background: "#f1f5f9",
-              border: "none",
+              background: "var(--bg-card-sub, #f1f5f9)",
+              border: "1px solid var(--border-color, transparent)",
               fontSize: 14,
-              color: "#64748b",
+              color: "var(--text-muted, #64748b)",
               cursor: "pointer",
               display: "grid",
               placeItems: "center",
@@ -450,11 +451,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               overflow: "hidden",
               margin: "0 auto 12px",
               boxShadow: "0 8px 24px rgba(225, 29, 72, 0.28)",
-              border: "2.5px solid #ffffff",
+              border: "2.5px solid var(--bg-card, #ffffff)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "#fff1f2",
+              backgroundColor: "rgba(225, 29, 72, 0.12)",
               flexShrink: 0,
             }}
           >
@@ -480,10 +481,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               }}
             />
           </div>
-          <h3 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#0f172a" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "var(--text-main, #0f172a)" }}>
             {title}
           </h3>
-          <p style={{ margin: 0, fontSize: 13, color: "#64748b", lineHeight: 1.4 }}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted, #64748b)", lineHeight: 1.4 }}>
             {subtitle}
           </p>
         </div>
@@ -493,10 +494,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           <div
             style={{
               display: "flex",
-              background: "#f8fafc",
+              background: "var(--bg-input, #f8fafc)",
               padding: 4,
               borderRadius: 14,
-              border: "1px solid #e2e8f0",
+              border: "1px solid var(--border-color, #e2e8f0)",
               marginBottom: 20,
               gap: 4,
             }}
@@ -509,12 +510,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 padding: "8px 12px",
                 borderRadius: 11,
                 border: "none",
-                background: view === "signin" ? "#ffffff" : "transparent",
-                color: view === "signin" ? "#e11d48" : "#64748b",
+                background: view === "signin" ? "var(--bg-card, #ffffff)" : "transparent",
+                color: view === "signin" ? "#e11d48" : "var(--text-muted, #64748b)",
                 fontWeight: view === "signin" ? 700 : 600,
                 fontSize: 13,
                 cursor: "pointer",
-                boxShadow: view === "signin" ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+                boxShadow: view === "signin" ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
                 transition: "all 0.15s ease",
               }}
             >
@@ -528,12 +529,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 padding: "8px 12px",
                 borderRadius: 11,
                 border: "none",
-                background: view === "signup" ? "#ffffff" : "transparent",
-                color: view === "signup" ? "#e11d48" : "#64748b",
+                background: view === "signup" ? "var(--bg-card, #ffffff)" : "transparent",
+                color: view === "signup" ? "#e11d48" : "var(--text-muted, #64748b)",
                 fontWeight: view === "signup" ? 700 : 600,
                 fontSize: 13,
                 cursor: "pointer",
-                boxShadow: view === "signup" ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+                boxShadow: view === "signup" ? "0 2px 8px rgba(0,0,0,0.12)" : "none",
                 transition: "all 0.15s ease",
               }}
             >
@@ -589,11 +590,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {view === "signin" && (
           <form onSubmit={signIn} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 6 }}>
                 Email pochta
               </label>
               <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 12, top: 12, fontSize: 14, color: "#94a3b8" }}>✉️</span>
+                <span style={{ position: "absolute", left: 12, top: 12, fontSize: 14, color: "var(--text-muted, #94a3b8)" }}>✉️</span>
                 <input
                   type="email"
                   value={email}
@@ -604,11 +605,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     width: "100%",
                     padding: "11px 12px 11px 36px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-input, #cbd5e1)",
                     fontSize: 13,
                     outline: "none",
                     boxSizing: "border-box",
-                    backgroundColor: "#f8fafc",
+                    backgroundColor: "var(--bg-input, #f8fafc)",
+                    color: "var(--text-main, #0f172a)",
                   }}
                 />
               </div>
@@ -616,7 +618,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>Parol</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)" }}>Parol</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -637,7 +639,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 </button>
               </div>
               <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 12, top: 12, fontSize: 14, color: "#94a3b8" }}>🔒</span>
+                <span style={{ position: "absolute", left: 12, top: 12, fontSize: 14, color: "var(--text-muted, #94a3b8)" }}>🔒</span>
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -648,11 +650,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     width: "100%",
                     padding: "11px 38px 11px 36px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-input, #cbd5e1)",
                     fontSize: 13,
                     outline: "none",
                     boxSizing: "border-box",
-                    backgroundColor: "#f8fafc",
+                    backgroundColor: "var(--bg-input, #f8fafc)",
+                    color: "var(--text-main, #0f172a)",
                   }}
                 />
                 <button
@@ -664,7 +667,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     top: 10,
                     background: "none",
                     border: "none",
-                    color: "#94a3b8",
+                    color: "var(--text-muted, #94a3b8)",
                     fontSize: 14,
                     cursor: "pointer",
                   }}
@@ -697,10 +700,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             </button>
 
             {/* Google or alternatives */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0", color: "#94a3b8", fontSize: 11 }}>
-              <span style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0", color: "var(--text-muted, #94a3b8)", fontSize: 11 }}>
+              <span style={{ flex: 1, height: 1, background: "var(--border-color, #e2e8f0)" }} />
               yoki
-              <span style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+              <span style={{ flex: 1, height: 1, background: "var(--border-color, #e2e8f0)" }} />
             </div>
 
             <button
@@ -710,9 +713,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 width: "100%",
                 padding: "10px",
                 borderRadius: 12,
-                border: "1px solid #e2e8f0",
-                background: "#ffffff",
-                color: "#334155",
+                border: "1px solid var(--border-color, #e2e8f0)",
+                background: "var(--bg-card-sub, #ffffff)",
+                color: "var(--text-main, #334155)",
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -731,7 +734,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               style={{
                 background: "none",
                 border: "none",
-                color: "#64748b",
+                color: "var(--text-muted, #64748b)",
                 fontSize: 12,
                 cursor: "pointer",
                 textAlign: "center",
@@ -746,7 +749,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {view === "signup" && (
           <form onSubmit={signup} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 5 }}>
                 Ism va familiyangiz
               </label>
               <input
@@ -759,17 +762,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 5 }}>
                 Telefon raqamingiz (ixtiyoriy)
               </label>
               <input
@@ -781,17 +785,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 5 }}>
                 Email pochta
               </label>
               <input
@@ -804,18 +809,19 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 5 }}>
                   Parol
                 </label>
                 <input
@@ -828,17 +834,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     width: "100%",
                     padding: "10px 12px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-input, #cbd5e1)",
                     fontSize: 12,
                     outline: "none",
                     boxSizing: "border-box",
-                    backgroundColor: "#f8fafc",
+                    backgroundColor: "var(--bg-input, #f8fafc)",
+                    color: "var(--text-main, #0f172a)",
                   }}
                 />
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 5 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 5 }}>
                   Takrorlang
                 </label>
                 <input
@@ -851,11 +858,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                     width: "100%",
                     padding: "10px 12px",
                     borderRadius: 12,
-                    border: "1px solid #cbd5e1",
+                    border: "1px solid var(--border-input, #cbd5e1)",
                     fontSize: 12,
                     outline: "none",
                     boxSizing: "border-box",
-                    backgroundColor: "#f8fafc",
+                    backgroundColor: "var(--bg-input, #f8fafc)",
+                    color: "var(--text-main, #0f172a)",
                   }}
                 />
               </div>
@@ -906,13 +914,13 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {/* 3. OTP VERIFY (Email kod tasdiqlash) */}
         {(view === "otp_verify" || view === "signup_otp") && (
           <form onSubmit={view === "otp_verify" ? verifyOtp : verifySignup} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-              <span style={{ fontSize: 11, color: "#64748b" }}>Yuborilgan manzil:</span>
-              <b style={{ display: "block", fontSize: 13, color: "#0f172a" }}>{email}</b>
+            <div style={{ background: "var(--bg-card-sub, #f8fafc)", padding: "10px 14px", borderRadius: 12, border: "1px solid var(--border-color, #e2e8f0)" }}>
+              <span style={{ fontSize: 11, color: "var(--text-muted, #64748b)" }}>Yuborilgan manzil:</span>
+              <b style={{ display: "block", fontSize: 13, color: "var(--text-main, #0f172a)" }}>{email}</b>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 6 }}>
                 6 xonali tasdiqlash kodi
               </label>
               <input
@@ -934,7 +942,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   letterSpacing: "6px",
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#ffffff",
+                  backgroundColor: "var(--bg-input, #ffffff)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
@@ -967,7 +976,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 style={{
                   background: "none",
                   border: "none",
-                  color: timer > 0 ? "#94a3b8" : "#e11d48",
+                  color: timer > 0 ? "var(--text-muted, #94a3b8)" : "#e11d48",
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: timer > 0 ? "default" : "pointer",
@@ -982,7 +991,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                 style={{
                   background: "none",
                   border: "none",
-                  color: "#64748b",
+                  color: "var(--text-muted, #64748b)",
                   fontSize: 12,
                   cursor: "pointer",
                 }}
@@ -997,7 +1006,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {view === "choice" && (
           <form onSubmit={sendOtp} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 6 }}>
                 Email pochtangiz:
               </label>
               <input
@@ -1010,11 +1019,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "11px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
@@ -1045,7 +1055,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               style={{
                 background: "none",
                 border: "none",
-                color: "#64748b",
+                color: "var(--text-muted, #64748b)",
                 fontSize: 12,
                 cursor: "pointer",
                 textAlign: "center",
@@ -1060,7 +1070,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {view === "forgot_request" && (
           <form onSubmit={sendReset} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 6 }}>
                 Email pochtangizni kiriting:
               </label>
               <input
@@ -1073,11 +1083,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "11px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 13,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
@@ -1108,7 +1119,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               style={{
                 background: "none",
                 border: "none",
-                color: "#64748b",
+                color: "var(--text-muted, #64748b)",
                 fontSize: 12,
                 cursor: "pointer",
                 textAlign: "center",
@@ -1123,7 +1134,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         {view === "forgot_verify" && (
           <form onSubmit={resetPassword} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 4 }}>
                 6 xonali tiklash kodi
               </label>
               <input
@@ -1138,18 +1149,19 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 14,
                   textAlign: "center",
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 4 }}>
                 Yangi parol
               </label>
               <input
@@ -1162,17 +1174,18 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 12,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 4 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-main, #334155)", marginBottom: 4 }}>
                 Yangi parolni takrorlang
               </label>
               <input
@@ -1185,11 +1198,12 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
                   width: "100%",
                   padding: "10px 12px",
                   borderRadius: 12,
-                  border: "1px solid #cbd5e1",
+                  border: "1px solid var(--border-input, #cbd5e1)",
                   fontSize: 12,
                   outline: "none",
                   boxSizing: "border-box",
-                  backgroundColor: "#f8fafc",
+                  backgroundColor: "var(--bg-input, #f8fafc)",
+                  color: "var(--text-main, #0f172a)",
                 }}
               />
             </div>
@@ -1221,7 +1235,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
               style={{
                 background: "none",
                 border: "none",
-                color: "#64748b",
+                color: "var(--text-muted, #64748b)",
                 fontSize: 12,
                 cursor: "pointer",
                 textAlign: "center",

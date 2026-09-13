@@ -14,7 +14,6 @@ import { AdminAnalyticsTab } from "./components/AdminAnalyticsTab";
 import { AdminCallCenterTab } from "./components/AdminCallCenterTab";
 import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
-import { AdminExtensionsTab } from "./components/AdminExtensionsTab";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
@@ -287,7 +286,21 @@ export default function AdminPro() {
   const [busy, setBusy] = useState(false);
 
   const [tab, setTab] = useState<NavTabKey>("dashboard");
+  const [tabHistory, setTabHistory] = useState<NavTabKey[]>(["dashboard"]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const navigateTab = useCallback((nextTab: NavTabKey) => {
+    setTab((prevTab) => {
+      if (prevTab !== nextTab) {
+        setTabHistory((h) => [...h, nextTab]);
+        try {
+          window.history.pushState({ guliAdminInit: true, guliAdminTab: nextTab }, "", "");
+        } catch {}
+      }
+      return nextTab;
+    });
+    setQuery("");
+  }, []);
 
   const [dashboard, setDashboard] = useState<any>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -337,9 +350,17 @@ export default function AdminPro() {
       return true;
     }
 
-    // 2. Return to dashboard main tab if in a sub-tab
-    if (tab !== "dashboard") {
+    // 2. Orqaga oldingi bo'limga qaytish (Admin Tab History Stack)
+    if (tabHistory.length > 1) {
+      const nextHistory = [...tabHistory];
+      nextHistory.pop(); // remove current
+      const prevTab = nextHistory[nextHistory.length - 1] || "dashboard";
+      setTabHistory(nextHistory);
+      setTab(prevTab);
+      return true;
+    } else if (tab !== "dashboard") {
       setTab("dashboard");
+      setTabHistory(["dashboard"]);
       return true;
     }
 
@@ -351,6 +372,7 @@ export default function AdminPro() {
     productOpen,
     promoOpen,
     mobileSidebarOpen,
+    tabHistory,
     tab,
   ]);
 
@@ -1090,10 +1112,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
       {/* 15-Item Android-first Drawer Sidebar */}
       <AdminSidebar
         currentTab={tab}
-        onSelectTab={(t) => {
-          setTab(t);
-          setQuery("");
-        }}
+        onSelectTab={navigateTab}
         isOpenMobile={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onLogout={logout}
@@ -1113,7 +1132,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
           onPlatformChange={handlePlatformChange}
           onRefresh={load}
           isBusy={busy}
-          onSelectTab={setTab}
+          onSelectTab={navigateTab}
         />
 
         {/* Action Toolbars for Products & Promos */}
@@ -1177,7 +1196,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                 <PanelHead
                   eyebrow="OPERATSION"
                   title="Buyurtma holatlari"
-                  action={() => setTab("orders")}
+                  action={() => navigateTab("orders")}
                 />
                 <div className="statusBoard">
                   {STATUSES.slice(0, 4).map((s) => (
@@ -1200,7 +1219,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                 <PanelHead
                   eyebrow="OMBOR"
                   title="Kam qolganlar"
-                  action={() => setTab("products")}
+                  action={() => navigateTab("products")}
                 />
                 {(dashboard?.lowStock || []).length ? (
                   <div className="lowList">
@@ -1222,7 +1241,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                   <span className="proEyebrow">LIVE</span>
                   <h2>So‘nggi buyurtmalar</h2>
                 </div>
-                <button type="button" onClick={() => setTab("orders")}>
+                <button type="button" onClick={() => navigateTab("orders")}>
                   Barchasi →
                 </button>
               </div>
@@ -1738,9 +1757,6 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
             onPlatformChange={handlePlatformChange}
           />
         )}
-
-        {/* Tab 14: 🧩 Qo‘shimcha */}
-        {tab === "extensions" && <AdminExtensionsTab notify={notify} />}
       </main>
 
       {/* Mobile Bottom Navigation Bar for quick access */}
@@ -1751,8 +1767,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
             type="button"
             className={tab === n.key ? "active" : ""}
             onClick={() => {
-              setTab(n.key);
-              setQuery("");
+              navigateTab(n.key);
             }}
           >
             <span>{n.icon}</span>

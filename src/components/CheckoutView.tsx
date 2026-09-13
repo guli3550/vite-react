@@ -28,6 +28,10 @@ interface CheckoutViewProps {
   formatPrice: (price: number) => string;
   showToast: (msg: string) => void;
   onProceedPayment: () => void;
+  availableCashback?: number;
+  useCashback?: boolean;
+  onToggleCashback?: (val: boolean) => void;
+  cashbackDiscount?: number;
   LocationPicker: React.ComponentType<{
     latitude: number;
     longitude: number;
@@ -60,6 +64,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   formatPrice,
   showToast,
   onProceedPayment,
+  availableCashback = 0,
+  useCashback = false,
+  onToggleCashback,
+  cashbackDiscount = 0,
   LocationPicker,
 }) => {
   const [showOrderSummary, setShowOrderSummary] = useState(false);
@@ -802,6 +810,120 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </div>
       </div>
 
+      {/* Real Cashback Spending Section */}
+      <div
+        className="checkoutCard cashbackCard"
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "20px",
+          padding: "16px 18px",
+          marginBottom: "16px",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "12px",
+                background: "linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(202, 138, 4, 0.1))",
+                color: "#ca8a04",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "18px",
+                flexShrink: 0,
+              }}
+            >
+              💎
+            </div>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-main)" }}>
+                Keshbekdan foydalanish
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "2px" }}>
+                Mavjud keshbek: <b style={{ color: "#ca8a04", fontWeight: 800 }}>{formatPrice(availableCashback)}</b>
+              </div>
+            </div>
+          </div>
+
+          <label
+            style={{
+              position: "relative",
+              display: "inline-block",
+              width: "46px",
+              height: "26px",
+              cursor: availableCashback > 0 ? "pointer" : "not-allowed",
+              opacity: availableCashback > 0 ? 1 : 0.5,
+            }}
+          >
+            <input
+              type="checkbox"
+              disabled={availableCashback <= 0}
+              checked={Boolean(useCashback && availableCashback > 0)}
+              onChange={(e) => {
+                if (onToggleCashback) onToggleCashback(e.target.checked);
+              }}
+              style={{ opacity: 0, width: 0, height: 0 }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: (useCashback && availableCashback > 0) ? "var(--primary, #e11d48)" : "var(--border-color, #cbd5e1)",
+                borderRadius: "34px",
+                transition: "0.2s",
+              }}
+            >
+              <span
+                style={{
+                  position: "absolute",
+                  height: "20px",
+                  width: "20px",
+                  left: (useCashback && availableCashback > 0) ? "23px" : "3px",
+                  bottom: "3px",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "50%",
+                  transition: "0.2s",
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+                }}
+              />
+            </span>
+          </label>
+        </div>
+
+        {useCashback && availableCashback > 0 ? (
+          <div
+            style={{
+              marginTop: "12px",
+              padding: "8px 12px",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              borderRadius: "12px",
+              border: "1px solid rgba(16, 185, 129, 0.25)",
+              color: "#059669",
+              fontSize: "12px",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>✓ Keshbek chegirmasi qo‘llandi</span>
+            <span>−{formatPrice(cashbackDiscount)}</span>
+          </div>
+        ) : availableCashback > 0 ? (
+          <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
+            💡 Keshbekni yoqsangiz, buyurtma summasidan {formatPrice(cashbackDiscount || availableCashback)} chegirib tashlanadi.
+          </div>
+        ) : (
+          <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
+            ℹ️ Har bir xaridingizdan 2% keshbek hisoblanadi va keyingi xaridlarda sarflanadi.
+          </div>
+        )}
+      </div>
+
       {/* Summary Calculations Card */}
       <div
         style={{
@@ -824,6 +946,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             {deliveryFee && deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul (600 000+ so‘m)"}
           </b>
         </div>
+
+        {Boolean(useCashback && cashbackDiscount && cashbackDiscount > 0) && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#059669", marginBottom: 8, fontWeight: 700 }}>
+            <span>💎 Keshbek orqali chegirma:</span>
+            <b>−{formatPrice(cashbackDiscount)}</b>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", marginBottom: 10, background: "var(--bg-card-sub)", padding: "7px 10px", borderRadius: "10px" }}>
           <span>🕒 Yetkazib berish muddati:</span>

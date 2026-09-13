@@ -165,39 +165,71 @@ async function signUp(req, res) {
   const name = String(req.body?.full_name || '').trim();
   const phone = String(req.body?.phone || '').trim();
 
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8) {
-    return fail(res, 400, 'Email yoki parol noto‘g‘ri. Parol kamida 8 belgidan iborat bo‘lsin.');
+  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 6) {
+    return fail(res, 400, 'Email noto‘g‘ri yoki parol kamida 6 ta belgidan iborat bo‘lishi kerak.');
   }
 
   try {
-    const r = await fetch(`${URL_}/auth/v1/signup`, {
+    // 1. Try to create user with email_confirm: true via Supabase Admin API
+    let createdUser = null;
+    try {
+      const { data: adminData, error: adminErr } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: name, phone }
+      });
+      if (!adminErr && adminData?.user) {
+        createdUser = adminData.user;
+      }
+    } catch (_adminEx) {}
+
+    // 2. If admin creation succeeded or already exists, obtain session token
+    let r = await fetch(`${URL_}/auth/v1/token?grant_type=password`, {
       method: 'POST',
       headers: { apikey: KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, data: { full_name: name, phone } })
+      body: JSON.stringify({ email, password })
     });
-    const data = await r.json().catch(() => null);
-    if (!r.ok) return fail(res, 400, data?.msg || data?.error_description || 'Ro‘yxatdan o‘tishda xatolik.');
+    let data = await r.json().catch(() => null);
 
-    if (data?.user?.id) {
-      await resolveCanonicalCustomer({ kind: 'auth', auth_user_id: data.user.id, user: data.user }, { email, full_name: name, phone }).catch(() => {});
+    // 3. Fallback to standard signup endpoint if token not obtained yet
+    if (!r.ok && !createdUser) {
+      const rSignup = await fetch(`${URL_}/auth/v1/signup`, {
+        method: 'POST',
+        headers: { apikey: KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, data: { full_name: name, phone } })
+      });
+      data = await rSignup.json().catch(() => null);
+      if (!rSignup.ok) {
+        return fail(res, 400, data?.msg || data?.error_description || 'Ro‘yxatdan o‘tishda xatolik.');
+      }
+    }
+
+    const authUserId = data?.user?.id || createdUser?.id;
+    if (authUserId) {
+      await resolveCanonicalCustomer(
+        { kind: 'auth', auth_user_id: authUserId, user: data?.user || createdUser },
+        { email, full_name: name, phone }
+      ).catch(() => {});
     }
 
     if (data?.access_token) {
       return res.status(201).json({
         success: true,
-        message: 'Hisob yaratildi.',
+        message: 'Hisob muvaffaqiyatli yaratildi va tizimga kirildi.',
         data: {
           access_token: data.access_token,
           refresh_token: data.refresh_token,
           expires_in: data.expires_in,
-          user: data.user
+          user: data.user || createdUser
         }
       });
     }
+
     return res.status(201).json({
       success: true,
-      message: 'Hisob yaratildi. Emailingizni tasdiqlang, so‘ng kiring.',
-      data: { user: data?.user || null }
+      message: 'Hisob muvaffaqiyatli yaratildi. Endi kirishingiz mumkin.',
+      data: { user: data?.user || createdUser || null }
     });
   } catch (e) {
     return fail(res, 500, e.message || 'Ro‘yxatdan o‘tishda xatolik');
@@ -519,27 +551,36 @@ async function listOrders(req, res) {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
-
-  if (!u && !orderNumsQuery.length) {
-    return fail(res, 401, 'Mijoz autentifikatsiyasi talab qilinadi.');
-  }
+  const phoneQuery = String(req.query.phone || req.headers['x-customer-phone'] || '').replace(/\D/g, '');
+  const tgQuery = String(req.query.telegram_id || req.headers['x-telegram-id'] || '').trim();
 
   try {
     const canonical = u ? await resolveCanonicalCustomer(u) : null;
-    const tgId = u?.kind === 'telegram' ? u.telegram_id : (canonical?.telegram_id || null);
+    const tgId = u?.kind === 'telegram' ? u.telegram_id : (canonical?.telegram_id || (tgQuery && /^\d+$/.test(tgQuery) ? Number(tgQuery) : null));
     const authId = u?.kind === 'auth' ? u.auth_user_id : (canonical?.auth_user_id || null);
     const phone = canonical?.phone || u?.user?.phone || null;
 
     let q = supabase
       .from('orders')
-      .select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at,status_updated_at')
+      .select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
       .order('created_at', { ascending: false })
       .limit(100);
 
     const orConditions = [];
     if (tgId) orConditions.push(`telegram_id.eq.${tgId}`);
     if (authId) orConditions.push(`auth_user_id.eq.${authId}`);
-    if (phone && phone.length >= 7) orConditions.push(`phone.eq.${phone}`);
+    if (phone && String(phone).replace(/\D/g, '').length >= 7) {
+      const cleanP = String(phone).replace(/\D/g, '').slice(-7);
+      orConditions.push(`phone.ilike.%${cleanP}%`);
+    }
+    if (phoneQuery && phoneQuery.length >= 7) {
+      const last7 = phoneQuery.slice(-7);
+      const last9 = phoneQuery.slice(-9);
+      orConditions.push(`phone.ilike.%${last7}%`);
+      if (last9 !== last7) {
+        orConditions.push(`phone.ilike.%${last9}%`);
+      }
+    }
     if (orderNumsQuery.length) {
       for (const num of orderNumsQuery.slice(0, 30)) {
         orConditions.push(`order_number.eq.${num}`);

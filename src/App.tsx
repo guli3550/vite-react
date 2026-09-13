@@ -131,6 +131,8 @@ export type Order = {
   subtotal: number;
   delivery: number;
   discount: number;
+  cashback_used?: number;
+  cashback_earned?: number;
   total: number;
   address?: Address;
   phone: string;
@@ -802,6 +804,7 @@ export default function App() {
 
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
+  const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
@@ -869,6 +872,7 @@ export default function App() {
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoLoading, setPromoLoading] = useState(false);
+  const [useCashback, setUseCashback] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [showSpendingStats, setShowSpendingStats] = useState(false);
@@ -1710,9 +1714,16 @@ export default function App() {
     }
   }, []);
 
+  const [phoneLookupInput, setPhoneLookupInput] = useState(() => {
+    return localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || "";
+  });
+  const [isLookingUpOrders, setIsLookingUpOrders] = useState(false);
+
   const loadOrders = useCallback(
-    async (silent = false) => {
+    async (silent = false, customPhone?: string) => {
       const token = localStorage.getItem("guli_access_token") || "";
+      const savedPhone = customPhone || localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || authUser?.phone || "";
+      const cleanPhone = String(savedPhone).replace(/\D/g, "");
       const localOrdersRaw = localStorage.getItem("guli_orders") || localStorage.getItem("orders") || "[]";
       let localOrderNumbers: string[] = [];
       try {
@@ -1724,26 +1735,51 @@ export default function App() {
         }
       } catch {}
 
-      if (!telegramUser?.id && !token && !localOrderNumbers.length) return [];
+      // URL search params lookup for external browser deep links
+      let urlPhone = "";
+      let urlTgId = "";
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        urlPhone = (sp.get("phone") || sp.get("tel") || "").replace(/\D/g, "");
+        urlTgId = (sp.get("tg_id") || sp.get("telegram_id") || "").trim();
+        const urlOrder = sp.get("order") || sp.get("order_number");
+        if (urlOrder && !localOrderNumbers.includes(urlOrder)) {
+          localOrderNumbers.push(urlOrder);
+        }
+        if (urlPhone && !cleanPhone) {
+          localStorage.setItem("guli_phone", urlPhone);
+        }
+      } catch {}
+
+      const effectivePhone = cleanPhone || urlPhone;
+      const effectiveTgId = telegramUser?.id ? String(telegramUser.id) : urlTgId;
+
+      if (!effectiveTgId && !token && !localOrderNumbers.length && (!effectivePhone || effectivePhone.length < 7)) {
+        return [];
+      }
+
       if (!silent) setOrdersLoading(true);
       try {
-        let url = "";
         const queryParams = new URLSearchParams();
         if (localOrderNumbers.length) {
           queryParams.set("order_numbers", localOrderNumbers.slice(0, 30).join(","));
         }
+        if (effectiveTgId) {
+          queryParams.set("telegram_id", effectiveTgId);
+        }
+        if (effectivePhone && effectivePhone.length >= 7) {
+          queryParams.set("phone", effectivePhone);
+        }
 
-        if (telegramUser?.id) {
-          queryParams.set("telegram_id", String(telegramUser.id));
-          url = `${API_URL}/api/orders?${queryParams.toString()}`;
-        } else if (token) {
-          url = `${API_URL}/api/customer/orders${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
-        } else {
-          url = `${API_URL}/api/orders?${queryParams.toString()}`;
+        let url = `${API_URL}/api/orders?${queryParams.toString()}`;
+        if (token && !effectiveTgId) {
+          url = `${API_URL}/api/customer/orders?${queryParams.toString()}`;
         }
 
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
+        if (effectivePhone) headers["X-Customer-Phone"] = effectivePhone;
+        if (effectiveTgId) headers["X-Telegram-Id"] = effectiveTgId;
         const tgData = (window as any).Telegram?.WebApp?.initData;
         if (tgData) headers["X-Telegram-Init-Data"] = tgData;
 
@@ -1799,7 +1835,7 @@ export default function App() {
         if (!silent) setOrdersLoading(false);
       }
     },
-    [telegramUser?.id],
+    [telegramUser?.id, authUser?.phone],
   );
 
   useEffect(() => {
@@ -1841,6 +1877,7 @@ export default function App() {
     } catch {}
     if (next !== page) {
       setPreviousPage(page);
+      setPageHistory((prev) => [...prev, next]);
       try {
         window.history.pushState({ guliPage: next }, "", "");
       } catch {}
@@ -1910,27 +1947,31 @@ export default function App() {
       return true;
     }
 
-    // 3. Category or Search / Recommendation active -> Reset and return to Home
-    if (selectedCategory !== "Barchasi" || search.trim() !== "") {
+    // 3. Kategoriya va rekomendatsiya bo'limida bo'lsa asosiy ekranga qaytish
+    if (selectedCategory !== "Barchasi" || search.trim() !== "" || page === "catalog") {
       setSelectedCategory("Barchasi");
       setSearch("");
       if (page !== "home") {
         setPage("home");
+        setPageHistory(["home"]);
       }
       return true;
     }
 
-    // 4. Catalog page -> return to Home
-    if (page === "catalog") {
-      setSelectedCategory("Barchasi");
-      setSearch("");
-      setPage("home");
+    // 4. Orqaga oldingi bo'limga qaytish (Navigation History Stack)
+    if (pageHistory.length > 1) {
+      const nextHistory = [...pageHistory];
+      nextHistory.pop(); // remove current page
+      const prev = nextHistory[nextHistory.length - 1] || "home";
+      setPageHistory(nextHistory);
+      setPage(prev);
       return true;
     }
 
-    // 5. Any other page -> return to Home
+    // 5. If not on home, return to Home
     if (page !== "home") {
       setPage("home");
+      setPageHistory(["home"]);
       return true;
     }
 
@@ -1952,6 +1993,7 @@ export default function App() {
     previousPage,
     selectedCategory,
     search,
+    pageHistory,
   ]);
 
   // Browser / Hardware Back Navigation (PopState)
@@ -2095,7 +2137,34 @@ export default function App() {
   const standardDeliveryFee = adminSettings.standardDeliveryFee !== undefined ? Number(adminSettings.standardDeliveryFee) : 20000;
   const delivery = subtotal >= freeDeliveryThreshold ? 0 : standardDeliveryFee;
   const discount = promoApplied ? Math.min(subtotal, promoDiscount) : 0;
-  const total = Math.max(0, subtotal + delivery - discount);
+
+  // Real Cashback calculations based on completed orders
+  const completedOrdersForCashback = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.status === "Yetkazildi" ||
+          o.status === "Qabul qilindi" ||
+          o.status === "To'lov tasdiqlandi" ||
+          o.status === "Yo‘lda" ||
+          o.status === "Tayyorlanmoqda"
+      ),
+    [orders]
+  );
+  const realTotalSpentForCashback = useMemo(
+    () => completedOrdersForCashback.reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+    [completedOrdersForCashback]
+  );
+  const realCashbackEarned = Math.round(realTotalSpentForCashback * 0.02);
+  const totalCashbackUsed = useMemo(
+    () => orders.reduce((sum, o) => sum + (Number((o as any).cashback_used) || 0), 0),
+    [orders]
+  );
+  const availableCashback = Math.max(0, realCashbackEarned - totalCashbackUsed);
+  const payableBeforeCashback = Math.max(0, subtotal + delivery - discount);
+  const maxCashbackDeduction = Math.min(availableCashback, payableBeforeCashback);
+  const appliedCashback = useCashback ? maxCashbackDeduction : 0;
+  const total = Math.max(0, payableBeforeCashback - appliedCashback);
   const allCategories = useMemo(
     () => getSynchronizedCategories(products),
     [products],
@@ -2373,6 +2442,8 @@ export default function App() {
       subtotal,
       delivery,
       discount,
+      cashback_used: appliedCashback,
+      cashback_earned: Math.round(total * 0.02),
       total,
       address,
       payment: "Karta (Uzcard / Humo)",
@@ -2441,6 +2512,8 @@ export default function App() {
         subtotal,
         delivery,
         discount,
+        cashback_used: appliedCashback,
+        cashback_earned: Math.round(total * 0.02),
         total,
         address,
         phone: phone.trim(),
@@ -2457,6 +2530,11 @@ export default function App() {
         try {
           localStorage.setItem("orders", JSON.stringify(next));
           localStorage.setItem("guli_orders", JSON.stringify(next));
+          if (phone.trim()) {
+            localStorage.setItem("guli_phone", phone.trim());
+            localStorage.setItem("guli_customer_phone", phone.trim());
+            localStorage.setItem("guli_last_order_phone", phone.trim());
+          }
           const nums = JSON.parse(localStorage.getItem("guli_my_order_numbers") || "[]");
           const updatedNums = [...new Set([createdOrderNumber, createdOrderId, ...(Array.isArray(nums) ? nums : [])])];
           localStorage.setItem("guli_my_order_numbers", JSON.stringify(updatedNums));
@@ -2478,6 +2556,7 @@ export default function App() {
       setPromo("");
       setPromoApplied(false);
       setPromoDiscount(0);
+      setUseCashback(false);
       setIsProcessingPayment(false);
       setShowCardPaymentModal(false);
       setTimerActive(false);
@@ -2771,6 +2850,63 @@ export default function App() {
               <span>🔑</span> Google / Email orqali kirish
             </button>
 
+            <div style={{ margin: "16px 0", paddingTop: "16px", borderTop: "1px dashed var(--border-color, #e2e8f0)", textAlign: "left" }}>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-muted, #64748b)", marginBottom: "8px" }}>
+                Yoki telefon raqamingiz orqali qidiring:
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="tel"
+                  placeholder="+998 90 123 45 67"
+                  value={phoneLookupInput}
+                  onChange={(e) => setPhoneLookupInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: "11px 12px",
+                    borderRadius: "12px",
+                    border: "1px solid var(--border-input, #cbd5e1)",
+                    fontSize: "13px",
+                    backgroundColor: "var(--bg-input, #f8fafc)",
+                    color: "var(--text-main, #1e293b)",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  disabled={isLookingUpOrders}
+                  onClick={async () => {
+                    const cl = phoneLookupInput.replace(/\D/g, "");
+                    if (cl.length < 7) {
+                      showToast("Iltimos to'g'ri telefon raqam kiriting");
+                      return;
+                    }
+                    setIsLookingUpOrders(true);
+                    localStorage.setItem("guli_phone", phoneLookupInput);
+                    localStorage.setItem("guli_customer_phone", phoneLookupInput);
+                    const res = await loadOrders(false, phoneLookupInput);
+                    setIsLookingUpOrders(false);
+                    if (res && res.length > 0) {
+                      showToast(`✓ ${res.length} ta buyurtma topildi!`);
+                    } else {
+                      showToast("Ushbu raqamga tegishli buyurtmalar topilmadi.");
+                    }
+                  }}
+                  style={{
+                    padding: "11px 16px",
+                    borderRadius: "12px",
+                    border: "none",
+                    backgroundColor: "var(--primary, #be185d)",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {isLookingUpOrders ? "Qidirilmoqda…" : "Qidirish"}
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={() => go("catalog")}
               style={{
@@ -2997,34 +3133,35 @@ export default function App() {
                       style={{ cursor: "pointer" }}
                     >
                       <div
-                        className="orderThumbGroup"
+                        className="orderProductsListUnder"
                         style={{
                           display: "flex",
-                          gap: "8px",
+                          gap: "10px",
                           overflowX: "auto",
-                          maxWidth: "100%",
-                          paddingBottom: "4px",
-                          alignItems: "center",
+                          paddingBottom: "8px",
+                          WebkitOverflowScrolling: "touch",
                         }}
                       >
                         {(o.items || []).map((it, idx) => {
                           const prod = it.product;
                           const img = prod ? imageUrl(prod) : ((it as any).image || "");
+                          const itemPrice = (prod?.price || (it as any).price || 0);
+                          const itemName = prod?.name || (it as any).name || "Mahsulot";
+                          const itemCode = prod?.product_code || (it as any).product_code;
+
                           return (
                             <div
                               key={idx}
-                              className="orderThumb"
+                              className="orderProductCardUnder"
                               style={{
                                 flexShrink: 0,
-                                position: "relative",
-                                width: "64px",
-                                height: "72px",
-                                borderRadius: "8px",
+                                width: "125px",
+                                display: "flex",
+                                flexDirection: "column",
+                                background: "var(--bg-card-sub, rgba(0,0,0,0.03))",
+                                borderRadius: "12px",
                                 overflow: "hidden",
                                 border: "1px solid var(--border-color)",
-                                background: "#f8fafc",
-                                display: "grid",
-                                placeItems: "center",
                               }}
                               onClick={(e) => {
                                 if (prod) {
@@ -3032,54 +3169,142 @@ export default function App() {
                                   openProduct(prod, "orders");
                                 }
                               }}
-                              title={prod?.name || (it as any).name || "Mahsulot"}
                             >
-                              {img ? (
-                                <img
-                                  src={img}
-                                  alt={prod?.name || "Mahsulot"}
-                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                                />
-                              ) : (
-                                <span style={{ fontSize: "20px" }}>👗</span>
-                              )}
-                              {it.quantity && it.quantity > 1 ? (
-                                <span
+                              {/* Product Image */}
+                              <div
+                                style={{
+                                  position: "relative",
+                                  width: "100%",
+                                  height: "110px",
+                                  background: "var(--bg-card)",
+                                  display: "grid",
+                                  placeItems: "center",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {img ? (
+                                  <img
+                                    src={img}
+                                    alt={itemName}
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLElement).style.display = "none";
+                                    }}
+                                  />
+                                ) : (
+                                  <span style={{ fontSize: "28px" }}>👗</span>
+                                )}
+                                {it.quantity && it.quantity > 1 ? (
+                                  <span
+                                    style={{
+                                      position: "absolute",
+                                      top: "4px",
+                                      right: "4px",
+                                      background: "rgba(15, 23, 42, 0.85)",
+                                      color: "#ffffff",
+                                      fontSize: "10px",
+                                      padding: "2px 6px",
+                                      borderRadius: "6px",
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    ×{it.quantity}
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {/* Price and Details placed UNDER the image */}
+                              <div
+                                style={{
+                                  padding: "8px 7px",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "3px",
+                                  flex: 1,
+                                }}
+                              >
+                                <div
                                   style={{
-                                    position: "absolute",
-                                    bottom: "2px",
-                                    right: "2px",
-                                    background: "rgba(15, 23, 42, 0.8)",
-                                    color: "#ffffff",
-                                    fontSize: "10px",
-                                    padding: "1px 5px",
-                                    borderRadius: "4px",
-                                    fontWeight: 800,
+                                    fontSize: "11.5px",
+                                    fontWeight: 750,
+                                    color: "var(--text-main)",
+                                    lineHeight: "1.3",
+                                    maxHeight: "2.6em",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: "vertical",
+                                  }}
+                                  title={itemName}
+                                >
+                                  {itemName}
+                                </div>
+
+                                {itemCode && (
+                                  <div style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: 600 }}>
+                                    Kod: {itemCode}
+                                  </div>
+                                )}
+
+                                {(it.size || it.color) && (
+                                  <div style={{ fontSize: "10px", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {[it.size, it.color ? formatColorName(it.color) : null].filter(Boolean).join(" · ")}
+                                  </div>
+                                )}
+
+                                <div
+                                  style={{
+                                    marginTop: "auto",
+                                    paddingTop: "5px",
+                                    fontSize: "12px",
+                                    fontWeight: 900,
+                                    color: "var(--primary)",
                                   }}
                                 >
-                                  ×{it.quantity}
-                                </span>
-                              ) : null}
+                                  {formatPrice(itemPrice * (it.quantity || 1))}
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
 
-                      <div className="orderInfoCol" style={{ marginTop: "4px" }}>
-                        <h3 className="orderItemTitle">
-                          {(o.items || []).length > 1
-                            ? `${o.items?.[0]?.product?.name || (o.items?.[0] as any)?.name || "Mahsulot"} va yana ${(o.items || []).length - 1} ta mahsulot`
-                            : o.items?.[0]?.product?.name || (o.items?.[0] as any)?.name || "Buyurtma"}
-                        </h3>
-                        <p className="orderMetaSummary">
-                          {totalItemCount} ta mahsulot ·{" "}
+                      {/* Overall Order Summary Bar */}
+                      <div
+                        className="orderInfoSummaryBar"
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          background: "var(--bg-card-sub, rgba(0,0,0,0.02))",
+                          borderRadius: "10px",
+                          border: "1px solid var(--border-color)",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--text-muted)" }}>
+                          <span>Jami: <b>{totalItemCount} ta mahsulot</b></span>
+                          <span>·</span>
                           <span className="paymentMethodPill">
-                            {o.payment === "card" ? "💳 Karta" : "💵 Naqd"}
+                            {o.payment === "card" || o.payment?.toLowerCase().includes("karta") ? "💳 Karta" : "💵 Naqd"}
                           </span>
-                        </p>
-                        <strong className="orderTotalAmount">
-                          {formatPrice(o.total)}
-                        </strong>
+                          {(o as any).cashback_used && Number((o as any).cashback_used) > 0 ? (
+                            <span style={{ color: "#059669", fontWeight: 700, fontSize: "11px" }}>
+                              (💎 −{formatPrice(Number((o as any).cashback_used))} keshbek)
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ fontSize: "11.5px", color: "var(--text-muted)" }}>Jami summa:</span>
+                          <strong style={{ fontSize: "15px", color: "var(--text-main)", fontWeight: 900 }}>
+                            {formatPrice(o.total)}
+                          </strong>
+                        </div>
                       </div>
                     </div>
 
@@ -3657,6 +3882,23 @@ export default function App() {
         </button>
         <div className="headerActions">
           <button
+            className="iconButton themeToggleBtn"
+            id="topbar-theme-toggle-btn"
+            onClick={() => {
+              const nextTheme = theme === "dark" ? "light" : "dark";
+              setTheme(nextTheme);
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+            }}
+            aria-label={theme === "dark" ? "Kunduzgi rejimga o'tish" : "Tungi rejimga o'tish"}
+            title={theme === "dark" ? "Kunduzgi rejim (Yorug')" : "Tungi rejim (Qorong'i)"}
+          >
+            <span style={{ fontSize: "16px", display: "inline-flex", alignItems: "center" }}>
+              {theme === "dark" ? "☀️" : "🌙"}
+            </span>
+          </button>
+          <button
             className={`iconButton notifBellBtn ${unreadMessages.length > 0 ? "hasUnread" : ""}`}
             id="topbar-notifications-btn"
             onClick={() => setIsNotificationsOpen(true)}
@@ -4181,6 +4423,12 @@ export default function App() {
                       <b>−{formatPrice(discount)}</b>
                     </div>
                   ) : null}
+                  {appliedCashback > 0 ? (
+                    <div className="discountLine" style={{ color: "#059669" }}>
+                      <span>💎 Keshbek chegirmasi</span>
+                      <b>−{formatPrice(appliedCashback)}</b>
+                    </div>
+                  ) : null}
                   <hr />
                   <div className="total">
                     <span>Jami</span>
@@ -4223,6 +4471,10 @@ export default function App() {
             formatPrice={formatPrice}
             showToast={showToast}
             onProceedPayment={() => setShowCardPaymentModal(true)}
+            availableCashback={availableCashback}
+            useCashback={useCashback}
+            onToggleCashback={setUseCashback}
+            cashbackDiscount={appliedCashback}
             LocationPicker={LocationPicker}
           />
         )}

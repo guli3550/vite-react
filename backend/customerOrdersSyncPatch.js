@@ -122,10 +122,9 @@ async function listOrders(req, res) {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
+  const phoneQuery = String(req.query.phone || req.headers['x-customer-phone'] || '').replace(/\D/g, '');
+  const telegramIdQuery = String(req.query.telegram_id || req.headers['x-telegram-id'] || '').trim();
 
-  if (!user && !orderNumsQuery.length) {
-    return res.status(401).json({ success: false, message: 'Mijoz sessiyasi topilmadi.' });
-  }
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
     let query = supabase
@@ -137,6 +136,20 @@ async function listOrders(req, res) {
     const orConditions = [];
     if (user?.type === 'auth') orConditions.push(`auth_user_id.eq.${user.id}`);
     else if (user?.id) orConditions.push(`telegram_id.eq.${user.id}`);
+    
+    if (telegramIdQuery && /^\d+$/.test(telegramIdQuery)) {
+      orConditions.push(`telegram_id.eq.${telegramIdQuery}`);
+    }
+
+    if (phoneQuery && phoneQuery.length >= 7) {
+      const last7 = phoneQuery.slice(-7);
+      const last9 = phoneQuery.slice(-9);
+      orConditions.push(`phone.ilike.%${last7}%`);
+      if (last9 !== last7) {
+        orConditions.push(`phone.ilike.%${last9}%`);
+      }
+    }
+
     if (orderNumsQuery.length) {
       for (const num of orderNumsQuery.slice(0, 30)) {
         orConditions.push(`order_number.eq.${num}`);
@@ -145,6 +158,9 @@ async function listOrders(req, res) {
 
     if (orConditions.length) {
       query = query.or(orConditions.join(','));
+    } else {
+      // Return empty array instead of 401 so non-logged in or fresh browser sessions do not crash
+      return res.json({ success: true, data: [] });
     }
 
     const { data, error } = await query;

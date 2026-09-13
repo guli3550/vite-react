@@ -12,8 +12,7 @@ export type NavTabKey =
   | "chat"
   | "callcenter"
   | "notifications"
-  | "settings"
-  | "extensions";
+  | "settings";
 
 export type NavItem = {
   key: NavTabKey;
@@ -37,5 +36,4 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { key: "callcenter", icon: "☎️", label: "Call Center Chat" },
   { key: "notifications", icon: "🔔", label: "Bildirishnomalar" },
   { key: "settings", icon: "⚙️", label: "Sozlamalar" },
-  { key: "extensions", icon: "🏢", label: "Agent ofisi" },
 ];
