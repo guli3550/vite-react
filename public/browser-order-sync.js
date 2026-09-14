@@ -2,21 +2,22 @@
   'use strict';
   const API='/api';
   const ACCESS='guli_access_token';
-  const SNAPSHOT='guli_server_orders_snapshot_v3';
-  const FP='guli_server_orders_status_fingerprint_v3';
-  const NOTE='guli_last_order_status_notification_v3';
-  const RESTORE='guli_restore_page_after_order_status_v1';
+  const SNAPSHOT='guli_server_orders_snapshot_v4';
+  const FP='guli_server_orders_status_fingerprint_v4';
+  const NOTE='guli_last_order_status_notification_v4';
+  const RESTORE='guli_restore_page_after_order_status_v2';
   let running=false;
 
   const token=()=>{
     const direct=localStorage.getItem(ACCESS)||'';
     if(direct)return direct;
     try{
-      const raw=localStorage.getItem('guli_supabase_auth_token');
+      const raw=localStorage.getItem('guli_supabase_auth_token')||'';
       const j=raw?JSON.parse(raw):null;
-      return j?.access_token||j?.currentSession?.access_token||'';
+      return j?.access_token||j?.currentSession?.access_token||j?.session?.access_token||j?.data?.session?.access_token||'';
     }catch{return ''}
   };
+
   const headers=()=>{
     const h={Accept:'application/json'};
     const tg=window.Telegram?.WebApp;
@@ -27,11 +28,12 @@
     }
     return h;
   };
+
   const hasSession=()=>Boolean(window.Telegram?.WebApp?.initData||token());
   const normalize=r=>({
     ...r,
     id:String(r.order_number||r.id||''),
-    order_number:r.order_number,
+    order_number:String(r.order_number||r.id||''),
     status:r.status||'⏳ Buyurtma kutilmoqda',
     payment_status:r.payment_status||'pending',
     updatedAt:r.updated_at||r.updatedAt,
@@ -54,11 +56,12 @@
 
   function rememberPage(){
     try{
-      if(document.querySelector('.ordersPageContainer')) sessionStorage.setItem(RESTORE,'orders');
-      else if(document.querySelector('.modernProfilePage')) sessionStorage.setItem(RESTORE,'profile');
+      if(document.querySelector('.ordersPageContainer'))sessionStorage.setItem(RESTORE,'orders');
+      else if(document.querySelector('.modernProfilePage'))sessionStorage.setItem(RESTORE,'profile');
       else sessionStorage.removeItem(RESTORE);
     }catch{}
   }
+
   function restorePage(){
     let page='';
     try{page=sessionStorage.getItem(RESTORE)||'';sessionStorage.removeItem(RESTORE);}catch{}
@@ -68,8 +71,8 @@
       tries++;
       const nodes=[...document.querySelectorAll('button,[role="button"],a')];
       const target=page==='orders'
-        ? nodes.find(el=>/Buyurtmalarim/i.test(String(el.textContent||'')))
-        : nodes.find(el=>/^\s*👤\s*$/.test(String(el.textContent||''))) || nodes.find(el=>/Profil|Shaxsiy/i.test(String(el.textContent||'')));
+        ?nodes.find(el=>/Buyurtmalarim/i.test(String(el.textContent||'')))
+        :nodes.find(el=>/^\s*👤\s*$/.test(String(el.textContent||'')))||nodes.find(el=>/Profil|Shaxsiy/i.test(String(el.textContent||'')));
       if(target){target.click();clearInterval(timer);}
       else if(tries>=15)clearInterval(timer);
     },300);
@@ -79,11 +82,14 @@
     if(running||!hasSession())return;
     running=true;
     try{
-      const r=await fetch(`${API}/customer/orders`,{headers:headers(),cache:'no-store',credentials:'same-origin'});
+      // Always use the canonical endpoint directly. It accepts both Telegram
+      // initData and Supabase Bearer sessions and is shared across clients.
+      const r=await fetch(`${API}/orders`,{headers:headers(),cache:'no-store',credentials:'same-origin'});
       if(!r.ok)return;
       const j=await r.json().catch(()=>null);
       if(!j?.success||!Array.isArray(j.data))return;
       const current=j.data.map(normalize).filter(x=>x.id);
+
       let previous=[];
       try{previous=JSON.parse(localStorage.getItem(SNAPSHOT)||'[]');if(!Array.isArray(previous))previous=[];}catch{}
       const oldFp=localStorage.getItem(FP)||'';
@@ -105,12 +111,8 @@
       if(changes.length){
         const change=changes[0];
         rememberPage();
-        try{
-          localStorage.setItem(NOTE,JSON.stringify({id:change.next.id,from:change.old.status,to:change.next.status,at:new Date().toISOString()}));
-        }catch{}
+        try{localStorage.setItem(NOTE,JSON.stringify({id:change.next.id,from:change.old.status,to:change.next.status,at:new Date().toISOString()}));}catch{}
         toast(`📦 ${change.next.id}: buyurtma holati o‘zgardi — ${change.next.status}`);
-        // One controlled refresh only for a real status/payment change.
-        // Never refresh for updated_at-only changes and never loop continuously.
         setTimeout(()=>location.reload(),700);
       }
     }catch{}
