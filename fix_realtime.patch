@@ -1,0 +1,47 @@
+--- src/App.tsx
++++ src/App.tsx
+@@ -1838,9 +1838,40 @@
+ 
+   useEffect(() => {
+     loadOrders(false).catch(() => {});
+-    const interval = setInterval(() => {
++    
++    // Fallback polling mechanism
++    const fallbackInterval = setInterval(() => {
+       loadOrders(true).catch(() => {});
+-    }, 4000);
+-    return () => clearInterval(interval);
++    }, 15000); // 15 seconds fallback polling
++    
++    // Supabase Realtime for orders
++    let channel: any;
++    try {
++      channel = supabase
++        .channel('public:orders')
++        .on(
++          'postgres_changes',
++          {
++            event: 'UPDATE',
++            schema: 'public',
++            table: 'orders',
++          },
++          (payload) => {
++            // Real-time synchronization callback
++            if (payload.new && payload.new.id) {
++              // Immediately fetch fresh orders on update
++              loadOrders(true).catch(() => {});
++            }
++          }
++        )
++        .subscribe();
++    } catch (err) {
++      console.warn("Supabase realtime setup failed:", err);
++    }
++
++    return () => {
++      clearInterval(fallbackInterval);
++      if (channel) supabase.removeChannel(channel).catch(() => {});
++    };
+   }, [loadOrders]);
+ 
+   useEffect(() => {

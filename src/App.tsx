@@ -1845,10 +1845,52 @@ export default function App() {
 
   useEffect(() => {
     loadOrders(false).catch(() => {});
-    const interval = setInterval(() => {
+    
+    // Fallback polling mechanism
+    const fallbackInterval = setInterval(() => {
       loadOrders(true).catch(() => {});
-    }, 4000);
-    return () => clearInterval(interval);
+    }, 15000);
+    
+    // Supabase Realtime synchronization
+    let channel: any = null;
+    try {
+      const sb = getSupabase();
+      if (sb) {
+        channel = sb
+          .channel('public:orders_customer')
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'orders',
+            },
+            (payload: any) => {
+              if (payload.new && payload.new.id) {
+                // If the updated order exists in our local list, fetch fresh data
+                const currentOrdersRaw = localStorage.getItem("guli_orders");
+                if (currentOrdersRaw) {
+                  const orders = JSON.parse(currentOrdersRaw);
+                  if (orders.some((o: any) => String(o.id) === String(payload.new.id))) {
+                    loadOrders(true).catch(() => {});
+                  }
+                }
+              }
+            }
+          )
+          .subscribe();
+      }
+    } catch (e) {
+      console.warn("Supabase realtime fail", e);
+    }
+
+    return () => {
+      clearInterval(fallbackInterval);
+      const sb = getSupabase();
+      if (channel && sb) {
+        sb.removeChannel(channel).catch(() => {});
+      }
+    };
   }, [loadOrders]);
 
   useEffect(() => {
@@ -1856,6 +1898,18 @@ export default function App() {
       loadOrders(false).catch(() => {});
     }
   }, [page, loadOrders]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadOrders(true).catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadOrders]);
   useEffect(() => {
     const w = tg();
     if (!w?.onEvent || !telegramUser?.id) return;
