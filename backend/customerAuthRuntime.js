@@ -452,6 +452,9 @@ async function createOrder(req, res) {
     const canonical = await resolveCanonicalCustomer(u);
     const telegramId = u.kind === 'telegram' ? u.telegram_id : (canonical?.telegram_id || null);
     const authUserId = u.kind === 'auth' ? u.auth_user_id : (canonical?.auth_user_id || null);
+    
+    body.auth_user_id = authUserId || null;
+    body.telegram_id = telegramId ? Number(telegramId) : null;
 
     let order = null;
     try {
@@ -490,11 +493,16 @@ async function createOrder(req, res) {
         throw insErr;
       }
       order = inserted;
-    } else if (order?.id && authUserId && !order.auth_user_id) {
-      await supabase.from('orders').update({
-        auth_user_id: authUserId,
-        updated_at: new Date().toISOString()
-      }).eq('id', order.id).catch(() => {});
+    }
+    
+    // Always ensure auth_user_id and telegram_id are hard-synced if not null
+    if (order?.id) {
+      const up = {};
+      if (authUserId) up.auth_user_id = authUserId;
+      if (telegramId) up.telegram_id = Number(telegramId);
+      if (Object.keys(up).length > 0) {
+        await supabase.from('orders').update(up).eq('id', order.id).catch(() => {});
+      }
     }
 
     // Process receipt if attached directly in checkout payload

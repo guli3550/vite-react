@@ -4817,3 +4817,93 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
 }
 
 
+
+/* Modern Order Timeline */
+.modernTimeline {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  margin: 16px auto;
+  padding: 24px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+.modernTimelineInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+.mt-line-bg {
+  position: absolute;
+  left: 0;
+  top: 20px;
+  width: 100%;
+  height: 4px;
+  background: var(--border-color);
+  z-index: 0;
+  border-radius: 2px;
+}
+.mt-line-fill {
+  position: absolute;
+  left: 0;
+  top: 20px;
+  height: 4px;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  z-index: 0;
+  transition: width 0.5s ease;
+  border-radius: 2px;
+}
+.mt-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+  gap: 8px;
+  width: 60px;
+}
+.mt-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card-sub);
+  border: 2px solid var(--border-color);
+  color: var(--text-muted);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+}
+.mt-step.active .mt-circle {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+.mt-step.pulse .mt-circle {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  animation: pulse-ring 2s infinite;
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+.mt-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+}
+.mt-step.active .mt-label { color: #10b981; }
+.mt-step.pulse .mt-label { color: #2563eb; }
+
+[data-theme="dark"] .mt-line-bg { background: #334155; }
+[data-theme="dark"] .mt-circle { background: #1e293b; border-color: #334155; }
