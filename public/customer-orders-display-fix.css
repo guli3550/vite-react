@@ -1,10 +1,34 @@
-/* Customer Buyurtmalarim: keep summary totals, remove the horizontal product image ribbon. */
+/* Customer Buyurtmalarim: compact order summary without product image ribbon. */
 .ordersPageContainer .orderProductsListUnder {
   display: none !important;
 }
 
 .ordersPageContainer .orderMain {
   display: block !important;
+  min-height: 0 !important;
+}
+
+/* Remove internal code/recent-update metadata from the main order header. */
+.ordersPageContainer .orderCodeTag,
+.ordersPageContainer .recentBadge,
+.ordersPageContainer .recentStatusTime {
+  display: none !important;
+}
+
+/* Keep the main card compact when the product ribbon is hidden. */
+.ordersPageContainer .orderTop {
+  padding-bottom: 6px !important;
+  min-height: 0 !important;
+}
+
+.ordersPageContainer .orderInfoSummaryBar {
+  margin-top: 4px !important;
+  padding: 7px 11px !important;
+}
+
+.ordersPageContainer .orderBottom {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
 }
 
 /* Banner: restore image-first presentation without overlay copy/buttons. */
