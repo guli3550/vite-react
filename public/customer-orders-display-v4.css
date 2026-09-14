@@ -1,0 +1,170 @@
+/* Final customer order visual corrections. */
+.ordersPageContainer .orderProductsListUnder {
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden !important;
+}
+.ordersPageContainer .orderMain {
+  min-height:0 !important;
+  height:auto !important;
+}
+.ordersPageContainer .orderTop {
+  min-height:0 !important;
+  height:auto !important;
+  padding-top:8px !important;
+  padding-bottom:4px !important;
+}
+.ordersPageContainer .orderCodeTag,
+.ordersPageContainer .recentBadge,
+.ordersPageContainer .recentStatusTime {
+  display:none !important;
+}
+.ordersPageContainer .orderInfoSummaryBar {
+  min-height:32px !important;
+  height:auto !important;
+  margin-top:3px !important;
+  margin-bottom:0 !important;
+  padding:5px 9px !important;
+}
+.ordersPageContainer .orderBottom {
+  min-height:0 !important;
+  padding-top:5px !important;
+  padding-bottom:7px !important;
+}
+
+/* Status shown by the real server-driven order indicator. */
+.ordersPageContainer .orderStatus.guliLiveStatusV3 {
+  font-weight:850 !important;
+  transition:all .2s ease !important;
+}
+
+/* Modern five-step indicator. */
+.ordersPageContainer [data-guli-order-stepper-v3] {
+  display:block !important;
+  width:100% !important;
+  box-sizing:border-box !important;
+  padding:7px 8px 2px !important;
+}
+.guliOrderStepperV3 {
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) 14px minmax(0,1fr) 14px minmax(0,1fr) 14px minmax(0,1fr) 14px minmax(0,1fr) !important;
+  align-items:start !important;
+  width:100% !important;
+  padding:8px 5px 7px !important;
+  box-sizing:border-box !important;
+  border:1px solid #eadfe3 !important;
+  border-radius:15px !important;
+  background:rgba(255,255,255,.96) !important;
+  box-shadow:0 5px 18px rgba(66,36,46,.06) !important;
+}
+.guliOrderStepV3 {
+  min-width:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  gap:4px !important;
+}
+.guliOrderStepV3 > span {
+  width:27px !important;
+  height:27px !important;
+  border-radius:50% !important;
+  display:grid !important;
+  place-items:center !important;
+  box-sizing:border-box !important;
+  border:2px solid #ded3d7 !important;
+  background:#fff !important;
+  color:#9b8990 !important;
+  font-size:11px !important;
+  font-weight:900 !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+.guliOrderStepV3 > b {
+  width:100% !important;
+  min-height:23px !important;
+  text-align:center !important;
+  font-size:8px !important;
+  line-height:1.15 !important;
+  color:#96838b !important;
+  font-weight:700 !important;
+  overflow-wrap:anywhere !important;
+}
+.guliOrderStepV3.done > span {
+  border-color:#18a957 !important;
+  background:#ecfdf3 !important;
+  color:#15803d !important;
+}
+.guliOrderStepV3.done > b { color:#4f6e5a !important; }
+.guliOrderStepV3.current > span {
+  border-color:#c9526b !important;
+  background:#c9526b !important;
+  color:#fff !important;
+  transform:scale(1.08) !important;
+  box-shadow:0 0 0 4px rgba(201,82,107,.12),0 5px 13px rgba(201,82,107,.22) !important;
+}
+.guliOrderStepV3.current > b { color:#3f2930 !important; font-weight:900 !important; }
+.guliOrderStepLineV3 {
+  height:3px !important;
+  margin-top:12px !important;
+  border-radius:999px !important;
+  background:#e8e0e3 !important;
+}
+.guliOrderStepLineV3.done { background:linear-gradient(90deg,#18a957,#c9526b) !important; }
+.guliOrderCancelledV3 {
+  margin-top:5px !important;
+  padding:6px 8px !important;
+  border-radius:9px !important;
+  text-align:center !important;
+  font-size:9px !important;
+  font-weight:850 !important;
+  color:#b4232d !important;
+  background:#fff1f2 !important;
+  border:1px solid #fecdd3 !important;
+}
+[data-theme="dark"] .guliOrderStepperV3 { background:#21171b !important; border-color:#49343c !important; }
+[data-theme="dark"] .guliOrderStepV3 > span { background:#281e22 !important; border-color:#5a454d !important; }
+[data-theme="dark"] .guliOrderStepV3.current > span { background:#c9526b !important; border-color:#c9526b !important; }
+
+/* Banner: image must occupy the complete rounded banner viewport. */
+.hero {
+  overflow:hidden !important;
+}
+.heroSlideTrack,
+.heroSlideItem {
+  width:100% !important;
+  height:100% !important;
+  min-width:100% !important;
+  min-height:100% !important;
+  padding:0 !important;
+  margin:0 !important;
+  box-sizing:border-box !important;
+}
+.heroSlideImg {
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  min-width:100% !important;
+  min-height:100% !important;
+  max-width:none !important;
+  object-fit:cover !important;
+  object-position:center center !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  transform:none !important;
+}
+.heroOverlay {
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  padding:0 !important;
+  margin:0 !important;
+}
+/* No overlay copy/buttons: the image itself is the banner. */
+.heroOverlay > * { display:none !important; }
