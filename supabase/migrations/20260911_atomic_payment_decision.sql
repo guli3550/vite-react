@@ -1,6 +1,5 @@
 -- GULI payment/order integrity: one atomic admin decision.
--- Applies payment_status and the corresponding order status in one DB transaction.
--- Production rollout must be reviewed before applying.
+-- Payment decisions must never move an already-progressed order backwards.
 
 create or replace function public.admin_payment_decision(p_order_id uuid, p_payment_status text)
 returns jsonb
@@ -42,12 +41,21 @@ begin
     raise exception 'Avval chek yuklangan bo‘lishi kerak';
   end if;
 
-  if coalesce(v_order.payment_status,'pending') = 'verified' and p_payment_status = 'verified' then
-    v_order_status := 'Qabul qilindi';
-  elsif coalesce(v_order.payment_status,'pending') = 'rejected' and p_payment_status = 'verified' then
-    raise exception 'Rad etilgan to‘lov yangi chek bilan qayta yuklanishi kerak';
+  -- Approval only moves an initial payment-waiting order to Qabul qilindi.
+  -- If processing has already started, preserve the current order status.
+  if p_payment_status = 'verified' then
+    if v_order.status in ('⏳ Buyurtma kutilmoqda', '⏳ To''lovni tasdiqlash kutilmoqda') then
+      v_order_status := 'Qabul qilindi';
+    else
+      v_order_status := v_order.status;
+    end if;
   else
-    v_order_status := case when p_payment_status = 'verified' then 'Qabul qilindi' else 'Bekor qilindi' end;
+    -- Rejection is allowed only before order processing starts.
+    if v_order.status in ('⏳ Buyurtma kutilmoqda', '⏳ To''lovni tasdiqlash kutilmoqda') then
+      v_order_status := 'Bekor qilindi';
+    else
+      raise exception 'Buyurtma allaqachon jarayonga o‘tgan; to‘lovni rad etish mumkin emas';
+    end if;
   end if;
 
   update public.orders
