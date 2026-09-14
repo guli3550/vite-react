@@ -260,13 +260,12 @@ async function uploadReceipt(req, res) {
       signedReceiptUrl = sData?.signedUrl || '';
     } catch {}
 
-    const newStatus = order.status === 'Bekor qilindi' ? order.status : (order.status === 'Qabul qilindi' ? order.status : '⏳ To‘lovni tasdiqlash kutilmoqda');
+    // Receipt upload must only update payment fields. Never regress the fulfillment status.
     const patchData = {
       payment_receipt_path: filePath,
       payment_status: 'receipt_uploaded',
       payment_receipt_uploaded_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      status: newStatus,
     };
 
     const { data: updated, error: ue } = await supabase
@@ -302,4 +301,3 @@ install('get', '/api/guest/orders', listOrders);
 install('post', '/api/orders/:orderNumber/receipt', uploadReceipt);
 install('post', '/api/orders/:id/receipt', uploadReceipt);
 install('post', '/api/orders/:orderNumber/payment-receipt', uploadReceipt);
-
