@@ -1,5 +1,6 @@
 // Final customer order continuity layer.
-// Keeps server data authoritative and rehydrates the same order list after a reload.
+// Uses the canonical authenticated orders endpoint for both Telegram WebApp and
+// browser accounts so the visible order list always comes from the same source.
 (() => {
   'use strict';
   if (window.__GULI_CUSTOMER_ORDERS_UNIFIED_FIX__) return;
@@ -28,6 +29,7 @@
       const t = token();
       if (t) h.set('Authorization', `Bearer ${t}`);
     }
+    h.set('Accept', 'application/json');
     return h;
   };
 
@@ -43,10 +45,19 @@
   };
 
   window.fetch = async (input, init) => {
-    const url = typeof input === 'string' ? input : input?.url || '';
-    if (!isOrderRead(url)) return nativeFetch(input, init);
+    const originalUrl = typeof input === 'string' ? input : input?.url || '';
+    if (!isOrderRead(originalUrl)) return nativeFetch(input, init);
+
+    const url = new URL(originalUrl, window.location.origin);
+    const isCustomerEndpoint = /\/api\/customer\/orders(?:[/?]|$)/i.test(url.pathname);
+    // The canonical backend route validates the same Telegram initData or
+    // Supabase bearer token and is shared by all customer clients.
+    if (isCustomerEndpoint && !/^\/api\/customer\/orders\/[^/]+\//i.test(url.pathname)) {
+      url.pathname = '/api/orders';
+    }
+
     const options = { ...(init || {}), headers: headers(init), cache: 'no-store' };
-    const response = await nativeFetch(input, options);
+    const response = await nativeFetch(url.toString(), options);
     if (!response.ok) return response;
     try {
       const clone = response.clone();
@@ -54,15 +65,18 @@
       if (body?.success && Array.isArray(body.data)) {
         body.data = body.data.map(canonical);
         try {
-          const existing = JSON.parse(localStorage.getItem('guli_orders') || '[]');
-          const old = Array.isArray(existing) ? existing : [];
-          const map = new Map(old.map(o => [String(o.order_number || o.id), o]));
-          body.data.forEach(o => map.set(o.order_number, o));
-          localStorage.setItem('guli_orders', JSON.stringify([...map.values()]));
-          localStorage.setItem('orders', JSON.stringify([...map.values()]));
+          const current = body.data;
+          localStorage.setItem('guli_orders', JSON.stringify(current));
+          localStorage.setItem('orders', JSON.stringify(current));
         } catch {}
       }
-      return new Response(JSON.stringify(body), { status: response.status, statusText: response.statusText, headers: response.headers });
-    } catch { return response; }
+      return new Response(JSON.stringify(body), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+    } catch {
+      return response;
+    }
   };
 })();
