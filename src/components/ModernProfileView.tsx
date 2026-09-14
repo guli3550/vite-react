@@ -1838,7 +1838,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       {/* MODAL 4: Logout Confirmation (Centered in the middle of screen) */}
       {isLogoutConfirmOpen && (
         <div
-          className="modalBackdrop modalBackdropCenter"
+          className="modalBackdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsLogoutConfirmOpen(false);
           }}
@@ -1853,7 +1853,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             alignItems: "center",
             justifyContent: "center",
             padding: "20px",
-            margin: "auto",
+            
           }}
         >
           <div
@@ -1868,8 +1868,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
               border: "1px solid var(--border-color, #e2e8f0)",
               textAlign: "center",
-              margin: "auto",
-              position: "relative",
+              
+              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", 
             }}
           >
             <span style={{ fontSize: "44px", display: "block", marginBottom: "12px" }}>🚪</span>
