@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="/marketplace-fixes.css?v=6" />
     <link rel="stylesheet" href="/premium-design.css?v=6" />
     <link rel="stylesheet" href="/reference-storefront.css?v=6" />
-    <link rel="stylesheet" href="/customer-orders-display-fix.css?v=2" />
+    <link rel="stylesheet" href="/customer-orders-display-fix.css?v=3" />
   </head>
   <body>
     <div id="root"></div>
@@ -47,5 +47,7 @@
     <script src="/customer-order-consistency-fix.js?v=1"></script>
     <script src="/browser-order-sync.js?v=6"></script>
     <script src="/browser-payment-status-sync.js?v=2"></script>
+    <!-- Definitive customer order identity/status runtime. Must load after legacy order bridges. -->
+    <script src="/customer-orders-definitive-runtime.js?v=1"></script>
   </body>
 </html>
