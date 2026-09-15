@@ -3,7 +3,6 @@ import type { Language } from "../utils/translations";
 
 export interface AuthUser {
   id: string;
-  email?: string | null;
   username?: string | null;
   full_name?: string | null;
   phone?: string | null;
@@ -11,6 +10,8 @@ export interface AuthUser {
   provider?: "google" | "email" | "telegram";
   created_at?: string;
   telegram_id?: number | null;
+  telegram_username?: string | null;
+  telegram_photo_url?: string | null;
 }
 
 interface CustomerAuthModalProps {
@@ -63,16 +64,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   }, [isOpen, initialTab]);
 
   const completeLogin = (data: any) => {
-    const rawUsername = String(data?.user?.username || "").trim();
+    const rawUsername = String(data?.user?.telegram_username || data?.user?.username || "").trim().replace(/^@+/, "");
     const user: AuthUser = {
       id: String(data?.user?.id || ""),
       phone: data?.user?.phone_number || null,
       username: rawUsername || null,
-      email: data?.user?.email || (rawUsername ? `@${rawUsername}` : null),
       full_name: data?.user?.full_name || null,
-      avatar_url: data?.user?.avatar_url || null,
+      avatar_url: data?.user?.telegram_photo_url || data?.user?.avatar_url || null,
       provider: "telegram",
       telegram_id: data?.user?.telegram_id ?? null,
+      telegram_username: rawUsername || null,
+      telegram_photo_url: data?.user?.telegram_photo_url || null,
       created_at: data?.user?.created_at,
     };
     if (!user.id || !data?.access_token) throw new Error("Auth javobi to‘liq emas.");
@@ -121,7 +123,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     if (loading || status === "waiting" || status === "ready" || exchangeInFlightRef.current) return;
     setLoading(true); setError(null); setSuccess(null); clearPolling(); exchangeInFlightRef.current = false;
 
-    // Open synchronously from the user's click so Android Chrome does not block Telegram.
     let popup: Window | null = null;
     try { popup = window.open("about:blank", "_blank"); } catch {}
     popupRef.current = popup;
