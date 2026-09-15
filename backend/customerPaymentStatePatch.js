@@ -1,13 +1,13 @@
 // Customer-only payment state and private receipt preview.
-// Keeps receipt objects private while giving the customer a short-lived signed URL.
-const express = require('express');
+// Canonical browser identity = GULI JWT -> public.users.id.
+// Telegram Mini App identity = verified Telegram initData -> telegram_id.
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { verifyAccessToken } = require('./guliCustomAuth.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || '').trim();
-const ADMIN_SECRET = String(process.env.ADMIN_SECRET || '').trim();
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
@@ -43,32 +43,32 @@ function verifyTelegramInitData(raw) {
   }
 }
 
-function verifyGuestToken(token) {
-  try {
-    const [payload, signature] = String(token || '').split('.');
-    if (!payload || !signature || !ADMIN_SECRET) return null;
-    const expected = crypto.createHmac('sha256', ADMIN_SECRET).update(payload).digest('base64url');
-    if (!safeEqual(signature, expected)) return null;
-    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    const id = Number(data.guestId);
-    if (!Number.isSafeInteger(id) || id >= 0 || Number(data.exp) < Date.now()) return null;
-    return { id };
-  } catch {
-    return null;
+async function requireCustomer(req, res, next) {
+  const auth = String(req.headers.authorization || '');
+  if (/^Bearer\s+/i.test(auth)) {
+    try {
+      const claims = verifyAccessToken(auth.replace(/^Bearer\s+/i, '').trim());
+      if (claims?.sub) {
+        if (!supabase) return res.status(503).json({ success: false, message: 'To‘lov xizmati sozlanmagan.' });
+        const { data: user, error } = await supabase
+          .from('users')
+          .select('id,phone_number,telegram_id')
+          .eq('id', String(claims.sub))
+          .maybeSingle();
+        if (!error && user) {
+          req.customerPaymentUser = { kind: 'guli', id: String(user.id), telegramId: user.telegram_id != null ? Number(user.telegram_id) : null };
+          return next();
+        }
+      }
+    } catch {}
   }
-}
 
-function requireCustomer(req, res, next) {
   const telegram = verifyTelegramInitData(req.headers['x-telegram-init-data'] || '');
   if (telegram) {
-    req.customerPaymentUser = telegram;
+    req.customerPaymentUser = { kind: 'telegram', id: telegram.id };
     return next();
   }
-  const guest = verifyGuestToken(req.headers['x-guli-guest-token'] || '');
-  if (guest) {
-    req.customerPaymentUser = guest;
-    return next();
-  }
+
   return res.status(401).json({ success: false, message: 'Mijoz sessiyasi topilmadi.' });
 }
 
@@ -77,13 +77,20 @@ install('get', '/api/orders/:orderNumber/payment-state', requireCustomer, async 
   try {
     if (!supabase) return res.status(503).json({ success: false, message: 'To‘lov xizmati sozlanmagan.' });
     const orderNumber = String(req.params.orderNumber || '').trim();
-    const customerId = Number(req.customerPaymentUser.id);
-    const { data: order, error } = await supabase
+    if (!orderNumber) return res.status(400).json({ success: false, message: 'Buyurtma raqami kerak.' });
+
+    let query = supabase
       .from('orders')
       .select('id,order_number,total,subtotal,delivery,discount,phone,payment,payment_status,payment_receipt_path,payment_receipt_uploaded_at,payment_verified_at,telegram_id,address,items,updated_at')
-      .eq('order_number', orderNumber)
-      .eq('telegram_id', customerId)
-      .maybeSingle();
+      .eq('order_number', orderNumber);
+
+    if (req.customerPaymentUser.kind === 'guli') {
+      query = query.eq('auth_user_id', String(req.customerPaymentUser.id));
+    } else {
+      query = query.eq('telegram_id', Number(req.customerPaymentUser.id));
+    }
+
+    const { data: order, error } = await query.maybeSingle();
     if (error) throw error;
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
 
