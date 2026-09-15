@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import "./ProductReviewsSection.css";
+import { getSupabase } from "../lib/supabaseClient";
 
 export interface ReviewItem {
   id: number | string;
@@ -34,10 +35,8 @@ interface ProductReviewsSectionProps {
   onShowToast?: (msg: string) => void;
 }
 
-// Compatibility exports for the legacy admin module. They intentionally do not
-// read/write localStorage; the production review source of truth is the API/DB.
 export function getStoredReviews(): ReviewItem[] { return []; }
-export function saveStoredReviews(_items: ReviewItem[]): void { /* no-op by design */ }
+export function saveStoredReviews(_items: ReviewItem[]): void { /* DB/API is the only source of truth. */ }
 
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 
@@ -45,23 +44,16 @@ function safeName(first?: string, last?: string) {
   const name = [first, last].map(v => String(v || "").trim()).filter(Boolean).join(" ");
   return name || "Anonim mijoz";
 }
-
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(v => v[0]).join("").toUpperCase() || "M";
 }
-
 function stars(value: number) {
   const n = Math.max(0, Math.min(5, Math.round(value)));
   return `${"★".repeat(n)}${"☆".repeat(5 - n)}`;
 }
 
 export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
-  productCode = "",
-  productName = "",
-  productId,
-  onRatingUpdate,
-  telegramUser,
-  onShowToast,
+  productCode = "", productName = "", productId, onRatingUpdate, telegramUser, onShowToast,
 }) => {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [average, setAverage] = useState(0);
@@ -73,21 +65,15 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selected, setSelected] = useState<ReviewItem | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
-
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(() => telegramUser?.photo_url || null);
   const currentName = safeName(telegramUser?.first_name, telegramUser?.last_name);
 
   useEffect(() => {
-    if (telegramUser?.photo_url) {
-      setUserAvatarUrl(telegramUser.photo_url);
-      return;
-    }
+    if (telegramUser?.photo_url) { setUserAvatarUrl(telegramUser.photo_url); return; }
     try {
       const raw = JSON.parse(localStorage.getItem("guli_auth_user") || "null");
       setUserAvatarUrl(raw?.telegram_photo_url || raw?.photo_url || raw?.avatar || null);
-    } catch {
-      setUserAvatarUrl(null);
-    }
+    } catch { setUserAvatarUrl(null); }
   }, [telegramUser?.photo_url]);
 
   const loadReviews = useCallback(async () => {
@@ -100,25 +86,16 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
       const json = await res.json();
       if (!json?.success || !Array.isArray(json.data?.reviews)) throw new Error("Invalid review response");
       const nextReviews: ReviewItem[] = json.data.reviews.map((r: any) => ({
-        id: r.id,
-        product_id: r.product_id,
-        product_code: r.product_code || productCode,
-        product_name: productName,
-        photo_url: r.photo_url || null,
-        display_name: r.display_name || "Anonim mijoz",
-        rating: Number(r.rating) || 0,
-        comment: String(r.comment || ""),
-        photos: Array.isArray(r.photos) ? r.photos : [],
-        verified_purchase: Boolean(r.verified_purchase),
-        status: "approved",
-        is_pinned: Boolean(r.is_pinned),
-        created_at: r.created_at,
+        id: r.id, product_id: r.product_id, product_code: r.product_code || productCode,
+        product_name: productName, photo_url: r.photo_url || null,
+        display_name: r.display_name || "Anonim mijoz", rating: Number(r.rating) || 0,
+        comment: String(r.comment || ""), photos: Array.isArray(r.photos) ? r.photos : [],
+        verified_purchase: Boolean(r.verified_purchase), status: "approved",
+        is_pinned: Boolean(r.is_pinned), created_at: r.created_at,
       }));
       const nextAverage = Number(json.data.total_average) || 0;
       const nextCount = Number(json.data.total_count) || 0;
-      setReviews(nextReviews);
-      setAverage(nextAverage);
-      setCount(nextCount);
+      setReviews(nextReviews); setAverage(nextAverage); setCount(nextCount);
       setDistribution(Array.isArray(json.data.distribution) ? json.data.distribution : []);
       onRatingUpdate?.(nextAverage, nextCount);
     } catch (error) {
@@ -131,23 +108,16 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
 
   useEffect(() => {
     if (!productId) return;
-    let channel: any = null;
-    let disposed = false;
-    (async () => {
-      try {
-        const { supabase } = await import("../lib/supabaseClient");
-        if (disposed) return;
-        channel = supabase.channel(`product-reviews-live-${String(productId)}`).on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "product_reviews", filter: `product_id=eq.${String(productId)}` },
-          () => { void loadReviews(); }
-        ).subscribe();
-      } catch (error) { console.warn("Review realtime unavailable:", error); }
-    })();
-    return () => {
-      disposed = true;
-      if (channel) import("../lib/supabaseClient").then(({ supabase }) => supabase.removeChannel(channel)).catch(() => {});
-    };
+    const client = getSupabase();
+    if (!client) return;
+    const channel = client.channel(`product-reviews-live-${String(productId)}`).on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "product_reviews", filter: `product_id=eq.${String(productId)}` },
+      () => { void loadReviews(); }
+    ).subscribe((status: string) => {
+      if (status === "CHANNEL_ERROR") console.warn("Review realtime channel error");
+    });
+    return () => { void client.removeChannel(channel); };
   }, [productId, loadReviews]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,10 +131,8 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
         reader.onload = ev => {
           const img = new Image();
           img.onload = () => {
-            const max = 800;
-            const scale = Math.min(1, max / Math.max(img.width, img.height));
-            const w = Math.max(1, Math.round(img.width * scale));
-            const h = Math.max(1, Math.round(img.height * scale));
+            const max = 800, scale = Math.min(1, max / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
             const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
             canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL("image/jpeg", 0.75));
@@ -175,8 +143,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
       });
       next.push(data);
     }
-    setPhotos(prev => [...prev, ...next].slice(0, 3));
-    e.target.value = "";
+    setPhotos(prev => [...prev, ...next].slice(0, 3)); e.target.value = "";
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -186,17 +153,14 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
     try {
       const initData = window.Telegram?.WebApp?.initData || "";
       const res = await fetch(`${API}/api/reviews`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": initData },
+        method: "POST", headers: { "Content-Type": "application/json", "X-Telegram-Init-Data": initData },
         body: JSON.stringify({ product_code: productCode, rating, comment: comment.trim(), photos }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.success) throw new Error(json?.message || "Sharhni yuborib bo‘lmadi");
-      setComment(""); setPhotos([]); await loadReviews();
-      onShowToast?.("Rahmat! Sharhingiz e'lon qilindi ⭐");
-    } catch (error: any) {
-      onShowToast?.(error?.message || "Sharh yuborishda xatolik");
-    } finally { setIsSubmitting(false); }
+      setComment(""); setPhotos([]); await loadReviews(); onShowToast?.("Rahmat! Sharhingiz e'lon qilindi ⭐");
+    } catch (error: any) { onShowToast?.(error?.message || "Sharh yuborishda xatolik"); }
+    finally { setIsSubmitting(false); }
   };
 
   return (
@@ -205,11 +169,9 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
         <div className="reviewsTitleGroup"><span className="reviewsTitleIcon">💬</span><h3 className="reviewsTitle">Baholar va sharhlar</h3></div>
         <div className="reviewsHeaderMeta"><span className="reviewsHeaderStars">{stars(average)}</span><strong className="reviewsHeaderScore">{average.toFixed(1)}</strong><span className="reviewsHeaderCount">({count} ta sharh)</span></div>
       </div></div>
-
       {count > 0 && <div className="reviewsDistribution" aria-label="Baholar taqsimoti">
         {distribution.map(item => <div key={item.star} className="reviewDistributionRow"><span>{item.star} ★</span><div className="reviewDistributionTrack"><span style={{ width: `${Math.round(item.count / count * 100)}%` }} /></div><b>{item.count}</b></div>)}
       </div>}
-
       <div className="reviewsList">
         {reviews.length === 0 ? <div className="emptyReviewsState"><div className="emptyReviewIcon">💬</div><h4>Hozircha sharhlar yo‘q</h4><p>Bu yerda faqat haqiqiy mijozlarning tasdiqlangan sharhlari ko‘rsatiladi.</p></div> : reviews.map(rev => {
           const name = rev.display_name || "Anonim mijoz";
@@ -224,18 +186,16 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
           </article>;
         })}
       </div>
-
       <div className="inlineReviewBoxContainer"><form onSubmit={handleSubmitReview} className="inlineReviewFormBar">
         {!!photos.length && <div className="inlinePhotosPreviewRow">{photos.map((p, i) => <div key={i} className="inlinePhotoThumbWrap"><img src={p} alt="Yuklangan" /><button type="button" className="inlineRemovePhotoBtn" onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button></div>)}</div>}
         <div className="inlineInputRow flexRow"><div className="inlineUserAvatarBox" title="Sizning profil rasmingiz">{userAvatarUrl ? <img src={userAvatarUrl} alt="Profil" className="inlineAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(currentName)}</div>}</div>
           <input type="text" className="inlineCommentInput" value={comment} onChange={e => setComment(e.target.value)} placeholder="Mahsulot haqidagi fikringiz..." required />
           <div className="inlineStarsPicker" title="Baho berish">{[1,2,3,4,5].map(s => <button key={s} type="button" className={`inlineStarBtn ${s <= rating ? "active" : ""}`} onClick={() => setRating(s)}>★</button>)}</div>
           <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="fileInputHidden" id="inline-gallery-photo-upload" />
-          <label htmlFor="inline-gallery-photo-upload" className="inlineAttachGalleryBtn" title="Qurilma galereyasidan rasm tanlash">📎</label>
+          <label htmlFor="inline-gallery-photo-upload" className="inlineAttachGalleryBtn" title="Qurilmadan rasm tanlash">📎</label>
           <button type="submit" className="inlineSubmitBtn" disabled={isSubmitting} title="Sharh yuborish">{isSubmitting ? "..." : "➤"}</button>
         </div>
       </form></div>
-
       {selected && <div className="modalBackdrop modalBackdropCenter" onClick={() => setSelected(null)}><div className="modalCard reviewDetailModalCard" onClick={e => e.stopPropagation()}>
         <div className="modalHeader reviewDetailModalHeader"><div className="reviewDetailUserHeader"><div className="detailAvatarBox">{selected.photo_url ? <img src={selected.photo_url} alt={selected.display_name || "Mijoz"} className="detailAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(selected.display_name || "Anonim mijoz")}</div>}</div><div><h3 className="detailUserName">{selected.display_name || "Anonim mijoz"}</h3><div className="detailUserSubMeta">{selected.verified_purchase && <span className="verifiedPurchasePill">✓ Tasdiqlangan haridor</span>}<span className="detailDateText">{new Date(selected.created_at).toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" })}</span></div></div></div><button className="closeModalBtn" onClick={() => setSelected(null)}>✕</button></div>
         <div className="reviewDetailBody"><div className="detailRatingRow"><span className="detailStarsGlyph">{stars(selected.rating)}</span><span className="detailScoreBadge">{selected.rating} / 5</span></div><div className="detailCommentCard"><p className="detailCommentText">{selected.comment}</p></div>{!!selected.photos?.length && <div className="detailPhotosGallery"><h4>📷 Biriktirilgan suratlar ({selected.photos.length}):</h4><div className="detailPhotosGrid">{selected.photos.map((url, i) => <img key={i} src={url} alt="Sharh surati" className="detailPhotoGridItem" onClick={() => setLightbox(url)} />)}</div></div>}<div className="detailModalFooter"><button type="button" className="primaryButton closeDetailBtn" onClick={() => setSelected(null)}>Yopish</button></div></div>
