@@ -3,6 +3,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { install } = require("./routeRegistry.js");
 
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
@@ -51,7 +52,7 @@ async function getCurrentAvatar(telegramId) {
 
 // Browser <img> cannot attach Authorization headers, so avatar access uses a
 // short-lived HMAC URL. The bot token is never exposed to the browser.
-express.application.get.call(express.application, "/api/v1/profile/telegram-avatar/:telegramId/:fileId", async (req, res) => {
+install("get", "/api/v1/profile/telegram-avatar/:telegramId/:fileId", async (req, res) => {
   try {
     const telegramId = Number(req.params.telegramId);
     const fileId = String(req.params.fileId || "");
@@ -73,8 +74,9 @@ express.application.get.call(express.application, "/api/v1/profile/telegram-avat
   }
 });
 
-// The final auth handler is wrapped at route-registration time. Its JSON response
-// is held until Telegram profile data is resolved, then emitted exactly once.
+// Wrap the final auth exchange handler at route-registration time. The underlying
+// handler still owns identity creation and JWT issuance; this layer only enriches
+// the returned user before the JSON response is committed.
 const originalPost = express.application.post;
 express.application.post = function guliProfilePost(routePath, ...handlers) {
   if (routePath === "/api/v1/auth/verify-otp" && handlers.length) {
