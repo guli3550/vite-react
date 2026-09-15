@@ -1,7 +1,6 @@
 // GULI unified customer identity bridge.
 // Telegram: identity is derived from signed WebApp initData (no registration).
-// Browser: identity is the Supabase Auth session (email/Google registration).
-// Both use the same backend customer/order APIs.
+// Browser: identity is the canonical GULI JWT user, including Telegram profile data.
 (() => {
   'use strict';
   if (window.__GULI_UNIFIED_IDENTITY_RUNTIME__) return;
@@ -40,4 +39,41 @@
     options.cache = 'no-store';
     return nativeFetch(input, options);
   };
+
+  // Chat avatar bridge: the canonical auth exchange stores Telegram avatar_url
+  // in guli_auth_user. OnlineChatView may receive only the Telegram WebApp user
+  // object in browser mode, so hydrate the rendered customer avatar from the
+  // canonical user record. This is DOM-only and does not change authorization.
+  function canonicalAvatar() {
+    try {
+      const raw = localStorage.getItem('guli_auth_user');
+      const user = raw ? JSON.parse(raw) : null;
+      return String(user?.avatar_url || '').trim();
+    } catch { return ''; }
+  }
+
+  function hydrateChatAvatars() {
+    const avatar = canonicalAvatar();
+    if (!avatar) return;
+    document.querySelectorAll('.bubbleAvatar.userAvatar').forEach((node) => {
+      const box = node;
+      let img = box.querySelector('img');
+      if (!img) {
+        box.textContent = '';
+        img = document.createElement('img');
+        img.alt = 'Profile';
+        box.appendChild(img);
+      }
+      if (img.getAttribute('src') !== avatar) img.setAttribute('src', avatar);
+    });
+  }
+
+  const observer = new MutationObserver(hydrateChatAvatars);
+  const startAvatarBridge = () => {
+    hydrateChatAvatars();
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startAvatarBridge, { once: true });
+  else startAvatarBridge();
+  window.addEventListener('storage', hydrateChatAvatars);
 })();
