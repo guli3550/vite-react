@@ -131,13 +131,22 @@ install("post", "/api/v1/auth/refresh", async (req, res) => {
   }
 });
 
-install("get", "/api/v1/auth/me", async (req, res) => {
-  if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
-  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  if (!token) return fail(res, 401, "Bearer token talab qilinadi.");
-  const claims = verifyAccessToken(token);
-  if (!claims?.sub) return fail(res, 401, "Sessiya yaroqsiz.");
-  const { data: user } = await supabase.from("users").select("id,phone_number,telegram_id,full_name,created_at,updated_at").eq("id", claims.sub).maybeSingle();
-  if (!user) return fail(res, 401, "Foydalanuvchi topilmadi.");
-  return ok(res, { user });
-});
+// NOTE: GET /api/v1/auth/me is intentionally NOT registered in this file.
+//
+// ROOT CAUSE (see commit message): this file is preloaded very early in
+// backend/package.json's `node -r` chain. routeRegistry.js's install()
+// wraps express.application.get such that whichever file registers a given
+// path FIRST ends up FIRST in the real Express handler chain for that
+// path. A plain handler here (selecting only id/phone_number/telegram_id/
+// full_name) that responds synchronously would therefore always win over -
+// and permanently shadow - the canonical, fully correct implementation in
+// canonicalCustomerProfileSelfHealPatch.js (which resolves the GULI JWT to
+// the canonical Telegram customer, live-fetches the Telegram profile via
+// getChat/getUserProfilePhotos, and returns full_name, telegram_username,
+// telegram_photo_url, and phone), further enriched by
+// canonicalTelegramProfileIdentityBoundaryPatch.js. That is exactly what
+// was happening in production and is why refreshing the app lost the real
+// Telegram avatar/@username.
+//
+// GET /api/v1/auth/me is owned solely by canonicalCustomerProfileSelfHealPatch.js.
+// Do not re-add a competing registration for this path here.
