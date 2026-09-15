@@ -97,10 +97,15 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
     (userKey ? localStorage.getItem(`guli_name_${userKey}`) : "") || 
     "Mijoz";
 
-  const userEmail = authUser?.email || (telegramUser?.username ? `@${telegramUser.username}` : (userKey ? localStorage.getItem(`guli_email_${userKey}`) : "") || "");
+  // NOTE: email auth has been removed from GULI. There is no real email
+  // address anywhere in this flow. `telegramUsername` below is the ONLY
+  // "handle" we display, and it is rendered as an @username - never
+  // disguised as an email address with an envelope icon (that was the
+  // previous bug: the Telegram username was being shown as a fake email).
+  const telegramUsername =
+    (authUser?.telegram_username || telegramUser?.username || "").toString().trim().replace(/^@+/, "") || null;
   const userPhone = authUser?.phone || (userKey ? localStorage.getItem(`guli_phone_${userKey}`) : "") || "+998 -- --- -- --";
   const userAvatar = currentAvatar || authUser?.avatar_url || customAvatar || telegramUser?.photo_url || "";
-  const isGoogle = authUser?.provider === "google" || (authUser?.email && authUser.email.endsWith("@gmail.com"));
 
   // Price formatter helper
   const formatPrice = (val: number) => `${Number(val || 0).toLocaleString("uz-UZ")} so'm`;
@@ -616,9 +621,11 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   >
                     {displayName}
                   </h1>
-                  <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.95, color: "#fffbeb", fontWeight: 600 }}>
-                    ✉️ {userEmail}
-                  </p>
+                  {telegramUsername && (
+                    <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.95, color: "#fffbeb", fontWeight: 600 }}>
+                      @{telegramUsername}
+                    </p>
+                  )}
                   <p style={{ fontSize: "12px", margin: 0, opacity: 0.95, color: "#fef3c7", fontWeight: 600 }}>
                     📞 {userPhone}
                   </p>
@@ -701,23 +708,6 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   >
                     🛡️ STANDART MIJOZ
                   </span>
-                  {isGoogle && (
-                    <span
-                      style={{
-                        backgroundColor: "rgba(255, 255, 255, 0.15)",
-                        color: "#ffffff",
-                        padding: "4px 9px",
-                        borderRadius: "20px",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      ✓ Google ulangan
-                    </span>
-                  )}
                 </div>
 
                 <button
@@ -821,9 +811,11 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   >
                     {displayName}
                   </h1>
-                  <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.85, color: "#cbd5e1" }}>
-                    ✉️ {userEmail}
-                  </p>
+                  {telegramUsername && (
+                    <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.85, color: "#cbd5e1" }}>
+                      @{telegramUsername}
+                    </p>
+                  )}
                   <p style={{ fontSize: "12px", margin: 0, opacity: 0.75, color: "#94a3b8" }}>
                     📞 {userPhone}
                   </p>
@@ -1300,8 +1292,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         >
           <span>🔒</span>
           <div>
-            <b>Xavfsizlik va Google akkaunt</b>
-            <small>{isGoogle ? "Google hisobiga ulangan" : "Email va parol orqali himoyalangan"}</small>
+            <b>Xavfsizlik</b>
+            <small>Telegram orqali tasdiqlangan hisob</small>
           </div>
           <i>›</i>
         </button>
@@ -1737,7 +1729,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: Security & Google Account Modal */}
+      {/* MODAL 3: Security Modal */}
       {isSecurityModalOpen && (
         <div
           className="modalBackdrop"
@@ -1799,13 +1791,13 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   border: "1px solid #e2e8f0",
                 }}
               >
-                <span style={{ fontSize: "24px" }}>{isGoogle ? "🌐" : "✉️"}</span>
+                <span style={{ fontSize: "24px" }}>📱</span>
                 <div>
                   <b style={{ display: "block", fontSize: "14px", color: "#1e293b" }}>
-                    {isGoogle ? "Google Akkaunt orqali autentifikatsiya" : "Email va Parol orqali kirilgan"}
+                    Telegram orqali tasdiqlangan
                   </b>
                   <span style={{ fontSize: "12px", color: "#64748b" }}>
-                    {userEmail}
+                    {userPhone}
                   </span>
                 </div>
               </div>
