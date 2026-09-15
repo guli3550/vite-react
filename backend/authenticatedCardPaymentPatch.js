@@ -41,7 +41,6 @@ async function ensureBucket() {
   const created = await supabase.storage.createBucket(BUCKET, { public: false, allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"], fileSizeLimit: `${MAX_RECEIPT_BYTES}B` });
   if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
 }
-function stableBridgeId(userId) { const hex = crypto.createHash("sha256").update(String(userId)).digest("hex").slice(0, 13); return -(100000000000 + (Number.parseInt(hex, 16) % 899999999999)); }
 install("post", "/api/auth/orders", async (req, res) => {
   const user = await customer(req);
   if (!user) return fail(res, 401, "Mijoz sessiyasi topilmadi. Telegram orqali qayta kiring.");
@@ -51,16 +50,13 @@ install("post", "/api/auth/orders", async (req, res) => {
     const canonicalPhone = String(user.phone || user.phone_number || "").trim();
     if (!canonicalPhone) return fail(res, 409, "Mijozning tasdiqlangan telefon raqami topilmadi.");
     if (!Array.isArray(items) || !items.length || items.length > 100) return fail(res, 400, "Buyurtma mahsulotlari noto‘g‘ri");
-    const order = { order_number: null, username: null, first_name: user.user_metadata?.full_name || null, phone: canonicalPhone, items, address: address || null, payment: "card_manual", status: "⏳ Buyurtma kutilmoqda", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
-    const bridgeId = stableBridgeId(user.id);
-    const { data: created, error } = await supabase.rpc("create_secure_order", { p_order: order, p_telegram_id: bridgeId });
+    const order = { order_number: null, items, address: address || null, payment: "card_manual", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
+    const { data: created, error } = await supabase.rpc("create_secure_order_for_user", { p_order: order, p_auth_user_id: user.id });
     if (error) throw error;
     const row = Array.isArray(created) ? created[0] : created;
     if (!row?.id) throw new Error("Buyurtma yaratildi, ammo identifikatori qaytmadi");
-    const { data: bound, error: bindError } = await supabase.from("orders").update({ auth_user_id: user.id, telegram_id: null, updated_at: new Date().toISOString() }).eq("id", row.id).eq("telegram_id", bridgeId).select("*").single();
-    if (bindError) throw bindError;
-    return res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data: bound });
-  } catch (error) { console.error("Authenticated checkout error:", error); const status = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori/i.test(error.message || "") ? 400 : 500; return fail(res, status, error.message || "Buyurtmani saqlashda xatolik"); }
+    return res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data: row });
+  } catch (error) { console.error("Authenticated checkout error:", error); const status = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori|canonical/i.test(error.message || "") ? 400 : 500; return fail(res, status, error.message || "Buyurtmani saqlashda xatolik"); }
 });
 install("post", "/api/auth/orders/:orderNumber/receipt", async (req, res) => {
   const user = await customer(req);
@@ -94,4 +90,4 @@ install("get", "/api/auth/payment/card-info", async (req, res) => {
   const holderInitials = holder.split(/\s+/).filter(Boolean).map((part) => part.slice(0, 2).toUpperCase()).join(" ");
   return res.json({ success: true, data: { card_number: cardNumber, holder_initials: holderInitials } });
 });
-console.log("[GULI Payment] Authenticated browser card checkout routes registered with GULI JWT.");
+console.log("[GULI Payment] Authenticated browser card checkout routes registered with canonical auth_user_id.");
