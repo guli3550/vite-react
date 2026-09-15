@@ -2,112 +2,20 @@
   const API = (window.__GULI_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
   const STYLE_ID = 'guli-canonical-auth-style';
   let active = false;
-  let observerStarted = false;
-
   const style = document.createElement('style');
   style.id = STYLE_ID;
-  style.textContent = `
-    #guli-canonical-auth{position:fixed;inset:0;z-index:1000001;background:rgba(15,23,42,.68);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit}
-    #guli-canonical-auth .card{width:min(420px,100%);background:#fff;border-radius:24px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.25);text-align:center}
-    #guli-canonical-auth h2{margin:0 0 8px;font-size:24px;color:#111827}
-    #guli-canonical-auth p{margin:0 0 20px;color:#6b7280;line-height:1.5}
-    #guli-canonical-auth .tg{width:100%;border:0;border-radius:14px;padding:14px 16px;background:#229ED9;color:#fff;font-weight:700;font-size:16px;cursor:pointer}
-    #guli-canonical-auth .status{margin-top:16px;padding:12px;border-radius:12px;background:#f3f4f6;color:#374151;font-size:14px;line-height:1.45}
-    #guli-canonical-auth .success{background:#ecfdf5;color:#047857}
-    #guli-canonical-auth .error{background:#fef2f2;color:#b91c1c}
-    #guli-canonical-auth .close{margin-top:14px;border:0;background:transparent;color:#6b7280;cursor:pointer}
-  `;
+  style.textContent = `#guli-canonical-auth{position:fixed;inset:0;z-index:1000001;background:rgba(15,23,42,.68);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit}#guli-canonical-auth .card{width:min(420px,100%);background:#fff;border-radius:24px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.25);text-align:center}#guli-canonical-auth h2{margin:0 0 8px;font-size:24px;color:#111827}#guli-canonical-auth p{margin:0 0 20px;color:#6b7280;line-height:1.5}#guli-canonical-auth .tg{width:100%;border:0;border-radius:14px;padding:14px 16px;background:#229ED9;color:#fff;font-weight:700;font-size:16px;cursor:pointer}#guli-canonical-auth .status{margin-top:16px;padding:12px;border-radius:12px;background:#f3f4f6;color:#374151;font-size:14px;line-height:1.45}#guli-canonical-auth .success{background:#ecfdf5;color:#047857}#guli-canonical-auth .error{background:#fef2f2;color:#b91c1c}#guli-canonical-auth .close{margin-top:14px;border:0;background:transparent;color:#6b7280;cursor:pointer}`;
   document.head.appendChild(style);
-
-  function api(path, options) {
-    return fetch(`${API}${path}`, { cache:'no-store', ...options, headers:{'Content-Type':'application/json',Accept:'application/json',...(options?.headers||{})} }).then(async r => {
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.success) throw new Error(j.message || `HTTP ${r.status}`);
-      return j.data;
-    });
+  const api=(path,options)=>fetch(`${API}${path}`,{cache:'no-store',...options,headers:{'Content-Type':'application/json',Accept:'application/json',...(options?.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||!j.success)throw new Error(j.message||`HTTP ${r.status}`);return j.data});
+  function mount(){
+    if(active||document.getElementById('guli-canonical-auth'))return;
+    active=true;
+    document.querySelectorAll('div').forEach(el=>{const s=el.getAttribute('style')||'';if(s.includes('z-index: 999999')||s.includes('z-index:999999'))el.style.display='none'});
+    const root=document.createElement('div');root.id='guli-canonical-auth';root.innerHTML='<div class="card"><h2>GULI hisobiga kirish</h2><p>Telefon raqamingizni Telegram orqali tasdiqlang.<br>OTP kod kiritish shart emas.</p><button class="tg">📱 Telegram orqali kirish</button><div class="status">Telegram tugmasini bosing. Botda <b>Telefon raqamimni yuborish</b> tugmasini bosganingizdan so‘ng brauzer avtomatik kiradi.</div><button class="close">Yopish</button></div>';document.body.appendChild(root);
+    const status=root.querySelector('.status'),tg=root.querySelector('.tg'),close=root.querySelector('.close');let timer=0,stopped=false;
+    const finish=data=>{localStorage.setItem('guli_access_token',data.access_token||'');localStorage.setItem('guli_refresh_token',data.refresh_token||'');localStorage.setItem('guli_auth_user',JSON.stringify({id:data.user?.id,phone:data.user?.phone_number||'',full_name:data.user?.full_name||'',provider:'telegram',telegram_id:data.user?.telegram_id}));status.className='status success';status.textContent='✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...';setTimeout(()=>window.location.reload(),450)};
+    const stop=()=>{stopped=true;if(timer)clearInterval(timer);root.remove();active=false};close.addEventListener('click',stop);
+    tg.addEventListener('click',async()=>{tg.disabled=true;tg.textContent='⏳ Telegram ochilmoqda...';try{const session=await api('/api/v1/auth/init-session',{method:'POST',body:'{}'});window.open(session.telegram_url,'_blank','noopener,noreferrer');status.textContent='📲 Telegram ochildi. Botdagi “Telefon raqamimni yuborish” tugmasini bosing...';let elapsed=0;timer=window.setInterval(async()=>{if(stopped)return;elapsed+=1200;if(elapsed>300000){clearInterval(timer);status.className='status error';status.textContent='Sessiya muddati tugadi. Qaytadan urinib ko‘ring.';tg.disabled=false;tg.textContent='📱 Telegram orqali kirish';return}try{const state=await api(`/api/v1/auth/check-status/${session.session_id}`);if(state.status==='EXPIRED'){clearInterval(timer);status.className='status error';status.textContent='Sessiya muddati tugadi. Qaytadan urinib ko‘ring.';tg.disabled=false;tg.textContent='📱 Telegram orqali kirish';return}try{const exchanged=await api('/api/v1/auth/exchange',{method:'POST',body:JSON.stringify({session_id:session.session_id})});clearInterval(timer);finish(exchanged)}catch(_){if(state.status==='VERIFIED')status.textContent='🔐 Telegram tasdig‘i olindi. Sessiya yaratilmoqda...'}}catch(_){}},1200)}catch(e){status.className='status error';status.textContent=`❌ ${e.message||'Telegram loginni boshlash imkoni bo‘lmadi.'}`;tg.disabled=false;tg.textContent='📱 Telegram orqali kirish'}});
   }
-
-  function closeOriginal() {
-    document.querySelectorAll('div').forEach(el => {
-      const s = el.getAttribute('style') || '';
-      if (s.includes('z-index: 999999') || s.includes('z-index:999999')) el.dataset.guliAuthHidden = '1';
-    });
-  }
-
-  function restoreOriginal() {
-    document.querySelectorAll('[data-guli-auth-hidden="1"]').forEach(el => { el.dataset.guliAuthHidden=''; });
-  }
-
-  function mount() {
-    if (active || document.getElementById('guli-canonical-auth')) return;
-    active = true;
-    closeOriginal();
-    const root = document.createElement('div');
-    root.id = 'guli-canonical-auth';
-    root.innerHTML = `<div class="card"><h2>GULI hisobiga kirish</h2><p>Telefon raqamingizni Telegram orqali tasdiqlang.<br>OTP kod kiritish shart emas.</p><button class="tg">📱 Telegram orqali kirish</button><div class="status">Telegram tugmasini bosing. Botda <b>Telefon raqamimni yuborish</b> tugmasini bosganingizdan so‘ng brauzer avtomatik kiradi.</div><button class="close">Yopish</button></div>`;
-    document.body.appendChild(root);
-    const status = root.querySelector('.status');
-    const tg = root.querySelector('.tg');
-    const close = root.querySelector('.close');
-    let timer = 0;
-    let stopped = false;
-
-    const finish = (data) => {
-      localStorage.setItem('guli_access_token', data.access_token || '');
-      localStorage.setItem('guli_refresh_token', data.refresh_token || '');
-      localStorage.setItem('guli_auth_user', JSON.stringify({
-        id:data.user?.id, phone:data.user?.phone_number || '', full_name:data.user?.full_name || '', provider:'telegram', telegram_id:data.user?.telegram_id
-      }));
-      status.className = 'status success';
-      status.textContent = '✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...';
-      setTimeout(() => window.location.reload(), 450);
-    };
-
-    const stop = () => { stopped=true; if(timer) clearInterval(timer); root.remove(); restoreOriginal(); active=false; };
-    close.addEventListener('click', stop);
-
-    tg.addEventListener('click', async () => {
-      tg.disabled = true;
-      tg.textContent = '⏳ Telegram ochilmoqda...';
-      try {
-        const session = await api('/api/v1/auth/init-session', {method:'POST',body:'{}'});
-        window.open(session.telegram_url, '_blank', 'noopener,noreferrer');
-        status.textContent = '📲 Telegram ochildi. Botdagi “Telefon raqamimni yuborish” tugmasini bosing...';
-        let elapsed = 0;
-        timer = window.setInterval(async () => {
-          if (stopped) return;
-          elapsed += 1200;
-          if (elapsed > 300000) { clearInterval(timer); status.className='status error'; status.textContent='Sessiya muddati tugadi. Qaytadan urinib ko‘ring.'; tg.disabled=false; tg.textContent='📱 Telegram orqali kirish'; return; }
-          try {
-            const state = await api(`/api/v1/auth/check-status/${session.session_id}`);
-            if (state.status === 'VERIFIED') {
-              clearInterval(timer);
-              status.textContent = '🔐 Telegram tasdig‘i olindi. Sessiya yaratilmoqda...';
-              const exchanged = await api('/api/v1/auth/exchange', {method:'POST',body:JSON.stringify({session_id:session.session_id})});
-              finish(exchanged);
-            } else if (state.status === 'EXPIRED') {
-              clearInterval(timer); status.className='status error'; status.textContent='Sessiya muddati tugadi. Qaytadan urinib ko‘ring.'; tg.disabled=false; tg.textContent='📱 Telegram orqali kirish';
-            }
-          } catch (_) {}
-        }, 1200);
-      } catch (e) {
-        status.className='status error'; status.textContent=`❌ ${e.message || 'Telegram loginni boshlash imkoni bo‘lmadi.'}`;
-        tg.disabled=false; tg.textContent='📱 Telegram orqali kirish';
-      }
-    });
-  }
-
-  const originalDisplay = new WeakMap();
-  const mo = new MutationObserver(() => {
-    document.querySelectorAll('div').forEach(el => {
-      const s = el.getAttribute('style') || '';
-      if (s.includes('z-index: 999999') || s.includes('z-index:999999')) {
-        if (!originalDisplay.has(el)) originalDisplay.set(el, el.style.display || '');
-        el.style.display = 'none';
-        if (!active) mount();
-      }
-    });
-  });
-  mo.observe(document.documentElement, {subtree:true,childList:true,attributes:true,attributeFilter:['style']});
-  observerStarted = true;
+  const mo=new MutationObserver(()=>{document.querySelectorAll('div').forEach(el=>{const s=el.getAttribute('style')||'';if(s.includes('z-index: 999999')||s.includes('z-index:999999')){el.style.display='none';if(!active)mount()}})});mo.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style']});
 })();
