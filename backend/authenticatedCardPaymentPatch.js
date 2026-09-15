@@ -1,4 +1,5 @@
 // Authenticated browser card checkout bridge.
+// Canonical browser identity is GULI JWT -> public.users.id.
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 const { verifyAccessToken } = require("./guliCustomAuth.js");
@@ -15,13 +16,11 @@ async function customer(req) {
   if (!header.startsWith("Bearer ")) return null;
   const token = header.slice(7).trim();
   if (!token) return null;
-  const claims = verifyAccessToken(token);
-  if (claims?.sub) {
-    const { data } = await supabase.from("users").select("id,phone_number,telegram_id,full_name").eq("id", String(claims.sub)).maybeSingle();
-    return data ? { id: data.id, phone: data.phone_number, telegram_id: data.telegram_id, user_metadata: { full_name: data.full_name } } : null;
-  }
-  const { data, error } = await supabase.auth.getUser(token);
-  return error || !data?.user?.id ? null : data.user;
+  let claims = null;
+  try { claims = verifyAccessToken(token); } catch { return null; }
+  if (!claims?.sub) return null;
+  const { data } = await supabase.from("users").select("id,phone_number,telegram_id,full_name").eq("id", String(claims.sub)).maybeSingle();
+  return data ? { id: data.id, phone: data.phone_number, telegram_id: data.telegram_id, user_metadata: { full_name: data.full_name } } : null;
 }
 function decodeReceipt(data, mimeType) {
   const raw = String(data || "");
@@ -47,7 +46,7 @@ install("post", "/api/auth/orders", async (req, res) => {
   try {
     if (!supabase) return fail(res, 503, "Supabase serverda sozlanmagan.");
     const { items, address, promo_code } = req.body || {};
-    const canonicalPhone = String(user.phone || user.phone_number || "").trim();
+    const canonicalPhone = String(user.phone || "").trim();
     if (!canonicalPhone) return fail(res, 409, "Mijozning tasdiqlangan telefon raqami topilmadi.");
     if (!Array.isArray(items) || !items.length || items.length > 100) return fail(res, 400, "Buyurtma mahsulotlari noto‘g‘ri");
     const order = { order_number: null, items, address: address || null, payment: "card_manual", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
