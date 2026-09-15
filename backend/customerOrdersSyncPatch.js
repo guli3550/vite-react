@@ -53,7 +53,6 @@ async function browserUser(req) {
   if (!token) return null;
   const claims = verifyAccessToken(token);
   if (claims?.sub) return { type: 'auth', id: String(claims.sub) };
-  // Backward compatibility for an already-issued Supabase Auth session.
   if (!supabase) return null;
   const { data, error } = await supabase.auth.getUser(token);
   return error || !data?.user?.id ? null : { type: 'auth', id: String(data.user.id) };
@@ -83,14 +82,17 @@ async function listOrders(req, res) {
   if (!user || (user.type !== 'auth' && user.type !== 'telegram')) return res.status(401).json({ success: false, message: 'Mijoz autentifikatsiyasi talab qilinadi.' });
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
-    let query = supabase.from('orders').select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at').order('created_at', { ascending: false }).limit(100);
+    // The production orders table has first_name but not last_name. Keep the API
+    // response shape compatible by mapping last_name in JS instead of selecting a
+    // non-existent SQL column (PostgREST 42703).
+    let query = supabase.from('orders').select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at').order('created_at', { ascending: false }).limit(100);
     query = user.type === 'auth' ? query.eq('auth_user_id', user.id) : query.eq('telegram_id', user.id);
     const { data, error } = await query;
     if (error) throw error;
     const formatted = await Promise.all((data || []).map(async (row) => {
       let receiptUrl = '';
       if (row.payment_receipt_path) { try { const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400); receiptUrl = sData?.signedUrl || ''; } catch {} }
-      return mapOrder({ ...row, receipt_url: receiptUrl || undefined });
+      return mapOrder({ ...row, receipt_url: receiptUrl || undefined, last_name: undefined });
     }));
     res.setHeader('Cache-Control', 'private, no-store');
     return res.json({ success: true, data: formatted });
