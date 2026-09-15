@@ -3,9 +3,8 @@
 // The backend signs short-lived customer JWTs and stores only hashed refresh tokens.
 const crypto = require("crypto");
 
-// Prefer a dedicated secret when available. The existing server-only Supabase
-// secret is a safe fallback so deployment does not require exposing any secret
-// to the browser or adding another dashboard credential.
+// Prefer a dedicated secret. A server-only Supabase secret remains a fallback
+// for deployments where AUTH_JWT_SECRET has not yet been provisioned.
 const SECRET = String(process.env.AUTH_JWT_SECRET || process.env.SUPABASE_SECRET_KEY || "").trim();
 const ACCESS_TTL_SEC = 15 * 60;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -48,8 +47,20 @@ async function rotateRefreshToken(supabase, token) {
   const tokenHash = hashRefreshToken(token);
   const { data: row, error } = await supabase.from("auth_refresh_tokens").select("id,user_id,expires_at,revoked_at").eq("token_hash", tokenHash).maybeSingle();
   if (error || !row || row.revoked_at || new Date(row.expires_at).getTime() <= Date.now()) return null;
-  const { error: revokeError } = await supabase.from("auth_refresh_tokens").update({ revoked_at: new Date().toISOString() }).eq("id", row.id).is("revoked_at", null);
+
+  // Atomic compare-and-revoke: only the request that successfully changes
+  // revoked_at may mint the replacement refresh token. This prevents two
+  // concurrent refresh calls from both rotating the same token successfully.
+  const { data: revoked, error: revokeError } = await supabase
+    .from("auth_refresh_tokens")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle();
   if (revokeError) throw revokeError;
+  if (!revoked?.id) return null;
+
   const next = await issueRefreshToken(supabase, row.user_id);
   return { userId: String(row.user_id), refreshToken: next };
 }
