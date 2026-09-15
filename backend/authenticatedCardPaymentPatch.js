@@ -47,10 +47,11 @@ install("post", "/api/auth/orders", async (req, res) => {
   if (!user) return fail(res, 401, "Mijoz sessiyasi topilmadi. Telegram orqali qayta kiring.");
   try {
     if (!supabase) return fail(res, 503, "Supabase serverda sozlanmagan.");
-    const { phone, items, address, promo_code } = req.body || {};
-    if (!String(phone || "").trim()) return fail(res, 400, "Telefon raqami kiritilmagan");
+    const { items, address, promo_code } = req.body || {};
+    const canonicalPhone = String(user.phone || user.phone_number || "").trim();
+    if (!canonicalPhone) return fail(res, 409, "Mijozning tasdiqlangan telefon raqami topilmadi.");
     if (!Array.isArray(items) || !items.length || items.length > 100) return fail(res, 400, "Buyurtma mahsulotlari noto‘g‘ri");
-    const order = { order_number: null, username: null, first_name: user.user_metadata?.full_name || null, phone: String(phone).trim(), items, address: address || null, payment: "card_manual", status: "⏳ Buyurtma kutilmoqda", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
+    const order = { order_number: null, username: null, first_name: user.user_metadata?.full_name || null, phone: canonicalPhone, items, address: address || null, payment: "card_manual", status: "⏳ Buyurtma kutilmoqda", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
     const bridgeId = stableBridgeId(user.id);
     const { data: created, error } = await supabase.rpc("create_secure_order", { p_order: order, p_telegram_id: bridgeId });
     if (error) throw error;
