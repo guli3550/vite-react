@@ -118,12 +118,20 @@ function mapOrder(row) {
 
 async function listOrders(req, res) {
   const user = await customer(req);
-  const orderNumsQuery = String(req.query.order_numbers || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-  const phoneQuery = String(req.query.phone || req.headers['x-customer-phone'] || '').replace(/\D/g, '');
-  const telegramIdQuery = String(req.query.telegram_id || req.headers['x-telegram-id'] || '').trim();
+
+  // SECURITY FIX (IDOR): order lists must only ever be scoped by a
+  // server-verified identity (validated Telegram initData or a valid
+  // Supabase auth JWT). The previous implementation additionally accepted
+  // client-supplied `phone`, `order_numbers` and `telegram_id`
+  // query/header values and OR-ed them into the database filter. That let
+  // anyone (even with a garbage `Authorization: Bearer x` header, which is
+  // enough to pass the upstream boundary check) read another customer's
+  // full order history, address and signed receipt-image URLs just by
+  // supplying their phone number or a guessed order number. There is no
+  // longer any unauthenticated or self-declared fallback path.
+  if (!user || (user.type !== 'auth' && user.type !== 'telegram')) {
+    return res.status(401).json({ success: false, message: 'Mijoz autentifikatsiyasi talab qilinadi.' });
+  }
 
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
@@ -133,35 +141,9 @@ async function listOrders(req, res) {
       .order('created_at', { ascending: false })
       .limit(100);
 
-    const orConditions = [];
-    if (user?.type === 'auth') orConditions.push(`auth_user_id.eq.${user.id}`);
-    else if (user?.id) orConditions.push(`telegram_id.eq.${user.id}`);
-    
-    if (telegramIdQuery && /^\d+$/.test(telegramIdQuery)) {
-      orConditions.push(`telegram_id.eq.${telegramIdQuery}`);
-    }
-
-    if (phoneQuery && phoneQuery.length >= 7) {
-      const last7 = phoneQuery.slice(-7);
-      const last9 = phoneQuery.slice(-9);
-      orConditions.push(`phone.ilike.%${last7}%`);
-      if (last9 !== last7) {
-        orConditions.push(`phone.ilike.%${last9}%`);
-      }
-    }
-
-    if (orderNumsQuery.length) {
-      for (const num of orderNumsQuery.slice(0, 30)) {
-        orConditions.push(`order_number.eq.${num}`);
-      }
-    }
-
-    if (orConditions.length) {
-      query = query.or(orConditions.join(','));
-    } else {
-      // Return empty array instead of 401 so non-logged in or fresh browser sessions do not crash
-      return res.json({ success: true, data: [] });
-    }
+    query = user.type === 'auth'
+      ? query.eq('auth_user_id', user.id)
+      : query.eq('telegram_id', user.id);
 
     const { data, error } = await query;
     if (error) throw error;
@@ -195,6 +177,17 @@ async function listOrders(req, res) {
 async function uploadReceipt(req, res) {
   if (!supabase) return res.status(503).json({ success: false, message: 'Xizmat sozlanmagan.' });
   try {
+    // SECURITY FIX (IDOR): this endpoint previously had no authentication
+    // or ownership check at all - anyone who knew or guessed an
+    // order_number (format GULI-XXXXXX, only 6 digits) could overwrite
+    // that order's payment receipt and flip its payment_status. We now
+    // require a verified identity and confirm the order actually belongs
+    // to that identity before accepting the upload.
+    const user = await customer(req);
+    if (!user || (user.type !== 'auth' && user.type !== 'telegram')) {
+      return res.status(401).json({ success: false, message: 'Mijoz autentifikatsiyasi talab qilinadi.' });
+    }
+
     const orderIdentifier = String(req.params.orderNumber || req.params.id || req.body?.order_id || '').trim();
     if (!orderIdentifier) {
       return res.status(400).json({ success: false, message: 'Buyurtma identifikatori topilmadi.' });
@@ -214,6 +207,14 @@ async function uploadReceipt(req, res) {
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
+    }
+
+    const owns = user.type === 'auth'
+      ? order.auth_user_id && String(order.auth_user_id) === String(user.id)
+      : order.telegram_id != null && Number(order.telegram_id) === Number(user.id);
+
+    if (!owns) {
+      return res.status(403).json({ success: false, message: 'Bu buyurtma sizga tegishli emas.' });
     }
 
     let rawData = req.body?.data || req.body?.receipt_url || '';
