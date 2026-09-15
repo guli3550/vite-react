@@ -68,16 +68,21 @@ async function enrich(body) {
     .eq("telegram_id", telegramId)
     .maybeSingle();
 
-  const username = String(tg?.username || "").trim() || null;
+  const username = String(tg?.username || "").trim().replace(/^@+/, "") || null;
   const firstName = String(tg?.first_name || "").trim();
   const lastName = String(tg?.last_name || "").trim();
   const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || String(user.full_name || "").trim() || null;
   const avatar = await getAvatar(telegramId);
 
   if (user.id) {
-    const userPatch = { updated_at: new Date().toISOString() };
+    const userPatch = {
+      telegram_id: telegramId,
+      telegram_username: username,
+      telegram_photo_url: avatar,
+      updated_at: new Date().toISOString(),
+    };
     if (fullName) userPatch.full_name = fullName;
-    await supabase.from("users").update(userPatch).eq("id", user.id);
+    await supabase.from("users").update(userPatch).eq("id", user.id).eq("telegram_id", telegramId);
 
     const profilePatch = {
       id: user.id,
@@ -88,8 +93,6 @@ async function enrich(body) {
     if (avatar) profilePatch.avatar_url = avatar;
     await supabase.from("profiles").upsert(profilePatch, { onConflict: "id" });
 
-    // Keep username/name metadata on the Telegram identity when the optional
-    // columns exist. Failure here must never break authentication.
     try {
       await supabase.from("user_identities").upsert({
         user_id: user.id,
@@ -104,11 +107,12 @@ async function enrich(body) {
   }
 
   body.data.user = {
-    ...user,
+    id: user.id,
+    phone_number: user.phone_number || tg?.telegram_phone || null,
+    telegram_id: telegramId,
     full_name: fullName,
-    username,
-    avatar_url: avatar,
-    email: username ? `@${username}` : null,
+    telegram_username: username,
+    telegram_photo_url: avatar,
   };
   return body;
 }
@@ -138,8 +142,6 @@ function wrapRoute(path) {
   return true;
 }
 
-// canonicalAuthAutoLoginPatch.js is loaded before this file, so its exchange
-// route is already present in the registry and can be wrapped directly.
 if (!wrapRoute("/api/v1/auth/exchange")) {
   console.warn("[GULI profile exchange] canonical auth exchange route not found at startup");
 }
