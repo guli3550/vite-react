@@ -29,37 +29,63 @@ function verifiedTelegram(raw) {
     const a = Buffer.from(hash); const b = Buffer.from(expected);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
     const user = JSON.parse(p.get('user') || 'null');
-    return user?.id ? { telegramId: Number(user.id), user } : null;
+    const telegramId = Number(user?.id);
+    return Number.isSafeInteger(telegramId) && telegramId > 0 ? { telegramId, user } : null;
   } catch { return null; }
 }
 
 async function identity(req) {
   const tg = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
   if (tg) return { kind: 'telegram', telegramId: tg.telegramId, user: tg.user };
+
+  // Browser sessions may identify the customer, but they do NOT prove a phone
+  // number. The phone must still come exclusively from telegram_users, linked
+  // through the canonical customer.telegram_id relation below.
   const auth = String(req.headers.authorization || '');
   if (!supabase || !auth.startsWith('Bearer ')) return null;
-  const { data, error } = await supabase.auth.getUser(auth.slice(7));
+  const { data, error } = await supabase.auth.getUser(auth.slice(7).trim());
   if (error || !data?.user?.id) return null;
-  return { kind: 'auth', authUserId: data.user.id, user: data.user };
+  return { kind: 'auth', authUserId: String(data.user.id), user: data.user };
 }
 
 async function canonicalPhone(id) {
   if (!supabase || !id) return null;
+
   if (id.kind === 'telegram') {
-    const { data } = await supabase.from('telegram_users').select('telegram_phone').eq('telegram_id', id.telegramId).maybeSingle();
+    const { data, error } = await supabase
+      .from('telegram_users')
+      .select('telegram_phone')
+      .eq('telegram_id', id.telegramId)
+      .maybeSingle();
+    if (error) return null;
     return String(data?.telegram_phone || '').trim() || null;
   }
-  const { data: customer } = await supabase.from('customers').select('phone,telegram_id').eq('auth_user_id', id.authUserId).maybeSingle();
-  if (customer?.phone) return String(customer.phone).trim();
-  if (customer?.telegram_id) {
-    const { data } = await supabase.from('telegram_users').select('telegram_phone').eq('telegram_id', customer.telegram_id).maybeSingle();
-    return String(data?.telegram_phone || '').trim() || null;
-  }
-  return String(id.user?.phone || '').trim() || null;
+
+  // IMPORTANT: never trust auth.users.phone, customer.phone, or request-body
+  // phone for canonical identity. A browser session must resolve to the same
+  // Telegram identity whose Contact Share supplied the verified phone.
+  const { data: customer, error: customerError } = await supabase
+    .from('customers')
+    .select('telegram_id')
+    .eq('auth_user_id', id.authUserId)
+    .maybeSingle();
+  if (customerError || !customer?.telegram_id) return null;
+
+  const { data: telegram, error: telegramError } = await supabase
+    .from('telegram_users')
+    .select('telegram_phone')
+    .eq('telegram_id', customer.telegram_id)
+    .maybeSingle();
+  if (telegramError) return null;
+  return String(telegram?.telegram_phone || '').trim() || null;
 }
 
 function rejectClientIdentity(req, res) {
-  if (req.body && (Object.prototype.hasOwnProperty.call(req.body, 'phone') || Object.prototype.hasOwnProperty.call(req.body, 'email') || Object.prototype.hasOwnProperty.call(req.body, 'telegram_phone'))) {
+  if (req.body && (
+    Object.prototype.hasOwnProperty.call(req.body, 'phone') ||
+    Object.prototype.hasOwnProperty.call(req.body, 'email') ||
+    Object.prototype.hasOwnProperty.call(req.body, 'telegram_phone')
+  )) {
     return fail(res, 400, 'Telefon/emailni mijoz o‘zi yubora olmaydi. Faqat tasdiqlangan Telegram Contact Share identifikatori qabul qilinadi.');
   }
   return null;
@@ -114,4 +140,4 @@ registry.routes = registry.routes.filter((r) => !(
 ));
 install('post', '/api/customer/sync', syncCustomer);
 install('put', '/api/customer/profile', updateProfile);
-console.log('[CanonicalPhoneIdentityBoundary] verified-phone-only customer identity installed');
+console.log('[CanonicalPhoneIdentityBoundary] verified Telegram phone-only customer identity installed');
