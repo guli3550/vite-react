@@ -11,8 +11,6 @@
 
   install('post','/api/telegram/webhook',async(req,res,next)=>{
     try{
-      const expected=String(process.env.TELEGRAM_WEBHOOK_SECRET||'').trim();
-      if(expected && req.headers['x-telegram-bot-api-secret-token']!==expected) return res.sendStatus(401);
       const m=req.body?.message,c=m?.contact,from=Number(m?.from?.id||m?.chat?.id||0),chat=Number(m?.chat?.id||0);
       if(c?.phone_number&&from&&Number(c.user_id)===from){
         const phone=normalizePhone(c.phone_number);
