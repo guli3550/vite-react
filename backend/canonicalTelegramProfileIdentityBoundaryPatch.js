@@ -76,8 +76,6 @@ async function loadTelegramProfile(telegramId) {
     console.warn('[GULI Telegram profile] getUserProfilePhotos failed:', error.message);
   }
 
-  // Telegram Bot API profile data is preferred. DB data is only a fallback for
-  // fields that the API did not return, and it is keyed by the verified Telegram ID.
   if (supabase && (!out.first_name || !out.last_name || !out.username)) {
     try {
       const { data: tg } = await supabase
@@ -107,7 +105,6 @@ async function enrichCanonicalUser(user) {
   const photoUrl = profile.photo_url || null;
   const phone = String(user.phone_number || '').trim() || null;
 
-  // Only the server-side verified telegramId is used to mutate the canonical user.
   const update = {
     telegram_id: telegramId,
     telegram_username: username,
@@ -144,10 +141,8 @@ async function enrichCanonicalUser(user) {
     full_name: fullName || user.full_name || null,
     telegram_username: username,
     telegram_photo_url: photoUrl,
-    // Backward-compatible aliases used by the current React profile UI.
     username,
     avatar_url: photoUrl,
-    email: username ? `@${username}` : null,
   };
 }
 
