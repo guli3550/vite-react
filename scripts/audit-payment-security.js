@@ -25,6 +25,7 @@ for (const relative of files) {
     console.error(`FAIL syntax: ${relative}: ${error.message}`);
   }
 }
+
 const generated = fs.readFileSync(path.join(root, 'backend/customerServer.js'), 'utf8');
 const declarations = (generated.match(/const GULI_CORS_ORIGINS\s*=/g) || []).length;
 const sets = (generated.match(/const GULI_CORS_SET\s*=/g) || []).length;
@@ -32,8 +33,14 @@ if (declarations !== 1 || sets !== 1) {
   failed = true;
   console.error(`FAIL CORS declarations: origins=${declarations}, set=${sets}`);
 } else console.log('PASS CORS declarations: exactly one origin/set pair');
+
+const webhookGuard = fs.readFileSync(path.join(root, 'backend/telegramWebhookSecretPatch.js'), 'utf8');
+if (!webhookGuard.includes('TELEGRAM_WEBHOOK_SECRET') || !webhookGuard.includes('x-telegram-bot-api-secret-token') || !webhookGuard.includes('body.secret_token')) {
+  failed = true;
+  console.error('FAIL Telegram webhook secret guard: configuration/header/registration control missing');
+} else console.log('PASS Telegram webhook secret guard: validation + Telegram registration');
+
 const required = [
-  'TELEGRAM_WEBHOOK_SECRET',
   'payment-receipts',
   'createSignedUrl',
   'payment_status',
