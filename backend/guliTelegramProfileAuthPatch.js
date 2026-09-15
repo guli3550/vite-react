@@ -1,16 +1,29 @@
 // Canonical Telegram profile enrichment for browser authentication.
-// Adds Telegram username/name/avatar to the same canonical GULI user returned by auth exchange.
-const express = require("express");
+// Serves the signed avatar proxy that the canonical /api/v1/auth/verify-otp
+// and /api/v1/auth/me handlers (canonicalTelegramProfileIdentityBoundaryPatch.js,
+// canonicalCustomerProfileSelfHealPatch.js) build telegram-avatar URLs against.
+//
+// ROOT-CAUSE FIX (profile "Y" avatar + stray email icon):
+// This file used to ALSO wrap POST /api/v1/auth/verify-otp a second time via a
+// direct express.application.post monkeypatch (an older, now-superseded
+// enrichment path that ran *after* the canonical enrichment layer below it in
+// the require() chain). Because it ran last, it silently overwrote the
+// already-correct canonical response with its own redundant Telegram API
+// call - and it explicitly set `payload.data.user.email = '@' + username`,
+// which is why the customer profile UI showed a leftover email icon
+// displaying the Telegram username, and why the avatar sometimes reverted to
+// the "Y" letter fallback when this second, redundant Telegram API call
+// happened to fail or hit a rate limit that the canonical call did not.
+// The canonical patches (canonicalTelegramProfileIdentityBoundaryPatch.js /
+// canonicalCustomerProfileSelfHealPatch.js) already perform this enrichment
+// correctly and do not set an email field, so this duplicate wrapper has
+// been removed. Only the shared avatar-proxy route remains here.
 const crypto = require("crypto");
-const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry.js");
 
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
 const SIGN_KEY = String(process.env.AUTH_JWT_SECRET || SUPABASE_KEY || "guli-auth").trim();
-const API_BASE = String(process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
-const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 
 function safeEqual(a, b) {
   const x = Buffer.from(String(a || ""));
@@ -20,34 +33,12 @@ function safeEqual(a, b) {
 function sign(telegramId, fileId, expires) {
   return crypto.createHmac("sha256", SIGN_KEY).update(`${Number(telegramId)}.${String(fileId)}.${Number(expires)}`).digest("base64url");
 }
-function avatarUrl(telegramId, fileId) {
-  const expires = Math.floor(Date.now() / 1000) + 3600;
-  return `${API_BASE}/api/v1/profile/telegram-avatar/${encodeURIComponent(telegramId)}/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(sign(telegramId, fileId, expires))}`;
-}
 async function telegramApi(method, body) {
   if (!BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan");
   const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
   if (!j.ok) throw new Error(j.description || `Telegram ${method} xatosi`);
   return j.result;
-}
-async function getCurrentAvatar(telegramId) {
-  try {
-    const result = await telegramApi("getUserProfilePhotos", { user_id: Number(telegramId), offset: 0, limit: 1 });
-    const sizes = Array.isArray(result?.photos?.[0]) ? result.photos[0] : [];
-    const largest = sizes[sizes.length - 1];
-    if (largest?.file_id) return { file_id: largest.file_id, url: avatarUrl(telegramId, largest.file_id) };
-  } catch (e) {
-    console.warn("[GULI profile] getUserProfilePhotos failed:", e.message);
-  }
-  try {
-    const chat = await telegramApi("getChat", { chat_id: Number(telegramId) });
-    const fileId = chat?.photo?.big_file_id || chat?.photo?.small_file_id || "";
-    if (fileId) return { file_id: fileId, url: avatarUrl(telegramId, fileId) };
-  } catch (e) {
-    console.warn("[GULI profile] getChat avatar fallback failed:", e.message);
-  }
-  return null;
 }
 
 // Browser <img> cannot attach Authorization headers, so avatar access uses a
@@ -73,49 +64,3 @@ install("get", "/api/v1/profile/telegram-avatar/:telegramId/:fileId", async (req
     return res.status(502).end();
   }
 });
-
-// Wrap the final auth exchange handler at route-registration time. The underlying
-// handler still owns identity creation and JWT issuance; this layer only enriches
-// the returned user before the JSON response is committed.
-const originalPost = express.application.post;
-express.application.post = function guliProfilePost(routePath, ...handlers) {
-  if (routePath === "/api/v1/auth/verify-otp" && handlers.length) {
-    const index = handlers.length - 1;
-    const handler = handlers[index];
-    handlers[index] = async function enrichedVerify(req, res, next) {
-      let payload = null;
-      let committed = false;
-      const originalJson = res.json.bind(res);
-      res.json = (body) => { payload = body; return res; };
-      try {
-        await handler(req, res, next);
-        if (payload?.success && payload?.data?.user && supabase) {
-          const telegramId = Number(payload.data.user.telegram_id || 0);
-          if (Number.isSafeInteger(telegramId)) {
-            const { data: tg } = await supabase.from("telegram_users").select("username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle();
-            const username = String(tg?.username || "").trim() || null;
-            const firstName = String(tg?.first_name || "").trim();
-            const lastName = String(tg?.last_name || "").trim();
-            const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || null;
-            const photo = await getCurrentAvatar(telegramId);
-            const avatar = photo?.url || null;
-            if (payload.data.user.id) {
-              await supabase.from("users").update({ ...(fullName ? { full_name: fullName } : {}), updated_at: new Date().toISOString() }).eq("id", payload.data.user.id);
-              await supabase.from("profiles").upsert({ id: payload.data.user.id, full_name: fullName || null, phone: payload.data.user.phone_number || null, avatar_url: avatar, updated_at: new Date().toISOString() }, { onConflict: "id" });
-              await supabase.from("user_identities").upsert({ user_id: payload.data.user.id, provider: "telegram", provider_subject: String(telegramId), provider_username: username, provider_phone: payload.data.user.phone_number || null, metadata: { username, first_name: firstName || null, last_name: lastName || null }, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
-            }
-            payload.data.user.full_name = fullName || payload.data.user.full_name || null;
-            payload.data.user.username = username;
-            payload.data.user.avatar_url = avatar;
-            payload.data.user.email = username ? `@${username}` : null;
-          }
-        }
-        if (!committed) { committed = true; return originalJson(payload || { success: false, message: "Auth javobi bo‘sh." }); }
-      } catch (e) {
-        console.warn("[GULI profile] auth enrichment failed:", e.message);
-        if (!committed) { committed = true; return originalJson(payload || { success: false, message: "Auth javobi tayyorlanmadi." }); }
-      }
-    };
-  }
-  return originalPost.call(this, routePath, ...handlers);
-};
