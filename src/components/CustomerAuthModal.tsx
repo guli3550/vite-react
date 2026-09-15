@@ -22,7 +22,7 @@ interface CustomerAuthModalProps {
   customSubtitle?: string;
 }
 
-type Status = "idle" | "waiting" | "otp";
+type Status = "idle" | "waiting";
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 
 async function api(path: string, options: RequestInit = {}) {
@@ -38,49 +38,20 @@ async function api(path: string, options: RequestInit = {}) {
   return json;
 }
 
-function saveSession(data: any, onSuccess: CustomerAuthModalProps["onSuccess"]) {
-  const user = data?.user;
-  const token = data?.access_token;
-  if (!user?.id || !token) throw new Error("Sessiya yaratilmadi. Qaytadan urinib ko‘ring.");
-  const authUser: AuthUser = {
-    id: user.id,
-    full_name: user.full_name || user.user_metadata?.full_name || null,
-    phone: user.phone || user.user_metadata?.phone || null,
-    avatar_url: user.avatar_url || user.user_metadata?.avatar_url || localStorage.getItem("guli_custom_avatar") || null,
-    provider: "telegram",
-    created_at: user.created_at,
-  };
-  localStorage.setItem("guli_access_token", token);
-  if (data?.refresh_token) localStorage.setItem("guli_refresh_token", data.refresh_token);
-  localStorage.setItem("guli_auth_user", JSON.stringify(authUser));
-  localStorage.setItem("guli_phone", authUser.phone || "");
-  localStorage.removeItem("guli_email");
-  onSuccess(authUser, token);
-}
-
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
-  isOpen, onClose, onSuccess, language: _language, initialTab = "signin", forceGate = false, customTitle, customSubtitle,
+  isOpen, onClose, onSuccess: _onSuccess, language: _language, initialTab = "signin", forceGate = false, customTitle, customSubtitle,
 }) => {
   const [status, setStatus] = useState<Status>("idle");
-  const [sessionId, setSessionId] = useState("");
-  const [telegramUrl, setTelegramUrl] = useState("");
-  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [seconds, setSeconds] = useState(0);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => () => { if (pollRef.current) window.clearInterval(pollRef.current); }, []);
   useEffect(() => {
     if (!isOpen) return;
-    setStatus("idle"); setSessionId(""); setTelegramUrl(""); setOtp(""); setError(null); setSuccess(null); setSeconds(0);
+    setStatus("idle"); setError(null); setSuccess(null);
   }, [isOpen, initialTab]);
-  useEffect(() => {
-    if (!seconds) return;
-    const t = window.setInterval(() => setSeconds(v => Math.max(0, v - 1)), 1000);
-    return () => window.clearInterval(t);
-  }, [seconds]);
 
   const start = async () => {
     setLoading(true); setError(null); setSuccess(null);
@@ -89,7 +60,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       const id = r?.data?.session_id;
       const url = r?.data?.telegram_url || r?.data?.deep_link;
       if (!id || !url) throw new Error("Telegram ulanish havolasi yaratilmadi.");
-      setSessionId(id); setTelegramUrl(url); setStatus("waiting"); setSeconds(300);
+      setStatus("waiting");
       window.open(url, "_blank", "noopener,noreferrer");
       if (pollRef.current) window.clearInterval(pollRef.current);
       pollRef.current = window.setInterval(async () => {
