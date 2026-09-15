@@ -48,6 +48,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const popupRef = useRef<Window | null>(null);
+  const exchangeInFlightRef = useRef(false);
 
   const clearPolling = () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -56,8 +57,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
   useEffect(() => () => { clearPolling(); try { popupRef.current?.close(); } catch {} }, []);
   useEffect(() => {
-    if (!isOpen) { clearPolling(); return; }
-    setStatus("idle"); setError(null); setSuccess(null); setLoading(false);
+    if (!isOpen) { clearPolling(); exchangeInFlightRef.current = false; return; }
+    setStatus("idle"); setError(null); setSuccess(null); setLoading(false); exchangeInFlightRef.current = false;
   }, [isOpen, initialTab]);
 
   const completeLogin = (data: any) => {
@@ -80,9 +81,40 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     window.setTimeout(() => window.location.reload(), 450);
   };
 
+  const exchangeSession = async (sessionId: string, ticket: string) => {
+    if (exchangeInFlightRef.current) return;
+    exchangeInFlightRef.current = true;
+    clearPolling();
+    setStatus("ready");
+    setError(null);
+    setSuccess("🔐 Telegram tasdig‘i olindi. Hisobingizga xavfsiz kirilmoqda...");
+
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const exchanged = await api("/api/v1/auth/exchange", {
+          method: "POST",
+          body: JSON.stringify({ session_id: sessionId, exchange_ticket: ticket }),
+        });
+        completeLogin(exchanged);
+        exchangeInFlightRef.current = false;
+        return;
+      } catch (e) {
+        lastError = e;
+        if (attempt < 3) await new Promise(resolve => window.setTimeout(resolve, attempt * 700));
+      }
+    }
+
+    exchangeInFlightRef.current = false;
+    const message = lastError instanceof Error ? lastError.message : "Avtomatik login bajarilmadi.";
+    setStatus("idle");
+    setSuccess(null);
+    setError(`Telegram tasdig‘i olindi, lekin login yakunlanmadi: ${message}`);
+  };
+
   const start = async () => {
-    if (loading || status === "waiting" || status === "ready") return;
-    setLoading(true); setError(null); setSuccess(null); clearPolling();
+    if (loading || status === "waiting" || status === "ready" || exchangeInFlightRef.current) return;
+    setLoading(true); setError(null); setSuccess(null); clearPolling(); exchangeInFlightRef.current = false;
 
     // Open synchronously from the user's click so Android Chrome does not block Telegram.
     let popup: Window | null = null;
@@ -110,6 +142,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
 
       let elapsed = 0;
       pollRef.current = window.setInterval(async () => {
+        if (exchangeInFlightRef.current) return;
         elapsed += 1200;
         if (elapsed > 300000) {
           clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return;
@@ -121,28 +154,17 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
             clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return;
           }
           if (state === "READY") {
-            setStatus("ready"); setError(null); setSuccess("🔐 Telegram tasdig‘i olindi. Hisobingizga xavfsiz kirilmoqda...");
-            try {
-              const exchanged = await api("/api/v1/auth/exchange", {
-                method: "POST",
-                body: JSON.stringify({ session_id: id, exchange_ticket: ticket }),
-              });
-              clearPolling();
-              completeLogin(exchanged);
-            } catch (e) {
-              const message = e instanceof Error ? e.message : "Avtomatik login bajarilmadi.";
-              if (/allaqachon|ishlatilgan/i.test(message)) {
-                clearPolling(); setStatus("idle"); setError("Sessiya allaqachon ishlatilgan. Qaytadan login qiling.");
-              }
-            }
+            await exchangeSession(id, ticket);
           } else if (state === "VERIFIED") {
             clearPolling();
-            // Backend may have completed the session through another valid exchange.
-            setSuccess("✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...");
-            window.setTimeout(() => window.location.reload(), 450);
+            setStatus("idle");
+            setSuccess(null);
+            setError("Auth sessiyasi allaqachon ishlatilgan. Xavfsizlik sababli yangi Telegram login sessiyasini boshlang.");
           }
-        } catch {
-          // Keep polling through temporary network failures.
+        } catch (e) {
+          const message = e instanceof Error ? e.message : "Auth status tekshiruvida xatolik.";
+          if (/sessiya topilmadi|session topilmadi/i.test(message)) setError(message);
+          // Temporary network errors do not stop the polling loop.
         }
       }, 1200);
     } catch (e) {
