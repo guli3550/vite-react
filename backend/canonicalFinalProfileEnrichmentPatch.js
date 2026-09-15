@@ -1,6 +1,6 @@
 // Final Telegram profile enrichment boundary.
-// This is deliberately loaded last so no later runtime patch can replace the
-// /api/v1/auth/exchange handler without also passing through this enrichment.
+// Loaded late so the canonical browser auth exchange response is normalized
+// to the single phone + Telegram identity contract.
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { registry } = require('./routeRegistry.js');
@@ -30,12 +30,10 @@ async function tg(method, body) {
 async function profile(telegramId) {
   const out = { username: null, first_name: null, last_name: null, avatar_url: null };
   if (!telegramId) return out;
-
-  // Prefer Telegram itself as the source of truth for current profile data.
   try {
     const chat = await tg('getChat', { chat_id: Number(telegramId) });
     if (chat) {
-      out.username = String(chat.username || '').trim() || null;
+      out.username = String(chat.username || '').trim().replace(/^@+/, '') || null;
       out.first_name = String(chat.first_name || '').trim() || null;
       out.last_name = String(chat.last_name || '').trim() || null;
       const photoId = chat.photo?.big_file_id || chat.photo?.small_file_id || '';
@@ -50,12 +48,11 @@ async function profile(telegramId) {
     if (largest?.file_id) out.avatar_url = avatarUrl(telegramId, largest.file_id);
   } catch (e) { console.warn('[GULI final profile] getUserProfilePhotos failed:', e.message); }
 
-  // DB fallback for deployments where Telegram bot API does not return a field.
   if (supabase && (!out.username || !out.first_name || !out.last_name)) {
     try {
       const { data: row } = await supabase.from('telegram_users').select('username,first_name,last_name,telegram_phone').eq('telegram_id', telegramId).maybeSingle();
       if (row) {
-        out.username ||= String(row.username || '').trim() || null;
+        out.username ||= String(row.username || '').trim().replace(/^@+/, '') || null;
         out.first_name ||= String(row.first_name || '').trim() || null;
         out.last_name ||= String(row.last_name || '').trim() || null;
       }
@@ -76,18 +73,25 @@ async function enrich(body) {
 
   if (supabase && user.id) {
     try {
-      await supabase.from('users').update({ ...(fullName ? { full_name: fullName } : {}), updated_at: new Date().toISOString() }).eq('id', user.id);
+      await supabase.from('users').update({
+        ...(fullName ? { full_name: fullName } : {}),
+        telegram_id: telegramId,
+        telegram_username: p.username,
+        telegram_photo_url: p.avatar_url,
+        updated_at: new Date().toISOString(),
+      }).eq('id', user.id).eq('telegram_id', telegramId);
       await supabase.from('profiles').upsert({ id: user.id, ...(fullName ? { full_name: fullName } : {}), phone, ...(p.avatar_url ? { avatar_url: p.avatar_url } : {}), updated_at: new Date().toISOString() }, { onConflict: 'id' });
       await supabase.from('user_identities').upsert({ user_id: user.id, provider: 'telegram', provider_subject: String(telegramId), provider_username: p.username, provider_phone: phone, metadata: { username: p.username, first_name: p.first_name, last_name: p.last_name }, updated_at: new Date().toISOString() }, { onConflict: 'provider,provider_subject' });
     } catch (e) { console.warn('[GULI final profile] persistence failed:', e.message); }
   }
 
   body.data.user = {
-    ...user,
+    id: user.id,
+    phone_number: phone,
+    telegram_id: telegramId,
     full_name: fullName,
-    username: p.username,
-    avatar_url: p.avatar_url,
-    email: p.username ? `@${p.username}` : null,
+    telegram_username: p.username,
+    telegram_photo_url: p.avatar_url,
   };
   console.log(`[GULI final profile] enriched telegram=${telegramId} username=${p.username || '-'} name=${fullName || '-'} avatar=${p.avatar_url ? 'yes' : 'no'}`);
   return body;
