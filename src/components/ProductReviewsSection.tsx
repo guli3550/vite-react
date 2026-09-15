@@ -34,6 +34,11 @@ interface ProductReviewsSectionProps {
   onShowToast?: (msg: string) => void;
 }
 
+// Compatibility exports for the legacy admin module. They intentionally do not
+// read/write localStorage; the production review source of truth is the API/DB.
+export function getStoredReviews(): ReviewItem[] { return []; }
+export function saveStoredReviews(_items: ReviewItem[]): void { /* no-op by design */ }
+
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 
 function safeName(first?: string, last?: string) {
@@ -87,18 +92,13 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
 
   const loadReviews = useCallback(async () => {
     if (!productCode) {
-      setReviews([]);
-      setAverage(0);
-      setCount(0);
-      return;
+      setReviews([]); setAverage(0); setCount(0); setDistribution([]); onRatingUpdate?.(0, 0); return;
     }
-
     try {
       const res = await fetch(`${API}/api/reviews?product_code=${encodeURIComponent(productCode)}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`reviews ${res.status}`);
       const json = await res.json();
       if (!json?.success || !Array.isArray(json.data?.reviews)) throw new Error("Invalid review response");
-
       const nextReviews: ReviewItem[] = json.data.reviews.map((r: any) => ({
         id: r.id,
         product_id: r.product_id,
@@ -114,7 +114,6 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
         is_pinned: Boolean(r.is_pinned),
         created_at: r.created_at,
       }));
-
       const nextAverage = Number(json.data.total_average) || 0;
       const nextCount = Number(json.data.total_count) || 0;
       setReviews(nextReviews);
@@ -124,45 +123,30 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
       onRatingUpdate?.(nextAverage, nextCount);
     } catch (error) {
       console.error("Failed to load real reviews:", error);
-      setReviews([]);
-      setAverage(0);
-      setCount(0);
-      setDistribution([]);
-      onRatingUpdate?.(0, 0);
+      setReviews([]); setAverage(0); setCount(0); setDistribution([]); onRatingUpdate?.(0, 0);
     }
   }, [productCode, productName, onRatingUpdate]);
 
-  useEffect(() => {
-    void loadReviews();
-  }, [loadReviews]);
+  useEffect(() => { void loadReviews(); }, [loadReviews]);
 
   useEffect(() => {
     if (!productId) return;
     let channel: any = null;
     let disposed = false;
-
     (async () => {
       try {
         const { supabase } = await import("../lib/supabaseClient");
         if (disposed) return;
-        channel = supabase
-          .channel(`product-reviews-live-${String(productId)}`)
-          .on(
-            "postgres_changes",
-            { event: "*", schema: "public", table: "product_reviews", filter: `product_id=eq.${String(productId)}` },
-            () => { void loadReviews(); }
-          )
-          .subscribe();
-      } catch (error) {
-        console.warn("Review realtime unavailable:", error);
-      }
+        channel = supabase.channel(`product-reviews-live-${String(productId)}`).on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "product_reviews", filter: `product_id=eq.${String(productId)}` },
+          () => { void loadReviews(); }
+        ).subscribe();
+      } catch (error) { console.warn("Review realtime unavailable:", error); }
     })();
-
     return () => {
       disposed = true;
-      if (channel) {
-        import("../lib/supabaseClient").then(({ supabase }) => supabase.removeChannel(channel)).catch(() => {});
-      }
+      if (channel) import("../lib/supabaseClient").then(({ supabase }) => supabase.removeChannel(channel)).catch(() => {});
     };
   }, [productId, loadReviews]);
 
@@ -181,8 +165,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
             const scale = Math.min(1, max / Math.max(img.width, img.height));
             const w = Math.max(1, Math.round(img.width * scale));
             const h = Math.max(1, Math.round(img.height * scale));
-            const canvas = document.createElement("canvas");
-            canvas.width = w; canvas.height = h;
+            const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
             canvas.getContext("2d")?.drawImage(img, 0, 0, w, h);
             resolve(canvas.toDataURL("image/jpeg", 0.75));
           };
@@ -209,107 +192,54 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.success) throw new Error(json?.message || "Sharhni yuborib bo‘lmadi");
-      setComment("");
-      setPhotos([]);
-      await loadReviews();
+      setComment(""); setPhotos([]); await loadReviews();
       onShowToast?.("Rahmat! Sharhingiz e'lon qilindi ⭐");
     } catch (error: any) {
       onShowToast?.(error?.message || "Sharh yuborishda xatolik");
-    } finally {
-      setIsSubmitting(false);
-    }
+    } finally { setIsSubmitting(false); }
   };
 
   return (
     <section className="productReviewsContainer" id="product-reviews-section">
-      <div className="reviewsHeaderBlock">
-        <div className="reviewsHeaderLeft">
-          <div className="reviewsTitleGroup">
-            <span className="reviewsTitleIcon">💬</span>
-            <h3 className="reviewsTitle">Baholar va sharhlar</h3>
-          </div>
-          <div className="reviewsHeaderMeta">
-            <span className="reviewsHeaderStars">{stars(average)}</span>
-            <strong className="reviewsHeaderScore">{average.toFixed(1)}</strong>
-            <span className="reviewsHeaderCount">({count} ta sharh)</span>
-          </div>
-        </div>
-      </div>
+      <div className="reviewsHeaderBlock"><div className="reviewsHeaderLeft">
+        <div className="reviewsTitleGroup"><span className="reviewsTitleIcon">💬</span><h3 className="reviewsTitle">Baholar va sharhlar</h3></div>
+        <div className="reviewsHeaderMeta"><span className="reviewsHeaderStars">{stars(average)}</span><strong className="reviewsHeaderScore">{average.toFixed(1)}</strong><span className="reviewsHeaderCount">({count} ta sharh)</span></div>
+      </div></div>
 
-      {count > 0 && (
-        <div className="reviewsDistribution" aria-label="Baholar taqsimoti">
-          {distribution.map(item => (
-            <div key={item.star} className="reviewDistributionRow">
-              <span>{item.star} ★</span>
-              <div className="reviewDistributionTrack"><span style={{ width: `${count ? Math.round(item.count / count * 100) : 0}%` }} /></div>
-              <b>{item.count}</b>
-            </div>
-          ))}
-        </div>
-      )}
+      {count > 0 && <div className="reviewsDistribution" aria-label="Baholar taqsimoti">
+        {distribution.map(item => <div key={item.star} className="reviewDistributionRow"><span>{item.star} ★</span><div className="reviewDistributionTrack"><span style={{ width: `${Math.round(item.count / count * 100)}%` }} /></div><b>{item.count}</b></div>)}
+      </div>}
 
       <div className="reviewsList">
-        {reviews.length === 0 ? (
-          <div className="emptyReviewsState">
-            <div className="emptyReviewIcon">💬</div>
-            <h4>Hozircha sharhlar yo‘q</h4>
-            <p>Bu yerda faqat haqiqiy mijozlarning tasdiqlangan sharhlari ko‘rsatiladi.</p>
-          </div>
-        ) : reviews.map(rev => {
+        {reviews.length === 0 ? <div className="emptyReviewsState"><div className="emptyReviewIcon">💬</div><h4>Hozircha sharhlar yo‘q</h4><p>Bu yerda faqat haqiqiy mijozlarning tasdiqlangan sharhlari ko‘rsatiladi.</p></div> : reviews.map(rev => {
           const name = rev.display_name || "Anonim mijoz";
-          return (
-            <article key={rev.id} className={`reviewItemCard ${rev.is_pinned ? "isPinnedReview" : ""}`} onClick={() => setSelected(rev)}>
-              {rev.is_pinned && <div className="pinnedReviewTag"><span>⭐ TOP SHARH</span></div>}
-              <div className="reviewAuthorRow">
-                <div className="authorAvatarWrap">
-                  {rev.photo_url ? <img src={rev.photo_url} alt={name} className="authorAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(name)}</div>}
-                </div>
-                <div className="authorMetaBox">
-                  <div className="authorTopLine">
-                    <b className="authorNameText">{name}</b>
-                    {rev.verified_purchase && <span className="verifiedPurchasePill">✓ Xarid qilgan</span>}
-                  </div>
-                  <div className="authorSubLine">
-                    <span className="reviewRatingStars">{stars(rev.rating)}</span>
-                    <span className="reviewDateText">· {new Date(rev.created_at).toLocaleDateString("uz-UZ", { day: "numeric", month: "short", year: "numeric" })}</span>
-                  </div>
-                </div>
+          return <article key={rev.id} className={`reviewItemCard ${rev.is_pinned ? "isPinnedReview" : ""}`} onClick={() => setSelected(rev)}>
+            {rev.is_pinned && <div className="pinnedReviewTag"><span>⭐ TOP SHARH</span></div>}
+            <div className="reviewAuthorRow"><div className="authorAvatarWrap">{rev.photo_url ? <img src={rev.photo_url} alt={name} className="authorAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(name)}</div>}</div>
+              <div className="authorMetaBox"><div className="authorTopLine"><b className="authorNameText">{name}</b>{rev.verified_purchase && <span className="verifiedPurchasePill">✓ Xarid qilgan</span>}</div>
+                <div className="authorSubLine"><span className="reviewRatingStars">{stars(rev.rating)}</span><span className="reviewDateText">· {new Date(rev.created_at).toLocaleDateString("uz-UZ", { day: "numeric", month: "short", year: "numeric" })}</span></div>
               </div>
-              <div className="reviewStreamContent">
-                <p className="reviewCommentBody">{rev.comment}</p>
-                {!!rev.photos?.length && <div className="reviewPhotosRow">{rev.photos.map((url, i) => <img key={i} src={url} alt="Mijoz yuklagan rasm" className="reviewPhotoThumb" loading="lazy" onClick={e => { e.stopPropagation(); setLightbox(url); }} />)}</div>}
-              </div>
-            </article>
-          );
+            </div>
+            <div className="reviewStreamContent"><p className="reviewCommentBody">{rev.comment}</p>{!!rev.photos?.length && <div className="reviewPhotosRow">{rev.photos.map((url, i) => <img key={i} src={url} alt="Mijoz yuklagan rasm" className="reviewPhotoThumb" loading="lazy" onClick={e => { e.stopPropagation(); setLightbox(url); }} />)}</div>}</div>
+          </article>;
         })}
       </div>
 
-      <div className="inlineReviewBoxContainer">
-        <form onSubmit={handleSubmitReview} className="inlineReviewFormBar">
-          {!!photos.length && <div className="inlinePhotosPreviewRow">{photos.map((p, i) => <div key={i} className="inlinePhotoThumbWrap"><img src={p} alt="Yuklangan" /><button type="button" className="inlineRemovePhotoBtn" onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button></div>)}</div>}
-          <div className="inlineInputRow flexRow">
-            <div className="inlineUserAvatarBox" title="Sizning profil rasmingiz">
-              {userAvatarUrl ? <img src={userAvatarUrl} alt="Profil" className="inlineAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(currentName)}</div>}
-            </div>
-            <input type="text" className="inlineCommentInput" value={comment} onChange={e => setComment(e.target.value)} placeholder="Mahsulot haqidagi fikringiz..." required />
-            <div className="inlineStarsPicker" title="Baho berish">
-              {[1, 2, 3, 4, 5].map(s => <button key={s} type="button" className={`inlineStarBtn ${s <= rating ? "active" : ""}`} onClick={() => setRating(s)}>★</button>)}
-            </div>
-            <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="fileInputHidden" id="inline-gallery-photo-upload" />
-            <label htmlFor="inline-gallery-photo-upload" className="inlineAttachGalleryBtn" title="Qurilma galereyasidan rasm tanlash">📎</label>
-            <button type="submit" className="inlineSubmitBtn" disabled={isSubmitting} title="Sharh yuborish">{isSubmitting ? "..." : "➤"}</button>
-          </div>
-        </form>
-      </div>
+      <div className="inlineReviewBoxContainer"><form onSubmit={handleSubmitReview} className="inlineReviewFormBar">
+        {!!photos.length && <div className="inlinePhotosPreviewRow">{photos.map((p, i) => <div key={i} className="inlinePhotoThumbWrap"><img src={p} alt="Yuklangan" /><button type="button" className="inlineRemovePhotoBtn" onClick={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>✕</button></div>)}</div>}
+        <div className="inlineInputRow flexRow"><div className="inlineUserAvatarBox" title="Sizning profil rasmingiz">{userAvatarUrl ? <img src={userAvatarUrl} alt="Profil" className="inlineAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(currentName)}</div>}</div>
+          <input type="text" className="inlineCommentInput" value={comment} onChange={e => setComment(e.target.value)} placeholder="Mahsulot haqidagi fikringiz..." required />
+          <div className="inlineStarsPicker" title="Baho berish">{[1,2,3,4,5].map(s => <button key={s} type="button" className={`inlineStarBtn ${s <= rating ? "active" : ""}`} onClick={() => setRating(s)}>★</button>)}</div>
+          <input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="fileInputHidden" id="inline-gallery-photo-upload" />
+          <label htmlFor="inline-gallery-photo-upload" className="inlineAttachGalleryBtn" title="Qurilma galereyasidan rasm tanlash">📎</label>
+          <button type="submit" className="inlineSubmitBtn" disabled={isSubmitting} title="Sharh yuborish">{isSubmitting ? "..." : "➤"}</button>
+        </div>
+      </form></div>
 
       {selected && <div className="modalBackdrop modalBackdropCenter" onClick={() => setSelected(null)}><div className="modalCard reviewDetailModalCard" onClick={e => e.stopPropagation()}>
-        <div className="modalHeader reviewDetailModalHeader">
-          <div className="reviewDetailUserHeader"><div className="detailAvatarBox">{selected.photo_url ? <img src={selected.photo_url} alt={selected.display_name || "Mijoz"} className="detailAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(selected.display_name || "Anonim mijoz")}</div>}</div><div><h3 className="detailUserName">{selected.display_name || "Anonim mijoz"}</h3><div className="detailUserSubMeta">{selected.verified_purchase && <span className="verifiedPurchasePill">✓ Tasdiqlangan haridor</span>}<span className="detailDateText">{new Date(selected.created_at).toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" })}</span></div></div></div>
-          <button className="closeModalBtn" onClick={() => setSelected(null)}>✕</button>
-        </div>
+        <div className="modalHeader reviewDetailModalHeader"><div className="reviewDetailUserHeader"><div className="detailAvatarBox">{selected.photo_url ? <img src={selected.photo_url} alt={selected.display_name || "Mijoz"} className="detailAvatarImg" /> : <div className="authorAvatarFallbackIcon">{initials(selected.display_name || "Anonim mijoz")}</div>}</div><div><h3 className="detailUserName">{selected.display_name || "Anonim mijoz"}</h3><div className="detailUserSubMeta">{selected.verified_purchase && <span className="verifiedPurchasePill">✓ Tasdiqlangan haridor</span>}<span className="detailDateText">{new Date(selected.created_at).toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" })}</span></div></div></div><button className="closeModalBtn" onClick={() => setSelected(null)}>✕</button></div>
         <div className="reviewDetailBody"><div className="detailRatingRow"><span className="detailStarsGlyph">{stars(selected.rating)}</span><span className="detailScoreBadge">{selected.rating} / 5</span></div><div className="detailCommentCard"><p className="detailCommentText">{selected.comment}</p></div>{!!selected.photos?.length && <div className="detailPhotosGallery"><h4>📷 Biriktirilgan suratlar ({selected.photos.length}):</h4><div className="detailPhotosGrid">{selected.photos.map((url, i) => <img key={i} src={url} alt="Sharh surati" className="detailPhotoGridItem" onClick={() => setLightbox(url)} />)}</div></div>}<div className="detailModalFooter"><button type="button" className="primaryButton closeDetailBtn" onClick={() => setSelected(null)}>Yopish</button></div></div>
       </div></div>}
-
       {lightbox && <div className="modalBackdrop lightboxBackdrop" onClick={() => setLightbox(null)}><div className="lightboxContent" onClick={e => e.stopPropagation()}><button className="lightboxCloseBtn" onClick={() => setLightbox(null)}>✕</button><img src={lightbox} alt="Katta rasm" className="lightboxMainImg" /></div></div>}
     </section>
   );
