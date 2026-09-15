@@ -13,10 +13,9 @@ const MAX_OTP_ATTEMPTS = 5;
 const hash = (value) => crypto.createHmac("sha256", KEY || "guli-auth").update(String(value)).digest("hex");
 const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
 const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
-// Supabase Auth's existing GULI phone identities are stored without the leading '+'.
-// Keep canonical business identity in public.users as E.164 (+998...), but use the
-// exact Auth representation for create/update/sign-in so legacy and new users match.
-const authPhone = (v) => String(v || "").trim().replace(/^\+/, "");
+// GULI's canonical business identity and Supabase Auth identity both use E.164.
+// Never strip the leading '+' before create/update/sign-in.
+const authPhone = (v) => normalizePhone(v);
 const ok = (res, data) => res.json({ success: true, data });
 const fail = (res, code, message) => res.status(code).json({ success: false, message });
 
@@ -100,15 +99,17 @@ install("post", "/api/v1/auth/verify-otp", async (req, res) => {
   const password = crypto.randomBytes(48).toString("base64url");
   if (!userId) {
     const { data: created, error } = await supabase.auth.admin.createUser({ phone: supabaseAuthPhone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
-    if (error || !created?.user) return fail(res, 500, "GULI Auth account yaratilmadi.");
+    if (error || !created?.user) return fail(res, 500, `GULI Auth account yaratilmadi: ${error?.message || "unknown"}`);
     userId = created.user.id;
   } else {
-    const { error } = await supabase.auth.admin.updateUserById(userId, { phone: supabaseAuthPhone, phone_confirm: true, password });
-    if (error) return fail(res, 500, "GULI Auth account yangilanmadi.");
+    const { error } = await supabase.auth.admin.updateUserById(userId, { phone: supabaseAuthPhone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
+    if (error) return fail(res, 500, `GULI Auth account yangilanmadi: ${error.message || "unknown"}`);
   }
 
+  // Supabase Auth expects the canonical E.164 phone representation here.
+  // This is the final step that mints the browser JWT session.
   const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ phone: supabaseAuthPhone, password });
-  if (signErr || !signed?.session) return fail(res, 500, "Auth session chiqarilmadi.");
+  if (signErr || !signed?.session) return fail(res, 500, `Auth session chiqarilmadi: ${signErr?.message || "Supabase session qaytarmadi."}`);
 
   await supabase.from("users").upsert({ id: userId, phone_number: phone, telegram_id: telegramId, updated_at: new Date().toISOString() }, { onConflict: "id" });
   await supabase.from("profiles").upsert({ id: userId, phone, updated_at: new Date().toISOString() }, { onConflict: "id" });
