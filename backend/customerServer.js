@@ -28,8 +28,6 @@ const paymentTelegramNotificationPatch = fs.readFileSync(paymentTelegramNotifica
 const canonicalAuthAutoLoginPatch = fs.readFileSync(canonicalAuthAutoLoginPatchPath, "utf8");
 
 // Load canonical auto-login hooks BEFORE the generated server registers routes.
-// This is important because routeRegistry prepends the Telegram webhook/exchange
-// handlers only when Express routes are registered after the hook is installed.
 source = canonicalAuthAutoLoginPatch + "\n" + source;
 
 // Production security hardening for the generated Express server.
@@ -77,14 +75,6 @@ source = source.replace(
 source = source.replace(
   'app.use(express.json({ limit: "4mb" }));',
   'app.use(express.json({ limit: "10mb" }));' + securityBlock
-);
-source = source.replace(
-  'await telegramApi("setWebhook", { url: webhookUrl });',
-  'await telegramApi("setWebhook", { url: webhookUrl, ...(process.env.TELEGRAM_WEBHOOK_SECRET ? { secret_token: String(process.env.TELEGRAM_WEBHOOK_SECRET).slice(0, 256) } : {}) });'
-);
-source = source.replace(
-  'app.post("/api/telegram/webhook", async (req, res) => {',
-  'app.post("/api/telegram/webhook", (req, res, next) => { const expected = String(process.env.TELEGRAM_WEBHOOK_SECRET || "").trim(); if (expected && req.headers["x-telegram-bot-api-secret-token"] !== expected) return res.sendStatus(401); if (!expected && process.env.NODE_ENV === "production") console.warn("SECURITY WARNING: TELEGRAM_WEBHOOK_SECRET is not configured"); next(); }, async (req, res) => {'
 );
 
 const marker = '\nconst PORT=process.env.PORT||10000;';
