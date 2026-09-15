@@ -28,38 +28,54 @@ async function getBotUsername() { if (BOT_USERNAME) return BOT_USERNAME; try { r
 install("post", "/api/v1/auth/init-session", async (req, res) => {
   if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
   const sessionId = crypto.randomUUID();
+  const exchangeTicket = crypto.randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_MS).toISOString();
-  const { error } = await supabase.from("auth_sessions").insert({ session_id: sessionId, expires_at: expiresAt });
+  const { error } = await supabase.from("auth_sessions").insert({ session_id: sessionId, exchange_ticket_hash: hash(exchangeTicket), exchange_ticket_used: false, expires_at: expiresAt });
   if (error) return fail(res, 500, "Auth sessiyasi yaratilmadi.");
   const username = await getBotUsername();
   if (!username) return fail(res, 503, "Telegram bot username sozlanmagan.");
-  return ok(res, { session_id: sessionId, expires_at: expiresAt, telegram_url: `https://t.me/${username}?start=auth_${sessionId}` });
+  return ok(res, { session_id: sessionId, exchange_ticket: exchangeTicket, expires_at: expiresAt, telegram_url: `https://t.me/${username}?start=auth_${sessionId}` });
 });
 
 install("get", "/api/v1/auth/check-status/:session_id", async (req, res) => {
   if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
   const sessionId = String(req.params.session_id || "");
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return fail(res, 400, "Noto'g'ri auth session.");
-  const { data, error } = await supabase.from("auth_sessions").select("session_id,is_verified,exchange_ticket_used,expires_at,verified_at").eq("session_id", sessionId).maybeSingle();
+  const { data, error } = await supabase.from("auth_sessions").select("session_id,is_verified,exchange_ticket_used,otp_hash,otp_used,expires_at,verified_at").eq("session_id", sessionId).maybeSingle();
   if (error || !data) return fail(res, 404, "Auth session topilmadi.");
   if (new Date(data.expires_at).getTime() < Date.now()) return ok(res, { status: "EXPIRED" });
-  return ok(res, { status: data.is_verified ? "VERIFIED" : "WAITING", verified_at: data.verified_at || null });
+  if (data.is_verified || data.exchange_ticket_used || data.otp_used) return ok(res, { status: "VERIFIED", verified_at: data.verified_at || null });
+  if (data.otp_hash) return ok(res, { status: "READY" });
+  return ok(res, { status: "WAITING" });
 });
 
 install("post", "/api/v1/auth/verify-otp", async (req, res) => {
   if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
   const sessionId = String(req.body?.session_id || "");
   const otp = String(req.body?.otp || "").replace(/\s+/g, "");
-  if (!/^[0-9a-f-]{36}$/i.test(sessionId) || !/^\d{6}$/.test(otp)) return fail(res, 400, "Session va 6 xonali kodni to'g'ri kiriting.");
+  const exchangeTicket = String(req.body?.exchange_ticket || "");
+  if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return fail(res, 400, "Noto'g'ri auth session.");
+  if (!exchangeTicket && !/^\d{6}$/.test(otp)) return fail(res, 400, "Session va 6 xonali kodni to'g'ri kiriting.");
+
   const { data: s, error: se } = await supabase.from("auth_sessions").select("*").eq("session_id", sessionId).maybeSingle();
   if (se || !s) return fail(res, 404, "Auth session topilmadi.");
   if (new Date(s.expires_at).getTime() < Date.now()) return fail(res, 410, "Auth session muddati tugagan.");
-  if (!s.otp_hash || s.otp_used) return fail(res, 401, "Kod yaroqsiz yoki allaqachon ishlatilgan.");
-  if (Number(s.otp_attempts || 0) >= MAX_OTP_ATTEMPTS) return fail(res, 429, "Urinishlar limiti tugadi.");
-  await supabase.from("auth_sessions").update({ otp_attempts: Number(s.otp_attempts || 0) + 1 }).eq("session_id", sessionId).eq("otp_used", false);
-  const expected = Buffer.from(String(s.otp_hash));
-  const actual = Buffer.from(hash(otp));
-  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return fail(res, 401, "Tasdiqlash kodi noto'g'ri.");
+
+  const isExchange = Boolean(exchangeTicket);
+  if (isExchange) {
+    if (s.exchange_ticket_used) return fail(res, 401, "Exchange ticket allaqachon ishlatilgan.");
+    if (!s.exchange_ticket_hash || !s.otp_hash) return fail(res, 425, "Telegram tasdig'i hali tayyor emas.");
+    const expectedTicket = Buffer.from(String(s.exchange_ticket_hash));
+    const actualTicket = Buffer.from(hash(exchangeTicket));
+    if (expectedTicket.length !== actualTicket.length || !crypto.timingSafeEqual(expectedTicket, actualTicket)) return fail(res, 401, "Exchange ticket yaroqsiz.");
+  } else {
+    if (!s.otp_hash || s.otp_used) return fail(res, 401, "Kod yaroqsiz yoki allaqachon ishlatilgan.");
+    if (Number(s.otp_attempts || 0) >= MAX_OTP_ATTEMPTS) return fail(res, 429, "Urinishlar limiti tugadi.");
+    await supabase.from("auth_sessions").update({ otp_attempts: Number(s.otp_attempts || 0) + 1 }).eq("session_id", sessionId).eq("otp_used", false);
+    const expected = Buffer.from(String(s.otp_hash));
+    const actual = Buffer.from(hash(otp));
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return fail(res, 401, "Tasdiqlash kodi noto'g'ri.");
+  }
 
   const phone = normalizePhone(s.phone_number);
   const telegramId = Number(s.telegram_id);
@@ -93,7 +109,7 @@ install("post", "/api/v1/auth/verify-otp", async (req, res) => {
   await supabase.from("profiles").upsert({ id: userId, phone, updated_at: new Date().toISOString() }, { onConflict: "id" });
   await supabase.from("user_identities").upsert({ user_id: userId, provider: "telegram", provider_subject: String(telegramId), provider_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
   await supabase.from("user_identities").upsert({ user_id: userId, provider: "phone", provider_subject: phone, provider_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
-  await supabase.from("auth_sessions").update({ is_verified: true, otp_used: true, verified_at: new Date().toISOString() }).eq("session_id", sessionId).eq("otp_used", false);
+  await supabase.from("auth_sessions").update({ is_verified: true, otp_used: true, exchange_ticket_used: isExchange || s.exchange_ticket_used, verified_at: new Date().toISOString() }).eq("session_id", sessionId).eq("otp_used", false).eq("exchange_ticket_used", false);
   return ok(res, { user: { id: userId, phone_number: phone, telegram_id: telegramId }, access_token: signed.session.access_token, refresh_token: signed.session.refresh_token, expires_at: signed.session.expires_at });
 });
 
