@@ -17,7 +17,7 @@
           const {data:s}=await supabase.from('auth_sessions').select('session_id').eq('telegram_id',from).eq('is_verified',false).eq('exchange_ticket_used',false).gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
           if(s){
             const otp=crypto.randomInt(100000,1000000).toString();
-            const {error}=await supabase.from('auth_sessions').update({phone_number:phone,otp_hash:hash(otp),otp_attempts:0}).eq('session_id',s.session_id).eq('is_verified',false).eq('exchange_ticket_used',false);
+            const {error}=await supabase.from('auth_sessions').update({phone_number:phone,otp_hash:hash(otp),otp_attempts:0}).eq('session_id',s.session_id).eq('is_verified',false).eq('exchange_ticket_used',false).eq('telegram_id',from);
             if(error) throw error;
             await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:chat,text:'✅ Telefon raqamingiz tasdiqlandi. Brauzer avtomatik ravishda tizimga kiritmoqda.',reply_markup:{remove_keyboard:true}})});
             return res.sendStatus(200);
