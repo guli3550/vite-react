@@ -12,6 +12,22 @@
     return v || '';
   }
 
+  // Signed Telegram avatar URLs carry ?expires=...&signature=... query
+  // params that change on every GET /api/v1/auth/me response even when the
+  // underlying photo has not changed. Identity comparisons must never use
+  // the raw URL - only its stable resource path (host + pathname).
+  function normalizeAvatarIdentity(url) {
+    var raw = String(url || '').trim();
+    if (!raw) return '';
+    try {
+      var u = new URL(raw, window.location.origin);
+      return u.origin + u.pathname;
+    } catch (_) {
+      // Fallback: strip query string/hash manually.
+      return raw.split('?')[0].split('#')[0];
+    }
+  }
+
   function canonicalize(next) {
     if (!next || !next.id) return null;
     var username = cleanUsername(next.telegram_username || next.username);
@@ -118,16 +134,26 @@
     var user = canonicalize(next);
     if (!user) return;
 
-    var current = null;
-    try { current = JSON.parse(localStorage.getItem('guli_auth_user') || 'null'); } catch (_) {}
-    current = current || {};
-
-    var identityChanged = String(current.id || '') !== user.id ||
-      String(current.telegram_id || '') !== String(user.telegram_id || '') ||
-      String(current.username || '') !== String(user.username || '') ||
-      String(current.avatar_url || '') !== String(user.avatar_url || '') ||
-      String(current.full_name || '') !== String(user.full_name || '') ||
-      String(current.phone || '') !== String(user.phone || '');
+    // NOTE: this used to compute an `identityChanged` flag (comparing the
+    // cached user against the freshly-fetched one, including the raw
+    // avatar_url) and call window.location.reload() whenever it changed.
+    // Because the Telegram avatar URL is a signed URL whose
+    // ?expires=...&signature=... query params rotate on every single
+    // GET /api/v1/auth/me response, avatar_url differed on effectively
+    // every fetch even when nothing about the customer's identity had
+    // changed. That made identityChanged true on every load and caused a
+    // reload -> fetch -> new signed URL -> reload infinite loop in
+    // production.
+    //
+    // The fix: never reload the page from this script. The canonical
+    // server identity from GET /api/v1/auth/me is applied directly to the
+    // DOM (and to localStorage) below via applyProfileUI(), which is
+    // sufficient to keep the profile in sync - a full page reload was
+    // never actually required. If a stable-identity-change signal is ever
+    // needed again (e.g. for analytics), compare only stable fields -
+    // id, telegram_id, phone, full_name, telegram_username, and the
+    // avatar's normalizeAvatarIdentity()'d resource path - never the raw
+    // avatar_url/telegram_photo_url string.
 
     localStorage.setItem('guli_auth_user', JSON.stringify(user));
     if (user.full_name) localStorage.setItem('guli_name_' + user.id, user.full_name);
@@ -141,7 +167,5 @@
     applyProfileUI(user);
     window.setTimeout(function () { applyProfileUI(user); }, 300);
     window.setTimeout(function () { applyProfileUI(user); }, 1200);
-
-    if (identityChanged) window.location.reload();
   }).catch(function () {});
 })();
