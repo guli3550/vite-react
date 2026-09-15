@@ -3,6 +3,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { verifyAccessToken } = require("./guliCustomAuth.js");
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
@@ -77,11 +78,19 @@ function chatTokenValid(req, id) {
   }
   return false;
 }
+function customCustomer(req) {
+  const h = String(req.headers.authorization || "");
+  if (!h.startsWith("Bearer ")) return null;
+  return verifyAccessToken(h.slice(7));
+}
 function authorized(req, id) {
   if (admin(req)) return true;
   const n = Number(id);
   const tg = telegramUser(String(req.headers["x-telegram-init-data"] || ""));
-  return (tg && tg === n) || chatTokenValid(req, n);
+  if (tg && tg === n) return true;
+  const jwt = customCustomer(req);
+  if (jwt && Number(jwt.telegram_id) === n) return true;
+  return chatTokenValid(req, n);
 }
 function decodeData(raw) { const s=String(raw||"").replace(/^data:[^;]+;base64,/i,""); if(!s||s.length>11500000||s.length%4===1||!/^[A-Za-z0-9+/]*={0,2}$/.test(s))throw new Error("Fayl noto‘g‘ri kodlangan"); const b=Buffer.from(s,"base64"); if(!b.length||b.length>MAX_BYTES)throw new Error("Fayl hajmi 8 MB dan oshmasligi kerak"); return b; }
 function extFor(mime,name){const n=String(name||"").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g,"");if(n&&n.length<=8)return n;const map={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif","application/pdf":"pdf","text/plain":"txt","application/zip":"zip"};return map[mime]||"bin";}
@@ -90,13 +99,13 @@ function validMagic(buffer,mime){const h=buffer.subarray(0,12);if(mime==="image/
 async function ensureBucket(){if(!supabase)throw new Error("Supabase sozlanmagan");const current=await supabase.storage.getBucket(BUCKET);if(!current.error)return;const created=await supabase.storage.createBucket(BUCKET,{public:false,fileSizeLimit:MAX_BYTES,allowedMimeTypes:["image/jpeg","image/png","image/webp","image/gif","application/pdf","text/plain","application/zip","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/msword","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]});if(created.error&&!/already exists|duplicate/i.test(created.error.message||""))throw created.error;}
 function signPath(path){const exp=Date.now()+TOKEN_TTL;const body=Buffer.from(JSON.stringify({path,exp})).toString("base64url");const sig=crypto.createHmac("sha256",ADMIN_SECRET||BOT_TOKEN).update(body).digest("base64url");return `${body}.${sig}`;}
 function verifyPath(token){if(!token||(!ADMIN_SECRET&&!BOT_TOKEN))return null;try{const [body,sig]=String(token).split(".");const expected=crypto.createHmac("sha256",ADMIN_SECRET||BOT_TOKEN).update(body).digest("base64url");if(!safeEqual(sig,expected))return null;const p=JSON.parse(Buffer.from(body,"base64url").toString("utf8"));if(!p.path||Number(p.exp)<=Date.now())return null;return p.path;}catch{return null;}}
+function ownerIdFromPath(path){const m=String(path||"").match(/^messages\/(-?\d+)\/[^/]+$/);if(!m)return null;const n=Number(m[1]);return Number.isSafeInteger(n) ? n : null;}
 
 const { install } = require('./routeRegistry.js');
 install("post", "/api/chat/media-upload", async (req, res) => {
   try {
     let id = Number(req.body?.telegram_id);
     const isAdmin = admin(req);
-    // Recover guestId or telegram user id if not directly provided as safe integer
     if (!Number.isSafeInteger(id)) {
       const guest = String(req.headers["x-guli-guest-token"] || "");
       const gp = guest.split(".");
@@ -112,15 +121,11 @@ install("post", "/api/chat/media-upload", async (req, res) => {
         const tg = telegramUser(String(req.headers["x-telegram-init-data"] || ""));
         if (tg) id = tg;
       }
-      if (!Number.isSafeInteger(id) && isAdmin) {
-        id = 0;
-      }
+      const jwt = customCustomer(req);
+      if (!Number.isSafeInteger(id) && jwt && Number.isSafeInteger(Number(jwt.telegram_id))) id = Number(jwt.telegram_id);
+      if (!Number.isSafeInteger(id) && isAdmin) id = 0;
     }
-
-    if ((!Number.isSafeInteger(id) || !authorized(req, id)) && !isAdmin) {
-      return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
-    }
-
+    if ((!Number.isSafeInteger(id) || !authorized(req, id)) && !isAdmin) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
     const mimeType = String(req.body?.mimeType || req.body?.mime_type || "").toLowerCase();
     if (!validMime(mimeType)) return res.status(400).json({ success: false, message: "Bu fayl turi qo‘llab-quvvatlanmaydi" });
     const buffer = decodeData(req.body?.data);
@@ -137,4 +142,4 @@ install("post", "/api/chat/media-upload", async (req, res) => {
     return res.status(500).json({ success: false, message: e?.message || "Faylni saqlashda xatolik" });
   }
 });
-install("get", "/api/chat/media-file/:token", async(req,res)=>{try{const path=verifyPath(req.params.token);if(!path)return res.status(404).json({success:false,message:"Fayl havolasi eskirgan yoki yaroqsiz"});await ensureBucket();const {data,error}=await supabase.storage.from(BUCKET).createSignedUrl(path,3600);if(error||!data?.signedUrl)return res.status(404).json({success:false,message:"Fayl Storage'da topilmadi"});res.setHeader("Cache-Control","private, max-age=300");return res.redirect(302,data.signedUrl);}catch(e){console.error("Chat media proxy error:",e);return res.status(500).json({success:false,message:"Faylni ochishda xatolik"});}});
+install("get", "/api/chat/media-file/:token", async(req,res)=>{try{const path=verifyPath(req.params.token);if(!path)return res.status(404).json({success:false,message:"Fayl havolasi eskirgan yoki yaroqsiz"});const ownerId=ownerIdFromPath(path);if(ownerId===null)return res.status(404).json({success:false,message:"Fayl havolasi yaroqsiz"});if(!authorized(req,ownerId))return res.status(401).json({success:false,message:"Media uchun ruxsat yo‘q"});await ensureBucket();const {data,error}=await supabase.storage.from(BUCKET).createSignedUrl(path,3600);if(error||!data?.signedUrl)return res.status(404).json({success:false,message:"Fayl Storage'da topilmadi"});res.setHeader("Cache-Control","private, max-age=300");return res.redirect(302,data.signedUrl);}catch(e){console.error("Chat media proxy error:",e);return res.status(500).json({success:false,message:"Faylni ochishda xatolik"});}});
