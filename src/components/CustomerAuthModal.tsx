@@ -3,6 +3,7 @@ import type { Language } from "../utils/translations";
 
 export interface AuthUser {
   id: string;
+  email?: never;
   username?: string | null;
   full_name?: string | null;
   phone?: string | null;
