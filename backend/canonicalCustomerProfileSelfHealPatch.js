@@ -26,7 +26,7 @@ async function telegramProfile(telegramId) {
     const j = await r.json();
     const c = j.ok ? j.result : null;
     if (c) {
-      out.username = String(c.username || '').trim() || null;
+      out.username = String(c.username || '').trim().replace(/^@+/, '') || null;
       out.first_name = String(c.first_name || '').trim() || null;
       out.last_name = String(c.last_name || '').trim() || null;
       const fileId = c.photo?.big_file_id || c.photo?.small_file_id || '';
@@ -50,7 +50,7 @@ async function me(req, res) {
   if (!claims || claims.role !== 'customer') return res.status(401).json({ success: false, message: 'Mijoz sessiyasi yaroqsiz yoki muddati tugagan.' });
   const userId = String(claims.sub);
   const telegramId = Number(claims.telegram_id || 0);
-  if (!telegramId || !Number.isSafeInteger(telegramId)) return res.status(403).json({ success: false, message: 'Telegram identity mavjud emas.' });
+  if (!telegramId || !Number.isSafeInteger(telegramId) || telegramId <= 0) return res.status(403).json({ success: false, message: 'Telegram identity mavjud emas.' });
 
   const [{ data: user }, { data: customer }, { data: tg }] = await Promise.all([
     supabase.from('users').select('id,phone_number,telegram_id,full_name').eq('id', userId).maybeSingle(),
@@ -58,17 +58,19 @@ async function me(req, res) {
     supabase.from('telegram_users').select('username,first_name,last_name,telegram_phone').eq('telegram_id', telegramId).maybeSingle(),
   ]);
   if (!user && !customer) return res.status(404).json({ success: false, message: 'Mijoz profili topilmadi.' });
+  if (user && Number(user.telegram_id || 0) !== telegramId) return res.status(403).json({ success: false, message: 'Telegram identity mos kelmadi.' });
+
   const p = await telegramProfile(telegramId);
   const fullName = [p.first_name || tg?.first_name, p.last_name || tg?.last_name].filter(Boolean).join(' ').trim() || user?.full_name || customer?.full_name || null;
   const username = p.username || tg?.username || null;
   const phone = String(user?.phone_number || tg?.telegram_phone || customer?.phone || claims.phone || '').trim() || null;
   const avatar = p.avatar_url || customer?.avatar_url || null;
 
-  if (user) await supabase.from('users').update({ full_name: fullName, telegram_id: telegramId, updated_at: new Date().toISOString() }).eq('id', user.id);
+  if (user) await supabase.from('users').update({ full_name: fullName, telegram_id: telegramId, telegram_username: username, telegram_photo_url: avatar, updated_at: new Date().toISOString() }).eq('id', user.id).eq('telegram_id', telegramId);
   if (userId) await supabase.from('profiles').upsert({ id: userId, full_name: fullName, phone, ...(avatar ? { avatar_url: avatar } : {}), updated_at: new Date().toISOString() }, { onConflict: 'id' });
   await supabase.from('user_identities').upsert({ user_id: userId, provider: 'telegram', provider_subject: String(telegramId), provider_username: username, provider_phone: phone, metadata: { username, first_name: p.first_name || tg?.first_name || null, last_name: p.last_name || tg?.last_name || null }, updated_at: new Date().toISOString() }, { onConflict: 'provider,provider_subject' });
 
-  return res.json({ success: true, data: { user: { id: userId, phone_number: phone, telegram_id: telegramId, full_name: fullName, username, avatar_url: avatar, email: username ? `@${username}` : null, provider: 'telegram' } } });
+  return res.json({ success: true, data: { user: { id: userId, phone_number: phone, telegram_id: telegramId, full_name: fullName, telegram_username: username, telegram_photo_url: avatar } } });
 }
 
 registry.routes = registry.routes.filter((r) => !(r.method === 'get' && r.path === '/api/v1/auth/me'));
