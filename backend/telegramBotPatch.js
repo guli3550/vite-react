@@ -9,13 +9,10 @@
   const STORE_TEXT = "🛍 Do‘konni ochish";
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
   const removeReplyKeyboard = { remove_keyboard: true };
-  const AUTH_SESSION_MS = 5 * 60 * 1000;
-  const OTP_MS = 3 * 60 * 1000;
   const AUTH_KEY = process.env.SUPABASE_SECRET_KEY || "guli-auth";
   const authHash = (value) => crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex");
   const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
   const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
-  const randomOtp = () => crypto.randomInt(100000, 1000000).toString();
 
   const orderText = (order) => {
     const items = Array.isArray(order?.items) ? order.items : [];
@@ -63,7 +60,6 @@
         }
 
         if (chatId && contact?.phone_number) {
-          // Contact messages are trusted only when Telegram identifies the contact as the sender.
           if (!fromId || !contact.user_id || Number(contact.user_id) !== fromId) {
             await telegramApi("sendMessage", { chat_id: Number(chatId), text: "❌ Faqat Telegram hisobingizga tegishli telefon raqamini yuboring. Raqamni oddiy xabar sifatida yuborish autentifikatsiya qilmaydi.", reply_markup: removeReplyKeyboard });
             return res.sendStatus(200);
@@ -74,12 +70,14 @@
             return res.sendStatus(200);
           }
 
+          // If this Telegram user started a browser auth deep-link, bind the contact to that exact session.
           const { data: authSession } = await supabase.from("auth_sessions").select("session_id,telegram_id,expires_at,is_verified,otp_used,otp_hash,created_at").eq("telegram_id", fromId).eq("is_verified", false).eq("otp_used", false).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
           if (authSession) {
-            const otp = randomOtp();
-            await supabase.from("auth_sessions").update({ phone_number: phone, otp_hash: authHash(otp), otp_attempts: 0 }).eq("session_id", authSession.session_id).eq("is_verified", false).eq("otp_used", false);
+            const autoOtp = crypto.randomInt(100000, 1000000).toString();
+            const { error: authUpdateError } = await supabase.from("auth_sessions").update({ phone_number: phone, otp_hash: authHash(autoOtp), otp_attempts: 0 }).eq("session_id", authSession.session_id).eq("is_verified", false).eq("otp_used", false);
+            if (authUpdateError) throw authUpdateError;
             await supabase.from("telegram_users").upsert({ telegram_id: fromId, username: message?.from?.username || null, first_name: message?.from?.first_name || null, last_name: message?.from?.last_name || null, telegram_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "telegram_id" });
-            await telegramApi("sendMessage", { chat_id: Number(chatId), text: `✅ Telefon raqamingiz Telegram orqali tasdiqlandi.\n\n🔢 <b>GULI tasdiqlash kodi:</b> <code>${otp}</code>\n\nKod 3 daqiqa amal qiladi va bir marta ishlatiladi. Kodni brauzerdagi GULI oynasiga kiriting.`, parse_mode: "HTML", reply_markup: removeReplyKeyboard });
+            await telegramApi("sendMessage", { chat_id: Number(chatId), text: "✅ Telefon raqamingiz tasdiqlandi. Brauzer avtomatik ravishda tizimga kiritmoqda.", reply_markup: removeReplyKeyboard });
             return res.sendStatus(200);
           }
 
@@ -88,7 +86,6 @@
           return res.sendStatus(200);
         }
 
-        // Do not treat arbitrary text containing a phone number as authentication.
         if (chatId && /^\+?\d[\d\s().-]{6,}$/.test(text)) {
           await telegramApi("sendMessage", { chat_id: Number(chatId), text: "❌ Telefon raqamini xabar sifatida yuborish autentifikatsiya qilmaydi. 📱 <b>Telefon raqamimni yuborish</b> tugmasidan foydalaning.", parse_mode: "HTML" });
           return res.sendStatus(200);
