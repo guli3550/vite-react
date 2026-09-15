@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry.js");
+const { issueAccessToken, issueRefreshToken, rotateRefreshToken, verifyAccessToken } = require("./guliCustomAuth.js");
 
 const URL = process.env.SUPABASE_URL || "";
 const KEY = process.env.SUPABASE_SECRET_KEY || "";
@@ -13,9 +14,6 @@ const MAX_OTP_ATTEMPTS = 5;
 const hash = (value) => crypto.createHmac("sha256", KEY || "guli-auth").update(String(value)).digest("hex");
 const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
 const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
-// GULI's canonical business identity and Supabase Auth identity both use E.164.
-// Never strip the leading '+' before create/update/sign-in.
-const authPhone = (v) => normalizePhone(v);
 const ok = (res, data) => res.json({ success: true, data });
 const fail = (res, code, message) => res.status(code).json({ success: false, message });
 
@@ -83,57 +81,63 @@ install("post", "/api/v1/auth/verify-otp", async (req, res) => {
   const phone = normalizePhone(s.phone_number);
   const telegramId = Number(s.telegram_id);
   if (!validPhone(phone) || !Number.isSafeInteger(telegramId)) return fail(res, 400, "Tasdiqlangan identity ma'lumotlari yetarli emas.");
-  const supabaseAuthPhone = authPhone(phone);
 
   let userId;
-  const { data: canonical } = await supabase.from("users").select("id,phone_number,telegram_id").eq("phone_number", phone).maybeSingle();
+  const { data: canonical } = await supabase.from("users").select("id,phone_number,telegram_id,full_name").eq("phone_number", phone).maybeSingle();
   if (canonical) {
     if (canonical.telegram_id && Number(canonical.telegram_id) !== telegramId) return fail(res, 409, "Bu telefon boshqa Telegram account bilan bog'langan.");
     userId = canonical.id;
   } else {
-    const { data: byTg } = await supabase.from("users").select("id,phone_number,telegram_id").eq("telegram_id", telegramId).maybeSingle();
+    const { data: byTg } = await supabase.from("users").select("id,phone_number,telegram_id,full_name").eq("telegram_id", telegramId).maybeSingle();
     if (byTg && byTg.phone_number !== phone) return fail(res, 409, "Telegram account boshqa telefon bilan bog'langan.");
     if (byTg) userId = byTg.id;
   }
 
-  const password = crypto.randomBytes(48).toString("base64url");
+  // Supabase Auth remains the durable user registry (users.id -> auth.users.id),
+  // but browser sessions no longer depend on hosted Phone Auth/SMS configuration.
   if (!userId) {
-    const { data: created, error } = await supabase.auth.admin.createUser({ phone: supabaseAuthPhone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
+    const { data: created, error } = await supabase.auth.admin.createUser({ phone, phone_confirm: true, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
     if (error || !created?.user) return fail(res, 500, `GULI Auth account yaratilmadi: ${error?.message || "unknown"}`);
     userId = created.user.id;
   } else {
-    const { error } = await supabase.auth.admin.updateUserById(userId, { phone: supabaseAuthPhone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
+    const { error } = await supabase.auth.admin.updateUserById(userId, { phone, phone_confirm: true, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
     if (error) return fail(res, 500, `GULI Auth account yangilanmadi: ${error.message || "unknown"}`);
   }
-
-  // Supabase Auth expects the canonical E.164 phone representation here.
-  // This is the final step that mints the browser JWT session.
-  const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ phone: supabaseAuthPhone, password });
-  if (signErr || !signed?.session) return fail(res, 500, `Auth session chiqarilmadi: ${signErr?.message || "Supabase session qaytarmadi."}`);
 
   await supabase.from("users").upsert({ id: userId, phone_number: phone, telegram_id: telegramId, updated_at: new Date().toISOString() }, { onConflict: "id" });
   await supabase.from("profiles").upsert({ id: userId, phone, updated_at: new Date().toISOString() }, { onConflict: "id" });
   await supabase.from("user_identities").upsert({ user_id: userId, provider: "telegram", provider_subject: String(telegramId), provider_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
   await supabase.from("user_identities").upsert({ user_id: userId, provider: "phone", provider_subject: phone, provider_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
+
+  const accessToken = issueAccessToken({ id: userId, phone_number: phone, telegram_id: telegramId });
+  const refreshToken = await issueRefreshToken(supabase, userId);
   await supabase.from("auth_sessions").update({ is_verified: true, otp_used: true, exchange_ticket_used: isExchange || s.exchange_ticket_used, verified_at: new Date().toISOString() }).eq("session_id", sessionId).eq("otp_used", false).eq("exchange_ticket_used", false);
-  return ok(res, { user: { id: userId, phone_number: phone, telegram_id: telegramId }, access_token: signed.session.access_token, refresh_token: signed.session.refresh_token, expires_at: signed.session.expires_at });
+  return ok(res, { user: { id: userId, phone_number: phone, telegram_id: telegramId }, access_token: accessToken, refresh_token: refreshToken, expires_in: 900 });
 });
 
 install("post", "/api/v1/auth/refresh", async (req, res) => {
   if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
-  const refreshToken = String(req.body?.refresh_token || "");
+  const refreshToken = String(req.body?.refresh_token || "").trim();
   if (!refreshToken) return fail(res, 400, "Refresh token talab qilinadi.");
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-  if (error || !data?.session) return fail(res, 401, "Refresh token yaroqsiz.");
-  return ok(res, { access_token: data.session.access_token, refresh_token: data.session.refresh_token, expires_at: data.session.expires_at });
+  try {
+    const rotated = await rotateRefreshToken(supabase, refreshToken);
+    if (!rotated) return fail(res, 401, "Refresh token yaroqsiz.");
+    const { data: user } = await supabase.from("users").select("id,phone_number,telegram_id").eq("id", rotated.userId).maybeSingle();
+    if (!user) return fail(res, 401, "Foydalanuvchi topilmadi.");
+    return ok(res, { access_token: issueAccessToken(user), refresh_token: rotated.refreshToken, expires_in: 900 });
+  } catch (error) {
+    console.error("[GULI Auth refresh]", error);
+    return fail(res, 401, "Refresh token yaroqsiz.");
+  }
 });
 
 install("get", "/api/v1/auth/me", async (req, res) => {
   if (!supabase) return fail(res, 503, "Auth xizmati sozlanmagan.");
   const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   if (!token) return fail(res, 401, "Bearer token talab qilinadi.");
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) return fail(res, 401, "Sessiya yaroqsiz.");
-  const { data: user } = await supabase.from("users").select("id,phone_number,telegram_id,full_name,created_at,updated_at").eq("id", data.user.id).maybeSingle();
-  return ok(res, { user: user || { id: data.user.id, phone_number: data.user.phone } });
+  const claims = verifyAccessToken(token);
+  if (!claims?.sub) return fail(res, 401, "Sessiya yaroqsiz.");
+  const { data: user } = await supabase.from("users").select("id,phone_number,telegram_id,full_name,created_at,updated_at").eq("id", claims.sub).maybeSingle();
+  if (!user) return fail(res, 401, "Foydalanuvchi topilmadi.");
+  return ok(res, { user });
 });
