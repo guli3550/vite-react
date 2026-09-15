@@ -4,6 +4,7 @@ import type { Language } from "../utils/translations";
 export interface AuthUser {
   id: string;
   email?: string | null;
+  username?: string | null;
   full_name?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
@@ -62,10 +63,14 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   }, [isOpen, initialTab]);
 
   const completeLogin = (data: any) => {
+    const rawUsername = String(data?.user?.username || "").trim();
     const user: AuthUser = {
       id: String(data?.user?.id || ""),
       phone: data?.user?.phone_number || null,
+      username: rawUsername || null,
+      email: data?.user?.email || (rawUsername ? `@${rawUsername}` : null),
       full_name: data?.user?.full_name || null,
+      avatar_url: data?.user?.avatar_url || null,
       provider: "telegram",
       telegram_id: data?.user?.telegram_id ?? null,
       created_at: data?.user?.created_at,
@@ -131,7 +136,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       if (popup && !popup.closed) {
         try { popup.location.href = url; } catch { window.location.href = url; }
       } else {
-        // Popup was blocked: direct navigation still preserves the auth_<UUID> payload.
         window.location.href = url;
       }
 
@@ -164,7 +168,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         } catch (e) {
           const message = e instanceof Error ? e.message : "Auth status tekshiruvida xatolik.";
           if (/sessiya topilmadi|session topilmadi/i.test(message)) setError(message);
-          // Temporary network errors do not stop the polling loop.
         }
       }, 1200);
     } catch (e) {
