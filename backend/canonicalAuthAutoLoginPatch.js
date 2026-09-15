@@ -11,6 +11,8 @@
 
   install('post','/api/telegram/webhook',async(req,res,next)=>{
     try{
+      const expected=String(process.env.TELEGRAM_WEBHOOK_SECRET||'').trim();
+      if(expected && req.headers['x-telegram-bot-api-secret-token']!==expected) return res.sendStatus(401);
       const m=req.body?.message,c=m?.contact,from=Number(m?.from?.id||m?.chat?.id||0),chat=Number(m?.chat?.id||0);
       if(c?.phone_number&&from&&Number(c.user_id)===from){
         const phone=normalizePhone(c.phone_number);
@@ -18,7 +20,8 @@
           const {data:s}=await supabase.from('auth_sessions').select('session_id').eq('telegram_id',from).eq('is_verified',false).eq('exchange_ticket_used',false).gt('expires_at',new Date().toISOString()).order('created_at',{ascending:false}).limit(1).maybeSingle();
           if(s){
             const otp=crypto.randomInt(100000,1000000).toString();
-            await supabase.from('auth_sessions').update({phone_number:phone,otp_hash:hash(otp),otp_attempts:0}).eq('session_id',s.session_id).eq('is_verified',false).eq('exchange_ticket_used',false);
+            const {error}=await supabase.from('auth_sessions').update({phone_number:phone,otp_hash:hash(otp),otp_attempts:0}).eq('session_id',s.session_id).eq('is_verified',false).eq('exchange_ticket_used',false);
+            if(error) throw error;
             pending.set(s.session_id,{otp,expires:Date.now()+180000});
             await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:chat,text:'✅ Telefon raqamingiz tasdiqlandi. Brauzer avtomatik ravishda tizimga kiritmoqda.',reply_markup:{remove_keyboard:true}})});
             return res.sendStatus(200);
