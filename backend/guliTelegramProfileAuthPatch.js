@@ -51,14 +51,6 @@ async function getCurrentAvatar(telegramId) {
 
 // Browser <img> cannot attach Authorization headers, so avatar access uses a
 // short-lived HMAC URL. The bot token is never exposed to the browser.
-const originalGet = express.application.get;
-express.application.get = function guliProfileGet(routePath, ...handlers) {
-  if (routePath === "/api/v1/profile/telegram-avatar/:telegramId/:fileId" && handlers.length) {
-    return originalGet.call(this, routePath, ...handlers);
-  }
-  return originalGet.call(this, routePath, ...handlers);
-};
-
 express.application.get.call(express.application, "/api/v1/profile/telegram-avatar/:telegramId/:fileId", async (req, res) => {
   try {
     const telegramId = Number(req.params.telegramId);
@@ -81,8 +73,8 @@ express.application.get.call(express.application, "/api/v1/profile/telegram-avat
   }
 });
 
-// Wrap the final auth exchange response. The underlying auth handler still owns
-// identity creation and JWT issuance; this layer only enriches the returned user.
+// The final auth handler is wrapped at route-registration time. Its JSON response
+// is held until Telegram profile data is resolved, then emitted exactly once.
 const originalPost = express.application.post;
 express.application.post = function guliProfilePost(routePath, ...handlers) {
   if (routePath === "/api/v1/auth/verify-otp" && handlers.length) {
@@ -90,36 +82,36 @@ express.application.post = function guliProfilePost(routePath, ...handlers) {
     const handler = handlers[index];
     handlers[index] = async function enrichedVerify(req, res, next) {
       let payload = null;
+      let committed = false;
       const originalJson = res.json.bind(res);
-      res.json = (body) => { payload = body; return originalJson(body); };
+      res.json = (body) => { payload = body; return res; };
       try {
         await handler(req, res, next);
-        if (!payload?.success || !payload?.data?.user || !supabase) return;
-        const telegramId = Number(payload.data.user.telegram_id || 0);
-        if (!Number.isSafeInteger(telegramId)) return;
-        const { data: tg } = await supabase.from("telegram_users").select("username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle();
-        const username = String(tg?.username || "").trim() || null;
-        const firstName = String(tg?.first_name || "").trim();
-        const lastName = String(tg?.last_name || "").trim();
-        const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || null;
-        const photo = await getCurrentAvatar(telegramId);
-        const avatar = photo?.url || null;
-        if (payload.data.user.id) {
-          const update = {};
-          if (fullName) update.full_name = fullName;
-          await supabase.from("users").update({ ...update, updated_at: new Date().toISOString() }).eq("id", payload.data.user.id);
-          await supabase.from("profiles").upsert({ id: payload.data.user.id, full_name: fullName || null, phone: payload.data.user.phone_number || null, avatar_url: avatar, updated_at: new Date().toISOString() }, { onConflict: "id" });
-          await supabase.from("user_identities").upsert({ user_id: payload.data.user.id, provider: "telegram", provider_subject: String(telegramId), provider_username: username, provider_phone: payload.data.user.phone_number || null, metadata: { username, first_name: firstName || null, last_name: lastName || null }, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
+        if (payload?.success && payload?.data?.user && supabase) {
+          const telegramId = Number(payload.data.user.telegram_id || 0);
+          if (Number.isSafeInteger(telegramId)) {
+            const { data: tg } = await supabase.from("telegram_users").select("username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle();
+            const username = String(tg?.username || "").trim() || null;
+            const firstName = String(tg?.first_name || "").trim();
+            const lastName = String(tg?.last_name || "").trim();
+            const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || null;
+            const photo = await getCurrentAvatar(telegramId);
+            const avatar = photo?.url || null;
+            if (payload.data.user.id) {
+              await supabase.from("users").update({ ...(fullName ? { full_name: fullName } : {}), updated_at: new Date().toISOString() }).eq("id", payload.data.user.id);
+              await supabase.from("profiles").upsert({ id: payload.data.user.id, full_name: fullName || null, phone: payload.data.user.phone_number || null, avatar_url: avatar, updated_at: new Date().toISOString() }, { onConflict: "id" });
+              await supabase.from("user_identities").upsert({ user_id: payload.data.user.id, provider: "telegram", provider_subject: String(telegramId), provider_username: username, provider_phone: payload.data.user.phone_number || null, metadata: { username, first_name: firstName || null, last_name: lastName || null }, updated_at: new Date().toISOString() }, { onConflict: "provider,provider_subject" });
+            }
+            payload.data.user.full_name = fullName || payload.data.user.full_name || null;
+            payload.data.user.username = username;
+            payload.data.user.avatar_url = avatar;
+            payload.data.user.email = username ? `@${username}` : null;
+          }
         }
-        payload.data.user.full_name = fullName || payload.data.user.full_name || null;
-        payload.data.user.username = username;
-        payload.data.user.avatar_url = avatar;
-        payload.data.user.email = username ? `@${username}` : null;
-        // res.json already ran. Send enrichment through the same response stream
-        // only when Express has not committed it yet; otherwise the browser bridge
-        // below can fetch /me. This object is also persisted for the next reload.
+        if (!committed) { committed = true; return originalJson(payload || { success: false, message: "Auth javobi bo‘sh." }); }
       } catch (e) {
         console.warn("[GULI profile] auth enrichment failed:", e.message);
+        if (!committed) { committed = true; return originalJson(payload || { success: false, message: "Auth javobi tayyorlanmadi." }); }
       }
     };
   }
