@@ -1,19 +1,20 @@
 # GULI — FINAL CENTRALIZED AUTH ARCHITECTURE
 
 **Status:** Canonical target architecture
-**Purpose:** This document is the source of truth for future GULI authentication and identity work. Do not introduce a parallel authentication model without explicitly updating this architecture.
+**Purpose:** Source of truth for GULI authentication and identity. Do not introduce a parallel customer authentication model without explicitly updating this document.
 
 ## 1. Core principle
 
-Browser, Telegram Bot, Telegram Mini App, and all future clients must use **one backend, one database, and one canonical `public.users` identity record**.
+Browser, Telegram Bot, Telegram Mini App, and all future clients use **one backend, one database, and one canonical `public.users` identity record**.
 
-The future custom domain must not create a separate application identity. Whether the customer opens GULI through the official domain, Telegram Mini App, Telegram Bot, Chrome, Safari, Yandex Browser, another browser, Android/iOS webview, or a future native app, all authenticated business data must resolve to the same canonical user.
+The future custom domain must not create a separate application identity. Whether the customer opens GULI through the official domain, Telegram Mini App, Telegram Bot, Chrome, Safari, Yandex Browser, Android/iOS webview, or a future native app, all authenticated business data must resolve to the same canonical user.
 
 - Business identity: normalized real phone number (`E.164`, e.g. `+998901234567`)
 - Technical primary key: `users.id` UUID
 - Verified Telegram identity: `users.telegram_id` UNIQUE nullable
-- Authorization: short-lived JWT access token + rotating/revocable refresh token
-- Email/password authentication: deprecated and must not be used for the new customer identity flow
+- Authorization: GULI server-signed short-lived JWT access token + rotating/revocable refresh token
+- Supabase Phone Auth/SMS: **not required** for the canonical customer login flow
+- Email/password authentication: deprecated and blocked at the customer route boundary
 - Frontend must never use phone number, Telegram ID, or order number as an authorization credential
 
 ### One Backend + One Database + One Canonical Identity
@@ -50,13 +51,9 @@ The future custom domain must not create a separate application identity. Whethe
 
 **Non-negotiable rule:** changing the client, browser, device, domain, or entry point must never by itself create a second customer identity or a second business database.
 
-The frontend/domain is only a client/entry point. The backend and database remain the source of truth.
-
 ## 2. Future domain architecture
 
-When the production domain is purchased, use the domain as the public entry point without changing the canonical identity model.
-
-Recommended topology:
+When the production domain is purchased, use it as the public entry point without changing the canonical identity model.
 
 ```text
 https://guli.uz
@@ -70,9 +67,7 @@ https://api.guli.uz
 
 Telegram Mini App, Telegram Bot, browser, Safari, Yandex Browser, and future clients must call the same canonical API layer (`api.guli.uz` in production).
 
-A domain migration must therefore be configuration/routing work, not an account/database migration.
-
-The exact production domain can be substituted later; the architecture must remain unchanged.
+A domain migration is configuration/routing work, not an account/database migration.
 
 ## 3. Canonical data model
 
@@ -100,12 +95,16 @@ create table if not exists public.auth_sessions (
     is_verified boolean not null default false,
     otp_used boolean not null default false,
     otp_attempts integer not null default 0,
+    exchange_ticket_hash text,
+    exchange_ticket_used boolean not null default false,
     expires_at timestamptz not null,
     created_at timestamptz not null default now()
 );
 ```
 
-Recommended lifecycle states for implementation: `WAITING`, `CONTACT_RECEIVED`, `OTP_SENT`, `VERIFIED`, `EXPIRED`, `BLOCKED`.
+The OTP is an **internal one-time verification primitive**. It is not shown to the customer in the canonical browser flow; the verified Telegram Contact event causes the browser's one-time exchange ticket to be accepted automatically.
+
+Recommended lifecycle states: `WAITING`, `CONTACT_RECEIVED`, `READY`, `VERIFIED`, `EXPIRED`, `BLOCKED`.
 
 ### `public.auth_refresh_tokens`
 
@@ -120,31 +119,36 @@ create table if not exists public.auth_refresh_tokens (
 );
 ```
 
-RLS should remain enabled. Browser/Mini App must not access these tables directly; all protected identity operations go through the backend.
+RLS remains enabled. Browser/Mini App must not access these tables directly; protected identity operations go through the backend.
 
-## 4. Browser authentication flow
+## 4. Browser authentication flow — canonical
 
 ```text
 Browser
   -> POST /api/v1/auth/init-session
-  -> backend creates short-lived auth session
-  -> backend returns Telegram deep link
+  -> backend creates unique 5-minute auth session
+  -> backend returns session_id + one-time exchange ticket + Telegram deep link
   -> user opens Telegram Bot
-  -> /start auth_SESSION_ID
+  -> /start auth_<SESSION_ID>
+  -> bot binds this exact session to msg.from.id
   -> bot requests Contact Share
   -> user sends own Telegram contact
-  -> backend validates contact ownership and binds telegram_id + phone
-  -> backend creates 6-digit OTP, stores only otp_hash
-  -> OTP expires in 3 minutes
-  -> browser submits POST /api/v1/auth/verify-otp
-  -> backend atomically verifies single-use OTP
+  -> backend validates contact.user_id === msg.from.id
+  -> backend stores verified phone + Telegram ID on that exact session
+  -> backend creates internal OTP hash / READY state
+  -> browser polls its own session_id
+  -> READY => POST /api/v1/auth/exchange with one-time exchange ticket
+  -> backend verifies ticket + session + identity
   -> find/create canonical users row
-  -> issue access + refresh tokens
+  -> issue GULI access JWT + rotating refresh token
+  -> browser stores customer session and continues automatically
 ```
 
-### Optional passwordless completion
+The browser must never receive a raw OTP from the polling endpoint. The exchange ticket is bound to one `session_id`, expires with the session, and is single-use.
 
-The browser may poll `GET /api/v1/auth/check-status/:session_id`. After the bot verifies the contact, the backend should expose only a short-lived, one-time exchange ticket—not raw JWTs through the polling endpoint. Browser exchanges the ticket for access/refresh tokens.
+### Concurrent-user isolation
+
+Every browser login attempt gets a unique UUID `session_id`. Telegram contact verification must resolve only to the matching active session. No global or "latest unbound session" fallback may be introduced.
 
 ## 5. Telegram Bot authentication
 
@@ -152,62 +156,75 @@ The `/start auth_SESSION_ID` handler must:
 
 1. Parse and validate the session ID.
 2. Confirm the session exists and has not expired.
-3. Store `msg.from.id` as the Telegram identity for the session.
+3. Bind `msg.from.id` to that exact auth session.
 4. Show a `request_contact=true` button.
-5. Accept `msg.contact.phone_number` only after validating that the contact belongs to the same Telegram user (`contact.user_id === msg.from.id` when supplied, with the message/context checks required by the Bot API).
+5. Accept `msg.contact.phone_number` only when the contact belongs to the same Telegram user (`contact.user_id === msg.from.id`).
 6. Normalize the phone to E.164.
-7. Generate a cryptographically secure 6-digit OTP.
-8. Store only the OTP hash, never plaintext OTP.
-9. Enforce 3-minute expiry, single-use semantics, and attempt limits.
+7. Generate a cryptographically secure internal 6-digit OTP and store only its keyed hash.
+8. Mark the session ready for the one-time browser exchange.
+9. Never accept a manually typed phone number as proof of ownership.
+10. Never guess an auth session from a plain `/start` command.
 
 ## 6. Telegram Mini App direct flow
 
-Mini App sends Telegram `initData` to:
+Mini App sends Telegram `initData` to the canonical backend authentication layer. The backend must validate `initData` cryptographically using the bot token before trusting the Telegram user ID.
 
-`POST /api/v1/auth/telegram`
+`initData` does not itself provide the user's phone number. If the canonical user already exists by a verified `telegram_id`, the backend may issue the GULI JWT directly. If not, require a verified Contact Share flow to obtain and bind the phone number.
 
-Backend must validate Telegram `initData` cryptographically using the bot token before trusting the Telegram user ID. `initData` does not itself provide the user's phone number. If the canonical user already exists by verified `telegram_id`, issue JWT immediately. If not, require a verified Contact Share flow to obtain the phone number, then create/link the canonical user.
+## 7. GULI customer JWT
 
-## 7. Account linking rules
+The canonical browser/Mini App session is issued by the **GULI backend**, not by Supabase Phone Auth.
+
+```text
+JWT header:  { alg: HS256, typ: JWT }
+JWT claims:  sub, phone, telegram_id, role=customer, iat, exp, jti
+Access TTL:  approximately 15 minutes
+Refresh TTL: approximately 30 days
+```
+
+The signing secret is server-only (`AUTH_JWT_SECRET`). It must never be bundled into Vite, returned by `/api/auth/config`, logged, or sent to Telegram/browser clients. Refresh tokens are stored only as keyed hashes and are rotated/revoked on use.
+
+Supabase remains the durable PostgreSQL/user registry and stores the canonical `users.id`; the GULI JWT is the customer authorization credential used by the protected backend API layer.
+
+## 8. Account linking rules
 
 The canonical identity is the normalized phone number, while `users.id` remains the immutable technical primary key.
 
 - Existing phone + same Telegram ID -> update/link and continue.
-- Existing phone + different Telegram ID -> reject automatic linking; require an explicit secure account-recovery/linking procedure.
-- Existing Telegram ID + different phone -> do not silently overwrite the phone; require explicit verified linking/recovery logic.
-- New phone + verified Telegram ID -> create a new user.
+- Existing phone + different Telegram ID -> reject automatic linking; require explicit secure account recovery/linking.
+- Existing Telegram ID + different phone -> do not silently overwrite the phone.
+- New phone + verified Telegram ID -> create a new canonical user.
 - Never allow client-supplied `phone`, `telegram_id`, `order_number`, or URL parameters to bypass authentication.
 
-## 8. Canonical API surface
+## 9. Canonical API surface
 
 ```text
 POST /api/v1/auth/init-session
-POST /api/v1/auth/verify-otp
 GET  /api/v1/auth/check-status/:session_id
-POST /api/v1/auth/telegram
+POST /api/v1/auth/exchange
+POST /api/v1/auth/verify-otp        # internal/controlled compatibility path
+POST /api/v1/auth/telegram          # Mini App direct flow
 POST /api/v1/auth/refresh
-POST /api/v1/auth/logout
+POST /api/v1/auth/logout             # required finalization endpoint
 GET  /api/v1/auth/me
 ```
 
-All protected business APIs must resolve the current user from the verified JWT `sub` claim.
+All protected customer APIs must resolve the current user from the verified GULI JWT `sub` claim. Supabase Auth JWT verification is retained only as a backward-compatibility path during migration.
 
-## 9. Order authorization
+## 10. Order authorization
 
 Canonical rule:
 
 ```text
-Authorization: Bearer <access-token>
-        -> verify JWT
+Authorization: Bearer <GULI access-token>
+        -> verify GULI JWT
         -> users.id = JWT.sub
-        -> orders.user_id = users.id
+        -> orders.auth_user_id = users.id
 ```
 
-Phone number, Telegram ID, order number, or localStorage values may be filters/identifiers only after authorization and ownership checks. They must never be authorization credentials.
+Phone number, Telegram ID, order number, or localStorage values may be identifiers only after authentication and ownership checks. They must never be authorization credentials.
 
-## 10. Centralized Telegram notification architecture
-
-Status, payment, receipt, and online-chat notifications must use one notification layer and the canonical `users` identity:
+## 11. Centralized Telegram notification architecture
 
 ```text
 Business event
@@ -219,54 +236,42 @@ Business event
 
 Do not create separate identity stores for browser, bot, Mini App, orders, payments, or chat.
 
-Existing `orders.telegram_id` fields may be retained temporarily during migration for compatibility, but the long-term source of truth is `users.telegram_id`. Notifications must not depend on stale client metadata.
+Existing `orders.telegram_id` fields may be retained temporarily for compatibility, but the long-term source of truth is `users.telegram_id`. Notifications must not depend on stale client metadata.
 
-Required notification events include:
+Required notification events include order status changes, payment verified/rejected, receipt events when applicable, and online-chat messages. Delivery should be idempotent using an event key/outbox or equivalent durable mechanism.
 
-- order status changed
-- payment verified/rejected
-- receipt-related customer event when applicable
-- online chat message
+## 12. Security requirements
 
-Notification delivery must be idempotent and should use an event key/outbox or equivalent durable mechanism so retries cannot create uncontrolled duplicates.
-
-## 11. Security requirements
-
-- OTP lifetime: 3 minutes.
-- OTP: cryptographically random 6 digits.
-- OTP stored only as a keyed hash/HMAC.
-- OTP is single-use and invalidated immediately after successful verification.
-- Maximum OTP attempts per session: 5.
-- OTP resend cooldown: approximately 60 seconds.
-- Rate-limit by IP, session, and Telegram identity.
 - Auth session lifetime: approximately 5 minutes.
+- Internal OTP: cryptographically random 6 digits, keyed-hash only, single-use, max 5 attempts.
 - Access JWT: approximately 15 minutes.
-- Refresh token: approximately 30 days, stored hashed and revocable; rotate on refresh.
-- Use constant-time comparison for hashes/signatures.
+- Refresh token: approximately 30 days, hashed, revocable, rotated on refresh.
+- Rate-limit by IP, session, and Telegram identity.
 - Validate Telegram Mini App `initData` server-side before trusting Telegram identity.
-- Never expose bot token, Supabase service-role key, or JWT signing secrets to the frontend.
-- Do not return raw OTPs from APIs or logs.
-- Do not put JWTs in URLs.
-- Prefer secure, HttpOnly, SameSite cookies for browser refresh/session material where compatible with the existing app; keep access tokens out of URLs.
-- Add audit logging for account linking, login success/failure, OTP abuse, refresh/revoke, and security-sensitive identity changes.
+- Never expose Telegram bot token, Supabase service-role key, or JWT signing secret to the frontend.
+- Never return raw OTPs from APIs or logs.
+- Never put JWTs in URLs.
+- Prefer secure HttpOnly SameSite cookies for long-lived browser credentials when the client architecture permits; current GULI localStorage access-token compatibility must not leak secrets to URLs.
+- Audit account linking, login success/failure, OTP abuse, refresh/revoke, and sensitive identity changes.
+- Customer email/password/Google routes remain disabled at the phone-only boundary.
 
-## 12. Migration rule for GULI
+## 13. Migration rule for GULI
 
-Do not replace the current production auth/order/payment/chat system with a destructive rewrite. Migrate incrementally:
+Do not perform a destructive rewrite of production auth/order/payment/chat. Migrate incrementally:
 
-1. Introduce canonical `users`, `auth_sessions`, and `auth_refresh_tokens`.
-2. Implement Telegram Bot authentication and verified contact linking.
-3. Implement Mini App `initData` verification and direct login for already-linked users.
-4. Implement Browser deep-link + OTP flow.
-5. Add JWT middleware and migrate protected APIs to `users.id` ownership.
-6. Migrate order/payment/chat/notification identity lookups to `users.telegram_id`.
-7. Add idempotent centralized notification service.
-8. Configure the future custom domain and canonical `api.<domain>` gateway without changing user identity records.
-9. Verify production smoke tests for authenticated customer flows from browser and Telegram Mini App.
-10. Only after successful migration, disable/deprecate legacy email/password/guest identity routes.
+1. Keep canonical `users`, `auth_sessions`, and `auth_refresh_tokens`.
+2. Use Telegram Bot verified Contact Share for browser identity proof.
+3. Issue GULI server-signed JWTs without depending on Supabase Phone Auth/SMS.
+4. Migrate protected customer APIs to GULI JWT `sub` + `orders.auth_user_id` ownership.
+5. Keep Supabase Auth JWT validation temporarily for already-issued legacy sessions.
+6. Migrate Mini App `initData` direct authentication to the same GULI JWT layer.
+7. Migrate order/payment/chat/notification identity lookups to `users.id` / `users.telegram_id`.
+8. Add centralized idempotent notification delivery.
+9. Configure the future custom domain and canonical `api.<domain>` gateway without changing user identity records.
+10. Verify production smoke tests from browser and Telegram Mini App.
 11. Remove obsolete auth patches only after dependency and production verification.
 
-## 13. Non-negotiable invariants
+## 14. Non-negotiable invariants
 
 ```text
 ONE public production domain / canonical web entry point
@@ -285,17 +290,17 @@ Future Android/iOS/native clients
                 v
              users.id
                 |
-               JWT
+           GULI JWT
                 |
          protected APIs
                 |
           business data
 ```
 
-A user who logs in through one supported client and then authenticates through another supported client must resolve to the same `users.id` when the verified identity-linking rules match. The client, browser, device, or domain must never determine the business identity.
+A user who authenticates through one supported client and then another must resolve to the same `users.id` when the verified identity-linking rules match. Client, browser, device, or domain must never determine business identity.
 
-Any future authentication implementation that conflicts with these invariants must be treated as a regression unless this architecture document is intentionally revised.
+Any future authentication implementation that conflicts with these invariants is a regression unless this architecture document is intentionally revised.
 
-## 14. Implementation note for the current GULI repository
+## 15. Current repository implementation status
 
-The repository currently contains multiple auth, customer, Telegram, order, chat, payment, and notification runtime patches. Future work should consolidate behavior behind the canonical architecture rather than adding another independent authentication path. The existing production security fixes must be preserved while migration is performed.
+The repository still contains multiple historical runtime patches. The canonical path is now the GULI server-signed JWT flow described above. Future work must consolidate behavior behind this architecture rather than adding another authentication system. Existing production IDOR, receipt, order-status, and phone-only boundary fixes must be preserved while legacy patches are retired incrementally.
