@@ -13,6 +13,10 @@ const MAX_OTP_ATTEMPTS = 5;
 const hash = (value) => crypto.createHmac("sha256", KEY || "guli-auth").update(String(value)).digest("hex");
 const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
 const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
+// Supabase Auth's existing GULI phone identities are stored without the leading '+'.
+// Keep canonical business identity in public.users as E.164 (+998...), but use the
+// exact Auth representation for create/update/sign-in so legacy and new users match.
+const authPhone = (v) => String(v || "").trim().replace(/^\+/, "");
 const ok = (res, data) => res.json({ success: true, data });
 const fail = (res, code, message) => res.status(code).json({ success: false, message });
 
@@ -80,6 +84,7 @@ install("post", "/api/v1/auth/verify-otp", async (req, res) => {
   const phone = normalizePhone(s.phone_number);
   const telegramId = Number(s.telegram_id);
   if (!validPhone(phone) || !Number.isSafeInteger(telegramId)) return fail(res, 400, "Tasdiqlangan identity ma'lumotlari yetarli emas.");
+  const supabaseAuthPhone = authPhone(phone);
 
   let userId;
   const { data: canonical } = await supabase.from("users").select("id,phone_number,telegram_id").eq("phone_number", phone).maybeSingle();
@@ -94,15 +99,15 @@ install("post", "/api/v1/auth/verify-otp", async (req, res) => {
 
   const password = crypto.randomBytes(48).toString("base64url");
   if (!userId) {
-    const { data: created, error } = await supabase.auth.admin.createUser({ phone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
+    const { data: created, error } = await supabase.auth.admin.createUser({ phone: supabaseAuthPhone, phone_confirm: true, password, user_metadata: { auth_source: "telegram", telegram_id: telegramId } });
     if (error || !created?.user) return fail(res, 500, "GULI Auth account yaratilmadi.");
     userId = created.user.id;
   } else {
-    const { error } = await supabase.auth.admin.updateUserById(userId, { phone, phone_confirm: true, password });
+    const { error } = await supabase.auth.admin.updateUserById(userId, { phone: supabaseAuthPhone, phone_confirm: true, password });
     if (error) return fail(res, 500, "GULI Auth account yangilanmadi.");
   }
 
-  const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ phone, password });
+  const { data: signed, error: signErr } = await supabase.auth.signInWithPassword({ phone: supabaseAuthPhone, password });
   if (signErr || !signed?.session) return fail(res, 500, "Auth session chiqarilmadi.");
 
   await supabase.from("users").upsert({ id: userId, phone_number: phone, telegram_id: telegramId, updated_at: new Date().toISOString() }, { onConflict: "id" });
