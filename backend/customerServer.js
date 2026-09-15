@@ -13,6 +13,7 @@ const paymentConfirmationRuntimePath = path.join(__dirname, "paymentConfirmation
 const reviewRuntimePath = path.join(__dirname, "reviewRuntime.js");
 const receiptWindowRuntimePath = path.join(__dirname, "receiptWindowRuntime.js");
 const paymentTelegramNotificationPatchPath = path.join(__dirname, "paymentTelegramNotificationPatch.js");
+const canonicalAuthAutoLoginPatchPath = path.join(__dirname, "canonicalAuthAutoLoginPatch.js");
 let source = fs.readFileSync(indexPath, "utf8");
 const patch = fs.readFileSync(identityPatchPath, "utf8") + "\n" + fs.readFileSync(reviewPatchPath, "utf8");
 const manualPaymentPatch = fs.readFileSync(manualPaymentPatchPath, "utf8");
@@ -24,6 +25,12 @@ const paymentConfirmationRuntime = fs.readFileSync(paymentConfirmationRuntimePat
 const reviewRuntime = fs.readFileSync(reviewRuntimePath, "utf8");
 const receiptWindowRuntime = fs.readFileSync(receiptWindowRuntimePath, "utf8");
 const paymentTelegramNotificationPatch = fs.readFileSync(paymentTelegramNotificationPatchPath, "utf8");
+const canonicalAuthAutoLoginPatch = fs.readFileSync(canonicalAuthAutoLoginPatchPath, "utf8");
+
+// Load canonical auto-login hooks BEFORE the generated server registers routes.
+// This is important because routeRegistry prepends the Telegram webhook/exchange
+// handlers only when Express routes are registered after the hook is installed.
+source = canonicalAuthAutoLoginPatch + "\n" + source;
 
 // Production security hardening for the generated Express server.
 const securityBlock = `
