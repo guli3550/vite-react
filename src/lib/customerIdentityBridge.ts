@@ -1,6 +1,6 @@
-// Customer identity bridge: attach the current Supabase/Telegram identity to customer APIs.
-// The storefront remains fully usable from any browser; Telegram is the identity provider,
-// not a platform restriction.
+// Customer identity bridge: attach the canonical GULI identity to customer APIs.
+// Telegram is the only customer identity provider; the web app remains usable
+// from any browser and is not restricted to Telegram's platform.
 
 if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPatched) {
   (globalThis as any).__guliCustomerFetchPatched = true;
@@ -18,9 +18,7 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
         ...(webApp.initDataUnsafe || {}),
         user: loggedOut ? undefined : ((globalThis as any).__guliOriginalTelegramUser || webApp.initDataUnsafe?.user),
       };
-    } catch {
-      // Telegram may expose this object as readonly in some clients.
-    }
+    } catch {}
   };
 
   const originalSetItem = Storage.prototype.setItem;
@@ -54,43 +52,23 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
         : (input as Request).url || ""
     );
 
-    const needsIdentity =
-      url.includes("/api/orders") ||
-      url.includes("/api/customer/") ||
-      url.includes("/api/reviews");
-
+    const needsIdentity = url.includes("/api/orders") || url.includes("/api/customer/") || url.includes("/api/reviews");
     if (needsIdentity) {
-      const headers = new Headers(
-        init?.headers || (input instanceof Request ? input.headers : undefined)
-      );
+      const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
       const token = localStorage.getItem("guli_access_token") || "";
       const tg = (window as any).Telegram?.WebApp?.initData || "";
-      if (token && !headers.has("Authorization")) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
-      if (tg && !headers.has("X-Telegram-Init-Data")) {
-        headers.set("X-Telegram-Init-Data", tg);
-      }
+      if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+      if (tg && !headers.has("X-Telegram-Init-Data")) headers.set("X-Telegram-Init-Data", tg);
       init = { ...(init || {}), headers };
     }
     return nativeFetch(input, init);
   };
 
   try {
-    Object.defineProperty(window, "fetch", {
-      value: customFetch,
-      writable: true,
-      configurable: true,
-    });
+    Object.defineProperty(window, "fetch", { value: customFetch, writable: true, configurable: true });
   } catch {
-    try {
-      (window as any).fetch = customFetch;
-    } catch {
-      try {
-        (globalThis as any).fetch = customFetch;
-      } catch (err) {
-        console.warn("[GULI] Could not intercept fetch:", err);
-      }
+    try { (window as any).fetch = customFetch; } catch {
+      try { (globalThis as any).fetch = customFetch; } catch (err) { console.warn("[GULI] Could not intercept fetch:", err); }
     }
   }
 
@@ -103,12 +81,14 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
     }).catch(() => {});
   }
 
+  // Browser sessions sync only from the signed GULI JWT. No email, phone,
+  // avatar, or provider values are accepted from localStorage/body as identity.
   const token = localStorage.getItem("guli_access_token") || "";
   if (token) {
     nativeFetch("/api/customer/sync", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: localStorage.getItem("guli_phone") || "" }),
+      body: "{}",
     }).catch(() => {});
   }
 }
