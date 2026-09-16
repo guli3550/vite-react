@@ -1,5 +1,6 @@
-// Customer identity bridge: attach the current Supabase/Telegram identity to customer API calls
-// and trigger customer profile synchronization on startup.
+// Customer identity bridge: attach the current Supabase/Telegram identity to customer APIs.
+// The storefront remains fully usable from any browser; Telegram is the identity provider,
+// not a platform restriction.
 
 if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPatched) {
   (globalThis as any).__guliCustomerFetchPatched = true;
@@ -14,7 +15,12 @@ if (typeof window !== "undefined" && !(globalThis as any).__guliCustomerFetchPat
         : (input as Request).url || ""
     );
 
-    if (url.includes("/api/orders") || url.includes("/api/customer/")) {
+    const needsIdentity =
+      url.includes("/api/orders") ||
+      url.includes("/api/customer/") ||
+      url.includes("/api/reviews");
+
+    if (needsIdentity) {
       const headers = new Headers(
         init?.headers || (input instanceof Request ? input.headers : undefined)
       );
