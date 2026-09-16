@@ -1,0 +1,138 @@
+STEP 1 STATUS: PASS
+
+A. Exact startup preload order
+1. canonicalServerBoundary.js
+2. canonicalAuthOnlyGuard.js
+3. adminEnvNormalizationPatch.js
+4. authenticatedCardPaymentPatch.js
+5. googleAuthPatch.js
+6. productionConfigPatch.js
+7. orderSecurityPatch.js
+8. telegramProductPublisherRuntime.js
+9. telegramRateLimitPatch.js
+10. telegramRuntimePatch.js
+11. guliTelegramProfileAuthPatch.js
+12. canonicalTelegramSessionAuthPatch.js
+13. authRuntimePatch.js
+14. authRecoveryOtpHardeningPatch.js
+15. paymentReceiptFinalRuntime.js
+16. manualCardPaymentRuntime.js
+17. customerGuestModeDisabledPatch.js
+18. atomicPaymentDecisionPatch.js
+19. orderStatusIntegrityPatch.js
+20. orderCreationIntegrityPatch.js
+21. chatMediaStorageRuntime.js
+22. paymentConfirmationRuntime.js
+23. paymentOrderUrlSanitizer.js
+24. paymentReceiptPaymentsOnlyRuntime.js
+25. categoryResiliencePatch.js
+26. category-settings-patch.js
+27. customerOrdersSyncPatch.js
+28. canonicalCustomerProfileRuntime.js
+29. telegramRealtimeFanoutPatch.js
+30. chatRealtimePatch.js
+31. chatGuestSessionHardeningPatch.js
+32. telegramChatBridgePatch.js
+33. chatPersistencePatch.js
+34. telegramAdminConfigPatch.js
+35. telegramSecureTestPatch.js
+36. broadcastDirectRoutePatch.js
+37. broadcastReliabilityPatch.js
+38. telegramCanonicalWebAppPatch.js
+39. telegramAdminBotProduction.js
+40. guliOrderAuthBoundaryRuntime.js
+41. telegramWebhookSecretPatch.js
+42. reviewCanonicalAuthBridge.js
+43. canonicalReviewRuntime.js
+44. canonicalCategoryRuntime.js
+(index.js)
+
+B. Route ownership matrix
+AUTH:
+POST /api/v1/auth/init-session -> canonicalTelegramSessionAuthPatch.js
+GET  /api/v1/auth/check-status/:session_id -> canonicalTelegramSessionAuthPatch.js
+POST /api/v1/auth/exchange -> canonicalTelegramSessionAuthPatch.js
+GET  /api/v1/auth/me -> canonicalTelegramSessionAuthPatch.js
+POST /api/v1/auth/logout -> canonicalTelegramSessionAuthPatch.js
+
+ORDERS:
+GET  /api/orders -> customerOrdersSyncPatch.js
+GET  /api/auth/orders -> customerOrdersSyncPatch.js
+GET  /api/v1/orders -> NOT PRESENT
+POST /api/orders -> index.js (with orderCreationIntegrityPatch.js and orderSecurityPatch.js middlewares)
+POST /api/auth/orders -> authenticatedCardPaymentPatch.js
+
+RECEIPT:
+POST /api/orders/:id/receipt -> customerOrdersSyncPatch.js
+POST /api/orders/:orderNumber/receipt -> paymentReceiptFinalRuntime.js
+POST /api/auth/orders/:orderNumber/receipt -> authenticatedCardPaymentPatch.js
+POST /api/v1/orders/:orderNumber/receipt -> NOT PRESENT
+
+PAYMENT:
+POST /api/orders/:id/payment -> paymentConfirmationRuntime.js (PUT method)
+POST /api/auth/orders/:orderNumber/payment -> NOT PRESENT
+POST /api/v1/orders/:orderNumber/payment -> NOT PRESENT
+
+ADMIN:
+approval endpoints -> paymentConfirmationRuntime.js & telegramAdminBotProduction.js
+Telegram admin endpoints -> telegramAdminBotProduction.js
+
+TELEGRAM:
+webhook endpoint -> telegramWebhookSecretPatch.js
+customer notification routes -> telegramRuntimePatch.js
+admin notification routes -> telegramAdminBotProduction.js
+
+C. Final runtime owners
+| Method | Route | Candidate handlers | Load order | Final runtime owner | Security status |
+|---|---|---|---|---|---|
+| GET | /api/orders | customerOrdersSyncPatch, index.js | 27, index | customerOrdersSyncPatch | SECURE |
+| POST | /api/orders | orderCreationIntegrityPatch, orderSecurityPatch, index.js | 20, 7, index | index.js | SECURE but BROKEN for browsers |
+| POST | /api/orders/:orderNumber/receipt | paymentReceiptFinalRuntime, customerOrdersSyncPatch | 15, 27 | paymentReceiptFinalRuntime | BROKEN (string mismatch) |
+| GET | /api/guest/orders | customerGuestModeDisabledPatch, manualCardPaymentRuntime | 17, 16 | customerGuestModeDisabledPatch | DISABLED |
+
+D. Route conflicts
+Finding: Receipt upload interceptor override
+Severity: P1
+Evidence: Both `paymentReceiptFinalRuntime.js` and `customerOrdersSyncPatch.js` install the same receipt upload endpoint. Due to the preload array prepend logic, the earlier patch (#15) executes first and swallows the request.
+Actual final handler: `paymentReceiptFinalRuntime.js`
+
+E. GET /api/orders IDOR analysis
+Final owner `listOrders` securely uses `req.headers['x-telegram-init-data']` (HMAC verified) or `req.headers.authorization` (JWT verified). It strictly enforces ownership via `.eq('telegram_id', user.id)` or `.eq('auth_user_id', user.id)`. Client-controlled identities in body/query are completely ignored. No IDOR reproduced during this discovery; runtime adversarial verification is required in STEP 2.
+
+F. Browser Buyurtmalarim=0 trace
+Browser UI requests `GET /api/orders`. Backend identifies the user via JWT (`type: 'auth'`) and queries `orders` where `auth_user_id = public.users.id`. However, the Telegram Mini App order creation path (`POST /api/orders`) only saves `telegram_id` to the order row, leaving `auth_user_id` NULL. Thus, the database query returns 0 rows for the browser session.
+
+G. Receipt upload trace
+Frontend sends `payment: "Karta (Uzcard / Humo)"`. Backend saves this exact string. The frontend calls `POST /api/orders/.../receipt`. `paymentReceiptFinalRuntime.js` intercepts it and explicitly checks `if (order.payment !== 'card_manual')`. The check fails (returns 400). The frontend catches the error and silently attempts a non-existent `/api/customer/orders/.../receipt` fallback, finally showing "Failed to fetch".
+
+H. Telegram admin notification trace
+`telegramAdminBotProduction.js` uses a continuous `while(true) poll(); sync();` loop. It deduplicates notifications using an in-memory `Map` (`state.sigs`). If Render scales out to 2 instances during a deployment, both instances run the loop, both lack the memory state for a new order, and both send the album to Telegram admins concurrently.
+
+I. Payment state trace
+Because receipt uploads fail the hardcoded `"card_manual"` check, the payment state remains stuck in `pending`. Legacy systems parsing the raw string `"Karta (Uzcard / Humo)"` may default to "Naqd" visual representations.
+
+J. AUTH_JWT_SECRET usage map
+Required for browser JWTs. Read in `guliCustomAuth.js`, `canonicalTelegramSessionAuthPatch.js`, and `guliTelegramProfileAuthPatch.js`. Falls back to `SUPABASE_SECRET_KEY` if missing.
+
+K. P0 findings
+None reproduced during this discovery; runtime adversarial verification is required in STEP 2.
+
+L. P1 findings
+- Broken Browser Order Creation (401 due to missing initData).
+- Broken Receipt Uploads (hardcoded string mismatch).
+- Browser "Buyurtmalarim=0" (missing `auth_user_id` linkage on Telegram orders).
+
+M. P2 findings
+- Duplicate Admin Notifications (in-memory lock failure in distributed environment).
+
+N. Exact minimal remediation plan
+1. Update `paymentReceiptFinalRuntime.js` to accept `"Karta (Uzcard / Humo)"`.
+2. Update `index.js` `requireTelegramUser` to optionally accept valid JWT identities, or enforce Mini App exclusively.
+3. Update `customerOrdersSyncPatch.js` to cross-reference `unified_customers` for `telegram_id` when queried by `auth_user_id`.
+4. Add a distributed lock or database flag for Telegram admin notifications.
+
+O. Files that would need modification
+- `backend/paymentReceiptFinalRuntime.js`
+- `backend/customerOrdersSyncPatch.js`
+- `backend/index.js`
+- `backend/telegramAdminBotProduction.js`
