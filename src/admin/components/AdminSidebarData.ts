@@ -9,6 +9,7 @@ export type NavTabKey =
   | "promos"
   | "banners"
   | "analytics"
+  | "guli_chat"
   | "chat"
   | "callcenter"
   | "notifications"
@@ -32,6 +33,7 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { key: "promos", icon: "🎟", label: "Kuponlar" },
   { key: "banners", icon: "🖼", label: "Bannerlar" },
   { key: "analytics", icon: "📊", label: "Tahlillar" },
+  { key: "guli_chat", icon: "✨", label: "Guli AI Chat" },
   { key: "chat", icon: "💬", label: "Online Chat" },
   { key: "callcenter", icon: "☎️", label: "Call Center Chat" },
   { key: "notifications", icon: "🔔", label: "Bildirishnomalar" },

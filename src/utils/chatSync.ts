@@ -25,6 +25,8 @@ export type ChatMessage = {
   pollOptions?: { id: number; text: string; votes: number }[];
   userVotedOption?: number;
   location?: { lat: number; lng: number; address: string; mapUrl?: string };
+  pinned?: boolean;
+  isBookmarked?: boolean;
 };
 
 export type ConversationSource = "telegram" | "webapp" | "callcenter";
@@ -45,6 +47,18 @@ export function editChatMessage(messageId: string, newText: string): void { cons
 export function deleteChatMessage(messageId: string): void { const messages = getStoredChatMessages(); const filtered = messages.filter(m => m.id !== messageId); if (filtered.length !== messages.length) saveChatMessages(filtered); }
 export function toggleMessageReaction(messageId: string, emoji: string): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId) return m; changed = true; const reactions = { ...(m.reactions || {}) }; if (reactions[emoji]) delete reactions[emoji]; else reactions[emoji] = 1; return { ...m, reactions }; }); if (changed) saveChatMessages(updated); }
 export function votePollOption(messageId: string, optionIndex: number): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId || !m.pollOptions) return m; changed = true; const prev = m.userVotedOption; const options = m.pollOptions.map((opt, idx) => ({ ...opt, votes: Math.max(0, (opt.votes || 0) - (prev === idx ? 1 : 0) + (optionIndex === idx ? 1 : 0)) })); return { ...m, pollOptions: options, userVotedOption: prev === optionIndex ? undefined : optionIndex }; }); if (changed) saveChatMessages(updated); }
+export function togglePinMessage(messageId: string): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId) return m; changed = true; return { ...m, pinned: !m.pinned }; }); if (changed) saveChatMessages(updated); }
+export function toggleBookmarkMessage(messageId: string): void { const messages = getStoredChatMessages(); let changed = false; const updated = messages.map(m => { if (m.id !== messageId) return m; changed = true; return { ...m, isBookmarked: !m.isBookmarked }; }); if (changed) saveChatMessages(updated); }
+export function clearChatMessages(userId?: string | number): void {
+  const messages = getStoredChatMessages();
+  if (!userId) {
+    saveChatMessages([DEFAULT_WELCOME_MESSAGE]);
+    return;
+  }
+  const uId = String(userId);
+  const remaining = messages.filter(m => m.id === "welcome-msg-1" || (m.userId && String(m.userId) !== uId));
+  saveChatMessages(remaining.length === 0 ? [DEFAULT_WELCOME_MESSAGE] : remaining);
+}
 
 export function isChatMessageValid(m: any): boolean {
   if (!m || typeof m !== "object") return false;

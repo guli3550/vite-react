@@ -4,7 +4,7 @@ interface OrderConfirmedModalProps {
   orderNumber: string;
   onViewOrders: () => void;
   onGoHome: () => void;
-  onClose?: () => void;
+  onClose: () => void;
 }
 
 export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
@@ -13,230 +13,132 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
   onGoHome,
   onClose,
 }) => {
-  const formattedOrderNo = orderNumber.startsWith("#") ? orderNumber : `#${orderNumber}`;
-
   return (
     <div
-      className="orderConfirmedBackdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && onClose) {
-          onClose();
-        }
-      }}
       style={{
         position: "fixed",
         inset: 0,
-        backgroundColor: "rgba(10, 8, 12, 0.82)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
         zIndex: 999999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: "16px",
-        animation: "orderModalFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
+        backgroundColor: "rgba(15, 23, 42, 0.72)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="orderConfirmedCard"
         style={{
           width: "100%",
-          maxWidth: "380px",
-          backgroundColor: "#161316",
-          color: "#ffffff",
-          borderRadius: "28px",
-          padding: "24px 20px 0px 20px",
-          boxShadow: "0 28px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(244, 114, 182, 0.15)",
+          maxWidth: "420px",
+          borderRadius: "24px",
+          padding: "28px 24px",
+          backgroundColor: "var(--bg-card, #ffffff)",
+          color: "var(--text-main, #1e293b)",
+          boxShadow: "0 25px 60px rgba(0, 0, 0, 0.35)",
           textAlign: "center",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          position: "relative",
-          overflow: "hidden",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
+          border: "1px solid var(--border-color, rgba(0,0,0,0.08))",
+          animation: "modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Header */}
         <div
           style={{
-            width: "100%",
+            width: "72px",
+            height: "72px",
+            margin: "0 auto 16px",
+            borderRadius: "50%",
+            backgroundColor: "rgba(16, 185, 129, 0.12)",
+            color: "#10b981",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            position: "relative",
-            marginBottom: "28px",
+            fontSize: "36px",
+            boxShadow: "0 8px 20px rgba(16, 185, 129, 0.25)",
           }}
         >
-          <span
-            style={{
-              fontSize: "15px",
-              fontWeight: 700,
-              color: "#e2e8f0",
-              letterSpacing: "0.2px",
-            }}
-          >
-            Buyurtma tasdiqlandi
-          </span>
-
-          {onClose && (
-            <button
-              onClick={onClose}
-              aria-label="Yopish"
-              style={{
-                position: "absolute",
-                right: 0,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "rgba(255, 255, 255, 0.08)",
-                border: "none",
-                color: "#94a3b8",
-                width: "28px",
-                height: "28px",
-                borderRadius: "50%",
-                fontSize: "14px",
-                display: "grid",
-                placeItems: "center",
-                cursor: "pointer",
-              }}
-            >
-              ✕
-            </button>
-          )}
+          ✓
         </div>
 
-        {/* Glowing Pink Circular Icon with Checkmark */}
-        <div
-          style={{
-            width: "78px",
-            height: "78px",
-            borderRadius: "50%",
-            background: "linear-gradient(135deg, #fb7185 0%, #e11d48 55%, #be123c 100%)",
-            display: "grid",
-            placeItems: "center",
-            boxShadow:
-              "0 0 35px rgba(225, 29, 72, 0.55), 0 0 70px rgba(225, 29, 72, 0.3)",
-            marginBottom: "20px",
-            flexShrink: 0,
-          }}
-        >
-          <svg
-            width="34"
-            height="34"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#ffffff"
-            strokeWidth="3.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        </div>
-
-        {/* Title */}
         <h2
           style={{
-            fontSize: "21px",
+            fontSize: "22px",
             fontWeight: 800,
-            margin: "0 0 6px",
-            color: "#ffffff",
-            letterSpacing: "-0.2px",
+            margin: "0 0 8px",
+            color: "var(--text-main, #1e293b)",
           }}
         >
-          Buyurtmangiz qabul qilindi!
+          Buyurtma qabul qilindi!
         </h2>
 
-        {/* Dynamic Real Order Number */}
-        <div
-          style={{
-            fontSize: "14.5px",
-            fontWeight: 700,
-            color: "#e2e8f0",
-            letterSpacing: "0.6px",
-            marginBottom: "12px",
-          }}
-        >
-          {formattedOrderNo}
-        </div>
-
-        {/* Description Subtitle */}
         <p
           style={{
-            fontSize: "13px",
-            color: "#94a3b8",
+            fontSize: "14px",
+            color: "var(--text-muted, #64748b)",
+            margin: "0 0 16px",
             lineHeight: 1.5,
-            margin: "0 0 24px",
-            maxWidth: "280px",
           }}
         >
-          Buyurtmangiz tez orada tasdiqlanadi va yetkazib beriladi.
+          Buyurtmangiz muvaffaqiyatli rasmiylashtirildi. Buyurtma raqami:
         </p>
 
-        {/* Action Button 1: Buyurtmalarim */}
-        <button
-          onClick={onViewOrders}
-          style={{
-            width: "100%",
-            padding: "14px 20px",
-            borderRadius: "16px",
-            border: "none",
-            background: "linear-gradient(135deg, #e11d48 0%, #be123c 100%)",
-            color: "#ffffff",
-            fontSize: "15px",
-            fontWeight: 750,
-            cursor: "pointer",
-            boxShadow: "0 8px 24px rgba(225, 29, 72, 0.38)",
-            marginBottom: "10px",
-            transition: "all 0.2s ease",
-            letterSpacing: "0.2px",
-          }}
-        >
-          Buyurtmalarim
-        </button>
-
-        {/* Action Button 2: Asosiy sahifaga qaytish */}
-        <button
-          onClick={onGoHome}
-          style={{
-            width: "100%",
-            padding: "13px 20px",
-            borderRadius: "16px",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            background: "rgba(255, 255, 255, 0.07)",
-            color: "#fda4af",
-            fontSize: "14px",
-            fontWeight: 650,
-            cursor: "pointer",
-            marginBottom: "18px",
-            transition: "all 0.2s ease",
-          }}
-        >
-          Asosiy sahifaga qaytish
-        </button>
-
-        {/* Bottom GULI Delivery Truck Illustration */}
         <div
           style={{
-            width: "100%",
-            position: "relative",
-            marginTop: "4px",
-            overflow: "hidden",
-            display: "flex",
-            justifyContent: "center",
+            padding: "10px 16px",
+            borderRadius: "14px",
+            backgroundColor: "var(--bg-card-sub, #f8fafc)",
+            border: "1px dashed var(--border-color, #cbd5e1)",
+            fontSize: "16px",
+            fontWeight: 800,
+            color: "var(--primary, #be185d)",
+            letterSpacing: "0.5px",
+            marginBottom: "22px",
           }}
         >
-          <img
-            src="/guli_delivery_truck.jpg"
-            alt="Guli Delivery Truck"
+          #{orderNumber}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={onViewOrders}
             style={{
               width: "100%",
-              maxHeight: "150px",
-              objectFit: "contain",
-              display: "block",
-              filter: "drop-shadow(0 10px 20px rgba(0,0,0,0.5))",
+              padding: "14px 20px",
+              borderRadius: "14px",
+              border: "none",
+              backgroundColor: "var(--primary, #be185d)",
+              color: "#ffffff",
+              fontSize: "14.5px",
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 4px 14px rgba(190, 24, 93, 0.3)",
+              transition: "transform 0.15s ease",
             }}
-          />
+          >
+            📦 Buyurtmalarim bo‘limiga o‘tish
+          </button>
+
+          <button
+            type="button"
+            onClick={onGoHome}
+            style={{
+              width: "100%",
+              padding: "12px 20px",
+              borderRadius: "14px",
+              border: "1px solid var(--border-color, #e2e8f0)",
+              backgroundColor: "transparent",
+              color: "var(--text-main, #334155)",
+              fontSize: "14px",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            🛍️ Xaridni davom ettirish
+          </button>
         </div>
       </div>
     </div>

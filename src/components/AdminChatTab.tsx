@@ -13,10 +13,15 @@ import {
   deleteChatMessage,
   toggleMessageReaction,
   votePollOption,
+  togglePinMessage,
+  toggleBookmarkMessage,
+  clearChatMessages,
 } from "../utils/chatSync";
 import { SwipeableChatBackground, SwipeableMessageRow } from "./SwipeChatHelpers";
 import { CircleVideoNotePlayer, TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
+import { copyToClipboard } from "../utils/clipboard";
 import "../chat2.css";
+import "../admin/components/AdminGuliChat.css";
 
 type AdminChatTabProps = {
   token?: string;
@@ -192,14 +197,6 @@ function VoiceAudioPlayer({ mediaUrl, duration: defaultDuration }: { mediaUrl: s
     }
   };
 
-  const handleSeek = (e: ChangeEvent<HTMLInputElement>) => {
-    const val = Number(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = val;
-      setCurrentTime(val);
-    }
-  };
-
   const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
@@ -207,7 +204,7 @@ function VoiceAudioPlayer({ mediaUrl, duration: defaultDuration }: { mediaUrl: s
   };
 
   return (
-    <div className="chat2-voice-player">
+    <div className="chatgpt-voice-pill">
       <audio
         ref={audioRef}
         src={mediaUrl}
@@ -219,25 +216,24 @@ function VoiceAudioPlayer({ mediaUrl, duration: defaultDuration }: { mediaUrl: s
         }}
         preload="metadata"
       />
-      <button type="button" className="chat2-voice-play-btn" onClick={togglePlay}>
+      <button type="button" className="chatgpt-voice-play-btn" onClick={togglePlay} title={isPlaying ? "Pauza" : "Tinglash"}>
         {isPlaying ? "⏸" : "▶"}
       </button>
-      <div className="chat2-voice-info">
-        <input
-          type="range"
-          min={0}
-          max={duration || 100}
-          value={currentTime}
-          onChange={handleSeek}
-          className="chat2-voice-slider"
-        />
-        <div className="chat2-voice-meta">
-          <span>🎙️ Ovozli xabar</span>
-          <span>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
-        </div>
+      <div className="chatgpt-voice-waveforms" style={{ flex: 1 }}>
+        {[10, 20, 8, 24, 16, 12, 26, 18, 14, 22, 12, 18, 9, 21].map((h, i) => (
+          <div
+            key={i}
+            className={`chatgpt-wave-bar ${isPlaying ? "playing" : ""}`}
+            style={{
+              height: `${h}px`,
+              animationDelay: `${i * 0.06}s`,
+            }}
+          />
+        ))}
       </div>
+      <span className="chatgpt-voice-duration">
+        {formatTime(currentTime > 0 ? currentTime : duration)}
+      </span>
     </div>
   );
 }
@@ -289,6 +285,12 @@ export default function AdminChatTab({
   // Full Customer Profile Chat Modal state
   const [fullProfileModalOpen, setFullProfileModalOpen] = useState(false);
   const [isVideoRecordingOpen, setIsVideoRecordingOpen] = useState(false);
+
+  const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
+  const [inChatSearchQuery, setInChatSearchQuery] = useState("");
+  const [activeMsgActionId, setActiveMsgActionId] = useState<string | null>(null);
+  const [aiSuggestionsOpen, setAiSuggestionsOpen] = useState(false);
+  const [clearChatModalOpen, setClearChatModalOpen] = useState(false);
 
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMessage | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
@@ -349,6 +351,18 @@ export default function AdminChatTab({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [allMessages, selectedUserId]);
 
+  // Click outside to close bubble menu
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".chat2-bubble-menu-popup") && !target.closest(".chat2-action-icon")) {
+        setActiveMsgActionId(null);
+      }
+    };
+    window.addEventListener("mousedown", handleOutside);
+    return () => window.removeEventListener("mousedown", handleOutside);
+  }, []);
+
   // Sync customer notes text on selectedUserId change
   const currentConversation = conversations.find((c) => c.userId === selectedUserId);
   useEffect(() => {
@@ -398,11 +412,23 @@ export default function AdminChatTab({
   });
 
   // Current active chat messages
-  const activeChatMessages = allMessages.filter(
+  const rawActiveChatMessages = allMessages.filter(
     (m) =>
       (!m.userId || String(m.userId) === String(selectedUserId) || m.id === "welcome-msg-1") &&
       Boolean((m.text && m.text.trim()) || m.mediaUrl || m.pollOptions || m.location)
   );
+
+  const activeChatMessages = rawActiveChatMessages.filter((m) => {
+    if (!inChatSearchQuery.trim()) return true;
+    const q = inChatSearchQuery.toLowerCase();
+    return (
+      m.text?.toLowerCase().includes(q) ||
+      m.fileName?.toLowerCase().includes(q) ||
+      m.userName?.toLowerCase().includes(q)
+    );
+  });
+
+  const pinnedMessage = rawActiveChatMessages.find((m) => m.pinned);
 
   // Synthesize Telegram-style message send audio feedback
   const playTelegramSendSound = () => {
@@ -662,8 +688,8 @@ export default function AdminChatTab({
   };
 
   // Copy message text
-  const handleCopyMessage = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyMessage = async (text: string) => {
+    await copyToClipboard(text);
     showToast("Xabar matni nusxalandi! ✓");
   };
 
@@ -979,6 +1005,25 @@ export default function AdminChatTab({
             </div>
 
             <div className="chat2-header-actions">
+              <button
+                type="button"
+                className={`chat2-action-btn ${inChatSearchOpen ? "primary" : ""}`}
+                onClick={() => {
+                  setInChatSearchOpen(!inChatSearchOpen);
+                  if (inChatSearchOpen) setInChatSearchQuery("");
+                }}
+                title="Xabarlarni qidirish"
+              >
+                🔍 Qidiruv
+              </button>
+              <button
+                type="button"
+                className="chat2-action-btn"
+                onClick={() => setAiSuggestionsOpen(true)}
+                title="Admin uchun tezkor aqlli javoblar"
+              >
+                💡 Takliflar
+              </button>
               {currentConversation?.phone && (
                 <a href={`tel:${currentConversation.phone.replace(/\s+/g, "")}`} className="chat2-action-btn">
                   📞 Tel
@@ -998,8 +1043,78 @@ export default function AdminChatTab({
               >
                 ℹ️ CRM
               </button>
+              <button
+                type="button"
+                className="chat2-action-btn"
+                onClick={() => setClearChatModalOpen(true)}
+                title="Chat tarixini tozalash"
+                style={{ color: "#e11d48" }}
+              >
+                🧹
+              </button>
             </div>
           </div>
+
+          {/* Inline In-Chat Search Bar */}
+          {inChatSearchOpen && (
+            <div className="chat2-inline-search">
+              <span>🔍</span>
+              <input
+                type="text"
+                className="chat2-inline-search-input"
+                placeholder="Ushbu chatdagi xabarlardan qidirish..."
+                value={inChatSearchQuery}
+                onChange={(e) => setInChatSearchQuery(e.target.value)}
+                autoFocus
+              />
+              {inChatSearchQuery && (
+                <span className="chat2-search-counter">
+                  {activeChatMessages.length} ta xabar topildi
+                </span>
+              )}
+              <button
+                type="button"
+                className="chat2-inline-search-close"
+                onClick={() => {
+                  setInChatSearchQuery("");
+                  setInChatSearchOpen(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Pinned Message Banner */}
+          {pinnedMessage && (
+            <div className="chat2-pinned-banner">
+              <div
+                className="chat2-pinned-info"
+                onClick={() => {
+                  const el = document.getElementById(`admin-swipe-row-${pinnedMessage.id}`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+              >
+                <span className="chat2-pinned-title">
+                  📌 Qadalgan xabar: {pinnedMessage.userName || (pinnedMessage.sender === "admin" ? "Admin" : "Mijoz")}
+                </span>
+                <span className="chat2-pinned-snippet">
+                  {pinnedMessage.text || pinnedMessage.fileName || "Media birikma"}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="chat2-pinned-action-btn"
+                onClick={() => {
+                  togglePinMessage(pinnedMessage.id);
+                  showToast("Qadash olib tashlandi");
+                }}
+                title="Qadashni bekor qilish"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* Operator Assignment Dropdown Modal */}
           {assignOperatorOpen && (
@@ -1067,7 +1182,7 @@ export default function AdminChatTab({
                     onReply={() => setReplyingToMsg(msg)}
                     id={`admin-swipe-row-${msg.id}`}
                   >
-                    <div className={`chat2-bubble-wrap ${msg.sender}`}>
+                    <div className={`chat2-bubble-wrap ${msg.sender}`} style={{ position: "relative" }}>
                       {/* Message Action Bar (Hover / Tap) */}
                       <div className="chat2-bubble-actions">
                         <div className="chat2-reaction-picker">
@@ -1098,6 +1213,28 @@ export default function AdminChatTab({
                         >
                           📋
                         </button>
+                        <button
+                          type="button"
+                          className={`chat2-action-icon ${msg.pinned ? "active" : ""}`}
+                          title={msg.pinned ? "Qadashni olib tashlash" : "Xabarni qadash (Pin)"}
+                          onClick={() => {
+                            togglePinMessage(msg.id);
+                            showToast(msg.pinned ? "Xabar qadashdan olindi" : "Xabar qadaldi 📌");
+                          }}
+                        >
+                          📌
+                        </button>
+                        <button
+                          type="button"
+                          className="chat2-action-icon"
+                          title="Qo'shimcha amallar (3 nuqta)"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMsgActionId(activeMsgActionId === msg.id ? null : msg.id);
+                          }}
+                        >
+                          ⋮
+                        </button>
                         {msg.sender === "admin" && (
                           <>
                             <button
@@ -1120,7 +1257,99 @@ export default function AdminChatTab({
                         )}
                       </div>
 
+                      {/* 3-Dots Action Popup for Bubble */}
+                      {activeMsgActionId === msg.id && (
+                        <div className="chat2-bubble-menu-popup" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="chat2-bubble-menu-item"
+                            onClick={() => {
+                              togglePinMessage(msg.id);
+                              setActiveMsgActionId(null);
+                              showToast(msg.pinned ? "Xabar qadashdan olindi" : "Xabar qadaldi 📌");
+                            }}
+                          >
+                            <span>📌</span>
+                            <span>{msg.pinned ? "Qadashni bekor qilish" : "Xabarni qadash (Pin)"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat2-bubble-menu-item"
+                            onClick={() => {
+                              toggleBookmarkMessage(msg.id);
+                              setActiveMsgActionId(null);
+                              showToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'plarga saqlandi ⭐");
+                            }}
+                          >
+                            <span>⭐</span>
+                            <span>{msg.isBookmarked ? "Xatcho'pdan chiqarish" : "Xatcho'pga saqlash"}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat2-bubble-menu-item"
+                            onClick={() => {
+                              handleCopyMessage(msg.text);
+                              setActiveMsgActionId(null);
+                            }}
+                          >
+                            <span>📋</span>
+                            <span>Nusxa olish</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat2-bubble-menu-item"
+                            onClick={() => {
+                              setReplyingToMsg(msg);
+                              setActiveMsgActionId(null);
+                            }}
+                          >
+                            <span>↩️</span>
+                            <span>Javob berish</span>
+                          </button>
+
+                          {msg.sender === "admin" && (
+                            <button
+                              type="button"
+                              className="chat2-bubble-menu-item"
+                              onClick={() => {
+                                handleStartEditMessage(msg);
+                                setActiveMsgActionId(null);
+                              }}
+                            >
+                              <span>✏️</span>
+                              <span>Tahrirlash</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="chat2-bubble-menu-item danger"
+                            onClick={() => {
+                              handleDeleteMessage(msg.id);
+                              setActiveMsgActionId(null);
+                            }}
+                          >
+                            <span>🗑️</span>
+                            <span>O'chirish</span>
+                          </button>
+                        </div>
+                      )}
+
                       <div className="chat2-bubble">
+                        {/* Pinned & Bookmarked Badges */}
+                        {msg.pinned && (
+                          <div style={{ fontSize: 11, color: "#b6536b", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
+                            <span>📌 Qadalgan xabar</span>
+                          </div>
+                        )}
+                        {msg.isBookmarked && (
+                          <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
+                            <span>⭐ Xatcho'p</span>
+                          </div>
+                        )}
                         {/* Quoted Reply if present */}
                         {msg.replyToText && (
                           <div className="chat2-reply-quote">
@@ -2116,6 +2345,176 @@ export default function AdminChatTab({
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin AI / Smart Suggestions Modal */}
+      {aiSuggestionsOpen && (
+        <div
+          className="chat2-modal-overlay"
+          onClick={() => setAiSuggestionsOpen(false)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="chat2-modal-card"
+            style={{ maxWidth: 520, width: "92%", borderRadius: 20, padding: 22 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>💡</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+                    Admin uchun Aqlli Tezkor Javoblar
+                  </h3>
+                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                    Bir marta bosish orqali xabar matniga joylang yoki to'g'ridan-to'g'ri yuboring
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                style={{ background: "transparent", border: "none", fontSize: 20, cursor: "pointer", color: "#64748b" }}
+                onClick={() => setAiSuggestionsOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "60vh", overflowY: "auto" }}>
+              {[
+                {
+                  title: "📦 Buyurtma tasdiqlandi",
+                  badge: "Buyurtma",
+                  text: "Assalomu alaykum! Buyurtmangiz muvaffaqiyatli qabul qilindi va tayyorlanmoqda. Kuryer yetkazishga chiqqanda SMS orqali xabar beramiz. GULI bilan ekanligingizdan mamnunmiz! 🌷",
+                },
+                {
+                  title: "🚚 Yetkazib berish shartlari",
+                  badge: "Logistika",
+                  text: "Yetkazib berish Toshkent bo'yicha 24 soat ichida (30 000 so'm, 600 000 so'mdan yuqoriga bepul!), viloyatlarga BTS pochta orqali 2-3 ish kunida yetkaziladi. Kuryer yetkazishdan oldin qo'ng'iroq qiladi 🛵",
+                },
+                {
+                  title: "💳 To'lov rekvizitlari",
+                  badge: "Moliya",
+                  text: "To'lovni Payme yoki Click orqali amalga oshirishingiz mumkin. Karta raqami: 8600 1234 5678 9012 (GULI Lingerie - Shoira M.). To'lov qilgach chek skrinshotini shu yerga yuborishingizni so'raymiz 💳",
+                },
+                {
+                  title: "📏 O'lcham tanlash bo'yicha maslahat",
+                  badge: "Konsultatsiya",
+                  text: "Sizga ideal o'lchamni tanlashda yordam berishimiz uchun: ko'krak aylanasi va ko'krak osti aylanasi santimetrini aytsangiz kifoya. Mutaxassisimiz darhol eng mos model va o'lchamni tanlab beradi ✨",
+                },
+                {
+                  title: "🔄 Almashtirish va qaytarish qoidalari",
+                  badge: "Kafolat",
+                  text: "Mahsulot o'lchami to'g'ri kelmasa, 3 kun ichida tovar ko'rinishi va yorliqlari saqlangan holda bepul almashtirib berish imkoniyati mavjud (gigiyenik talablar asosida). Biz mijozlarimiz mamnuniyatini birinchi o'ringa qo'yamiz 🌸",
+                },
+                {
+                  title: "🎁 Maxsus 10% chegirma promo-kodi",
+                  badge: "Chegirma",
+                  text: "Siz bizning qadrli mijozimizsiz! Xaridingiz uchun maxsus 10% chegirma taqdim etamiz. Promo-kod: GULI10. Savatchada ushbu kodni kiritishingiz mumkin! 🎉",
+                },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 12,
+                    padding: 12,
+                    background: "#f8fafc",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13, color: "#1e293b" }}>{item.title}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        background: "rgba(182, 83, 107, 0.1)",
+                        color: "#b6536b",
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  </div>
+                  <p style={{ margin: "0 0 8px", fontSize: 12, color: "#475569", lineHeight: 1.5 }}>
+                    {item.text}
+                  </p>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button
+                      type="button"
+                      className="chat2-action-btn"
+                      style={{ fontSize: 11, padding: "4px 10px" }}
+                      onClick={() => {
+                        setReplyText(item.text);
+                        setAiSuggestionsOpen(false);
+                        showToast("Matn kiritish maydoniga joylandi");
+                      }}
+                    >
+                      ✏️ Matnga qo'yish
+                    </button>
+                    <button
+                      type="button"
+                      className="chat2-action-btn primary"
+                      style={{ fontSize: 11, padding: "4px 10px" }}
+                      onClick={() => {
+                        handleSendReply(undefined, item.text);
+                        setAiSuggestionsOpen(false);
+                      }}
+                    >
+                      ➤ Yuborish
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Chat History Modal */}
+      {clearChatModalOpen && (
+        <div
+          className="chat2-modal-overlay"
+          onClick={() => setClearChatModalOpen(false)}
+          style={{ zIndex: 9999 }}
+        >
+          <div
+            className="chat2-modal-card"
+            style={{ maxWidth: 380, width: "90%", borderRadius: 18, padding: 22, textAlign: "center" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🧹</div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
+              Chat tarixini tozalash
+            </h3>
+            <p style={{ margin: "0 0 18px", fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>
+              Ushbu mijoz ({currentConversation?.userName || "Mijoz"}) bilan bo'lgan barcha xabarlar o'chirib tashlanadi. Rozimisiz?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button
+                type="button"
+                className="chat2-action-btn"
+                onClick={() => setClearChatModalOpen(false)}
+              >
+                Bekor qilish
+              </button>
+              <button
+                type="button"
+                className="chat2-action-btn primary"
+                style={{ background: "#e11d48", borderColor: "#e11d48" }}
+                onClick={() => {
+                  clearChatMessages(selectedUserId);
+                  setClearChatModalOpen(false);
+                  showToast("Chat tarixi tozalandi");
+                }}
+              >
+                Ha, tozalash
+              </button>
             </div>
           </div>
         </div>

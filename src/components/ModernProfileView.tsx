@@ -3,18 +3,152 @@ import type { Order } from "../App";
 import type { Language } from "../utils/translations";
 import type { Currency } from "../utils/currency";
 import type { AuthUser } from "./CustomerAuthModal";
-import profileCardNightImg from "../assets/images/profile_night_clear_1789524463595.jpg";
-import profileCardDayImg from "../assets/images/profile_card_day_1789523863503.jpg";
 
-// Preload card background images immediately for zero-latency native background rendering
-if (typeof window !== "undefined") {
-  try {
-    const p1 = new Image();
-    p1.src = profileCardDayImg;
-    const p2 = new Image();
-    p2.src = profileCardNightImg;
-  } catch {}
-}
+// Background images for guest promo cards
+import goldCoinsCashbackImg from "../assets/images/gold_coins_cashback_1789530473466.jpg";
+import onlineChatBgImg from "../assets/images/online_chat_bg_1789530489414.jpg";
+import operatorCallBgImg from "../assets/images/operator_call_bg_1789530502870.jpg";
+import lionVipBgImg from "../assets/images/lion_vip_bg_1789530516581.jpg";
+
+export const TelegramLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 240 240"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <circle cx="120" cy="120" r="120" fill="url(#tg_logo_icon_grad)" />
+    <path
+      d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z"
+      fill="white"
+    />
+    <defs>
+      <linearGradient id="tg_logo_icon_grad" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#2AABEE" />
+        <stop offset="1" stopColor="#229ED9" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+export const CashbackLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <circle cx="12" cy="12" r="10" fill="url(#cashback_badge_grad)" stroke="#FDE68A" strokeWidth="1.2" />
+    <circle cx="12" cy="12" r="8" stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" strokeDasharray="2 1.5" />
+    <path
+      d="M9 9.5a1.5 1.5 0 1 1 3 0c0 1.5-3 1.8-3 3.5h3.5M12 17v-1M15.5 8.5l-7 7"
+      stroke="#FFFFFF"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <defs>
+      <linearGradient id="cashback_badge_grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#F59E0B" />
+        <stop offset="1" stopColor="#D97706" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+export const LiveChatLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <circle cx="12" cy="12" r="10" fill="url(#livechat_badge_grad)" stroke="#BAE6FD" strokeWidth="1.2" />
+    <path
+      d="M7.5 14.5L6 17.5l3.2-1c.9.3 1.8.5 2.8.5 4 0 7-2.6 7-6s-3-6-7-6-7 2.6-7 6c0 1.5.6 2.9 1.5 4v0z"
+      fill="#FFFFFF"
+    />
+    <circle cx="9.5" cy="10.5" r="1" fill="#0284C7" />
+    <circle cx="12" cy="10.5" r="1" fill="#0284C7" />
+    <circle cx="14.5" cy="10.5" r="1" fill="#0284C7" />
+    <defs>
+      <linearGradient id="livechat_badge_grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#38BDF8" />
+        <stop offset="1" stopColor="#0284C7" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+export const CallCenterLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <circle cx="12" cy="12" r="10" fill="url(#callcenter_badge_grad)" stroke="#A7F3D0" strokeWidth="1.2" />
+    <path
+      d="M7 13.5v-2a5 5 0 0 1 10 0v2"
+      stroke="#FFFFFF"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+    <rect x="5.5" y="12" width="3" height="4.5" rx="1.5" fill="#FFFFFF" />
+    <rect x="15.5" y="12" width="3" height="4.5" rx="1.5" fill="#FFFFFF" />
+    <path
+      d="M17 14.5v1.2a2 2 0 0 1-2 2h-2.5"
+      stroke="#FFFFFF"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+    <circle cx="12" cy="17.7" r="1" fill="#FFFFFF" />
+    <defs>
+      <linearGradient id="callcenter_badge_grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#10B981" />
+        <stop offset="1" stopColor="#059669" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+export const VipCrownLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ flexShrink: 0, display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <circle cx="12" cy="12" r="10" fill="url(#vipcrown_badge_grad)" stroke="#E9D5FF" strokeWidth="1.2" />
+    <path
+      d="M6 16.5h12l-1.5-6.5-3 3.5-1.5-5-1.5 5-3-3.5L6 16.5z"
+      fill="#FEF08A"
+      stroke="#F59E0B"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="8" r="0.9" fill="#FFFFFF" />
+    <circle cx="7.5" cy="9.5" r="0.8" fill="#FFFFFF" />
+    <circle cx="16.5" cy="9.5" r="0.8" fill="#FFFFFF" />
+    <rect x="7" y="15" width="10" height="1.2" rx="0.6" fill="#F59E0B" />
+    <defs>
+      <linearGradient id="vipcrown_badge_grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#A855F7" />
+        <stop offset="1" stopColor="#7E22CE" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
 
 interface ModernProfileViewProps {
   authUser: AuthUser | null;
@@ -310,16 +444,20 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         /* Bright, Radiant, Beautiful Guest Card */
         <section
           style={{
-            background: "linear-gradient(135deg, #9d174d 0%, #be123c 35%, #e11d48 70%, #fb7185 100%)",
+            background: isDark
+              ? "linear-gradient(135deg, #1f0b18 0%, #430c22 40%, #1e1b4b 100%)"
+              : "linear-gradient(135deg, #9d174d 0%, #be123c 35%, #e11d48 70%, #fb7185 100%)",
             borderRadius: "28px",
-            padding: "32px 22px",
+            padding: "32px 20px",
             color: "#ffffff",
-            boxShadow: "0 18px 40px -10px rgba(225, 29, 72, 0.45), 0 0 24px rgba(251, 113, 133, 0.35)",
+            boxShadow: isDark
+              ? "0 18px 40px -10px rgba(0, 0, 0, 0.75), 0 0 24px rgba(225, 29, 72, 0.25)"
+              : "0 18px 40px -10px rgba(225, 29, 72, 0.45), 0 0 24px rgba(251, 113, 133, 0.35)",
             position: "relative",
             overflow: "hidden",
             marginBottom: "22px",
             textAlign: "center",
-            border: "1.5px solid rgba(255, 255, 255, 0.3)",
+            border: isDark ? "1.5px solid rgba(255, 255, 255, 0.18)" : "1.5px solid rgba(255, 255, 255, 0.3)",
           }}
         >
           {/* Ambient luminous spots */}
@@ -385,102 +523,367 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             />
           </div>
 
-          <h2 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 8px 0", textShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
+          <h2 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 8px 0", textShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
             GULI Shaxsiy hisobingizga xush kelibsiz!
           </h2>
-          <p style={{ fontSize: "13.5px", color: "rgba(255, 255, 255, 0.92)", margin: "0 auto 20px auto", lineHeight: 1.55, maxWidth: "460px" }}>
-            Har bir muvaffaqiyatli xaridingizdan <b>2% real keshbek</b>, buyurtmalar tarixi, to‘lov cheklari va VIP imtiyozlarni boshqarish uchun tizimga kiring:
+          <p style={{ fontSize: "13.5px", color: "rgba(255, 255, 255, 0.94)", margin: "0 auto 20px auto", lineHeight: 1.55, maxWidth: "480px" }}>
+            Har bir xaridingizdan <b>2% real keshbek</b>, 24/7 shaxsiy <b>Online Chat</b>, to‘lov cheklari nazorati va VIP imtiyozlardan foydalanish uchun hisobingizga kiring:
           </p>
 
-          {/* Key Advantages Pills */}
-          <div style={{ display: "flex", justifyContent: "center", gap: "8px", flexWrap: "wrap", marginBottom: "22px" }}>
-            <span
+          {/* Key Advantages & Services Ads Showcase with Real Photographic Backgrounds & Crisp Vector Logos */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: "10px",
+              marginBottom: "22px",
+              textAlign: "left",
+            }}
+          >
+            {/* Card 1: 2% Real Keshbek (Real Oltin tangalar rasmi) */}
+            <div
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                backdropFilter: "blur(6px)",
-                padding: "5px 12px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: 700,
-                border: "1px solid rgba(255, 255, 255, 0.35)",
+                position: "relative",
+                borderRadius: "18px",
+                overflow: "hidden",
+                padding: "12px 14px",
+                minHeight: "105px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.25)" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                boxShadow: isDark ? "0 8px 20px rgba(0, 0, 0, 0.5)" : "0 8px 24px rgba(0, 0, 0, 0.16)",
               }}
             >
-              💰 2% Real Keshbek
-            </span>
-            <span
+              <img
+                src={goldCoinsCashbackImg}
+                alt="Oltin tangalar keshbek"
+                referrerPolicy="no-referrer"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scale(1.05)",
+                  filter: isDark ? "brightness(0.85) contrast(1.05)" : "brightness(1.08) saturate(1.15) contrast(1.02)",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: isDark
+                    ? "linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.88) 100%)"
+                    : "linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(15, 23, 42, 0.58) 100%)",
+                }}
+              />
+              <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.65)" : "rgba(255, 255, 255, 0.85)",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.25)",
+                  }}
+                >
+                  <CashbackLogoIcon size={22} />
+                </div>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    color: isDark ? "#fef08a" : "#ffffff",
+                    backgroundColor: isDark ? "rgba(245, 158, 11, 0.4)" : "rgba(217, 119, 6, 0.85)",
+                    padding: "2px 7px",
+                    borderRadius: "6px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  Bonus
+                </span>
+              </div>
+              <div style={{ position: "relative", zIndex: 1, marginTop: "8px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.2px", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
+                  2% Real Keshbek
+                </div>
+                <div style={{ fontSize: "10.5px", color: "rgba(255, 255, 255, 0.95)", marginTop: "2px", lineHeight: 1.3, textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+                  Har bir xariddan avtomatik
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: 24/7 Shaxsiy Online Chat (Real Online Chat rasmi) */}
+            <div
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                backdropFilter: "blur(6px)",
-                padding: "5px 12px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: 700,
-                border: "1px solid rgba(255, 255, 255, 0.35)",
+                position: "relative",
+                borderRadius: "18px",
+                overflow: "hidden",
+                padding: "12px 14px",
+                minHeight: "105px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.25)" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                boxShadow: isDark ? "0 8px 20px rgba(0, 0, 0, 0.5)" : "0 8px 24px rgba(0, 0, 0, 0.16)",
               }}
             >
-              👑 2 000 000 so'mda VIP maqom
-            </span>
-            <span
+              <img
+                src={onlineChatBgImg}
+                alt="Online Chat interfeysi"
+                referrerPolicy="no-referrer"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scale(1.05)",
+                  filter: isDark ? "brightness(0.85) contrast(1.05)" : "brightness(1.08) saturate(1.15) contrast(1.02)",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: isDark
+                    ? "linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.88) 100%)"
+                    : "linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(15, 23, 42, 0.58) 100%)",
+                }}
+              />
+              <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.65)" : "rgba(255, 255, 255, 0.85)",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.25)",
+                  }}
+                >
+                  <LiveChatLogoIcon size={22} />
+                </div>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    color: isDark ? "#7dd3fc" : "#ffffff",
+                    backgroundColor: isDark ? "rgba(14, 165, 233, 0.4)" : "rgba(2, 132, 199, 0.85)",
+                    padding: "2px 7px",
+                    borderRadius: "6px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  24/7 Live
+                </span>
+              </div>
+              <div style={{ position: "relative", zIndex: 1, marginTop: "8px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.2px", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
+                  24/7 Online Chat
+                </div>
+                <div style={{ fontSize: "10.5px", color: "rgba(255, 255, 255, 0.95)", marginTop: "2px", lineHeight: 1.3, textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+                  Ro‘yxatdan o‘tgan a'zolar uchun
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Call-Center (Real Operator Qiz rasmi) */}
+            <div
               style={{
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                backdropFilter: "blur(6px)",
-                padding: "5px 12px",
-                borderRadius: "20px",
-                fontSize: "12px",
-                fontWeight: 700,
-                border: "1px solid rgba(255, 255, 255, 0.35)",
+                position: "relative",
+                borderRadius: "18px",
+                overflow: "hidden",
+                padding: "12px 14px",
+                minHeight: "105px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.25)" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                boxShadow: isDark ? "0 8px 20px rgba(0, 0, 0, 0.5)" : "0 8px 24px rgba(0, 0, 0, 0.16)",
               }}
             >
-              🧾 To‘lov cheklari nazorati
-            </span>
+              <img
+                src={operatorCallBgImg}
+                alt="Operator Call Center"
+                referrerPolicy="no-referrer"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scale(1.05)",
+                  filter: isDark ? "brightness(0.85) contrast(1.05)" : "brightness(1.08) saturate(1.15) contrast(1.02)",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: isDark
+                    ? "linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.88) 100%)"
+                    : "linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(15, 23, 42, 0.58) 100%)",
+                }}
+              />
+              <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.65)" : "rgba(255, 255, 255, 0.85)",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.25)",
+                  }}
+                >
+                  <CallCenterLogoIcon size={22} />
+                </div>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    color: isDark ? "#86efac" : "#ffffff",
+                    backgroundColor: isDark ? "rgba(16, 185, 129, 0.4)" : "rgba(5, 150, 105, 0.85)",
+                    padding: "2px 7px",
+                    borderRadius: "6px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  Operator
+                </span>
+              </div>
+              <div style={{ position: "relative", zIndex: 1, marginTop: "8px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.2px", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
+                  Call-Center
+                </div>
+                <div style={{ fontSize: "10.5px", color: "rgba(255, 255, 255, 0.95)", marginTop: "2px", lineHeight: 1.3, textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+                  Tezkor shaxsiy konsultatsiya
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: VIP Mijoz (Toj kiygan multik sher rasmi) */}
+            <div
+              style={{
+                position: "relative",
+                borderRadius: "18px",
+                overflow: "hidden",
+                padding: "12px 14px",
+                minHeight: "105px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.25)" : "1.5px solid rgba(255, 255, 255, 0.85)",
+                boxShadow: isDark ? "0 8px 20px rgba(0, 0, 0, 0.5)" : "0 8px 24px rgba(0, 0, 0, 0.16)",
+              }}
+            >
+              <img
+                src={lionVipBgImg}
+                alt="VIP Mijoz Toj kiygan sher"
+                referrerPolicy="no-referrer"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scale(1.05)",
+                  filter: isDark ? "brightness(0.85) contrast(1.05)" : "brightness(1.08) saturate(1.15) contrast(1.02)",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: isDark
+                    ? "linear-gradient(180deg, rgba(15, 23, 42, 0.4) 0%, rgba(15, 23, 42, 0.88) 100%)"
+                    : "linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(15, 23, 42, 0.58) 100%)",
+                }}
+              />
+              <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.65)" : "rgba(255, 255, 255, 0.85)",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.25)",
+                  }}
+                >
+                  <VipCrownLogoIcon size={22} />
+                </div>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    color: isDark ? "#d8b4fe" : "#ffffff",
+                    backgroundColor: isDark ? "rgba(168, 85, 247, 0.4)" : "rgba(147, 51, 234, 0.85)",
+                    padding: "2px 7px",
+                    borderRadius: "6px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  VIP
+                </span>
+              </div>
+              <div style={{ position: "relative", zIndex: 1, marginTop: "8px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#ffffff", letterSpacing: "0.2px", textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}>
+                  VIP Mijoz
+                </div>
+                <div style={{ fontSize: "10.5px", color: "rgba(255, 255, 255, 0.95)", marginTop: "2px", lineHeight: 1.3, textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+                  2 000 000 so‘mda maxsus chegirmalar
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-            <button
-              onClick={() => onOpenAuth?.("signin")}
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#be123c",
-                border: "none",
-                borderRadius: "16px",
-                padding: "13px 24px",
-                fontSize: "14px",
-                fontWeight: 800,
-                cursor: "pointer",
-                boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                transition: "all 0.18s ease",
-                flex: "1 1 0",
-              }}
-            >
-              <span>🔑</span> Tizimga kirish
-            </button>
-            <button
-              onClick={() => onOpenAuth?.("signup")}
-              style={{
-                backgroundColor: "#ffffff",
-                color: "#be123c",
-                border: "none",
-                borderRadius: "16px",
-                padding: "13px 24px",
-                fontSize: "14px",
-                fontWeight: 800,
-                cursor: "pointer",
-                boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                transition: "all 0.18s ease",
-                flex: "1 1 0",
-              }}
-            >
-              <span>✨</span> Ro‘yxatdan o‘tish
-            </button>
-          </div>
+          {/* Telegram Login Button (Tun va Kun rejimiga moslangan) */}
+          <button
+            onClick={() => onOpenAuth?.("signin")}
+            id="guest-telegram-login-btn"
+            style={{
+              backgroundColor: isDark ? "#0f172a" : "#ffffff",
+              color: isDark ? "#38bdf8" : "#0284c7",
+              border: isDark ? "1.5px solid rgba(56, 189, 248, 0.45)" : "1px solid rgba(255, 255, 255, 0.85)",
+              borderRadius: "16px",
+              padding: "14px 24px",
+              fontSize: "15px",
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: isDark
+                ? "0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(42, 171, 238, 0.3)"
+                : "0 8px 24px rgba(0, 0, 0, 0.22)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "10px",
+              transition: "transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease",
+              width: "100%",
+            }}
+          >
+            <TelegramLogoIcon size={24} />
+            <span style={{ color: isDark ? "#f8fafc" : "#0284c7" }}>Telegram orqali kirish</span>
+          </button>
         </section>
       ) : (
         <>
@@ -773,39 +1176,29 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     : "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%)",
                 }}
               >
-                {/* Night Mode Background Image - Persistent RAM cache, centered-right woman */}
+                {/* Night Mode Background Layer */}
                 <div
                   style={{
                     position: "absolute",
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    backgroundImage: `url(${profileCardNightImg})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "75% center",
-                    backgroundRepeat: "no-repeat",
+                    background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%)",
                     opacity: isDark ? 1 : 0,
-                    filter: "contrast(1.06) brightness(1.02)",
                     transition: "opacity 0.35s ease-in-out",
-                    willChange: "opacity",
                   }}
                 />
 
-                {/* Day Mode Background Image */}
+                {/* Day Mode Background Layer */}
                 <div
                   style={{
                     position: "absolute",
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    backgroundImage: `url(${profileCardDayImg})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "75% center",
-                    backgroundRepeat: "no-repeat",
+                    background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%)",
                     opacity: isDark ? 0 : 1,
-                    filter: "contrast(1.03) brightness(1.02)",
                     transition: "opacity 0.35s ease-in-out",
-                    willChange: "opacity",
                   }}
                 />
 
@@ -1342,34 +1735,43 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       <section className="profileSection" style={{ marginBottom: "16px" }}>
         <h2>💬 Xizmat va Bog'lanish</h2>
 
-        <button
-          className="menuRow"
-          id="profile-chat-btn"
-          onClick={() => onNavigate("chat")}
-        >
-          <span className="profileSticker3D">💬</span>
-          <div>
-            <b>GULI Chat</b>
-            {unreadChatCount > 0 ? (
-              <span className="badgePill" style={{ backgroundColor: "#ef4444" }}>{unreadChatCount} yangi</span>
-            ) : null}
-            <small>Operatorlarimiz 24/7 sizga yordam berishga tayyor</small>
-          </div>
-          <i>›</i>
-        </button>
+        {/* Faqat ro'yxatdan o'tgan foydalanuvchilarga ko'rinadi */}
+        {isAuthenticated && (
+          <>
+            <button
+              className="menuRow"
+              id="profile-chat-btn"
+              onClick={() => onNavigate("chat")}
+            >
+              <span className="profileSticker3D">💬</span>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <b>GULI Chat</b>
+                </div>
+                {unreadChatCount > 0 ? (
+                  <span className="badgePill" style={{ backgroundColor: "#ef4444" }}>{unreadChatCount} yangi</span>
+                ) : null}
+                <small>Operatorlarimiz 24/7 sizga yordam berishga tayyor</small>
+              </div>
+              <i>›</i>
+            </button>
 
-        <button
-          className="menuRow"
-          id="profile-help-btn"
-          onClick={onOpenHelp}
-        >
-          <span className="profileSticker3D">📞</span>
-          <div>
-            <b>{t("help_support")}</b>
-            <small>Call Center (+998 90 581-11-17) & FAQ</small>
-          </div>
-          <i>›</i>
-        </button>
+            <button
+              className="menuRow"
+              id="profile-help-btn"
+              onClick={onOpenHelp}
+            >
+              <span className="profileSticker3D">📞</span>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <b>{t("help_support")}</b>
+                </div>
+                <small>Call Center (+998 90 581-11-17) & FAQ</small>
+              </div>
+              <i>›</i>
+            </button>
+          </>
+        )}
 
         <button
           className="menuRow"

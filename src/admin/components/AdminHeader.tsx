@@ -72,6 +72,31 @@ export function AdminHeader({
       <div className="topActions headerRightActions">
         <button
           type="button"
+          onClick={() => onSelectTab("guli_chat")}
+          className="guliHeaderAiBtn"
+          title="Guli AI Chat (ChatGPT uslubidagi assistent)"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            padding: "6px 12px",
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, rgba(190, 18, 60, 0.08), rgba(244, 63, 94, 0.12))",
+            border: "1px solid rgba(190, 18, 60, 0.2)",
+            color: "#be123c",
+            fontSize: "12px",
+            fontWeight: 700,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span style={{ fontSize: "14px" }}>✨</span>
+          <span>Guli AI</span>
+        </button>
+
+        <button
+          type="button"
           className={`notifBellBtn ${isRinging || unreadNotificationsCount > 0 ? "ring3dAnim" : ""}`}
           onClick={() => onSelectTab("chat")}
           title="Online Chat (Yangi xabarlar)"
@@ -94,8 +119,13 @@ export function AdminHeader({
           className="adminHeaderAvatar"
           onClick={() => onSelectTab("settings")}
           title="Sozlamalar"
+          style={{ overflow: "hidden", padding: 0 }}
         >
-          🌷
+          <img
+            src="/guli_logo.jpg"
+            alt="Guli"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
         </div>
       </div>
     </header>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { type Language, getTranslation } from "../utils/translations";
 import { playTapSound, triggerHaptic } from "../utils/soundEffects";
+import { copyToClipboard } from "../utils/clipboard";
 
 const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 
@@ -109,15 +110,9 @@ export function HelpSupportModal({
   const supportCardNumber = localStorage.getItem("guli_support_card_number") || localStorage.getItem("guli_payment_card_number") || "9860 1766 1229 1557";
   const supportCardHolder = localStorage.getItem("guli_support_card_holder") || localStorage.getItem("guli_payment_card_holder") || "X.Yusufaliyev";
 
-  const handleCopyNumber = () => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(CALL_CENTER_RAW);
-      }
-      onShowToast(`✓ ${t("copied")}: ${CALL_CENTER_FORMATTED}`);
-    } catch {
-      onShowToast(`✓ ${CALL_CENTER_FORMATTED}`);
-    }
+  const handleCopyNumber = async () => {
+    await copyToClipboard(CALL_CENTER_RAW);
+    onShowToast(`✓ ${t("copied")}: ${CALL_CENTER_FORMATTED}`);
   };
 
   const faqs = [
@@ -405,17 +400,11 @@ export function HelpSupportModal({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          try {
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                              navigator.clipboard.writeText(supportCardNumber.replace(/\s+/g, ""));
-                            }
-                            onShowToast(language === "ru" ? "✓ Номер карты скопирован!" : "✓ Karta raqami nusxalandi!");
-                            triggerHaptic();
-                            playTapSound();
-                          } catch {
-                            onShowToast(supportCardNumber);
-                          }
+                        onClick={async () => {
+                          await copyToClipboard(supportCardNumber.replace(/\s+/g, ""));
+                          onShowToast(language === "ru" ? "✓ Номер карты скопирован!" : "✓ Karta raqami nusxalandi!");
+                          triggerHaptic();
+                          playTapSound();
                         }}
                         style={{
                           background: "linear-gradient(135deg, #f59e0b, #d97706)",

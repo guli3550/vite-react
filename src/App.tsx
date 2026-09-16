@@ -63,6 +63,7 @@ import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal
 import { getSupabase, loadSupabaseConfigAsync, signOutEverywhere, syncCustomerProfile } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
+import { copyToClipboard } from "./utils/clipboard";
 
 declare global {
   interface Window {
@@ -2981,19 +2982,20 @@ export default function App() {
     go("cart");
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const shareText =
       "GULI Premium — Nafis va sifatli ayollar ichki kiyimlari to‘plami 🌷";
     const shareUrl = "https://t.me/guli_lingerie_bot";
     if (navigator.share) {
-      navigator
-        .share({ title: "GULI Premium", text: shareText, url: shareUrl })
-        .catch(() => {});
-    } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareUrl);
-      showToast("✓ Havola nusxalandi!");
+      try {
+        await navigator.share({ title: "GULI Premium", text: shareText, url: shareUrl });
+      } catch {
+        await copyToClipboard(shareUrl);
+        showToast("✓ Havola nusxalandi!");
+      }
     } else {
-      showToast(shareUrl);
+      await copyToClipboard(shareUrl);
+      showToast("✓ Havola nusxalandi!");
     }
   };
 
@@ -4100,56 +4102,92 @@ export default function App() {
   return (
     <div className="appShell">
       <header className="topbar">
-        <button
-          className="brand"
-          onClick={() => go("home")}
-          type="button"
-          aria-label="GULI Home"
-        >
-          <span
-            className="brandIcon"
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+          <button
+            className="brand"
+            onClick={() => go("home")}
+            type="button"
+            aria-label="GULI Home"
+          >
+            <span
+              className="brandIcon"
+              style={{
+                width: "42px",
+                height: "42px",
+                minWidth: "42px",
+                minHeight: "42px",
+                maxWidth: "42px",
+                maxHeight: "42px",
+                flex: "0 0 42px",
+                flexShrink: 0,
+                aspectRatio: "1 / 1",
+                borderRadius: "50%",
+                overflow: "hidden",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <img
+                src={appLogo}
+                alt="Guli Premium"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  minWidth: "100%",
+                  minHeight: "100%",
+                  aspectRatio: "1 / 1",
+                  objectFit: "cover",
+                  borderRadius: "50%",
+                  display: "block",
+                  flexShrink: 0,
+                  pointerEvents: "none",
+                  userSelect: "none",
+                }}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg";
+                }}
+              />
+            </span>
+            <span>
+              <b>{brandName}</b>
+              <small>{t("brand_sub")}</small>
+            </span>
+          </button>
+
+          {/* Admin panelga o'tish tugmasi */}
+          <a
+            href="/admin"
+            id="topbar-admin-btn"
+            title="Admin panelga o'tish"
+            aria-label="Admin panel"
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = "/admin";
+            }}
             style={{
-              width: "42px",
-              height: "42px",
-              minWidth: "42px",
-              minHeight: "42px",
-              maxWidth: "42px",
-              maxHeight: "42px",
-              flex: "0 0 42px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "4px 8px",
+              borderRadius: "10px",
+              fontSize: "11px",
+              fontWeight: 800,
+              letterSpacing: "0.2px",
+              textDecoration: "none",
+              backgroundColor: theme === "dark" ? "rgba(225, 29, 72, 0.16)" : "rgba(225, 29, 72, 0.08)",
+              color: theme === "dark" ? "#fda4af" : "#be123c",
+              border: theme === "dark" ? "1px solid rgba(244, 63, 94, 0.3)" : "1px solid rgba(225, 29, 72, 0.22)",
+              boxShadow: theme === "dark" ? "0 2px 6px rgba(0, 0, 0, 0.3)" : "0 2px 5px rgba(225, 29, 72, 0.08)",
+              transition: "all 0.15s ease",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
               flexShrink: 0,
-              aspectRatio: "1 / 1",
-              borderRadius: "50%",
-              overflow: "hidden",
-              display: "grid",
-              placeItems: "center",
             }}
           >
-            <img
-              src={appLogo}
-              alt="Guli Premium"
-              style={{
-                width: "100%",
-                height: "100%",
-                minWidth: "100%",
-                minHeight: "100%",
-                aspectRatio: "1 / 1",
-                objectFit: "cover",
-                borderRadius: "50%",
-                display: "block",
-                flexShrink: 0,
-                pointerEvents: "none",
-                userSelect: "none",
-              }}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg";
-              }}
-            />
-          </span>
-          <span>
-            <b>{brandName}</b>
-            <small>{t("brand_sub")}</small>
-          </span>
-        </button>
+            <span style={{ fontSize: "11px", lineHeight: 1 }}>⚙️</span>
+            <span>Admin</span>
+          </a>
+        </div>
         <div className="headerActions">
           <button
             className="iconButton themeToggleBtn"
@@ -5169,13 +5207,11 @@ export default function App() {
                       <button
                         className="copyCardBtn"
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           const num = (
                             localStorage.getItem("guli_payment_card_number") || "9860 1766 1229 1557"
                           ).replace(/\s+/g, "");
-                          try {
-                            navigator.clipboard.writeText(num);
-                          } catch {}
+                          await copyToClipboard(num);
                           setCopiedCard(true);
                           showToast("✓ Karta raqami nusxalandi!");
                           setTimeout(() => setCopiedCard(false), 2500);

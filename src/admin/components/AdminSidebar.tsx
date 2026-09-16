@@ -33,7 +33,9 @@ export function AdminSidebar({
       <aside className={`proSide ${isOpenMobile ? "mobileDrawerOpen" : ""}`}>
         {/* Brand Header */}
         <div className="proBrand">
-          <span>🌷</span>
+          <span style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", display: "inline-flex", verticalAlign: "middle", flexShrink: 0 }}>
+            <img src="/guli_logo.jpg" alt="Guli" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </span>
           <div>
             <b>GULI</b>
             <small>PREMIUM ADMIN</small>
@@ -80,7 +82,9 @@ export function AdminSidebar({
         {/* Bottom Profile & Exit Section */}
         <div className="sideBottom">
           <div className="adminProfileMiniCard">
-            <div className="adminAvatarCircle">🌷</div>
+            <div className="adminAvatarCircle" style={{ overflow: "hidden", padding: 0 }}>
+              <img src="/guli_logo.jpg" alt="Guli Admin" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </div>
             <div className="adminProfileDetails">
               <b>Guli Admin</b>
               <small>Super Administrator</small>

@@ -1183,9 +1183,31 @@ select.input option {
 .quickChipBtn{white-space:nowrap;padding:7px 12px;border-radius:999px;background:var(--bg-card-sub);border:1px solid var(--border-color);font-size:10.5px;color:var(--text-main);font-weight:600;cursor:pointer;transition:all .18s ease}
 .quickChipBtn:hover{border-color:var(--primary);color:var(--primary)}
 
-.chatInputBar{display:flex;gap:8px;padding:10px 14px;background:var(--bg-card);border-top:1px solid var(--border-color)}
-.chatInputField{flex:1;background:var(--bg-card-sub);border:1px solid var(--border-color);border-radius:24px;padding:11px 16px;outline:none;font-size:12.5px;color:var(--text-main)}
-.chatSendBtn{width:42px;height:42px;border-radius:50%;background:var(--primary-gradient);color:#fff;font-size:16px;display:grid;place-items:center;box-shadow:0 4px 12px rgba(189,82,106,.3);flex-shrink:0}
+.chatInputBar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#ffffff;border-top:1px solid #f1f5f9;position:relative;z-index:10}
+.chatInputCapsule{flex:1;display:flex;align-items:center;background:#f1f5f9;border:none;outline:none;border-radius:26px;padding:3px 8px;transition:background 0.2s ease;box-shadow:none}
+.chatInputCapsule:focus-within{background:#eef2f6;border:none;outline:none;box-shadow:none}
+.chatInputField{flex:1;background:transparent;border:none;border-radius:0;padding:9px 12px;outline:none;font-size:13.5px;color:#0f172a;box-shadow:none}
+.chatInputField:focus{outline:none;border:none;box-shadow:none}
+.chatSendBtn{width:40px;height:40px;border-radius:50%;background:#b6536b;color:#fff;border:none;display:grid;place-items:center;box-shadow:0 3px 10px rgba(182,83,107,0.3);flex-shrink:0;cursor:pointer;transition:transform 0.15s ease}
+.chatSendBtn:hover{transform:scale(1.05);background:#9e4359}
+.chatSendBtn:active{transform:scale(0.95)}
+
+/* Customer Chat 3-Dots Button & Popup */
+.chatBubbleRowWrap{position:relative;display:flex;flex-direction:column}
+.chatBubbleHeaderRow{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.chatBubbleMenuTriggerBtn{background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:2px 4px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;transition:all 0.15s ease;opacity:0.6}
+.chatBubbleRow:hover .chatBubbleMenuTriggerBtn, .chatBubbleMenuTriggerBtn.active{opacity:1;color:#475569;background:rgba(0,0,0,0.05)}
+.chatBubbleDropdownMenu{position:absolute;top:100%;right:0;z-index:40;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:5px;box-shadow:0 10px 25px rgba(0,0,0,0.12);min-width:210px;display:flex;flex-direction:column;gap:2px;animation:fadeIn 0.15s ease}
+.chatBubbleDropdownItem{display:flex;align-items:center;gap:8px;padding:7px 10px;border:none;background:transparent;border-radius:8px;font-size:12px;font-weight:500;color:#1e293b;cursor:pointer;text-align:left;transition:background 0.12s ease}
+.chatBubbleDropdownItem:hover{background:#f8fafc;color:#0f172a}
+.chatBubbleDropdownItem.danger{color:#e11d48}
+.chatBubbleDropdownItem.danger:hover{background:#fff1f2}
+
+/* Search bar in customer chat */
+.customerChatSearchBar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8f0;animation:fadeIn 0.15s ease}
+.customerChatSearchInput{flex:1;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:6px 12px;font-size:12px;outline:none;color:#0f172a}
+.customerChatSearchInput:focus{border-color:#b6536b}
+.customerChatSearchCount{font-size:11px;font-weight:600;color:#64748b;white-space:nowrap}
 
 /* Swipe Gesture & Reply Styles */
 .swipeReplyPill {

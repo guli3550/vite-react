@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Address } from "../types";
+import { copyToClipboard } from "../utils/clipboard";
 
 interface SavedAddressesManagerProps {
   address: Address;
@@ -64,10 +65,10 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
     }
   };
 
-  const handleCopyCoordinates = () => {
+  const handleCopyCoordinates = async () => {
     if (!address.latitude || !address.longitude) return;
     const text = `${address.latitude.toFixed(6)}, ${address.longitude.toFixed(6)}`;
-    navigator.clipboard?.writeText(text);
+    await copyToClipboard(text);
     setCopiedCoords(true);
     showToast("📍 Koordinatalar nusxalandi!");
     setTimeout(() => setCopiedCoords(false), 2000);

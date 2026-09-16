@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
+import AdminGuliChatTab from "./components/AdminGuliChatTab";
 import { detectPlatform, type PlatformType } from "../utils/platformAdapter";
 import { sendAdminReply, updateConversationMetadata, getTotalUnreadChatCount, subscribeToChat } from "../utils/chatSync";
 
@@ -17,6 +18,7 @@ import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
+import { copyToClipboard } from "../utils/clipboard";
 
 import "./AdminPro.css";
 import "./ReviewsNav.css";
@@ -933,7 +935,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
       <div className="proLogin">
         <div className="loginAura" />
         <form className="proLoginCard" onSubmit={doLogin}>
-          <div className="proLogo">🌷</div>
+          <div className="proLogo" style={{ overflow: "hidden", padding: 0 }}>
+            <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", borderRadius: "16px", objectFit: "cover" }} />
+          </div>
           <span className="proEyebrow">GULI PREMIUM</span>
           <h1>Control Center</h1>
           <p>Do‘konni bitta professional paneldan boshqaring.</p>
@@ -1729,6 +1733,18 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
 
         {/* Tab 9: 📊 Tahlillar */}
         {tab === "analytics" && <AdminAnalyticsTab dashboardData={dashboard} />}
+
+        {/* Tab: ✨ Guli AI Chat (ChatGPT uslubidagi multimodal assistent) */}
+        {tab === "guli_chat" && (
+          <AdminGuliChatTab
+            orders={orders}
+            products={products}
+            dashboardData={dashboard}
+            promos={promos}
+            users={users}
+            token={token}
+          />
+        )}
 
         {/* Tab 10: 💬 Online Chat */}
         {tab === "chat" && (
@@ -2591,7 +2607,7 @@ function OrderDrawer({
               </h3>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const fullText = [
                     addr.region && `Viloyat: ${addr.region}`,
                     addr.district && `Tuman: ${addr.district}`,
@@ -2603,7 +2619,7 @@ function OrderDrawer({
                   ]
                     .filter(Boolean)
                     .join(", ");
-                  navigator.clipboard?.writeText(fullText || "Manzil ko'rsatilmagan");
+                  await copyToClipboard(fullText || "Manzil ko'rsatilmagan");
                   setCopiedAddress(true);
                   setTimeout(() => setCopiedAddress(false), 2000);
                 }}
@@ -2743,8 +2759,8 @@ function OrderDrawer({
                 </a>
                 <button
                   type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(`${addr.latitude}, ${addr.longitude}`);
+                  onClick={async () => {
+                    await copyToClipboard(`${addr.latitude}, ${addr.longitude}`);
                     setCopiedCoords(true);
                     setTimeout(() => setCopiedCoords(false), 2000);
                   }}

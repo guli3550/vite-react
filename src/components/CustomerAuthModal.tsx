@@ -193,7 +193,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           <div style={{width:64,height:64,margin:"0 auto 14px auto",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",boxShadow:"0 8px 24px rgba(34,158,217,0.38)"}}>
             <svg width="64" height="64" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="120" cy="120" r="120" fill="url(#tg_auth_modal_grad)"/>
-              <path d="M183 67L47.5 119.3C38.3 123 38.4 128.2 45.8 130.5L80.6 141.3L161.1 90.6C164.9 88.3 168.4 89.5 165.5 92.1L100.3 151L98.9 171.7C100.9 171.7 101.8 170.8 102.9 169.7L122.1 151.2L162 180.7C169.4 184.8 174.7 182.7 176.5 173.9L202.7 50.4C205.4 39.6 198.6 34.7 183 67Z" fill="white"/>
+              <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white"/>
               <defs>
                 <linearGradient id="tg_auth_modal_grad" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse">
                   <stop stopColor="#2AABEE"/>
@@ -217,7 +217,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           ) : (
             <>
               <svg width="22" height="22" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
-                <path d="M183 67L47.5 119.3C38.3 123 38.4 128.2 45.8 130.5L80.6 141.3L161.1 90.6C164.9 88.3 168.4 89.5 165.5 92.1L100.3 151L98.9 171.7C100.9 171.7 101.8 170.8 102.9 169.7L122.1 151.2L162 180.7C169.4 184.8 174.7 182.7 176.5 173.9L202.7 50.4C205.4 39.6 198.6 34.7 183 67Z" fill="currentColor"/>
+                <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="currentColor"/>
               </svg>
               <span>Telegram orqali kirish</span>
             </>

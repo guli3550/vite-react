@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, type FC } from "react";
 import type { Language } from "../utils/translations";
+import { copyToClipboard } from "../utils/clipboard";
 
 interface AdminPromo {
   id?: string | number;
@@ -87,14 +88,12 @@ export const PromosModal: FC<{
     return Array.from(map.values());
   }, [adminPromos, customAddedPromos, deletedCodes]);
 
-  const handleCopy = (code: string, isActive: boolean) => {
+  const handleCopy = async (code: string, isActive: boolean) => {
     if (!isActive) {
       onShowToast("Bu promokod muddati tugagan yoki nofaol");
       return;
     }
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(code);
-    }
+    await copyToClipboard(code);
     setCopiedCode(code);
     onShowToast(`✓ ${code} promokodi nusxalandi!`);
     try {
