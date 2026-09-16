@@ -53,12 +53,12 @@ function wrapWebhook() {
           const authStart = text.match(/^\/start(?:@\w+)?\s+auth_([0-9a-f-]{36})$/i);
           if (chatId && authStart && supabase) {
             const sessionId = authStart[1];
-            const { data: session } = await supabase.from("auth_sessions").select("session_id,expires_at,is_verified,otp_used").eq("session_id", sessionId).maybeSingle();
-            if (!session || session.is_verified || session.otp_used || new Date(session.expires_at).getTime() < Date.now()) {
+            const { data: session } = await supabase.from("auth_sessions").select("session_id,expires_at,is_verified,exchange_ticket_used").eq("session_id", sessionId).maybeSingle();
+            if (!session || session.is_verified || session.exchange_ticket_used || new Date(session.expires_at).getTime() < Date.now()) {
               await telegramApi("sendMessage", { chat_id: chatId, text: "❌ Bu autentifikatsiya havolasi yaroqsiz yoki muddati tugagan. Brauzerdan yangi login sessiyasi boshlang.", reply_markup: storeMenuKeyboard() });
               return res.sendStatus(200);
             }
-            await supabase.from("auth_sessions").update({ telegram_id: fromId }).eq("session_id", sessionId).eq("is_verified", false).eq("otp_used", false);
+            await supabase.from("auth_sessions").update({ telegram_id: fromId }).eq("session_id", sessionId).eq("is_verified", false).eq("exchange_ticket_used", false);
             await telegramApi("sendMessage", { chat_id: chatId, text: "🔐 <b>GULI autentifikatsiyasi</b>\n\nDavom etish uchun faqat o‘zingizning Telegram telefon raqamingizni yuboring.", parse_mode: "HTML", reply_markup: authContactKeyboard() });
             return res.sendStatus(200);
           }
@@ -80,10 +80,14 @@ function wrapWebhook() {
             }
 
             if (supabase) {
-              const { data: authSession } = await supabase.from("auth_sessions").select("session_id,telegram_id,expires_at,is_verified,otp_used,otp_hash,created_at").eq("telegram_id", fromId).eq("is_verified", false).eq("otp_used", false).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
+              const { data: authSession } = await supabase.from("auth_sessions").select("session_id,telegram_id,expires_at,is_verified,exchange_ticket_used,created_at").eq("telegram_id", fromId).eq("is_verified", false).eq("exchange_ticket_used", false).gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
               if (authSession) {
-                const autoOtp = crypto.randomInt(100000, 1000000).toString();
-                const { error } = await supabase.from("auth_sessions").update({ phone_number: phone, otp_hash: authHash(autoOtp), otp_attempts: 0 }).eq("session_id", authSession.session_id).eq("is_verified", false).eq("otp_used", false);
+                // Telegram itself has already proven ownership of this phone
+                // number (contact.user_id === message.from.id, checked
+                // above), so the browser session is verified directly here -
+                // no separate OTP the user has to type is needed. The
+                // browser learns this via GET /api/v1/auth/check-status.
+                const { error } = await supabase.from("auth_sessions").update({ phone_number: phone, is_verified: true, verified_at: new Date().toISOString() }).eq("session_id", authSession.session_id).eq("is_verified", false);
                 if (error) throw error;
                 await supabase.from("telegram_users").upsert({ telegram_id: fromId, username: message?.from?.username || null, first_name: message?.from?.first_name || null, last_name: message?.from?.last_name || null, telegram_phone: phone, updated_at: new Date().toISOString() }, { onConflict: "telegram_id" });
                 await telegramApi("sendMessage", { chat_id: chatId, text: "✅ Telefon raqamingiz tasdiqlandi. Brauzer avtomatik ravishda tizimga kiritmoqda.", reply_markup: storeMenuKeyboard() });
