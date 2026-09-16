@@ -14,7 +14,7 @@ interface ProductReviewsSectionProps {
   onShowToast?: (msg: string) => void;
 }
 export function getStoredReviews(): ReviewItem[] { return []; }
-export function saveStoredReviews(_items: ReviewItem[]): void { /* DB/API is the only source of truth. */ }
+export function saveStoredReviews(): void { /* DB/API is the only source of truth. */ }
 const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
 function safeName(first?: string, last?: string) { const n = [first,last].map(v=>String(v||"").trim()).filter(Boolean).join(" "); return n || "Anonim mijoz"; }
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0,2).map(v=>v[0]).join("").toUpperCase() || "M"; }
@@ -28,12 +28,108 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
   const [userAvatarUrl,setUserAvatarUrl]=useState<string|null>(()=>telegramUser?.photo_url||null); const currentName=safeName(telegramUser?.first_name,telegramUser?.last_name);
 
   useEffect(()=>{ if(telegramUser?.photo_url){setUserAvatarUrl(telegramUser.photo_url);return;} try{const raw=JSON.parse(localStorage.getItem("guli_auth_user")||"null");setUserAvatarUrl(raw?.telegram_photo_url||raw?.photo_url||raw?.avatar||null);}catch{setUserAvatarUrl(null);} },[telegramUser?.photo_url]);
-  const loadReviews=useCallback(async()=>{ if(!productCode){setReviews([]);setAverage(0);setCount(0);setDistribution([]);onRatingUpdate?.(0,0);return;} try{
-    const res=await fetch(`${API}/api/reviews?product_code=${encodeURIComponent(productCode)}`,{cache:"no-store"}); if(!res.ok)throw new Error(`reviews ${res.status}`); const json=await res.json();
-    if(!json?.success||!Array.isArray(json.data?.reviews))throw new Error("Invalid review response");
-    const next:ReviewItem[]=json.data.reviews.map((r:any)=>({id:r.id,product_id:r.product_id,product_code:r.product_code||productCode,product_name:productName,photo_url:r.photo_url||null,display_name:r.display_name||"Anonim mijoz",rating:Number(r.rating)||0,comment:String(r.comment||""),photos:Array.isArray(r.photos)?r.photos:[],verified_purchase:Boolean(r.verified_purchase),status:"approved",is_pinned:Boolean(r.is_pinned),created_at:r.created_at}));
-    const avg=Number(json.data.total_average)||0,c=Number(json.data.total_count)||0; setReviews(next);setAverage(avg);setCount(c);setDistribution(Array.isArray(json.data.distribution)?json.data.distribution:[]);onRatingUpdate?.(avg,c);
-  }catch(error){console.error("Failed to load real reviews:",error);setReviews([]);setAverage(0);setCount(0);setDistribution([]);onRatingUpdate?.(0,0);} },[productCode,productName,onRatingUpdate]);
+  const loadReviews = useCallback(async () => {
+    const param = productCode || (productId ? String(productId) : "");
+    if (!param) {
+      setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+      onRatingUpdate?.(0, 0);
+      return;
+    }
+    try {
+      const endpoints = [
+        `${API}/api/reviews?product_code=${encodeURIComponent(param)}`,
+        `/api/reviews?product_code=${encodeURIComponent(param)}`,
+      ];
+      let json: any = null;
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep, { cache: "no-store" });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.success) {
+              json = data;
+              break;
+            }
+          }
+        } catch {
+          // continue to next endpoint
+        }
+      }
+
+      // If backend API could not be reached, fallback gracefully to direct Supabase query
+      if (!json?.success || !Array.isArray(json?.data?.reviews)) {
+        const client = getSupabase();
+        if (client) {
+          try {
+            let q = client.from("product_reviews").select("*");
+            if (productId && productCode) {
+              q = q.or(`product_id.eq.${productId},product_code.eq.${productCode}`);
+            } else if (productId) {
+              q = q.eq("product_id", productId);
+            } else {
+              q = q.eq("product_code", param);
+            }
+            const { data, error } = await q.order("created_at", { ascending: false }).limit(100);
+            if (!error && Array.isArray(data)) {
+              const list: ReviewItem[] = data.map((r: any) => ({
+                id: r.id,
+                product_id: r.product_id,
+                product_code: r.product_code || productCode,
+                product_name: productName,
+                photo_url: r.photo_url || null,
+                display_name: r.display_name || r.first_name || (r.username ? `@${r.username}` : "Anonim mijoz"),
+                rating: Number(r.rating) || 5,
+                comment: String(r.comment || ""),
+                photos: Array.isArray(r.photos) ? r.photos : [],
+                verified_purchase: Boolean(r.verified_purchase),
+                status: "approved",
+                is_pinned: Boolean(r.is_pinned),
+                created_at: r.created_at || new Date().toISOString()
+              }));
+              const c = list.length;
+              const sum = list.reduce((n, r) => n + Number(r.rating || 0), 0);
+              const avg = c ? Math.round(sum / c * 10) / 10 : 0;
+              const dist = [5, 4, 3, 2, 1].map(star => ({ star, count: list.filter(r => r.rating === star).length }));
+              setReviews(list); setAverage(avg); setCount(c); setDistribution(dist);
+              onRatingUpdate?.(avg, c);
+              return;
+            }
+          } catch {
+            // direct query fallback note
+          }
+        }
+        setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+        onRatingUpdate?.(0, 0);
+        return;
+      }
+
+      const next: ReviewItem[] = (json.data.reviews || []).map((r: any) => ({
+        id: r.id,
+        product_id: r.product_id,
+        product_code: r.product_code || productCode,
+        product_name: productName,
+        photo_url: r.photo_url || null,
+        display_name: r.display_name || "Anonim mijoz",
+        rating: Number(r.rating) || 0,
+        comment: String(r.comment || ""),
+        photos: Array.isArray(r.photos) ? r.photos : [],
+        verified_purchase: Boolean(r.verified_purchase),
+        status: "approved",
+        is_pinned: Boolean(r.is_pinned),
+        created_at: r.created_at
+      }));
+      const avg = Number(json.data.total_average) || 0;
+      const c = Number(json.data.total_count) || 0;
+      setReviews(next);
+      setAverage(avg);
+      setCount(c);
+      setDistribution(Array.isArray(json.data.distribution) ? json.data.distribution : []);
+      onRatingUpdate?.(avg, c);
+    } catch {
+      setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+      onRatingUpdate?.(0, 0);
+    }
+  }, [productCode, productId, productName, onRatingUpdate]);
   useEffect(()=>{void loadReviews();},[loadReviews]);
   useEffect(()=>{if(!productId)return;const client=getSupabase();if(!client)return;const channel=client.channel(`product-review-events-${String(productId)}`).on("postgres_changes",{event:"*",schema:"public",table:"review_events",filter:`product_id=eq.${String(productId)}`},()=>{void loadReviews();}).subscribe((status:string)=>{if(status==="CHANNEL_ERROR")console.warn("Review realtime channel error");});return()=>{void client.removeChannel(channel);};},[productId,loadReviews]);
 

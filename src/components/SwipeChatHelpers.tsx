@@ -255,7 +255,7 @@ export function SwipeableChatBackground({
     // Only ignore if target is directly an interactive control or the message bubble itself
     if (
       target.closest(
-        "input, textarea, button, a, select, audio, .bubbleBox, .chatMediaImage, .chatMediaAudio, .chatMediaFile, .chatLongPressReactionsBar, .chatCopyBtnSeparate, .chatReactionPill, .chatQuickChipsScroll, .chatInputBar, .chatHeader, .chatReplyPreviewBar, .chat2-quick-replies, .chat2-footer, .chat2-header-actions, .chat2-action-btn"
+        "input, textarea, button, a, select, audio, video, .bubbleBox, .chatMediaImage, .chatMediaAudio, .chatMediaFile, .chatMediaVideoNote, .chatMediaVideo, .circleVideoContainer, .chatVideoNoteRecorder, .chatLongPressReactionsBar, .chatCopyBtnSeparate, .chatReactionPill, .chatQuickChipsScroll, .chatInputBar, .chatHeader, .chatReplyPreviewBar, .chat2-quick-replies, .chat2-footer, .chat2-header-actions, .chat2-action-btn"
       )
     ) {
       return;

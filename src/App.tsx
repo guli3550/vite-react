@@ -38,6 +38,7 @@ import {
 import { SocialLinksModal } from "./components/SocialLinksModal";
 import { SavedAddressesManager } from "./components/SavedAddressesManager";
 import { CheckoutView } from "./components/CheckoutView";
+import { OrderConfirmedModal } from "./components/OrderConfirmedModal";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
   parseColorValue,
@@ -59,7 +60,7 @@ import {
 } from "./utils/chatSync";
 import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter";
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
-import { getSupabase, signOutEverywhere, syncCustomerProfile } from "./lib/supabaseClient";
+import { getSupabase, loadSupabaseConfigAsync, signOutEverywhere, syncCustomerProfile } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 
@@ -139,6 +140,8 @@ export type Order = {
   payment: string;
   status: string;
   receipt_url?: string;
+  payment_receipt_path?: string;
+  payment_status?: string;
   createdAt: string;
   updatedAt?: string;
   statusUpdatedAt?: string;
@@ -847,6 +850,11 @@ export default function App() {
   });
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [showCardPaymentModal, setShowCardPaymentModal] = useState(false);
+  const [confirmedOrder, setConfirmedOrder] = useState<{
+    orderNumber: string;
+    orderId: string;
+    total?: number;
+  } | null>(null);
   const [paymentTimer, setPaymentTimer] = useState(600); // 10 minutes (600 seconds)
   const [timerActive, setTimerActive] = useState(false);
   const [uploadedReceipt, setUploadedReceipt] = useState<string | null>(null);
@@ -1596,95 +1604,142 @@ export default function App() {
 
   const [reuploadingOrderId, setReuploadingOrderId] = useState<string | null>(null);
 
-  const handleOrderReceiptReupload = (orderId: string, file: File) => {
+  const handleOrderReceiptReupload = async (orderId: string, file: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       showToast("Iltimos faqat rasm faylini yuklang");
       return;
     }
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("Chek hajmi 10 MB dan oshmasligi kerak");
+      return;
+    }
+
     setReuploadingOrderId(orderId);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const rawData = ev.target?.result as string;
-      const img = new Image();
-      img.src = rawData;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const maxDim = 1200;
-        let w = img.width;
-        let h = img.height;
-        if (w > h && w > maxDim) {
-          h = Math.round((h * maxDim) / w);
-          w = maxDim;
-        } else if (h > maxDim) {
-          w = Math.round((w * maxDim) / h);
-          h = maxDim;
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, w, h);
-        const compressed = canvas.toDataURL("image/jpeg", 0.82);
 
-        // Update local orders state immediately
-        setOrders((prevOrders) => {
-          const updated = prevOrders.map((o) =>
-            String(o.id) === String(orderId)
-              ? {
-                  ...o,
-                  receipt_url: compressed,
-                  status: o.status === "Bekor qilindi" ? o.status : (o.status === "Qabul qilindi" ? o.status : "⏳ To'lovni tasdiqlash kutilmoqda"),
-                  updatedAt: new Date().toISOString(),
-                  statusUpdatedAt: new Date().toISOString(),
-                }
-              : o
-          );
-          try {
-            localStorage.setItem("orders", JSON.stringify(updated));
-            localStorage.setItem("guli_orders", JSON.stringify(updated));
-          } catch {}
-          return updated;
+    const readFileAndCompress = (): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const rawData = ev.target?.result as string;
+          const img = new Image();
+          img.src = rawData;
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxDim = 1200;
+            let w = img.width;
+            let h = img.height;
+            if (w > h && w > maxDim) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else if (h > maxDim) {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0, w, h);
+            const compressed = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(compressed);
+          };
+          img.onerror = () => reject(new Error("Rasmni qayta ishlashda xatolik"));
+        };
+        reader.onerror = () => reject(new Error("Faylni o‘qishda xatolik"));
+        reader.readAsDataURL(file);
+      });
+    };
+
+    try {
+      const compressed = await readFileAndCompress();
+
+      const token = localStorage.getItem("guli_access_token") || "";
+      const tgData = (window as any).Telegram?.WebApp?.initData;
+      const phoneVal = localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || "";
+
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (tgData) headers["X-Telegram-Init-Data"] = tgData;
+      if (phoneVal) headers["X-Customer-Phone"] = phoneVal.replace(/\D/g, "");
+
+      const bodyPayload = JSON.stringify({
+        data: compressed,
+        receipt_url: compressed,
+        mimeType: "image/jpeg",
+        order_id: orderId,
+      });
+
+      let res = await fetch(`${API_URL}/api/orders/${encodeURIComponent(orderId)}/receipt`, {
+        method: "POST",
+        headers,
+        body: bodyPayload,
+      }).catch((e) => {
+        console.warn("[Receipt upload direct attempt notice]", e);
+        return null;
+      });
+
+      if (!res || !res.ok) {
+        res = await fetch(`${API_URL}/api/customer/orders/${encodeURIComponent(orderId)}/receipt`, {
+          method: "POST",
+          headers,
+          body: bodyPayload,
+        }).catch((e) => {
+          console.warn("[Receipt upload fallback attempt notice]", e);
+          return null;
         });
+      }
 
-        // Sync with API backend
-        try {
-          fetch(`${API_URL}/api/orders/${orderId}/receipt`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ receipt_url: compressed, order_id: orderId }),
-          }).catch(() => {
-            fetch(`${API_URL}/api/orders/${orderId}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ receipt_url: compressed }),
-            }).catch(() => {});
-          });
-        } catch {}
+      if (!res) {
+        throw new Error("Tarmoq xatosi: Serverga ulanib bo‘lmadi.");
+      }
 
-        try {
-          window.dispatchEvent(
-            new CustomEvent("guli_order_receipt_updated", {
-              detail: { orderId, receipt_url: compressed },
-            })
-          );
-        } catch {}
+      const resJson = await res.json().catch(() => null);
+      if (!res.ok || !resJson?.success) {
+        throw new Error(resJson?.message || `Server xatosi: HTTP ${res.status}`);
+      }
 
-        setReuploadingOrderId(null);
+      const updatedServerOrder = resJson.data || {};
+      const newReceiptUrl = updatedServerOrder.receipt_url || compressed;
+
+      setOrders((prevOrders) => {
+        const updated = prevOrders.map((o) =>
+          String(o.id) === String(orderId) || String(o.order_number) === String(orderId)
+            ? {
+                ...o,
+                receipt_url: newReceiptUrl,
+                payment_receipt_path: updatedServerOrder.payment_receipt_path || o.payment_receipt_path,
+                payment_status: "receipt_uploaded",
+                updatedAt: new Date().toISOString(),
+                statusUpdatedAt: new Date().toISOString(),
+              }
+            : o
+        );
         try {
-          window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+          localStorage.setItem("orders", JSON.stringify(updated));
+          localStorage.setItem("guli_orders", JSON.stringify(updated));
         } catch {}
-        showToast("To‘lov cheki muvaffaqiyatli qayta yuklandi ☺️");
-      };
-      img.onerror = () => {
-        setReuploadingOrderId(null);
-        showToast("Rasmni qayta ishlashda xatolik yuz berdi");
-      };
-    };
-    reader.onerror = () => {
+        return updated;
+      });
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent("guli_order_receipt_updated", {
+            detail: { orderId, receipt_url: newReceiptUrl },
+          })
+        );
+      } catch {}
+
+      try {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
+      } catch {}
+
+      showToast("To‘lov cheki muvaffaqiyatli saqlandi ☺️");
+    } catch (err: any) {
+      console.warn("[Handle receipt reupload failure]", err);
+      showToast(err?.message || "Chekni yuklashda xatolik yuz berdi");
+    } finally {
       setReuploadingOrderId(null);
-      showToast("Faylni o‘qishda xatolik yuz berdi");
-    };
-    reader.readAsDataURL(file);
+    }
   };
   const loadProducts = useCallback(async (silent = false) => {
     if (!silent) setProductsLoading(true);
@@ -1784,8 +1839,18 @@ export default function App() {
         const tgData = (window as any).Telegram?.WebApp?.initData;
         if (tgData) headers["X-Telegram-Init-Data"] = tgData;
 
-        const r = await fetch(url, { headers });
-        if (!r.ok) throw new Error("Buyurtmalarni yuklashda xatolik");
+        // Abort timeout after 8 seconds to prevent hanging if Render server is hibernating
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        let r: Response | null = null;
+        try {
+          r = await fetch(url, { headers, signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (!r || !r.ok) throw new Error(`Orders fetch failed: ${r?.status || "network_error"}`);
         const j = await r.json();
         if (!j.success || !Array.isArray(j.data)) return [];
         const list: Order[] = j.data.map((row: any) => ({
@@ -1830,8 +1895,67 @@ export default function App() {
         });
         return list;
       } catch (e) {
-        console.error("Failed to load orders", e);
-        throw e;
+        console.warn("[Orders] Server fetch note (using local cache or Supabase):", e);
+
+        // Fallback 1: LocalStorage cached orders
+        let cachedOrders: Order[] = [];
+        try {
+          const raw = localStorage.getItem("orders") || localStorage.getItem("guli_orders");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              cachedOrders = parsed;
+              setOrders(parsed);
+            }
+          }
+        } catch {}
+
+        // Fallback 2: Direct Supabase query if available
+        try {
+          const sb = await loadSupabaseConfigAsync();
+          if (sb) {
+            let sbQuery = sb.from("orders").select("*").order("created_at", { ascending: false }).limit(50);
+            if (effectiveTgId) {
+              sbQuery = sbQuery.eq("telegram_id", effectiveTgId);
+            } else if (effectivePhone && effectivePhone.length >= 7) {
+              sbQuery = sbQuery.eq("phone", effectivePhone);
+            } else if (localOrderNumbers.length) {
+              sbQuery = sbQuery.in("order_number", localOrderNumbers.slice(0, 30));
+            }
+            const { data: sbData, error: sbErr } = await sbQuery;
+            if (!sbErr && Array.isArray(sbData) && sbData.length > 0) {
+              const mapped: Order[] = sbData.map((row: any) => ({
+                id: String(row.order_number || row.id || orderNumber()),
+                order_number: row.order_number || undefined,
+                first_name: row.first_name || undefined,
+                last_name: row.last_name || undefined,
+                customer_name: row.customer_name || undefined,
+                birth_date: row.birth_date || row.dob || undefined,
+                items: Array.isArray(row.items) ? row.items : [],
+                subtotal: Number(row.subtotal || 0),
+                delivery: Number(row.delivery || 0),
+                discount: Number(row.discount || 0),
+                total: Number(row.total || 0),
+                address: row.address || undefined,
+                phone: row.phone || "",
+                payment: row.payment || "cash",
+                status: row.status || "Qabul qilindi",
+                receipt_url: row.receipt_url || undefined,
+                createdAt: row.created_at || new Date().toISOString(),
+                updatedAt: row.updated_at || undefined,
+                statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
+              }));
+              setOrders(mapped);
+              try {
+                localStorage.setItem("orders", JSON.stringify(mapped));
+                localStorage.setItem("guli_orders", JSON.stringify(mapped));
+              } catch {}
+              return mapped;
+            }
+          }
+        } catch {}
+
+        return cachedOrders;
       } finally {
         if (!silent) setOrdersLoading(false);
       }
@@ -1846,18 +1970,22 @@ export default function App() {
   useEffect(() => {
     loadOrders(false).catch(() => {});
     
-    // Fallback polling mechanism
+    // Fallback polling mechanism (every 20s as resilient backup)
     const fallbackInterval = setInterval(() => {
       loadOrders(true).catch(() => {});
-    }, 15000);
+    }, 20000);
     
     // Supabase Realtime synchronization
-    let channel: any = null;
-    try {
-      const sb = getSupabase();
-      if (sb) {
-        channel = sb
-          .channel('public:orders_customer')
+    let activeChannel: any = null;
+    let isSubscribed = true;
+
+    const setupRealtime = async () => {
+      try {
+        const sb = await loadSupabaseConfigAsync();
+        if (!sb || !isSubscribed) return;
+
+        activeChannel = sb
+          .channel('public:orders_customer_realtime')
           .on(
             'postgres_changes',
             {
@@ -1866,29 +1994,64 @@ export default function App() {
               table: 'orders',
             },
             (payload: any) => {
-              if (payload.new && payload.new.id) {
-                // If the updated order exists in our local list, fetch fresh data
-                const currentOrdersRaw = localStorage.getItem("guli_orders");
-                if (currentOrdersRaw) {
-                  const orders = JSON.parse(currentOrdersRaw);
-                  if (orders.some((o: any) => String(o.id) === String(payload.new.id))) {
-                    loadOrders(true).catch(() => {});
+              const newRow = payload.new;
+              if (!newRow) return;
+              const newId = String(newRow.id || '');
+              const newOrderNum = String(newRow.order_number || '');
+              console.log('[Supabase Realtime UPDATE received]:', { id: newId, order_number: newOrderNum, status: newRow.status, payment_status: newRow.payment_status });
+
+              // Instantly update React state for matching customer orders
+              setOrders((prevOrders) => {
+                let matched = false;
+                const updated = prevOrders.map((o) => {
+                  const isMatch = (newId && String(o.id) === newId) ||
+                                  (newOrderNum && (String(o.order_number) === newOrderNum || String(o.id) === newOrderNum));
+                  if (isMatch) {
+                    matched = true;
+                    return {
+                      ...o,
+                      status: newRow.status || o.status,
+                      payment_status: newRow.payment_status || (o as any).payment_status,
+                      payment_receipt_path: newRow.payment_receipt_path || (o as any).payment_receipt_path,
+                      receipt_url: newRow.receipt_url || o.receipt_url,
+                      updatedAt: newRow.updated_at || new Date().toISOString(),
+                      statusUpdatedAt: newRow.status_updated_at || newRow.updated_at || o.statusUpdatedAt,
+                    };
                   }
+                  return o;
+                });
+
+                if (matched) {
+                  try {
+                    localStorage.setItem("orders", JSON.stringify(updated));
+                    localStorage.setItem("guli_orders", JSON.stringify(updated));
+                  } catch {}
                 }
-              }
+                return updated;
+              });
+
+              // Canonical server refresh
+              loadOrders(true).catch(() => {});
             }
           )
-          .subscribe();
+          .subscribe((status: string, err?: any) => {
+            console.log(`[Supabase Realtime Channel Status]: ${status}`, err || '');
+          });
+      } catch (e) {
+        console.warn("[Supabase Realtime Setup Warning]", e);
       }
-    } catch (e) {
-      console.warn("Supabase realtime fail", e);
-    }
+    };
+
+    void setupRealtime();
 
     return () => {
+      isSubscribed = false;
       clearInterval(fallbackInterval);
-      const sb = getSupabase();
-      if (channel && sb) {
-        sb.removeChannel(channel).catch(() => {});
+      if (activeChannel) {
+        const sb = getSupabase();
+        if (sb) {
+          sb.removeChannel(activeChannel).catch(() => {});
+        }
       }
     };
   }, [loadOrders]);
@@ -2621,7 +2784,13 @@ export default function App() {
           "success",
         );
       } catch {}
-      go("orders");
+
+      // Show order confirmed screen with genuine order number (#GULI-XXXX)
+      setConfirmedOrder({
+        orderNumber: createdOrderNumber,
+        orderId: createdOrderId,
+        total,
+      });
       showToast("Buyurtmangiz yuborildi! Status: ⏳ To'lovni tasdiqlash kutilmoqda ✓");
     } catch (e) {
       setIsProcessingPayment(false);
@@ -2765,7 +2934,7 @@ export default function App() {
         showToast("PDF yaratishda xatolik");
       }
     } catch (e) {
-      console.error(e);
+      console.warn("[PDF export failure]", e);
       showToast("PDF yuklashda xatolik");
     } finally {
       setExportingPdf(false);
@@ -3937,15 +4106,37 @@ export default function App() {
           type="button"
           aria-label="GULI Home"
         >
-          <span className="brandIcon">
+          <span
+            className="brandIcon"
+            style={{
+              width: "42px",
+              height: "42px",
+              minWidth: "42px",
+              minHeight: "42px",
+              maxWidth: "42px",
+              maxHeight: "42px",
+              flex: "0 0 42px",
+              flexShrink: 0,
+              aspectRatio: "1 / 1",
+              borderRadius: "50%",
+              overflow: "hidden",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
             <img
               src={appLogo}
               alt="Guli Premium"
               style={{
                 width: "100%",
                 height: "100%",
+                minWidth: "100%",
+                minHeight: "100%",
+                aspectRatio: "1 / 1",
                 objectFit: "cover",
                 borderRadius: "50%",
+                display: "block",
+                flexShrink: 0,
                 pointerEvents: "none",
                 userSelect: "none",
               }}
@@ -4131,7 +4322,13 @@ export default function App() {
                 </div>
               )}
             </section>
-            <div className="deliveryBanner">
+            <div
+              className="deliveryBanner cursor-pointer"
+              onClick={() => setIsDeliveryInfoOpen(true)}
+              role="button"
+              tabIndex={0}
+              title="Yetkazib berish shartlari"
+            >
               <div>
                 <span>🚚</span>
                 <div>
@@ -5075,6 +5272,25 @@ export default function App() {
         customTitle={authGateCustomMessage.title}
         customSubtitle={authGateCustomMessage.subtitle}
       />
+
+      {/* Real Order Confirmed Modal matching Dark/Light Mode specs */}
+      {confirmedOrder && (
+        <OrderConfirmedModal
+          orderNumber={confirmedOrder.orderNumber}
+          onViewOrders={() => {
+            setConfirmedOrder(null);
+            go("orders");
+          }}
+          onGoHome={() => {
+            setConfirmedOrder(null);
+            go("catalog");
+          }}
+          onClose={() => {
+            setConfirmedOrder(null);
+            go("orders");
+          }}
+        />
+      )}
     </div>
   );
 }

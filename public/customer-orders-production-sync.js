@@ -145,59 +145,13 @@
     }
   };
 
-  const schedulePoll = () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => { void pollOrders(); }, 150);
-  };
-
-  // Fix the specific realtime bug in the React subscription indirectly: the existing
-  // callback compares DB UUIDs with frontend order_number values. This production
-  // bridge does not rely on that comparison and always reads the canonical server state.
-  const observer = new MutationObserver(schedulePoll);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(pollOrders, 400);
-  setInterval(pollOrders, 2000);
+  // Visibility change synchronization (refetches fresh data on return)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void pollOrders();
   });
 
-  // Receipt upload can finish on the API even when the browser loses the response
-  // (CORS/network interruption). Verify the order before surfacing a false error.
-  window.fetch = async function(input, init) {
-    const method = String(init?.method || input?.method || 'GET').toUpperCase();
-    const rawUrl = String(typeof input === 'string' ? input : input?.url || '');
-    const match = rawUrl.match(/\/api\/(?:auth\/)?orders\/([^/?#]+)\/(?:receipt|payment-receipt)(?:[/?#]|$)/i);
-    if (method !== 'POST' || !match) return nativeFetch(input, init);
-
-    try {
-      const response = await nativeFetch(input, init);
-      if (response.ok) return response;
-      // The backend may have completed the upload before a late non-2xx response.
-    } catch {
-      // Verify below before exposing a network error to the UI.
-    }
-
-    try {
-      const orderNumber = decodeURIComponent(match[1]);
-      const verifyUrl = new URL(`${API}/api/orders`);
-      verifyUrl.searchParams.set('order_numbers', orderNumber);
-      verifyUrl.searchParams.set('_guli_receipt_verify', String(Date.now()));
-      const verify = await nativeFetch(verifyUrl.toString(), { headers: headers(), cache: 'no-store' });
-      const body = await verify.json().catch(() => null);
-      const order = Array.isArray(body?.data) ? body.data.map(normalize).find((o) => o.order_number === orderNumber || o.id === orderNumber) : null;
-      if (verify.ok && body?.success && order && (order.payment_receipt_path || order.receipt_url || order.payment_status === 'receipt_uploaded' || order.payment_status === 'verified')) {
-        return new Response(JSON.stringify({
-          success: true,
-          message: 'Chek muvaffaqiyatli saqlandi. Admin tez orada tekshiradi.',
-          data: order,
-          recovered: true,
-        }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-      }
-    } catch {}
-
-    return new Response(JSON.stringify({ success: false, message: 'Chekni yuborishda xatolik yuz berdi.' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    });
-  };
+  // Listen to custom update events
+  window.addEventListener('guli_order_receipt_updated', () => {
+    setTimeout(pollOrders, 300);
+  });
 })();

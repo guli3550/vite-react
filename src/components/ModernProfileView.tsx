@@ -3,6 +3,18 @@ import type { Order } from "../App";
 import type { Language } from "../utils/translations";
 import type { Currency } from "../utils/currency";
 import type { AuthUser } from "./CustomerAuthModal";
+import profileCardNightImg from "../assets/images/profile_night_clear_1789524463595.jpg";
+import profileCardDayImg from "../assets/images/profile_card_day_1789523863503.jpg";
+
+// Preload card background images immediately for zero-latency native background rendering
+if (typeof window !== "undefined") {
+  try {
+    const p1 = new Image();
+    p1.src = profileCardDayImg;
+    const p2 = new Image();
+    p2.src = profileCardNightImg;
+  } catch {}
+}
 
 interface ModernProfileViewProps {
   authUser: AuthUser | null;
@@ -60,9 +72,51 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   t,
 }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+
+  // Automatic Day / Night Theme synchronizer (syncs with prop, document data-theme, and theme change events)
+  const [activeTheme, setActiveTheme] = useState<"light" | "dark">(() => {
+    if (typeof document !== "undefined") {
+      const domTheme = document.documentElement.getAttribute("data-theme");
+      if (domTheme === "dark" || domTheme === "light") return domTheme;
+    }
+    return theme || "light";
+  });
+
+  useEffect(() => {
+    if (theme === "dark" || theme === "light") {
+      setActiveTheme(theme);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    const handleThemeChange = (e: any) => {
+      const mode = e?.detail || (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "light";
+      if (mode === "dark" || mode === "light") {
+        setActiveTheme(mode);
+      }
+    };
+    window.addEventListener("guli_theme_changed", handleThemeChange);
+
+    let observer: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined" && typeof document !== "undefined") {
+      observer = new MutationObserver(() => {
+        const domTheme = document.documentElement.getAttribute("data-theme");
+        if (domTheme === "dark" || domTheme === "light") {
+          setActiveTheme(domTheme);
+        }
+      });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }
+
+    return () => {
+      window.removeEventListener("guli_theme_changed", handleThemeChange);
+      if (observer) observer.disconnect();
+    };
+  }, []);
+
+  const isDark = activeTheme === "dark";
 
   const isAuthenticated = Boolean(authUser?.id || telegramUser?.id);
   const userKey = authUser?.id || (telegramUser?.id ? `tg_${telegramUser.id}` : "");
@@ -473,7 +527,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 }}
               />
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px", position: "relative", zIndex: 2 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px", position: "relative", zIndex: 2, paddingRight: "80px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   <span
                     style={{
@@ -504,33 +558,42 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                       backdropFilter: "blur(4px)",
                     }}
                   >
-                    ✨ 2 000 000+ so'm tasdiqlangan
+                    ✨ 2 000 000+ so'm
                   </span>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => {
                     setEditName(displayName);
                     setEditPhone(userPhone === "+998 -- --- -- --" ? "" : userPhone);
                     setIsEditModalOpen(true);
                   }}
+                  aria-label="Profilni tahrirlash"
+                  title="Profilni tahrirlash"
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.28)",
-                    border: "1px solid rgba(255, 255, 255, 0.5)",
+                    position: "absolute",
+                    top: "-6px",
+                    right: "-2px",
+                    backgroundColor: "rgba(255, 255, 255, 0.32)",
+                    border: "1px solid rgba(255, 255, 255, 0.6)",
                     color: "#ffffff",
-                    padding: "6px 14px",
+                    padding: "5px 11px",
                     borderRadius: "14px",
-                    fontSize: "12px",
+                    fontSize: "11.5px",
                     fontWeight: 800,
                     cursor: "pointer",
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                    backdropFilter: "blur(6px)",
-                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                    gap: "4px",
+                    backdropFilter: "blur(8px)",
+                    WebkitBackdropFilter: "blur(8px)",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+                    transition: "transform 0.15s ease",
                   }}
                 >
-                  <span>✏️</span> Tahrirlash
+                  <span style={{ fontSize: "12px" }}>✏️</span>
+                  <span>Tahrirlash</span>
                 </button>
               </div>
 
@@ -675,68 +738,153 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               </div>
             </section>
           ) : (
-            /* STANDARD CUSTOMER CARD (Spent < 2,000,000 UZS) */
+            /* STANDARD NON-VIP CUSTOMER CARD (Full-bleed 16:9 Day & Night Background with zero dividing lines) */
             <section
               style={{
-                background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
-                borderRadius: "28px",
-                padding: "24px 20px",
-                color: "#ffffff",
-                boxShadow: "0 14px 34px -10px rgba(15, 23, 42, 0.5)",
+                borderRadius: "26px",
+                padding: "22px 18px",
+                color: isDark ? "#ffffff" : "#1c1917",
+                boxShadow: isDark
+                  ? "0 18px 40px -10px rgba(0, 0, 0, 0.75), 0 2px 12px rgba(0, 0, 0, 0.5)"
+                  : "0 14px 34px -8px rgba(225, 29, 72, 0.18), 0 2px 10px rgba(0, 0, 0, 0.04)",
                 position: "relative",
                 overflow: "hidden",
                 marginBottom: "18px",
-                border: "1px solid rgba(148, 163, 184, 0.2)",
+                border: isDark
+                  ? "1.5px solid rgba(255, 255, 255, 0.18)"
+                  : "1.5px solid rgba(244, 114, 182, 0.45)",
+                backgroundColor: isDark ? "#12030a" : "#fff1f2",
+                transition: "border-color 0.4s ease, box-shadow 0.4s ease",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "18px" }}>
+              {/* Full-bleed 16:9 Persistent CSS Background Layers (No loading flicker, instant offline & tab switch) */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  pointerEvents: "none",
+                  overflow: "hidden",
+                  zIndex: 1,
+                  background: isDark
+                    ? "linear-gradient(135deg, #1c0512 0%, #0c0207 100%)"
+                    : "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%)",
+                }}
+              >
+                {/* Night Mode Background Image - Persistent RAM cache, centered-right woman */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    backgroundImage: `url(${profileCardNightImg})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "75% center",
+                    backgroundRepeat: "no-repeat",
+                    opacity: isDark ? 1 : 0,
+                    filter: "contrast(1.06) brightness(1.02)",
+                    transition: "opacity 0.35s ease-in-out",
+                    willChange: "opacity",
+                  }}
+                />
+
+                {/* Day Mode Background Image */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    backgroundImage: `url(${profileCardDayImg})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "75% center",
+                    backgroundRepeat: "no-repeat",
+                    opacity: isDark ? 0 : 1,
+                    filter: "contrast(1.03) brightness(1.02)",
+                    transition: "opacity 0.35s ease-in-out",
+                    willChange: "opacity",
+                  }}
+                />
+
+                {/* Subtle uniform scrim for text contrast - completely uniform, NO dividing line */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: isDark
+                      ? "linear-gradient(180deg, rgba(12, 2, 7, 0.18) 0%, rgba(12, 2, 7, 0.38) 100%)"
+                      : "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.3) 100%)",
+                    transition: "background 0.35s ease",
+                  }}
+                />
+              </div>
+
+              {/* Header Badge & Corner Edit Button */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", position: "relative", zIndex: 2, paddingRight: "80px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <span
                     style={{
-                      backgroundColor: "rgba(148, 163, 184, 0.15)",
-                      border: "1px solid rgba(148, 163, 184, 0.3)",
-                      color: "#cbd5e1",
-                      padding: "4px 10px",
+                      backgroundColor: isDark ? "rgba(20, 4, 12, 0.76)" : "rgba(255, 255, 255, 0.88)",
+                      border: isDark ? "1px solid rgba(255, 255, 255, 0.28)" : "1px solid rgba(225, 29, 72, 0.28)",
+                      color: isDark ? "#ffffff" : "#9f1239",
+                      padding: "5px 12px",
                       borderRadius: "20px",
                       fontSize: "12px",
                       fontWeight: 800,
                       letterSpacing: "0.5px",
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "5px",
+                      gap: "6px",
+                      backdropFilter: "blur(8px)",
+                      WebkitBackdropFilter: "blur(8px)",
+                      boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(159, 18, 57, 0.12)",
+                      transition: "all 0.3s ease",
                     }}
                   >
-                    🛡️ STANDART MIJOZ
+                    🌸 GULI PREMIUM MIJOZ
                   </span>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => {
                     setEditName(displayName);
                     setEditPhone(userPhone === "+998 -- --- -- --" ? "" : userPhone);
                     setIsEditModalOpen(true);
                   }}
+                  aria-label="Profilni tahrirlash"
+                  title="Profilni tahrirlash"
                   style={{
-                    backgroundColor: "rgba(255, 255, 255, 0.15)",
-                    border: "1px solid rgba(255, 255, 255, 0.25)",
-                    color: "#ffffff",
-                    padding: "6px 12px",
+                    position: "absolute",
+                    top: "-4px",
+                    right: "-2px",
+                    backgroundColor: isDark ? "rgba(20, 4, 12, 0.78)" : "rgba(255, 255, 255, 0.92)",
+                    border: isDark ? "1px solid rgba(255, 255, 255, 0.28)" : "1px solid rgba(225, 29, 72, 0.28)",
+                    color: isDark ? "#ffffff" : "#9f1239",
+                    padding: "5px 11px",
                     borderRadius: "14px",
-                    fontSize: "12px",
+                    fontSize: "11.5px",
                     fontWeight: 700,
                     cursor: "pointer",
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
-                    gap: "6px",
-                    backdropFilter: "blur(4px)",
+                    gap: "4px",
+                    backdropFilter: "blur(8px)",
+                    WebkitBackdropFilter: "blur(8px)",
+                    boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(159, 18, 57, 0.12)",
+                    transition: "transform 0.15s ease",
                   }}
                 >
-                  <span>✏️</span> Tahrirlash
+                  <span style={{ fontSize: "12px" }}>✏️</span>
+                  <span>Tahrirlash</span>
                 </button>
               </div>
 
               {/* Standard Member Info Row */}
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", position: "relative", zIndex: 2 }}>
                 <div
                   style={{
                     position: "relative",
@@ -747,8 +895,9 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     aspectRatio: "1 / 1",
                     borderRadius: "50%",
                     padding: "3px",
-                    background: "linear-gradient(135deg, #94a3b8, #64748b)",
+                    background: "linear-gradient(135deg, #f472b6, #fb7185)",
                     flexShrink: 0,
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
                   }}
                 >
                   {userAvatar ? (
@@ -770,7 +919,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                         width: "100%",
                         height: "100%",
                         borderRadius: "50%",
-                        backgroundColor: "#475569",
+                        backgroundColor: "#831843",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -790,7 +939,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                       width: "18px",
                       height: "18px",
                       backgroundColor: "#10b981",
-                      border: "2px solid #0f172a",
+                      border: "2px solid #500724",
                       borderRadius: "50%",
                     }}
                     title="Faol a'zo"
@@ -800,48 +949,57 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h1
                     style={{
-                      fontSize: "20px",
+                      fontSize: "21px",
                       fontWeight: 800,
                       margin: "0 0 4px",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
-                      color: "#ffffff",
+                      color: isDark ? "#ffffff" : "#831843",
+                      textShadow: isDark ? "0 2px 8px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.9)" : "0 1px 4px rgba(255,255,255,0.9)",
+                      transition: "color 0.3s ease",
                     }}
                   >
                     {displayName}
                   </h1>
                   {telegramUsername && (
-                    <p style={{ fontSize: "13px", margin: "0 0 2px", opacity: 0.85, color: "#cbd5e1" }}>
+                    <p style={{ fontSize: "13px", margin: "0 0 3px", opacity: 0.95, color: isDark ? "#fce7f3" : "#9f1239", fontWeight: 700, textShadow: isDark ? "0 1px 4px rgba(0,0,0,0.8)" : "0 1px 3px rgba(255,255,255,0.85)", transition: "color 0.3s ease" }}>
                       @{telegramUsername}
                     </p>
                   )}
-                  <p style={{ fontSize: "12px", margin: 0, opacity: 0.75, color: "#94a3b8" }}>
+                  <p style={{ fontSize: "12.5px", margin: 0, opacity: 0.95, color: isDark ? "#fbcfe8" : "#9f1239", fontWeight: 600, textShadow: isDark ? "0 1px 4px rgba(0,0,0,0.8)" : "0 1px 3px rgba(255,255,255,0.85)", transition: "color 0.3s ease" }}>
                     📞 {userPhone}
                   </p>
                 </div>
               </div>
 
-              {/* Real VIP Progression: 2,000,000 UZS target */}
-              <div style={{ marginTop: "18px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.12)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", marginBottom: "6px", color: "#cbd5e1" }}>
+              {/* Real VIP Progression: 2,000,000 UZS target (clean background-free layout per user request) */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "0",
+                  position: "relative",
+                  zIndex: 2,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "6px", color: isDark ? "#ffffff" : "#831843", fontWeight: 700, textShadow: isDark ? "0 1px 4px rgba(0,0,0,0.95)" : "0 1px 3px rgba(255,255,255,0.9)", transition: "color 0.3s ease" }}>
                   <span>
                     VIP Maqomi: <b>{vipProgressPercent}%</b> (Xarid: {formatPrice(realTotalSpent)})
                   </span>
                   <span>Maqsad: 2 000 000 so'm</span>
                 </div>
-                <div style={{ height: "7px", width: "100%", backgroundColor: "rgba(255, 255, 255, 0.15)", borderRadius: "4px", overflow: "hidden" }}>
+                <div style={{ height: "7px", width: "100%", backgroundColor: isDark ? "rgba(255, 255, 255, 0.28)" : "rgba(225, 29, 72, 0.22)", borderRadius: "4px", overflow: "hidden", boxShadow: isDark ? "0 1px 3px rgba(0,0,0,0.6)" : "none", transition: "background 0.3s ease" }}>
                   <div
                     style={{
                       height: "100%",
                       width: `${vipProgressPercent}%`,
-                      background: "linear-gradient(90deg, #f59e0b, #fbbf24)",
+                      background: isDark ? "linear-gradient(90deg, #fbbf24, #f59e0b)" : "linear-gradient(90deg, #f43f5e, #be123c)",
                       borderRadius: "4px",
-                      transition: "width 0.4s ease",
+                      transition: "width 0.4s ease, background 0.3s ease",
                     }}
                   />
                 </div>
-                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", lineHeight: 1.4 }}>
+                <div style={{ fontSize: "11px", color: isDark ? "#fce7f3" : "#9f1239", marginTop: "8px", lineHeight: 1.4, fontWeight: 600, textShadow: isDark ? "0 1px 4px rgba(0,0,0,0.95)" : "0 1px 3px rgba(255,255,255,0.9)", transition: "color 0.3s ease" }}>
                   VIP maqomi va bepul ekspress yetkazish uchun yana <b>{formatPrice(remainingForVip)}</b> lik xarid yetarli.
                 </div>
               </div>
@@ -974,7 +1132,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               onNavigate("orders");
             }}
             style={{
-              backgroundColor: "var(--bg-subtle, #f8fafc)",
+              backgroundColor: "var(--bg-card-sub, var(--bg-subtle, #f8fafc))",
               border: "1px solid var(--border-color, #e2e8f0)",
               borderRadius: "16px",
               padding: "12px 6px",
@@ -992,8 +1150,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               style={{
                 fontSize: "11px",
                 fontWeight: 800,
-                color: "#d97706",
-                backgroundColor: "#fef3c7",
+                color: "var(--status-pending-color, #d97706)",
+                backgroundColor: "var(--status-pending-bg, #fef3c7)",
                 padding: "1px 6px",
                 borderRadius: "10px",
               }}
@@ -1009,7 +1167,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               onNavigate("orders");
             }}
             style={{
-              backgroundColor: "var(--bg-subtle, #f8fafc)",
+              backgroundColor: "var(--bg-card-sub, var(--bg-subtle, #f8fafc))",
               border: "1px solid var(--border-color, #e2e8f0)",
               borderRadius: "16px",
               padding: "12px 6px",
@@ -1026,8 +1184,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               style={{
                 fontSize: "11px",
                 fontWeight: 800,
-                color: "#2563eb",
-                backgroundColor: "#dbeafe",
+                color: "var(--status-processing-color, #2563eb)",
+                backgroundColor: "var(--status-processing-bg, #dbeafe)",
                 padding: "1px 6px",
                 borderRadius: "10px",
               }}
@@ -1043,7 +1201,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               onNavigate("orders");
             }}
             style={{
-              backgroundColor: "var(--bg-subtle, #f8fafc)",
+              backgroundColor: "var(--bg-card-sub, var(--bg-subtle, #f8fafc))",
               border: "1px solid var(--border-color, #e2e8f0)",
               borderRadius: "16px",
               padding: "12px 6px",
@@ -1060,8 +1218,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               style={{
                 fontSize: "11px",
                 fontWeight: 800,
-                color: "#7c3aed",
-                backgroundColor: "#ede9fe",
+                color: "var(--status-shipping-color, #7c3aed)",
+                backgroundColor: "var(--status-shipping-bg, #ede9fe)",
                 padding: "1px 6px",
                 borderRadius: "10px",
               }}
@@ -1077,7 +1235,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               onNavigate("orders");
             }}
             style={{
-              backgroundColor: "var(--bg-subtle, #f8fafc)",
+              backgroundColor: "var(--bg-card-sub, var(--bg-subtle, #f8fafc))",
               border: "1px solid var(--border-color, #e2e8f0)",
               borderRadius: "16px",
               padding: "12px 6px",
@@ -1094,8 +1252,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               style={{
                 fontSize: "11px",
                 fontWeight: 800,
-                color: "#16a34a",
-                backgroundColor: "#dcfce7",
+                color: "var(--status-delivered-color, #16a34a)",
+                backgroundColor: "var(--status-delivered-bg, #dcfce7)",
                 padding: "1px 6px",
                 borderRadius: "10px",
               }}
@@ -1287,19 +1445,6 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
         <button
           className="menuRow"
-          id="profile-security-btn"
-          onClick={() => setIsSecurityModalOpen(true)}
-        >
-          <span>🔒</span>
-          <div>
-            <b>Xavfsizlik</b>
-            <small>Telegram orqali tasdiqlangan hisob</small>
-          </div>
-          <i>›</i>
-        </button>
-
-        <button
-          className="menuRow"
           id="profile-share-btn"
           onClick={onShare}
         >
@@ -1362,16 +1507,16 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       {/* MODAL 1: Edit Profile Modal */}
       {isEditModalOpen && (
         <div
-          className="modalBackdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsEditModalOpen(false);
           }}
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(6px)",
-            zIndex: 99999,
+            backgroundColor: isDark ? "rgba(0, 0, 0, 0.82)" : "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            zIndex: 999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1379,30 +1524,38 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           }}
         >
           <div
-            className="modalCard"
             style={{
               width: "100%",
               maxWidth: "420px",
-              backgroundColor: "#ffffff",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              backgroundColor: isDark ? "#1c1317" : "#ffffff",
+              color: isDark ? "#fbeff2" : "#1e293b",
               borderRadius: "24px",
               padding: "24px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              boxShadow: isDark ? "0 24px 80px rgba(0, 0, 0, 0.8)" : "0 24px 80px rgba(0, 0, 0, 0.25)",
+              border: isDark ? "1px solid #38262d" : "1px solid rgba(0, 0, 0, 0.08)",
+              margin: "auto",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
-              <h3 style={{ fontSize: "18px", fontWeight: 800, margin: 0, color: "#1e293b" }}>
+              <h3 style={{ fontSize: "18px", fontWeight: 800, margin: 0, color: isDark ? "#fbeff2" : "#1e293b" }}>
                 Profilni tahrirlash
               </h3>
               <button
+                type="button"
                 onClick={() => setIsEditModalOpen(false)}
                 style={{
-                  border: "none",
-                  backgroundColor: "#f1f5f9",
+                  border: isDark ? "1px solid #38262d" : "none",
+                  backgroundColor: isDark ? "#2a1e24" : "#f1f5f9",
+                  color: isDark ? "#b89ea6" : "#64748b",
                   width: "32px",
                   height: "32px",
                   borderRadius: "50%",
                   fontSize: "16px",
                   cursor: "pointer",
+                  display: "grid",
+                  placeItems: "center",
                 }}
               >
                 ✕
@@ -1418,8 +1571,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   alignItems: "center",
                   padding: "14px",
                   borderRadius: "20px",
-                  backgroundColor: "#f8fafc",
-                  border: "1px dashed #cbd5e1",
+                  backgroundColor: isDark ? "#23171d" : "#f8fafc",
+                  border: isDark ? "1px dashed #4a323c" : "1px dashed #cbd5e1",
                   marginBottom: "16px",
                   gap: "10px",
                 }}
@@ -1444,7 +1597,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                         height: "100%",
                         objectFit: "cover",
                         borderRadius: "50%",
-                        backgroundColor: "#ffffff",
+                        backgroundColor: isDark ? "#1c1317" : "#ffffff",
                       }}
                     />
                   ) : (
@@ -1472,7 +1625,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     style={{
                       padding: "7px 14px",
                       borderRadius: "12px",
-                      backgroundColor: "#be185d",
+                      backgroundColor: isDark ? "#be123c" : "#be185d",
                       color: "#ffffff",
                       fontSize: "12px",
                       fontWeight: 700,
@@ -1480,7 +1633,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "5px",
-                      boxShadow: "0 3px 10px rgba(190, 24, 93, 0.25)",
+                      boxShadow: "0 3px 10px rgba(190, 24, 93, 0.3)",
                     }}
                   >
                     <span>📷</span> Yangi rasm yuklash
@@ -1499,9 +1652,9 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                       style={{
                         padding: "7px 12px",
                         borderRadius: "12px",
-                        backgroundColor: "#fee2e2",
-                        border: "1px solid #fca5a5",
-                        color: "#b91c1c",
+                        backgroundColor: "rgba(239, 68, 68, 0.15)",
+                        border: "1px solid rgba(239, 68, 68, 0.3)",
+                        color: "#ef4444",
                         fontSize: "12px",
                         fontWeight: 600,
                         cursor: "pointer",
@@ -1514,7 +1667,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
                 {/* Quick Avatar Presets */}
                 <div style={{ textAlign: "center", width: "100%", marginTop: "2px" }}>
-                  <span style={{ fontSize: "11px", color: "#64748b", display: "block", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "11px", color: isDark ? "#b89ea6" : "#64748b", display: "block", marginBottom: "6px" }}>
                     Yoki tayyor avatarlardan tanlang:
                   </span>
                   <div style={{ display: "flex", justifyContent: "center", gap: "6px" }}>
@@ -1532,10 +1685,10 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                           width: "32px",
                           height: "32px",
                           borderRadius: "50%",
-                          border: editAvatar === sampleUrl ? "2px solid #be185d" : "1px solid #cbd5e1",
+                          border: editAvatar === sampleUrl ? "2px solid #e26b84" : (isDark ? "1px solid #38262d" : "1px solid #cbd5e1"),
                           padding: "1px",
                           cursor: "pointer",
-                          backgroundColor: "#fff",
+                          backgroundColor: isDark ? "#261b20" : "#ffffff",
                           overflow: "hidden",
                         }}
                       >
@@ -1547,7 +1700,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               </div>
 
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: isDark ? "#e2d9dc" : "#475569", marginBottom: "6px" }}>
                   Ism va Familiya
                 </label>
                 <input
@@ -1560,15 +1713,19 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     width: "100%",
                     padding: "12px",
                     borderRadius: "14px",
-                    border: "1.5px solid #cbd5e1",
+                    backgroundColor: isDark ? "#23171d" : "#f8fafc",
+                    color: isDark ? "#fbeff2" : "#1e293b",
+                    border: isDark ? "1.5px solid #38262d" : "1.5px solid #cbd5e1",
                     fontSize: "14px",
                     boxSizing: "border-box",
+                    outline: "none",
+                    colorScheme: isDark ? "dark" : "light",
                   }}
                 />
               </div>
 
               <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: isDark ? "#e2d9dc" : "#475569", marginBottom: "6px" }}>
                   Telefon raqam (Yetkazib berish uchun)
                 </label>
                 <input
@@ -1580,15 +1737,19 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     width: "100%",
                     padding: "12px",
                     borderRadius: "14px",
-                    border: "1.5px solid #cbd5e1",
+                    backgroundColor: isDark ? "#23171d" : "#f8fafc",
+                    color: isDark ? "#fbeff2" : "#1e293b",
+                    border: isDark ? "1.5px solid #38262d" : "1.5px solid #cbd5e1",
                     fontSize: "14px",
                     boxSizing: "border-box",
+                    outline: "none",
+                    colorScheme: isDark ? "dark" : "light",
                   }}
                 />
               </div>
 
               <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "6px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: isDark ? "#e2d9dc" : "#475569", marginBottom: "6px" }}>
                   Tug'ilgan sana (Bayram bonusi uchun)
                 </label>
                 <input
@@ -1599,9 +1760,13 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                     width: "100%",
                     padding: "12px",
                     borderRadius: "14px",
-                    border: "1.5px solid #cbd5e1",
+                    backgroundColor: isDark ? "#23171d" : "#f8fafc",
+                    color: isDark ? "#fbeff2" : "#1e293b",
+                    border: isDark ? "1.5px solid #38262d" : "1.5px solid #cbd5e1",
                     fontSize: "14px",
                     boxSizing: "border-box",
+                    outline: "none",
+                    colorScheme: isDark ? "dark" : "light",
                   }}
                 />
               </div>
@@ -1619,6 +1784,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   fontSize: "15px",
                   fontWeight: 700,
                   cursor: "pointer",
+                  boxShadow: "0 4px 16px rgba(190, 24, 93, 0.4)",
                 }}
               >
                 {savingProfile ? "Saqlanmoqda..." : "O'zgarishlarni saqlash ✓"}
@@ -1631,16 +1797,16 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       {/* MODAL 2: Wallet & Cashback details */}
       {isWalletModalOpen && (
         <div
-          className="modalBackdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsWalletModalOpen(false);
           }}
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(6px)",
-            zIndex: 99999,
+            backgroundColor: isDark ? "rgba(0, 0, 0, 0.82)" : "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            zIndex: 999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1648,26 +1814,28 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           }}
         >
           <div
-            className="modalCard"
             style={{
               width: "100%",
               maxWidth: "420px",
-              backgroundColor: "#ffffff",
+              backgroundColor: isDark ? "#1c1317" : "#ffffff",
+              color: isDark ? "#fbeff2" : "#1e293b",
               borderRadius: "24px",
               padding: "24px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              boxShadow: isDark ? "0 24px 80px rgba(0,0,0,0.8)" : "0 24px 80px rgba(0,0,0,0.25)",
+              border: isDark ? "1px solid #38262d" : "1px solid rgba(0,0,0,0.08)",
               textAlign: "center",
+              margin: "auto",
             }}
           >
             <span style={{ fontSize: "42px" }}>💰</span>
-            <h3 style={{ fontSize: "20px", fontWeight: 800, margin: "10px 0 6px", color: "#1e293b" }}>
+            <h3 style={{ fontSize: "20px", fontWeight: 800, margin: "10px 0 6px", color: isDark ? "#fbeff2" : "#1e293b" }}>
               GULI Keshbek Hamyoni
             </h3>
             <div
               style={{
                 fontSize: "28px",
                 fontWeight: 800,
-                color: "#be185d",
+                color: isDark ? "#f472b6" : "#be185d",
                 margin: "12px 0 16px",
               }}
             >
@@ -1676,12 +1844,12 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
 
             <div
               style={{
-                backgroundColor: "#f8fafc",
+                backgroundColor: isDark ? "#23171d" : "#f8fafc",
                 borderRadius: "16px",
                 padding: "14px",
                 textAlign: "left",
                 marginBottom: "16px",
-                border: "1px solid #e2e8f0",
+                border: isDark ? "1px solid #38262d" : "1px solid #e2e8f0",
                 fontSize: "12px",
                 display: "flex",
                 flexDirection: "column",
@@ -1689,34 +1857,35 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Tasdiqlangan xaridlar:</span>
+                <span style={{ color: isDark ? "#b89ea6" : "#64748b" }}>Tasdiqlangan xaridlar:</span>
                 <b>{formatPrice(realTotalSpent)}</b>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>2% Keshbek darajasi:</span>
-                <b style={{ color: "#16a34a" }}>+{formatPrice(realCashbackEarned)}</b>
+                <span style={{ color: isDark ? "#b89ea6" : "#64748b" }}>2% Keshbek darajasi:</span>
+                <b style={{ color: "var(--success-badge-color, #16a34a)" }}>+{formatPrice(realCashbackEarned)}</b>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#64748b" }}>Avval ishlatilgan:</span>
+                <span style={{ color: isDark ? "#b89ea6" : "#64748b" }}>Avval ishlatilgan:</span>
                 <b style={{ color: "#dc2626" }}>-{formatPrice(usedCashback)}</b>
               </div>
-              <div style={{ borderTop: "1px dashed #cbd5e1", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
-                <span style={{ fontWeight: 700, color: "#1e293b" }}>Mavjud foydalanish balansi:</span>
-                <b style={{ color: "#be185d", fontWeight: 800 }}>{formatPrice(cashbackBalance)}</b>
+              <div style={{ borderTop: isDark ? "1px dashed #4a323c" : "1px dashed #cbd5e1", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                <span style={{ fontWeight: 700, color: isDark ? "#fbeff2" : "#1e293b" }}>Mavjud foydalanish balansi:</span>
+                <b style={{ color: isDark ? "#f472b6" : "#be185d", fontWeight: 800 }}>{formatPrice(cashbackBalance)}</b>
               </div>
             </div>
 
-            <p style={{ fontSize: "12.5px", color: "#64748b", lineHeight: 1.5, margin: "0 0 18px" }}>
+            <p style={{ fontSize: "12.5px", color: isDark ? "#b89ea6" : "#64748b", lineHeight: 1.5, margin: "0 0 18px" }}>
               Har bir xaridingizdan <b>2% kafolatlangan keshbek</b> hisoblanadi. Buyurtma rasmiylashtirishda ushbu summani to‘lovdan chegirib tovar sotib olishingiz mumkin!
             </p>
             <button
+              type="button"
               onClick={() => setIsWalletModalOpen(false)}
               style={{
                 width: "100%",
                 padding: "12px",
                 borderRadius: "14px",
-                border: "none",
-                backgroundColor: "#1e293b",
+                border: isDark ? "1px solid #38262d" : "none",
+                backgroundColor: isDark ? "#2a1e24" : "#1e293b",
                 color: "#ffffff",
                 fontSize: "14px",
                 fontWeight: 700,
@@ -1729,19 +1898,19 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: Security Modal */}
-      {isSecurityModalOpen && (
+      {/* MODAL 2: Logout Confirmation (Centered in the viewport, modern platform design) */}
+      {isLogoutConfirmOpen && (
         <div
-          className="modalBackdrop"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setIsSecurityModalOpen(false);
+            if (e.target === e.currentTarget) setIsLogoutConfirmOpen(false);
           }}
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(6px)",
-            zIndex: 99999,
+            backgroundColor: isDark ? "rgba(0, 0, 0, 0.82)" : "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            zIndex: 999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1749,127 +1918,46 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           }}
         >
           <div
-            className="modalCard"
             style={{
               width: "100%",
-              maxWidth: "420px",
-              backgroundColor: "#ffffff",
-              borderRadius: "24px",
-              padding: "24px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+              maxWidth: "380px",
+              backgroundColor: isDark ? "#1c1317" : "#ffffff",
+              color: isDark ? "#fbeff2" : "#1e293b",
+              borderRadius: "26px",
+              padding: "26px 22px",
+              boxShadow: isDark ? "0 24px 80px rgba(0, 0, 0, 0.85)" : "0 24px 80px rgba(0, 0, 0, 0.25)",
+              border: isDark ? "1px solid #38262d" : "1px solid #e2e8f0",
+              textAlign: "center",
+              margin: "auto",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "18px", fontWeight: 800, margin: 0, color: "#1e293b" }}>
-                🔒 Xavfsizlik va Kirish
-              </h3>
-              <button
-                onClick={() => setIsSecurityModalOpen(false)}
-                style={{
-                  border: "none",
-                  backgroundColor: "#f1f5f9",
-                  width: "32px",
-                  height: "32px",
-                  borderRadius: "50%",
-                  fontSize: "16px",
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ marginBottom: "16px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "14px",
-                  backgroundColor: "#f8fafc",
-                  borderRadius: "16px",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <span style={{ fontSize: "24px" }}>📱</span>
-                <div>
-                  <b style={{ display: "block", fontSize: "14px", color: "#1e293b" }}>
-                    Telegram orqali tasdiqlangan
-                  </b>
-                  <span style={{ fontSize: "12px", color: "#64748b" }}>
-                    {userPhone}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ fontSize: "12px", color: "#64748b", lineHeight: 1.5, marginBottom: "20px" }}>
-              🛡️ Sizning buyurtmalaringiz va to'lov ma'lumotlaringiz xavfsiz himoyalangan. Boshqa qurilmadan kirganda ham buyurtmalaringiz avtomatik ko'rinadi.
-            </div>
-
-            <button
-              onClick={() => setIsSecurityModalOpen(false)}
+            {/* Elegant Danger Icon Circle */}
+            <div
               style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "14px",
-                border: "none",
-                backgroundColor: "#1e293b",
-                color: "#ffffff",
-                fontSize: "14px",
-                fontWeight: 700,
-                cursor: "pointer",
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                backgroundColor: isDark ? "rgba(239, 68, 68, 0.18)" : "rgba(239, 68, 68, 0.12)",
+                color: "#ef4444",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px auto",
+                boxShadow: "0 4px 14px rgba(239, 68, 68, 0.18)",
               }}
             >
-              Yopish
-            </button>
-          </div>
-        </div>
-      )}
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </div>
 
-      {/* MODAL 4: Logout Confirmation (Centered in the middle of screen) */}
-      {isLogoutConfirmOpen && (
-        <div
-          className="modalBackdrop"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsLogoutConfirmOpen(false);
-          }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.75)",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            zIndex: 999999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-            
-          }}
-        >
-          <div
-            className="modalCard"
-            style={{
-              width: "100%",
-              maxWidth: "360px",
-              backgroundColor: "var(--bg-card, #ffffff)",
-              color: "var(--text-main, #1e293b)",
-              borderRadius: "24px",
-              padding: "26px 22px",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
-              border: "1px solid var(--border-color, #e2e8f0)",
-              textAlign: "center",
-              
-              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", 
-            }}
-          >
-            <span style={{ fontSize: "44px", display: "block", marginBottom: "12px" }}>🚪</span>
-            <h3 style={{ fontSize: "19px", fontWeight: 800, margin: "0 0 8px", color: "var(--text-main, #1e293b)" }}>
-              Hisobdan chiqmoqchimisiz?
+            <h3 style={{ fontSize: "19px", fontWeight: 800, margin: "0 0 8px", color: isDark ? "#fbeff2" : "#1e293b" }}>
+              Tizimdan chiqish
             </h3>
-            <p style={{ fontSize: "13.5px", color: "var(--text-muted, #64748b)", lineHeight: 1.5, margin: "0 0 22px" }}>
-              Hisobdan chiqsangiz, buyurtmalar va profil ma'lumotlarini ko'rish uchun qayta kirishingiz kerak bo'ladi.
+            <p style={{ fontSize: "13.5px", color: isDark ? "#b89ea6" : "#64748b", lineHeight: 1.5, margin: "0 0 22px" }}>
+              Haqiqatan ham GULI hisobingizdan chiqmoqchimisiz? Barcha xaridlar tarixi va keshbek balansingiz saqlanib qoladi.
             </p>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -1879,9 +1967,9 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 style={{
                   padding: "13px 16px",
                   borderRadius: "14px",
-                  border: "1px solid var(--border-color, #cbd5e1)",
-                  backgroundColor: "var(--bg-card-hover, #f8fafc)",
-                  color: "var(--text-main, #475569)",
+                  border: isDark ? "1px solid #38262d" : "1px solid #cbd5e1",
+                  backgroundColor: isDark ? "#2a1e24" : "#f8fafc",
+                  color: isDark ? "#fbeff2" : "#475569",
                   fontSize: "14px",
                   fontWeight: 700,
                   cursor: "pointer",

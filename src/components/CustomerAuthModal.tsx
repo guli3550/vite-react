@@ -43,7 +43,7 @@ async function api(path: string, options: RequestInit = {}) {
 }
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
-  isOpen, onClose, onSuccess, language: _language, initialTab = "signin", forceGate = false, customTitle, customSubtitle,
+  isOpen, onClose, onSuccess, initialTab = "signin", forceGate = false, customTitle, customSubtitle,
 }) => {
   const [status, setStatus] = useState<Status>("idle");
   const [loading, setLoading] = useState(false);
@@ -187,14 +187,44 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const waiting = status === "waiting" || status === "ready";
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:999999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(15,23,42,.68)",backdropFilter:"blur(10px)"}} onClick={e=>{if(!forceGate&&e.target===e.currentTarget)onClose?.();}}>
-      <div style={{width:"100%",maxWidth:420,borderRadius:24,padding:24,background:"var(--bg-card,#fff)",boxShadow:"0 24px 80px rgba(0,0,0,.25)"}}>
-        <div style={{textAlign:"center",marginBottom:22}}><div style={{fontSize:42,marginBottom:8}}>📱</div><h2 style={{margin:0,fontSize:24,fontWeight:800}}>{title}</h2><p style={{margin:"8px 0 0",opacity:.7,lineHeight:1.45}}>{subtitle}</p></div>
+    <div style={{position:"fixed",inset:0,zIndex:999999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(15,23,42,.72)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}} onClick={e=>{if(!forceGate&&e.target===e.currentTarget)onClose?.();}}>
+      <div style={{width:"100%",maxWidth:420,borderRadius:24,padding:24,background:"var(--bg-card,#fff)",color:"var(--text-main,#1e293b)",boxShadow:"0 24px 80px rgba(0,0,0,.35)",border:"1px solid var(--border-color,rgba(0,0,0,.08))"}}>
+        <div style={{textAlign:"center",marginBottom:22}}>
+          <div style={{width:64,height:64,margin:"0 auto 14px auto",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",boxShadow:"0 8px 24px rgba(34,158,217,0.38)"}}>
+            <svg width="64" height="64" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="120" cy="120" r="120" fill="url(#tg_auth_modal_grad)"/>
+              <path d="M183 67L47.5 119.3C38.3 123 38.4 128.2 45.8 130.5L80.6 141.3L161.1 90.6C164.9 88.3 168.4 89.5 165.5 92.1L100.3 151L98.9 171.7C100.9 171.7 101.8 170.8 102.9 169.7L122.1 151.2L162 180.7C169.4 184.8 174.7 182.7 176.5 173.9L202.7 50.4C205.4 39.6 198.6 34.7 183 67Z" fill="white"/>
+              <defs>
+                <linearGradient id="tg_auth_modal_grad" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#2AABEE"/>
+                  <stop offset="1" stopColor="#229ED9"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <h2 style={{margin:0,fontSize:22,fontWeight:800,color:"var(--text-main,#1e293b)"}}>{title}</h2>
+          <p style={{margin:"8px 0 0",color:"var(--text-muted,#64748b)",lineHeight:1.45,fontSize:13.5}}>{subtitle}</p>
+        </div>
         {error && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(220,38,38,.10)",color:"#b91c1c",fontSize:14}}>{error}</div>}
-        {success && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(22,163,74,.10)",color:"#15803d",fontSize:14}}>{success}</div>}
-        <button type="button" onClick={start} disabled={loading||waiting} style={{width:"100%",padding:"15px 18px",border:0,borderRadius:14,cursor:loading?"wait":"pointer",fontSize:16,fontWeight:800,background:"#229ED9",color:"white",opacity:loading||waiting?.7:1}}>{loading?"⏳ Telegram ochilmoqda…":status==="ready"?"🔐 Tasdiqlandi…":status==="waiting"?"📲 Telegram tasdig‘i kutilmoqda…":"📱 Telegram orqali kirish"}</button>
-        {waiting && <div style={{marginTop:14,padding:12,borderRadius:12,background:"rgba(100,116,139,.08)",fontSize:13,lineHeight:1.5}}>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</div>}
-        {!forceGate && onClose && <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",cursor:"pointer",opacity:.6}}>Yopish</button>}
+        {success && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(220,38,38,.10)",color:"#15803d",fontSize:14}}>{success}</div>}
+        <button type="button" onClick={start} disabled={loading||waiting} style={{width:"100%",padding:"15px 18px",border:0,borderRadius:14,cursor:loading?"wait":"pointer",fontSize:15,fontWeight:800,background:"#229ED9",color:"white",display:"flex",alignItems:"center",justifyContent:"center",gap:9,boxShadow:"0 4px 14px rgba(34,158,217,0.35)",opacity:loading||waiting?.7:1}}>
+          {loading ? (
+            "⏳ Telegram ochilmoqda…"
+          ) : status === "ready" ? (
+            "🔐 Tasdiqlandi…"
+          ) : status === "waiting" ? (
+            "📲 Telegram tasdig‘i kutilmoqda…"
+          ) : (
+            <>
+              <svg width="22" height="22" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
+                <path d="M183 67L47.5 119.3C38.3 123 38.4 128.2 45.8 130.5L80.6 141.3L161.1 90.6C164.9 88.3 168.4 89.5 165.5 92.1L100.3 151L98.9 171.7C100.9 171.7 101.8 170.8 102.9 169.7L122.1 151.2L162 180.7C169.4 184.8 174.7 182.7 176.5 173.9L202.7 50.4C205.4 39.6 198.6 34.7 183 67Z" fill="currentColor"/>
+              </svg>
+              <span>Telegram orqali kirish</span>
+            </>
+          )}
+        </button>
+        {waiting && <div style={{marginTop:14,padding:12,borderRadius:12,background:"var(--bg-card-sub,rgba(100,116,139,.08))",color:"var(--text-main)",fontSize:13,lineHeight:1.5}}>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</div>}
+        {!forceGate && onClose && <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",color:"var(--text-muted,#64748b)",cursor:"pointer",opacity:.8,fontSize:13.5,fontWeight:600}}>Yopish</button>}
       </div>
     </div>
   );

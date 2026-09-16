@@ -942,13 +942,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
           <span>Yetkazib berish xizmati:</span>
-          <b style={{ color: deliveryFee && deliveryFee > 0 ? "var(--text-main)" : "#059669" }}>
+          <b style={{ color: deliveryFee && deliveryFee > 0 ? "var(--text-main)" : "var(--success-badge-color, #059669)" }}>
             {deliveryFee && deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul (600 000+ so‘m)"}
           </b>
         </div>
 
         {Boolean(useCashback && cashbackDiscount && cashbackDiscount > 0) && (
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#059669", marginBottom: 8, fontWeight: 700 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--success-badge-color, #059669)", marginBottom: 8, fontWeight: 700 }}>
             <span>💎 Keshbek orqali chegirma:</span>
             <b>−{formatPrice(cashbackDiscount)}</b>
           </div>
@@ -978,8 +978,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           <span
             style={{
               fontSize: "11px",
-              color: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-color, #059669)" : "#b45309",
-              background: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-bg, rgba(16,185,129,0.1))" : "#fef3c7",
+              color: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-color, #059669)" : "var(--amber-badge-color, #b45309)",
+              background: (!deliveryFee || deliveryFee === 0) ? "var(--success-badge-bg, rgba(16,185,129,0.1))" : "var(--amber-badge-bg, #fef3c7)",
+              border: (!deliveryFee || deliveryFee === 0) ? "1px solid rgba(16,185,129,0.2)" : "1px solid rgba(245,158,11,0.25)",
               padding: "4px 8px",
               borderRadius: "8px",
               fontWeight: "750",

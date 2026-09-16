@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, FormEvent } from "react";
+import { Paperclip, Mic, Video, Send } from "lucide-react";
 import { type Language, getTranslation } from "../utils/translations";
 import {
   type ChatMessage,
@@ -9,6 +10,7 @@ import {
   toggleMessageReaction,
 } from "../utils/chatSync";
 import { SwipeableChatBackground, SwipeableMessageRow } from "./SwipeChatHelpers";
+import { CircleVideoNotePlayer, TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 
 const REACTION_EMOJIS = ["❤️", "👍", "🔥", "😂", "😮", "🙏"];
 
@@ -44,6 +46,9 @@ export function OnlineChatView({
   const longPressTimerRef = useRef<any>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordMode, setRecordMode] = useState<"voice" | "video">("voice");
+  const [isVideoRecordingOpen, setIsVideoRecordingOpen] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
 
   const showToast = (msgStr: string) => {
     if (onShowToast) onShowToast(msgStr);
@@ -143,7 +148,17 @@ export function OnlineChatView({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = (e?: FormEvent, customText?: string, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string }) => {
+  const handleSendMessage = (
+    e?: FormEvent,
+    customText?: string,
+    media?: {
+      type?: "image" | "file" | "audio" | "video" | "video_note";
+      mediaUrl?: string;
+      fileName?: string;
+      audioDuration?: number;
+      videoDuration?: number;
+    }
+  ) => {
     if (e) e.preventDefault();
     const textToSend = (customText || inputText).trim();
     if (!textToSend && !media) return;
@@ -157,13 +172,20 @@ export function OnlineChatView({
     const replyParam = replyingToMsg
       ? {
           id: replyingToMsg.id,
-          text: replyingToMsg.text || (replyingToMsg.type === "image" ? "📷 Rasm" : "📁 Fayl"),
+          text: replyingToMsg.text || (replyingToMsg.type === "image" ? "📷 Rasm" : replyingToMsg.type === "video" || replyingToMsg.type === "video_note" ? "📹 Dumaloq video" : replyingToMsg.type === "audio" ? "🎙️ Ovoz" : "📁 Fayl"),
           sender: replyingToMsg.sender === "admin" ? t("admin_tag") : t("you_tag"),
         }
       : undefined;
 
     sendUserMessage(
-      textToSend || (media?.type === "image" ? "📷 Rasm" : media?.type === "audio" ? "🎙️ Ovozli xabar" : "📁 Fayl"),
+      textToSend ||
+        (media?.type === "image"
+          ? "📷 Rasm"
+          : media?.type === "audio"
+          ? "🎙️ Ovozli xabar"
+          : media?.type === "video" || media?.type === "video_note"
+          ? "📹 Dumaloq video"
+          : "📁 Fayl"),
       user,
       media,
       replyParam
@@ -171,6 +193,17 @@ export function OnlineChatView({
 
     setInputText("");
     setReplyingToMsg(null);
+  };
+
+  const handleSendVideoNote = (base64Video: string, durationSec: number) => {
+    handleSendMessage(undefined, "📹 Dumaloq video", {
+      type: "video_note",
+      mediaUrl: base64Video,
+      fileName: "video_note.webm",
+      videoDuration: durationSec,
+    });
+    setIsVideoRecordingOpen(false);
+    onShowToast?.("Dumaloq video yuborildi ✓");
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -422,7 +455,13 @@ export function OnlineChatView({
                         </div>
                       )}
 
-                      {msg.type === "image" && msg.mediaUrl ? (
+                      {/* Circular Video Note / Video Message */}
+                      {(msg.type === "video" || msg.type === "video_note" || Boolean(msg.mediaUrl && (msg.fileName?.includes("video") || msg.mediaUrl.startsWith("data:video")))) && msg.mediaUrl ? (
+                        <div className="chatMediaVideoNote">
+                          <CircleVideoNotePlayer mediaUrl={msg.mediaUrl} duration={msg.videoDuration} />
+                          {msg.text && msg.text !== "📹 Dumaloq video" && msg.text !== "📹 Video" && <p className="bubbleText">{msg.text}</p>}
+                        </div>
+                      ) : msg.type === "image" && msg.mediaUrl ? (
                         <div className="chatMediaImage">
                           <img src={msg.mediaUrl} alt="Uploaded attachment" />
                           {msg.text && msg.text !== "📷 Rasm" && <p className="bubbleText">{msg.text}</p>}
@@ -523,14 +562,61 @@ export function OnlineChatView({
           ))}
         </div>
 
-        {/* Recording status bar if recording */}
+        {/* Recording status bar if voice recording */}
         {isRecording && (
-          <div className="recordingStatusBar">
-            <span className="pulsingDot" />
-            <span>Ovoz yozilmoqda... 0:</span>
-            <span>{recordTimer < 10 ? `0${recordTimer}` : recordTimer}</span>
-            <button type="button" className="stopRecordBtn" onClick={stopRecording}>
-              Tugatish va yuborish ✓
+          <div className="chatVoiceRecordingBar">
+            <div className="voiceWaveAnim">
+              <span className="voiceWaveBar" />
+              <span className="voiceWaveBar" />
+              <span className="voiceWaveBar" />
+              <span className="voiceWaveBar" />
+            </div>
+            <div style={{ flex: 1, fontSize: "13px", fontWeight: 600, color: "#e11d48" }}>
+              Ovoz yozilmoqda... {Math.floor(recordTimer / 60)}:{recordTimer % 60 < 10 ? `0${recordTimer % 60}` : recordTimer % 60}
+            </div>
+            <button
+              type="button"
+              style={{
+                background: "rgba(225, 29, 72, 0.1)",
+                color: "#e11d48",
+                border: "1px solid rgba(225, 29, 72, 0.3)",
+                padding: "6px 12px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                marginRight: "6px",
+              }}
+              onClick={() => {
+                if (mediaRecorderRef.current && isRecording) {
+                  mediaRecorderRef.current.ondataavailable = null;
+                  mediaRecorderRef.current.onstop = null;
+                  try {
+                    mediaRecorderRef.current.stop();
+                  } catch {}
+                  setIsRecording(false);
+                  clearInterval(timerIntervalRef.current);
+                  setRecordTimer(0);
+                }
+              }}
+            >
+              Bekor qilish
+            </button>
+            <button
+              type="button"
+              style={{
+                background: "#e11d48",
+                color: "#fff",
+                border: "none",
+                padding: "6px 14px",
+                borderRadius: "20px",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+              onClick={stopRecording}
+            >
+              Yuborish ✓
             </button>
           </div>
         )}
@@ -542,7 +628,7 @@ export function OnlineChatView({
               <span className="replyIcon">↩️</span>
               <div className="replyTextInfo">
                 <b>{replyingToMsg.sender === "admin" ? t("admin_tag") : (replyingToMsg.userName || t("you_tag"))}</b>
-                <p>{replyingToMsg.text || (replyingToMsg.type === "image" ? "📷 Rasm" : "📁 Fayl")}</p>
+                <p>{replyingToMsg.text || (replyingToMsg.type === "image" ? "📷 Rasm" : replyingToMsg.type === "video" || replyingToMsg.type === "video_note" ? "📹 Dumaloq video" : replyingToMsg.type === "audio" ? "🎙️ Ovoz" : "📁 Fayl")}</p>
               </div>
             </div>
             <button
@@ -556,39 +642,62 @@ export function OnlineChatView({
           </div>
         )}
 
-        {/* Message Input Box */}
+        {/* Message Input Box - Telegram Style */}
         <form
           className="chatInputBar"
           onSubmit={(e) => handleSendMessage(e)}
           id="chat-message-form"
         >
-          <button
-            type="button"
-            className="chatAttachBtn"
-            onClick={() => imageInputRef.current?.click()}
-            title="Rasm yuborish"
-            id="chat-img-btn"
-          >
-            📷
-          </button>
-          <button
-            type="button"
-            className="chatAttachBtn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Fayl yuborish"
-            id="chat-file-btn"
-          >
-            📎
-          </button>
-          <button
-            type="button"
-            className={`chatAttachBtn ${isRecording ? "recordingActive" : ""}`}
-            onClick={isRecording ? stopRecording : startRecording}
-            title={isRecording ? "Ovoz yozishni to'xtatish" : "Ovozli xabar yuborish"}
-            id="chat-mic-btn"
-          >
-            🎙️
-          </button>
+          {/* Attachment button & popup */}
+          <div className="chatAttachWrapper">
+            <button
+              type="button"
+              className="chatAttachBtn"
+              onClick={() => setShowAttachMenu((prev) => !prev)}
+              title="Fayl yoki media biriktirish"
+              id="chat-attach-menu-btn"
+            >
+              <Paperclip size={19} />
+            </button>
+
+            {showAttachMenu && (
+              <div className="chatAttachPopup" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="chatAttachPopupItem"
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    imageInputRef.current?.click();
+                  }}
+                >
+                  <span className="attachPopupIcon">🖼️</span>
+                  <span>Rasm / Galereya</span>
+                </button>
+                <button
+                  type="button"
+                  className="chatAttachPopupItem"
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <span className="attachPopupIcon">📁</span>
+                  <span>Hujjat / Fayl</span>
+                </button>
+                <button
+                  type="button"
+                  className="chatAttachPopupItem"
+                  onClick={() => {
+                    setShowAttachMenu(false);
+                    setIsVideoRecordingOpen(true);
+                  }}
+                >
+                  <span className="attachPopupIcon">📹</span>
+                  <span>Dumaloq video</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <input
             type="text"
@@ -598,16 +707,82 @@ export function OnlineChatView({
             placeholder={replyingToMsg ? "Javob yozing..." : t("type_message")}
             id="chat-input-text"
           />
-          <button
-            type="submit"
-            className="chatSendBtn"
-            disabled={!inputText.trim()}
-            id="chat-send-button"
-            aria-label={t("send")}
-          >
-            ➤
-          </button>
+
+          {/* Right Action: Send OR Telegram Voice/Video Note Switcher */}
+          {inputText.trim() ? (
+            <button
+              type="submit"
+              className="chatSendBtn"
+              id="chat-send-button"
+              aria-label={t("send")}
+            >
+              <Send size={18} />
+            </button>
+          ) : (
+            <div className="chatRecordActionWrapper">
+              <button
+                type="button"
+                className={`chatTelegramRecordBtn ${isRecording ? "recordingVoiceActive" : ""}`}
+                onClick={() => {
+                  if (recordMode === "video") {
+                    setIsVideoRecordingOpen(true);
+                  } else {
+                    if (isRecording) {
+                      stopRecording();
+                    } else {
+                      startRecording();
+                    }
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  // Toggle between voice and video note mode
+                  try {
+                    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+                  } catch {}
+                  setRecordMode((prev) => (prev === "voice" ? "video" : "voice"));
+                  onShowToast?.(recordMode === "voice" ? "📹 Dumaloq video rejimiga o'tildi" : "🎙️ Ovozli xabar rejimiga o'tildi");
+                }}
+                title={
+                  recordMode === "video"
+                    ? "Dumaloq video yozish (Ovozga o'tish uchun bosing yoki o'ng tugmani bosing)"
+                    : isRecording
+                    ? "Ovoz yozishni to'xtatish"
+                    : "Ovozli xabar yozish (Videoga o'tish uchun bosing yoki o'ng tugmani bosing)"
+                }
+                id="chat-telegram-record-btn"
+              >
+                {recordMode === "video" ? <Video size={20} /> : <Mic size={20} />}
+              </button>
+
+              {/* Mini Mode Toggle Badge */}
+              <button
+                type="button"
+                className="chatRecordModeBadge"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+                  } catch {}
+                  setRecordMode((prev) => (prev === "voice" ? "video" : "voice"));
+                  onShowToast?.(recordMode === "voice" ? "📹 Dumaloq video rejimiga o'tildi" : "🎙️ Ovozli xabar rejimiga o'tildi");
+                }}
+                title="Rejimni almashtirish (Ovoz / Video)"
+              >
+                {recordMode === "voice" ? "📹" : "🎙️"}
+              </button>
+            </div>
+          )}
         </form>
+
+        {/* Fullscreen Telegram Circular Video Note Recorder Overlay */}
+        {isVideoRecordingOpen && (
+          <TelegramCircularVideoRecorderOverlay
+            onCancel={() => setIsVideoRecordingOpen(false)}
+            onSend={handleSendVideoNote}
+            onShowToast={onShowToast}
+          />
+        )}
       </div>
     </SwipeableChatBackground>
   );

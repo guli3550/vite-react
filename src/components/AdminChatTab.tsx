@@ -15,6 +15,7 @@ import {
   votePollOption,
 } from "../utils/chatSync";
 import { SwipeableChatBackground, SwipeableMessageRow } from "./SwipeChatHelpers";
+import { CircleVideoNotePlayer, TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 import "../chat2.css";
 
 type AdminChatTabProps = {
@@ -287,6 +288,7 @@ export default function AdminChatTab({
 
   // Full Customer Profile Chat Modal state
   const [fullProfileModalOpen, setFullProfileModalOpen] = useState(false);
+  const [isVideoRecordingOpen, setIsVideoRecordingOpen] = useState(false);
 
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMessage | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
@@ -428,7 +430,13 @@ export default function AdminChatTab({
   const handleSendReply = async (
     e?: FormEvent,
     overrideText?: string,
-    media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }
+    media?: {
+      type?: "image" | "file" | "audio" | "video" | "video_note";
+      mediaUrl?: string;
+      fileName?: string;
+      audioDuration?: number;
+      videoDuration?: number;
+    }
   ) => {
     if (e) e.preventDefault();
     const textToSend = overrideText !== undefined ? overrideText : replyText;
@@ -558,6 +566,17 @@ export default function AdminChatTab({
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  };
+
+  const handleSendVideoNote = (base64Video: string, durationSec: number) => {
+    handleSendReply(undefined, "📹 Dumaloq video", {
+      type: "video_note",
+      mediaUrl: base64Video,
+      fileName: `video_note-${Date.now()}.webm`,
+      videoDuration: durationSec,
+    });
+    setIsVideoRecordingOpen(false);
+    showToast("Dumaloq video yuborildi ✓");
   };
 
   // Voice recording controls
@@ -1212,8 +1231,13 @@ export default function AdminChatTab({
                           </div>
                         )}
 
-                        {/* Voice Audio Message */}
-                        {msg.type === "audio" && msg.mediaUrl ? (
+                        {/* Circular Video Note / Video Message */}
+                        {(msg.type === "video" || msg.type === "video_note" || Boolean(msg.mediaUrl && (msg.fileName?.includes("video") || msg.mediaUrl.startsWith("data:video")))) && msg.mediaUrl ? (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <CircleVideoNotePlayer mediaUrl={msg.mediaUrl} duration={msg.videoDuration} />
+                            {msg.text && msg.text !== "📹 Dumaloq video" && msg.text !== "📹 Video" && <div>{msg.text}</div>}
+                          </div>
+                        ) : msg.type === "audio" && msg.mediaUrl ? (
                           <VoiceAudioPlayer mediaUrl={msg.mediaUrl} duration={msg.audioDuration} />
                         ) : (
                           !msg.pollOptions && !msg.location && <div>{msg.text}</div>
@@ -1373,6 +1397,18 @@ export default function AdminChatTab({
             >
               <div className="telegram-attach-icon camera">📸</div>
               <span>Kamera</span>
+            </button>
+
+            <button
+              type="button"
+              className="telegram-attach-item"
+              onClick={() => {
+                setIsVideoRecordingOpen(true);
+                setAttachMenuOpen(false);
+              }}
+            >
+              <div className="telegram-attach-icon video" style={{ background: "rgba(225, 29, 72, 0.15)", color: "#e11d48" }}>📹</div>
+              <span>Dumaloq video (Video note)</span>
             </button>
 
             <button
@@ -2104,6 +2140,15 @@ export default function AdminChatTab({
             style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 12, objectFit: "contain" }}
           />
         </div>
+      )}
+
+      {/* Fullscreen Telegram Circular Video Note Recorder Overlay */}
+      {isVideoRecordingOpen && (
+        <TelegramCircularVideoRecorderOverlay
+          onCancel={() => setIsVideoRecordingOpen(false)}
+          onSend={handleSendVideoNote}
+          onShowToast={showToast}
+        />
       )}
     </div>
   );

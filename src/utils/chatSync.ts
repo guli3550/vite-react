@@ -10,10 +10,11 @@ export type ChatMessage = {
   userName?: string;
   userPhoto?: string;
   orderNumber?: string;
-  type?: "text" | "image" | "file" | "audio" | "poll" | "location";
+  type?: "text" | "image" | "file" | "audio" | "video" | "video_note" | "poll" | "location";
   mediaUrl?: string;
   fileName?: string;
   audioDuration?: number;
+  videoDuration?: number;
   isEdited?: boolean;
   editedAt?: string;
   replyToId?: string;
@@ -204,13 +205,13 @@ export function markAllAdminChatRead(): void {
 
 export function getTotalUnreadChatCount(): number { return getAllConversations().reduce((sum, c) => sum + (c.unreadCount || 0), 0); }
 
-export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
+export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio" | "video" | "video_note"; mediaUrl?: string; fileName?: string; audioDuration?: number; videoDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
   const cleanText = text.trim();
   if (!cleanText && !media?.mediaUrl) return null;
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
   const userName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Mijoz";
-  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, newMsg]);
 
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
@@ -254,11 +255,11 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   return newMsg;
 }
 
-export async function sendAdminReply(userId: string, text: string, media?: { type?: "image" | "file" | "audio"; mediaUrl?: string; fileName?: string; audioDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
+export async function sendAdminReply(userId: string, text: string, media?: { type?: "image" | "file" | "audio" | "video" | "video_note"; mediaUrl?: string; fileName?: string; audioDuration?: number; videoDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
   const cleanText = text.trim();
   if (!cleanText && !media?.mediaUrl) return null;
   const allMessages = getStoredChatMessages();
-  const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: cleanText, timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: cleanText, timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, reply]);
   try {
     await fetch(`${API_URL}/api/chat/messages`, {
