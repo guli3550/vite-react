@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// Supabase is the data layer only. Customer authentication is handled by the
-// canonical GULI Telegram auth server, never by Supabase email/password/Google auth.
+// Supabase is the data/storage layer only. Customer authentication is handled
+// exclusively by the canonical GULI Telegram auth server.
 export const DEFAULT_SUPABASE_URL = "https://qttwufydrvdwmhxcpgjb.supabase.co";
 export const BACKEND_API_URL = (
   (import.meta.env.VITE_API_URL as string | undefined) ||
@@ -24,12 +24,7 @@ export function getSupabase(): SupabaseClient | null {
   if (!url || !anonKey) return null;
   try {
     cachedClient = createClient(url, anonKey, {
-      auth: {
-        // Supabase is not the customer auth provider.
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     });
     return cachedClient;
   } catch (err) {
@@ -47,11 +42,7 @@ export function initSupabaseWithKey(anonKey: string, url?: string): SupabaseClie
   return getSupabase();
 }
 
-/**
- * Legacy compatibility entry point. Customer identity is already established
- * by the canonical Telegram exchange; this function only asks the canonical
- * backend to refresh the user's own profile. No email/provider fields are sent.
- */
+/** Refresh the canonical customer profile using only the signed GULI JWT. */
 export async function syncCustomerProfile(
   _user: unknown,
   accessToken: string,
@@ -64,16 +55,10 @@ export async function syncCustomerProfile(
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${accessToken}` },
       body: "{}",
     });
-  } catch {
-    // Best-effort profile refresh; the canonical auth token remains untouched.
-  }
+  } catch {}
 }
 
-/**
- * Customer sign-out is local token invalidation until the canonical server-side
- * session-revocation endpoint is introduced. Supabase auth is never signed out
- * because it is not the customer identity provider.
- */
+/** Clear the canonical GULI client session locally. */
 export async function signOutEverywhere(): Promise<void> {
   try {
     localStorage.removeItem("guli_access_token");
