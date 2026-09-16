@@ -1,4 +1,7 @@
-// Secure customer order history for browser-authenticated users, Telegram customers, and legacy guest sessions.
+// Secure customer order history and receipt ownership.
+// Canonical browser identity = GULI JWT -> public.users.id.
+// Telegram Mini App identity = verified Telegram initData -> telegram_id.
+// No Supabase Auth, guest token, or client-supplied phone/telegram identity is accepted.
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
@@ -7,7 +10,6 @@ const { verifyAccessToken } = require('./guliCustomAuth.js');
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN || '').trim();
-const ADMIN_SECRET = String(process.env.ADMIN_SECRET || '').trim();
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
@@ -17,6 +19,7 @@ function safeEqual(a, b) {
   const bb = Buffer.from(String(b || ''));
   return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
 }
+
 function telegramUser(raw) {
   if (!raw || !BOT_TOKEN) return null;
   try {
@@ -34,34 +37,22 @@ function telegramUser(raw) {
     return Number.isSafeInteger(id) && id > 0 ? { type: 'telegram', id } : null;
   } catch { return null; }
 }
-function guestUser(token) {
-  try {
-    const [payload, signature] = String(token || '').split('.');
-    if (!payload || !signature || !ADMIN_SECRET) return null;
-    const expected = crypto.createHmac('sha256', ADMIN_SECRET).update(payload).digest('base64url');
-    if (!safeEqual(signature, expected)) return null;
-    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    const id = Number(data.guestId);
-    if (!Number.isSafeInteger(id) || id >= 0 || Number(data.exp) < Date.now()) return null;
-    return { type: 'guest', id };
-  } catch { return null; }
-}
-async function browserUser(req) {
+
+function browserUser(req) {
   const header = String(req.headers.authorization || '');
   if (!header.startsWith('Bearer ')) return null;
-  const token = header.slice(7).trim();
-  if (!token) return null;
-  const claims = verifyAccessToken(token);
-  if (claims?.sub) return { type: 'auth', id: String(claims.sub) };
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser(token);
-  return error || !data?.user?.id ? null : { type: 'auth', id: String(data.user.id) };
+  try {
+    const claims = verifyAccessToken(header.slice(7).trim());
+    return claims?.sub ? { type: 'auth', id: String(claims.sub) } : null;
+  } catch {
+    return null;
+  }
 }
-async function customer(req) {
-  return telegramUser(req.headers['x-telegram-init-data'] || '')
-    || guestUser(req.headers['x-guli-guest-token'] || '')
-    || await browserUser(req);
+
+function customer(req) {
+  return telegramUser(req.headers['x-telegram-init-data'] || '') || browserUser(req);
 }
+
 function normalizeItems(items) {
   if (!Array.isArray(items)) return [];
   return items.map(it => {
@@ -74,24 +65,55 @@ function normalizeItems(items) {
     return { ...it, image: img, name, product_code: code, price, product: { ...prod, name: prod.name || name, image: prod.image || img, price: prod.price != null ? prod.price : price, product_code: prod.product_code || code } };
   });
 }
+
 function mapOrder(row) {
-  return { id: String(row.order_number || row.id || ''), order_number: row.order_number || undefined, first_name: row.first_name || undefined, last_name: row.last_name || undefined, customer_name: row.customer_name || undefined, phone: row.phone || '', items: normalizeItems(row.items), subtotal: Number(row.subtotal || 0), delivery: Number(row.delivery || 0), discount: Number(row.discount || 0), total: Number(row.total || 0), address: row.address || undefined, payment: row.payment || '', payment_status: row.payment_status || 'pending', payment_receipt_path: row.payment_receipt_path || undefined, receipt_url: row.receipt_url || undefined, status: row.status || '⏳ Buyurtma kutilmoqda', createdAt: row.created_at || new Date().toISOString(), updatedAt: row.updated_at || undefined, statusUpdatedAt: row.updated_at || undefined };
+  return {
+    id: String(row.order_number || row.id || ''),
+    order_number: row.order_number || undefined,
+    first_name: row.first_name || undefined,
+    last_name: row.last_name || undefined,
+    customer_name: row.customer_name || undefined,
+    phone: row.phone || '',
+    items: normalizeItems(row.items),
+    subtotal: Number(row.subtotal || 0),
+    delivery: Number(row.delivery || 0),
+    discount: Number(row.discount || 0),
+    total: Number(row.total || 0),
+    address: row.address || undefined,
+    payment: row.payment || '',
+    payment_status: row.payment_status || 'pending',
+    payment_receipt_path: row.payment_receipt_path || undefined,
+    receipt_url: row.receipt_url || undefined,
+    status: row.status || '⏳ Buyurtma kutilmoqda',
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || undefined,
+    statusUpdatedAt: row.updated_at || undefined,
+  };
 }
+
 async function listOrders(req, res) {
-  const user = await customer(req);
-  if (!user || (user.type !== 'auth' && user.type !== 'telegram')) return res.status(401).json({ success: false, message: 'Mijoz autentifikatsiyasi talab qilinadi.' });
+  const user = customer(req);
+  if (!user || !['auth', 'telegram'].includes(user.type)) {
+    return res.status(401).json({ success: false, message: 'Telegram autentifikatsiyasi talab qilinadi.' });
+  }
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
-    // The production orders table has first_name but not last_name. Keep the API
-    // response shape compatible by mapping last_name in JS instead of selecting a
-    // non-existent SQL column (PostgREST 42703).
-    let query = supabase.from('orders').select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at').order('created_at', { ascending: false }).limit(100);
-    query = user.type === 'auth' ? query.eq('auth_user_id', user.id) : query.eq('telegram_id', user.id);
+    let query = supabase.from('orders')
+      .select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
+      .order('created_at', { ascending: false }).limit(100);
+    query = user.type === 'auth'
+      ? query.eq('auth_user_id', user.id)
+      : query.eq('telegram_id', user.id);
     const { data, error } = await query;
     if (error) throw error;
-    const formatted = await Promise.all((data || []).map(async (row) => {
+    const formatted = await Promise.all((data || []).map(async row => {
       let receiptUrl = '';
-      if (row.payment_receipt_path) { try { const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400); receiptUrl = sData?.signedUrl || ''; } catch {} }
+      if (row.payment_receipt_path) {
+        try {
+          const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400);
+          receiptUrl = sData?.signedUrl || '';
+        } catch {}
+      }
       return mapOrder({ ...row, receipt_url: receiptUrl || undefined, last_name: undefined });
     }));
     res.setHeader('Cache-Control', 'private, no-store');
@@ -101,30 +123,49 @@ async function listOrders(req, res) {
     return res.status(500).json({ success: false, message: 'Buyurtmalarni yuklashda xatolik.' });
   }
 }
+
 async function uploadReceipt(req, res) {
   if (!supabase) return res.status(503).json({ success: false, message: 'Xizmat sozlanmagan.' });
   try {
-    const user = await customer(req);
-    if (!user || (user.type !== 'auth' && user.type !== 'telegram')) return res.status(401).json({ success: false, message: 'Mijoz autentifikatsiyasi talab qilinadi.' });
-    const orderIdentifier = String(req.params.orderNumber || req.params.id || req.body?.order_id || '').trim();
+    const user = customer(req);
+    if (!user || !['auth', 'telegram'].includes(user.type)) return res.status(401).json({ success: false, message: 'Telegram autentifikatsiyasi talab qilinadi.' });
+    const orderIdentifier = String(req.params.orderNumber || req.params.id || '').trim();
     if (!orderIdentifier) return res.status(400).json({ success: false, message: 'Buyurtma identifikatori topilmadi.' });
-    let { data: order } = await supabase.from('orders').select('*').eq('order_number', orderIdentifier).maybeSingle();
-    if (!order) order = (await supabase.from('orders').select('*').eq('id', orderIdentifier).maybeSingle()).data;
+
+    let { data: order, error } = await supabase.from('orders').select('*').eq('order_number', orderIdentifier).maybeSingle();
+    if (error) throw error;
+    if (!order) {
+      const byId = await supabase.from('orders').select('*').eq('id', orderIdentifier).maybeSingle();
+      if (byId.error) throw byId.error;
+      order = byId.data;
+    }
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
-    const owns = user.type === 'auth' ? order.auth_user_id && String(order.auth_user_id) === String(user.id) : order.telegram_id != null && Number(order.telegram_id) === Number(user.id);
+
+    const owns = user.type === 'auth'
+      ? order.auth_user_id && String(order.auth_user_id) === String(user.id)
+      : order.telegram_id != null && Number(order.telegram_id) === Number(user.id);
     if (!owns) return res.status(403).json({ success: false, message: 'Bu buyurtma sizga tegishli emas.' });
+
     let rawData = req.body?.data || req.body?.receipt_url || '';
-    let mimeType = req.body?.mimeType || 'image/jpeg';
-    if (typeof rawData === 'string' && rawData.startsWith('data:')) { const match = rawData.match(/^data:([^;]+);base64,(.+)$/); if (match) { mimeType = match[1]; rawData = match[2]; } }
+    let mimeType = String(req.body?.mimeType || 'image/jpeg');
+    if (typeof rawData === 'string' && rawData.startsWith('data:')) {
+      const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) { mimeType = match[1]; rawData = match[2]; }
+    }
     if (!rawData) return res.status(400).json({ success: false, message: 'Chek rasmi taqdim etilmadi.' });
+    if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType)) return res.status(400).json({ success: false, message: 'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin.' });
+
     const buffer = Buffer.from(rawData, 'base64');
     if (!buffer.length || buffer.length > 10 * 1024 * 1024) return res.status(400).json({ success: false, message: 'Chek hajmi juda katta yoki fayl yaroqsiz.' });
-    const ext = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
     const filePath = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-    const up = await supabase.storage.from('payment-receipts').upload(filePath, buffer, { contentType: mimeType, cacheControl: '31536000', upsert: true });
+    const up = await supabase.storage.from('payment-receipts').upload(filePath, buffer, { contentType: mimeType, cacheControl: '31536000', upsert: false });
     if (up.error) throw up.error;
     let signedReceiptUrl = '';
-    try { const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(filePath, 86400); signedReceiptUrl = sData?.signedUrl || ''; } catch {}
+    try {
+      const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(filePath, 86400);
+      signedReceiptUrl = sData?.signedUrl || '';
+    } catch {}
     const patchData = { payment_receipt_path: filePath, payment_status: 'receipt_uploaded', payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data: updated, error: ue } = await supabase.from('orders').update(patchData).eq('id', order.id).select('*').single();
     if (ue) throw ue;
@@ -135,6 +176,7 @@ async function uploadReceipt(req, res) {
     return res.status(500).json({ success: false, message: 'Chekni yuborishda xatolik yuz berdi.' });
   }
 }
+
 install('get', '/api/orders', listOrders);
 install('get', '/api/guest/orders', listOrders);
 install('post', '/api/orders/:orderNumber/receipt', uploadReceipt);
