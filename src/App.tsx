@@ -60,7 +60,7 @@ import {
 } from "./utils/chatSync";
 import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter";
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
-import { getSupabase, loadSupabaseConfigAsync, signOutEverywhere, syncCustomerProfile } from "./lib/supabaseClient";
+import { getSupabase, signOutEverywhere } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
@@ -1155,101 +1155,8 @@ export default function App() {
     initPlatformEnvironment();
   }, []);
 
-  // Supabase Auth State Synchronization & Session Restoration
-  useEffect(() => {
-    const client = getSupabase();
-    if (!client) return;
+  // (Supabase Auth and Google Auth blocks removed for canonical Telegram-only auth)
 
-    // 1. Recover existing Supabase session
-    client.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const u = session.user;
-        const provider = (u.app_metadata?.provider || "email") as "google" | "email" | "telegram";
-        const authUserData: AuthUser = {
-          id: u.id,
-          email: u.email || null,
-          full_name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Mijoz",
-          phone: u.phone || u.user_metadata?.phone || null,
-          avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
-          provider: provider === "google" ? "google" : "email",
-          created_at: u.created_at,
-        };
-        setAuthUser(authUserData);
-        localStorage.setItem("guli_auth_user", JSON.stringify(authUserData));
-        localStorage.setItem("guli_access_token", session.access_token);
-      }
-    });
-
-    // 2. Real-time auth state listener
-    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const u = session.user;
-        const provider = (u.app_metadata?.provider || "email") as "google" | "email" | "telegram";
-        const authUserData: AuthUser = {
-          id: u.id,
-          email: u.email || null,
-          full_name: u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split("@")[0] || "Mijoz",
-          phone: u.phone || u.user_metadata?.phone || null,
-          avatar_url: u.user_metadata?.avatar_url || u.user_metadata?.picture || null,
-          provider: provider === "google" ? "google" : "email",
-          created_at: u.created_at,
-        };
-        setAuthUser(authUserData);
-        localStorage.setItem("guli_auth_user", JSON.stringify(authUserData));
-        localStorage.setItem("guli_access_token", session.access_token);
-        if (authUserData.full_name) localStorage.setItem("guli_first_name", authUserData.full_name);
-        if (authUserData.email) localStorage.setItem("guli_email", authUserData.email);
-
-        await syncCustomerProfile(u, session.access_token);
-      } else if (event === "SIGNED_OUT") {
-        setAuthUser(null);
-        localStorage.removeItem("guli_access_token");
-        localStorage.removeItem("guli_refresh_token");
-        localStorage.removeItem("guli_auth_user");
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  // Listen for Google OAuth callback token in URL hash (if redirected from OAuth)
-  useEffect(() => {
-    try {
-      const hash = new URLSearchParams(window.location.hash.replace(/^#/, "") || "");
-      const token = hash.get("access_token");
-      if (token) {
-        localStorage.setItem("guli_access_token", token);
-        const refreshToken = hash.get("refresh_token");
-        if (refreshToken) localStorage.setItem("guli_refresh_token", refreshToken);
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
-
-        fetch("/api/customer/profile", {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-          .then((r) => r.json().catch(() => null))
-          .then((j) => {
-            const data = j?.data || {};
-            const googleUser: AuthUser = {
-              id: data.id || "google_" + Date.now(),
-              email: data.email || null,
-              full_name: data.full_name || null,
-              phone: data.phone || null,
-              avatar_url: data.avatar_url || null,
-              provider: "google",
-              created_at: new Date().toISOString(),
-            };
-            setAuthUser(googleUser);
-            localStorage.setItem("guli_auth_user", JSON.stringify(googleUser));
-            if (googleUser.full_name) localStorage.setItem("guli_first_name", googleUser.full_name);
-            if (googleUser.email) localStorage.setItem("guli_email", googleUser.email);
-            showToast("✓ Google hisobingiz bilan tizimga kirdingiz! 🎉");
-          })
-          .catch(() => {});
-      }
-    } catch {}
-  }, []);
 
   // Expose global trigger for auth bridge
   useEffect(() => {
@@ -1913,7 +1820,7 @@ export default function App() {
 
         // Fallback 2: Direct Supabase query if available
         try {
-          const sb = await loadSupabaseConfigAsync();
+          const sb = getSupabase();
           if (sb) {
             let sbQuery = sb.from("orders").select("*").order("created_at", { ascending: false }).limit(50);
             if (effectiveTgId) {
@@ -1982,7 +1889,7 @@ export default function App() {
 
     const setupRealtime = async () => {
       try {
-        const sb = await loadSupabaseConfigAsync();
+        const sb = getSupabase();
         if (!sb || !isSubscribed) return;
 
         activeChannel = sb
@@ -5300,7 +5207,7 @@ export default function App() {
           setIsCustomerAuthOpen(false);
           setAuthGateCustomMessage({});
           if (user.full_name) localStorage.setItem("guli_first_name", user.full_name);
-          if (user.email) localStorage.setItem("guli_email", user.email);
+          if (user.telegram_username) localStorage.setItem("guli_telegram_username", user.telegram_username);
           showToast(`✓ Xush kelibsiz, ${user.full_name || "Mijoz"}!`);
         }}
         language={language}
