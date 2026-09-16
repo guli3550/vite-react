@@ -48,11 +48,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl -sS --fail --max-time 30 "${GATEWAY_URL}/api/health")"
-          echo "$body"
-          grep -q '"success":true' <<< "$body"
-          grep -q '"gateway":"cloudflare"' <<< "$body"
-          echo "Cloudflare gateway OK"
+          set -x
+          curl -sS --fail --max-time 30 -D /tmp/gateway-headers.txt -o /tmp/gateway-health.json "${GATEWAY_URL}/api/health"
+          set +x
+          echo "Gateway response headers:"
+          cat /tmp/gateway-headers.txt
+          echo "Gateway response body:"
+          cat /tmp/gateway-health.json
+          grep -q '"success":true' /tmp/gateway-health.json
+          grep -q '"status":"online"' /tmp/gateway-health.json
+          grep -qi '^x-guli-gateway:[[:space:]]*cloudflare-proxy' /tmp/gateway-headers.txt
+          grep -qi '^x-guli-canonical-upstream:[[:space:]]*guli-api' /tmp/gateway-headers.txt
+          echo "Cloudflare proxy gateway OK"
 
       - name: Check catalog API through gateway
         shell: bash
