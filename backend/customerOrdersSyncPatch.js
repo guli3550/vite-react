@@ -43,7 +43,7 @@ function browserUser(req) {
   if (!header.startsWith('Bearer ')) return null;
   try {
     const claims = verifyAccessToken(header.slice(7).trim());
-    return claims?.sub ? { type: 'auth', id: String(claims.sub) } : null;
+    return claims?.sub ? { type: 'auth', id: String(claims.sub), telegram_id: claims.telegram_id } : null;
   } catch {
     return null;
   }
@@ -101,9 +101,15 @@ async function listOrders(req, res) {
     let query = supabase.from('orders')
       .select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
       .order('created_at', { ascending: false }).limit(100);
-    query = user.type === 'auth'
-      ? query.eq('auth_user_id', user.id)
-      : query.eq('telegram_id', user.id);
+    if (user.type === 'auth') {
+      if (user.telegram_id) {
+        query = query.or(`auth_user_id.eq.${user.id},telegram_id.eq.${user.telegram_id}`);
+      } else {
+        query = query.eq('auth_user_id', user.id);
+      }
+    } else {
+      query = query.eq('telegram_id', user.id);
+    }
     const { data, error } = await query;
     if (error) throw error;
     const formatted = await Promise.all((data || []).map(async row => {
@@ -142,7 +148,7 @@ async function uploadReceipt(req, res) {
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
 
     const owns = user.type === 'auth'
-      ? order.auth_user_id && String(order.auth_user_id) === String(user.id)
+      ? (order.auth_user_id && String(order.auth_user_id) === String(user.id)) || (user.telegram_id && order.telegram_id != null && Number(order.telegram_id) === Number(user.telegram_id))
       : order.telegram_id != null && Number(order.telegram_id) === Number(user.id);
     if (!owns) return res.status(403).json({ success: false, message: 'Bu buyurtma sizga tegishli emas.' });
 
@@ -178,7 +184,9 @@ async function uploadReceipt(req, res) {
 }
 
 install('get', '/api/orders', listOrders);
+install('get', '/api/customer/orders', listOrders);
 install('get', '/api/guest/orders', listOrders);
 install('post', '/api/orders/:orderNumber/receipt', uploadReceipt);
+install('post', '/api/customer/orders/:orderNumber/receipt', uploadReceipt);
 install('post', '/api/orders/:id/receipt', uploadReceipt);
 install('post', '/api/orders/:orderNumber/payment-receipt', uploadReceipt);

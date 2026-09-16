@@ -11,15 +11,35 @@ import {
   updateConversationMetadata,
   editChatMessage,
   deleteChatMessage,
-  toggleMessageReaction,
-  votePollOption,
   togglePinMessage,
   toggleBookmarkMessage,
   clearChatMessages,
 } from "../utils/chatSync";
-import { SwipeableChatBackground, SwipeableMessageRow } from "./SwipeChatHelpers";
-import { CircleVideoNotePlayer, TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
+import { SwipeableChatBackground } from "./SwipeChatHelpers";
+import { TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 import { copyToClipboard } from "../utils/clipboard";
+import { ChatGPTMessageRow } from "./ChatGPTMessageRow";
+import {
+  Search,
+  Sparkles,
+  Phone,
+  User,
+  UserCheck,
+  Trash2,
+  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  Plus,
+  Smile,
+  Mic,
+  X,
+  Pin,
+  ImageIcon,
+  Video,
+  FileText,
+  MapPin,
+  BarChart2,
+} from "lucide-react";
 import "../chat2.css";
 import "../admin/components/AdminGuliChat.css";
 
@@ -131,8 +151,6 @@ const EMOJI_LIST = [
   "⚡", "✅", "📍", "🧾", "😍", "🎯", "⭐", "🎉",
 ];
 
-const REACTION_EMOJIS = ["❤️", "👍", "😂", "😍", "😢", "😡"];
-
 const OPERATORS_LIST = [
   "Operator #1 (Dilnoza Rahimova)",
   "Operator #2 (Malika Karimova)",
@@ -166,76 +184,6 @@ function formatDateGroup(isoString: string): string {
     "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"
   ];
   return `${date.getDate()}-${monthNames[date.getMonth()]}, ${date.getFullYear()}`;
-}
-
-// Custom Voice Audio Player component
-function VoiceAudioPlayer({ mediaUrl, duration: defaultDuration }: { mediaUrl: string; duration?: number }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(defaultDuration || 0);
-
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-      if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
-        setDuration(audioRef.current.duration);
-      }
-    }
-  };
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
-
-  return (
-    <div className="chatgpt-voice-pill">
-      <audio
-        ref={audioRef}
-        src={mediaUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleTimeUpdate}
-        onEnded={() => {
-          setIsPlaying(false);
-          setCurrentTime(0);
-        }}
-        preload="metadata"
-      />
-      <button type="button" className="chatgpt-voice-play-btn" onClick={togglePlay} title={isPlaying ? "Pauza" : "Tinglash"}>
-        {isPlaying ? "⏸" : "▶"}
-      </button>
-      <div className="chatgpt-voice-waveforms" style={{ flex: 1 }}>
-        {[10, 20, 8, 24, 16, 12, 26, 18, 14, 22, 12, 18, 9, 21].map((h, i) => (
-          <div
-            key={i}
-            className={`chatgpt-wave-bar ${isPlaying ? "playing" : ""}`}
-            style={{
-              height: `${h}px`,
-              animationDelay: `${i * 0.06}s`,
-            }}
-          />
-        ))}
-      </div>
-      <span className="chatgpt-voice-duration">
-        {formatTime(currentTime > 0 ? currentTime : duration)}
-      </span>
-    </div>
-  );
 }
 
 export default function AdminChatTab({
@@ -288,7 +236,6 @@ export default function AdminChatTab({
 
   const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
   const [inChatSearchQuery, setInChatSearchQuery] = useState("");
-  const [activeMsgActionId, setActiveMsgActionId] = useState<string | null>(null);
   const [aiSuggestionsOpen, setAiSuggestionsOpen] = useState(false);
   const [clearChatModalOpen, setClearChatModalOpen] = useState(false);
 
@@ -314,6 +261,15 @@ export default function AdminChatTab({
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    setShowScrollBottom(!isNearBottom);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -350,18 +306,6 @@ export default function AdminChatTab({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [allMessages, selectedUserId]);
-
-  // Click outside to close bubble menu
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest(".chat2-bubble-menu-popup") && !target.closest(".chat2-action-icon")) {
-        setActiveMsgActionId(null);
-      }
-    };
-    window.addEventListener("mousedown", handleOutside);
-    return () => window.removeEventListener("mousedown", handleOutside);
-  }, []);
 
   // Sync customer notes text on selectedUserId change
   const currentConversation = conversations.find((c) => c.userId === selectedUserId);
@@ -473,7 +417,10 @@ export default function AdminChatTab({
       : undefined;
 
     playTelegramSendSound();
-    await sendAdminReply(selectedUserId, textToSend, media, replyToParam);
+    const sentMsg = await sendAdminReply(selectedUserId, textToSend, media, replyToParam);
+    if (sentMsg) {
+      setStreamingMsgId(sentMsg.id);
+    }
 
     setReplyText("");
     setReplyingToMsg(null);
@@ -685,18 +632,6 @@ export default function AdminChatTab({
     setConversations(getAllConversations());
     setAssignOperatorOpen(false);
     showToast(`${opName} biriktirildi ✓`);
-  };
-
-  // Copy message text
-  const handleCopyMessage = async (text: string) => {
-    await copyToClipboard(text);
-    showToast("Xabar matni nusxalandi! ✓");
-  };
-
-  // Delete message
-  const handleDeleteMessage = (id: string) => {
-    deleteChatMessage(id);
-    showToast("Xabar o'chirildi");
   };
 
   // Edit message
@@ -960,158 +895,169 @@ export default function AdminChatTab({
               }}
               id="admin-chat-swipe-bg"
             >
-          {/* Chat Header */}
-          <div className="chat2-header">
-            <div className="chat2-header-info">
-              <button
-                type="button"
-                className="chat2-action-btn"
-                style={{ display: mobileView === "chat" ? "inline-flex" : "none" }}
-                onClick={() => setMobileView("list")}
-              >
-                ← Orqaga
-              </button>
+          {/* Chat Header: 100% Guli AI / ChatGPT Header */}
+          <div className="chatgpt-clean-header" style={{ padding: "10px 18px", borderBottom: "1px solid #F0F0F0" }}>
+            <div className="chatgpt-header-left">
+              {mobileView === "chat" && (
+                <button
+                  type="button"
+                  className="chatgpt-header-icon-btn"
+                  onClick={() => setMobileView("list")}
+                  title="Orqaga"
+                >
+                  <ArrowLeft size={19} />
+                </button>
+              )}
               <div
                 className="chat2-avatar-wrap"
-                style={{ width: 42, height: 42, cursor: "pointer" }}
+                style={{ width: 40, height: 40, cursor: "pointer" }}
                 title="Mijoz chat oynasini to'liq ekranda ochish"
                 onClick={() => setFullProfileModalOpen(true)}
               >
                 {currentConversation?.userPhoto ? (
-                  <img className="chat2-avatar" style={{ width: 42, height: 42 }} src={currentConversation.userPhoto} alt="" />
+                  <img className="chat2-avatar" style={{ width: 40, height: 40 }} src={currentConversation.userPhoto} alt="" />
                 ) : (
-                  <div className="chat2-avatar" style={{ width: 42, height: 42, fontSize: 18 }}>
+                  <div className="chat2-avatar" style={{ width: 40, height: 40, fontSize: 16 }}>
                     {(currentConversation?.userName || "M").slice(0, 1).toUpperCase()}
                   </div>
                 )}
                 <span className="chat2-online-dot" />
               </div>
               <div
-                className="chat2-header-title"
+                className="chatgpt-header-title-box"
                 style={{ cursor: "pointer" }}
                 onClick={() => setFullProfileModalOpen(true)}
               >
-                <span className="chat2-header-name">
-                  {currentConversation?.userName || "Mijoz"}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <h1 className="chatgpt-header-title" style={{ fontSize: 15, margin: 0 }}>
+                    {currentConversation?.userName || "Mijoz"}
+                  </h1>
                   <span className={`chat2-platform-badge ${currentConversation?.source || "webapp"}`}>
                     {currentConversation?.source === "telegram" ? "Telegram" : currentConversation?.source === "webapp" ? "Web App" : "Call Center"}
                   </span>
-                </span>
-                <span className="chat2-header-status" style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>
-                  GULI Admin Web App - {currentConversation?.source === "telegram" ? "Telegram bot" : currentConversation?.source === "callcenter" ? "Call center" : "web app profilidagi"} online chatdan yozayotgan mijoz
-                  <span style={{ marginLeft: 6, color: "#10b981", fontWeight: 700 }}>● Online</span>
-                </span>
+                </div>
+                <div className="chatgpt-header-online-indicator">
+                  <span className="chatgpt-indicator-dot" />
+                  <span>Online · GULI Admin Web App mijoz aloqasi</span>
+                </div>
               </div>
             </div>
 
-            <div className="chat2-header-actions">
+            <div className="chatgpt-header-right" style={{ gap: 4 }}>
               <button
                 type="button"
-                className={`chat2-action-btn ${inChatSearchOpen ? "primary" : ""}`}
+                className={`chatgpt-header-icon-btn ${inChatSearchOpen ? "active" : ""}`}
                 onClick={() => {
                   setInChatSearchOpen(!inChatSearchOpen);
                   if (inChatSearchOpen) setInChatSearchQuery("");
                 }}
                 title="Xabarlarni qidirish"
               >
-                🔍 Qidiruv
+                <Search size={18} />
               </button>
               <button
                 type="button"
-                className="chat2-action-btn"
+                className="chatgpt-header-icon-btn"
                 onClick={() => setAiSuggestionsOpen(true)}
-                title="Admin uchun tezkor aqlli javoblar"
+                title="Admin uchun aqlli tezkor javoblar"
               >
-                💡 Takliflar
+                <Sparkles size={18} color="#BE123C" />
               </button>
               {currentConversation?.phone && (
-                <a href={`tel:${currentConversation.phone.replace(/\s+/g, "")}`} className="chat2-action-btn">
-                  📞 Tel
+                <a
+                  href={`tel:${currentConversation.phone.replace(/\s+/g, "")}`}
+                  className="chatgpt-header-icon-btn"
+                  title="Qo'ng'iroq qilish"
+                  style={{ display: "inline-flex", textDecoration: "none" }}
+                >
+                  <Phone size={18} />
                 </a>
               )}
               <button
                 type="button"
-                className="chat2-action-btn"
+                className="chatgpt-header-icon-btn"
                 onClick={() => setAssignOperatorOpen(!assignOperatorOpen)}
+                title="Operator biriktirish"
               >
-                👤 Operator
+                <UserCheck size={18} />
               </button>
               <button
                 type="button"
-                className="chat2-action-btn primary"
+                className="chatgpt-header-icon-btn"
                 onClick={() => setMobileView("crm")}
+                title="Mijoz CRM kartochkasi"
               >
-                ℹ️ CRM
+                <User size={18} />
               </button>
               <button
                 type="button"
-                className="chat2-action-btn"
+                className="chatgpt-header-icon-btn"
                 onClick={() => setClearChatModalOpen(true)}
                 title="Chat tarixini tozalash"
-                style={{ color: "#e11d48" }}
+                style={{ color: "#E11D48" }}
               >
-                🧹
+                <Trash2 size={18} />
               </button>
             </div>
           </div>
 
           {/* Inline In-Chat Search Bar */}
           {inChatSearchOpen && (
-            <div className="chat2-inline-search">
-              <span>🔍</span>
+            <div className="chatgpt-inline-search" style={{ margin: "8px 18px", padding: "6px 14px", borderRadius: "10px", border: "none", outline: "none", boxShadow: "none" }}>
+              <Search size={15} color="#71717A" />
               <input
                 type="text"
-                className="chat2-inline-search-input"
+                className="chatgpt-inline-search-input"
                 placeholder="Ushbu chatdagi xabarlardan qidirish..."
                 value={inChatSearchQuery}
                 onChange={(e) => setInChatSearchQuery(e.target.value)}
+                style={{ border: "none", outline: "none", boxShadow: "none" }}
                 autoFocus
               />
               {inChatSearchQuery && (
-                <span className="chat2-search-counter">
-                  {activeChatMessages.length} ta xabar topildi
+                <span className="chat2-search-count-pill" style={{ background: "#E4E4E7", color: "#71717A", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
+                  {activeChatMessages.length} ta
                 </span>
               )}
               <button
                 type="button"
-                className="chat2-inline-search-close"
+                className="chatgpt-icon-btn"
                 onClick={() => {
                   setInChatSearchQuery("");
                   setInChatSearchOpen(false);
                 }}
               >
-                ✕
+                <X size={15} />
               </button>
             </div>
           )}
 
           {/* Pinned Message Banner */}
           {pinnedMessage && (
-            <div className="chat2-pinned-banner">
-              <div
-                className="chat2-pinned-info"
-                onClick={() => {
-                  const el = document.getElementById(`admin-swipe-row-${pinnedMessage.id}`);
-                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
-              >
-                <span className="chat2-pinned-title">
-                  📌 Qadalgan xabar: {pinnedMessage.userName || (pinnedMessage.sender === "admin" ? "Admin" : "Mijoz")}
-                </span>
-                <span className="chat2-pinned-snippet">
-                  {pinnedMessage.text || pinnedMessage.fileName || "Media birikma"}
-                </span>
+            <div
+              className="chatgpt-pinned-banner"
+              style={{ margin: "6px 18px", cursor: "pointer" }}
+              onClick={() => {
+                const el = document.getElementById(`admin-swipe-row-${pinnedMessage.id}`);
+                el?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >
+              <div className="chatgpt-pinned-info">
+                <Pin size={14} color="#BE123C" />
+                <span style={{ fontWeight: 700 }}>Qadalgan xabar:</span>
+                <span>{pinnedMessage.text || pinnedMessage.fileName || "Media birikma"}</span>
               </div>
               <button
                 type="button"
-                className="chat2-pinned-action-btn"
-                onClick={() => {
+                className="chatgpt-icon-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
                   togglePinMessage(pinnedMessage.id);
                   showToast("Qadash olib tashlandi");
                 }}
                 title="Qadashni bekor qilish"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
           )}
@@ -1162,7 +1108,7 @@ export default function AdminChatTab({
           )}
 
           {/* Messages Container */}
-          <div className="chat2-messages">
+          <div className="chatgpt-messages-scrollview" onScroll={handleScroll}>
             {activeChatMessages.map((msg, idx) => {
               const prevMsg = activeChatMessages[idx - 1];
               const currentDateGroup = formatDateGroup(msg.timestamp);
@@ -1177,334 +1123,45 @@ export default function AdminChatTab({
                     </div>
                   )}
 
-                  <SwipeableMessageRow
-                    align={msg.sender === "user" ? "left" : "right"}
-                    onReply={() => setReplyingToMsg(msg)}
-                    id={`admin-swipe-row-${msg.id}`}
-                  >
-                    <div className={`chat2-bubble-wrap ${msg.sender}`} style={{ position: "relative" }}>
-                      {/* Message Action Bar (Hover / Tap) */}
-                      <div className="chat2-bubble-actions">
-                        <div className="chat2-reaction-picker">
-                          {REACTION_EMOJIS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              className="chat2-action-icon"
-                              onClick={() => toggleMessageReaction(msg.id, emoji)}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          className="chat2-action-icon"
-                          title="Javob berish"
-                          onClick={() => setReplyingToMsg(msg)}
-                        >
-                          ↩️
-                        </button>
-                        <button
-                          type="button"
-                          className="chat2-action-icon"
-                          title="Nusxalash"
-                          onClick={() => handleCopyMessage(msg.text)}
-                        >
-                          📋
-                        </button>
-                        <button
-                          type="button"
-                          className={`chat2-action-icon ${msg.pinned ? "active" : ""}`}
-                          title={msg.pinned ? "Qadashni olib tashlash" : "Xabarni qadash (Pin)"}
-                          onClick={() => {
-                            togglePinMessage(msg.id);
-                            showToast(msg.pinned ? "Xabar qadashdan olindi" : "Xabar qadaldi 📌");
-                          }}
-                        >
-                          📌
-                        </button>
-                        <button
-                          type="button"
-                          className="chat2-action-icon"
-                          title="Qo'shimcha amallar (3 nuqta)"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMsgActionId(activeMsgActionId === msg.id ? null : msg.id);
-                          }}
-                        >
-                          ⋮
-                        </button>
-                        {msg.sender === "admin" && (
-                          <>
-                            <button
-                              type="button"
-                              className="chat2-action-icon"
-                              title="Tahrirlash"
-                              onClick={() => handleStartEditMessage(msg)}
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              type="button"
-                              className="chat2-action-icon"
-                              title="O'chirish"
-                              onClick={() => handleDeleteMessage(msg.id)}
-                            >
-                              🗑️
-                            </button>
-                          </>
-                        )}
-                      </div>
-
-                      {/* 3-Dots Action Popup for Bubble */}
-                      {activeMsgActionId === msg.id && (
-                        <div className="chat2-bubble-menu-popup" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="chat2-bubble-menu-item"
-                            onClick={() => {
-                              togglePinMessage(msg.id);
-                              setActiveMsgActionId(null);
-                              showToast(msg.pinned ? "Xabar qadashdan olindi" : "Xabar qadaldi 📌");
-                            }}
-                          >
-                            <span>📌</span>
-                            <span>{msg.pinned ? "Qadashni bekor qilish" : "Xabarni qadash (Pin)"}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat2-bubble-menu-item"
-                            onClick={() => {
-                              toggleBookmarkMessage(msg.id);
-                              setActiveMsgActionId(null);
-                              showToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'plarga saqlandi ⭐");
-                            }}
-                          >
-                            <span>⭐</span>
-                            <span>{msg.isBookmarked ? "Xatcho'pdan chiqarish" : "Xatcho'pga saqlash"}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat2-bubble-menu-item"
-                            onClick={() => {
-                              handleCopyMessage(msg.text);
-                              setActiveMsgActionId(null);
-                            }}
-                          >
-                            <span>📋</span>
-                            <span>Nusxa olish</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat2-bubble-menu-item"
-                            onClick={() => {
-                              setReplyingToMsg(msg);
-                              setActiveMsgActionId(null);
-                            }}
-                          >
-                            <span>↩️</span>
-                            <span>Javob berish</span>
-                          </button>
-
-                          {msg.sender === "admin" && (
-                            <button
-                              type="button"
-                              className="chat2-bubble-menu-item"
-                              onClick={() => {
-                                handleStartEditMessage(msg);
-                                setActiveMsgActionId(null);
-                              }}
-                            >
-                              <span>✏️</span>
-                              <span>Tahrirlash</span>
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            className="chat2-bubble-menu-item danger"
-                            onClick={() => {
-                              handleDeleteMessage(msg.id);
-                              setActiveMsgActionId(null);
-                            }}
-                          >
-                            <span>🗑️</span>
-                            <span>O'chirish</span>
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="chat2-bubble">
-                        {/* Pinned & Bookmarked Badges */}
-                        {msg.pinned && (
-                          <div style={{ fontSize: 11, color: "#b6536b", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
-                            <span>📌 Qadalgan xabar</span>
-                          </div>
-                        )}
-                        {msg.isBookmarked && (
-                          <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
-                            <span>⭐ Xatcho'p</span>
-                          </div>
-                        )}
-                        {/* Quoted Reply if present */}
-                        {msg.replyToText && (
-                          <div className="chat2-reply-quote">
-                            <div className="chat2-reply-quote-sender">{msg.replyToSender || "Xabar"}</div>
-                            <div className="chat2-reply-quote-text">{msg.replyToText}</div>
-                          </div>
-                        )}
-
-                        {/* Image Attachment (Telegram botdan kelgan rasm) */}
-                        {((msg.type === "image" || Boolean(msg.mediaUrl && (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || msg.mediaUrl.includes("photo"))))) && msg.mediaUrl && (
-                          <div className="chat2-media-img-container" style={{ margin: "6px 0" }}>
-                            <img
-                              className="chat2-media-img"
-                              src={msg.mediaUrl}
-                              alt="Rasm"
-                              style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: "12px", objectFit: "contain", cursor: "pointer", display: "block", border: "1px solid rgba(0,0,0,0.08)" }}
-                              onClick={() => setLightboxImageUrl(msg.mediaUrl!)}
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-
-                        {/* File Attachment (Telegram botdan kelgan fayl) */}
-                        {((msg.type === "file" || Boolean(msg.mediaUrl && !(msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) || msg.mediaUrl.includes("photo"))))) && msg.mediaUrl && (
-                          <a
-                            className="chat2-media-file"
-                            href={msg.mediaUrl}
-                            download={msg.fileName || "fayl"}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "10px",
-                              padding: "9px 13px",
-                              background: "rgba(0,0,0,0.06)",
-                              borderRadius: "12px",
-                              textDecoration: "none",
-                              color: "inherit",
-                              margin: "6px 0",
-                              maxWidth: "100%",
-                              wordBreak: "break-all",
-                            }}
-                          >
-                            <span style={{ fontSize: "22px" }}>📁</span>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: "13px" }}>{msg.fileName || "Biriktirilgan fayl"}</div>
-                              <div style={{ fontSize: "11px", opacity: 0.75 }}>Faylni ochish / yuklab olish</div>
-                            </div>
-                          </a>
-                        )}
-
-                        {/* Interactive Poll Card */}
-                        {(msg.type === "poll" || msg.pollOptions) && (
-                          <div className="chat2-poll-card">
-                            <div className="chat2-poll-title">📊 {msg.pollQuestion || msg.text}</div>
-                            <div className="chat2-poll-options">
-                              {(msg.pollOptions || []).map((opt, oIdx) => {
-                                const totalVotes = (msg.pollOptions || []).reduce((acc, curr) => acc + (curr.votes || 0), 0);
-                                const percentage = totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0;
-                                const isVoted = msg.userVotedOption === oIdx;
-                                return (
-                                  <button
-                                    key={opt.id || oIdx}
-                                    type="button"
-                                    className={`chat2-poll-opt-btn ${isVoted ? "voted" : ""}`}
-                                    onClick={() => {
-                                      votePollOption(msg.id, oIdx);
-                                      playTelegramSendSound();
-                                    }}
-                                  >
-                                    <div className="chat2-poll-fill" style={{ width: `${percentage}%` }} />
-                                    <div className="chat2-poll-opt-text">
-                                      <span>{isVoted ? "☑️" : "⚪"}</span>
-                                      <span>{opt.text}</span>
-                                    </div>
-                                    <div className="chat2-poll-opt-meta">
-                                      {percentage}% ({opt.votes || 0})
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Geolocation Card */}
-                        {(msg.type === "location" || msg.location) && (
-                          <div className="chat2-location-card">
-                            <div className="chat2-location-map-preview">
-                              <div className="chat2-map-pin-badge">
-                                📍 Pin Jo'natildi
-                              </div>
-                            </div>
-                            <div className="chat2-location-info">
-                              <div className="chat2-location-address">
-                                {msg.location?.address || msg.text}
-                              </div>
-                              <a
-                                href={msg.location?.mapUrl || `https://www.google.com/maps?q=${msg.location?.lat || 41.2825},${msg.location?.lng || 69.2155}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="chat2-location-btn"
-                              >
-                                🗺️ Kartada ochish (Google Maps)
-                              </a>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Circular Video Note / Video Message */}
-                        {(msg.type === "video" || msg.type === "video_note" || Boolean(msg.mediaUrl && (msg.fileName?.includes("video") || msg.mediaUrl.startsWith("data:video")))) && msg.mediaUrl ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                            <CircleVideoNotePlayer mediaUrl={msg.mediaUrl} duration={msg.videoDuration} />
-                            {msg.text && msg.text !== "📹 Dumaloq video" && msg.text !== "📹 Video" && <div>{msg.text}</div>}
-                          </div>
-                        ) : msg.type === "audio" && msg.mediaUrl ? (
-                          <VoiceAudioPlayer mediaUrl={msg.mediaUrl} duration={msg.audioDuration} />
-                        ) : (
-                          !msg.pollOptions && !msg.location && <div>{msg.text}</div>
-                        )}
-
-                        {/* Bubble Footer Meta */}
-                        <div className="chat2-bubble-meta">
-                          {msg.isEdited && <span>(tahrirlandi)</span>}
-                          <span>
-                            {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
-                          </span>
-                          {msg.sender === "admin" && (
-                            <span>{msg.read ? "✓✓" : "✓"}</span>
-                          )}
-                        </div>
-
-                        {/* Reactions Pill Counter */}
-                        {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                          <div className="chat2-reactions-bar">
-                            {Object.entries(msg.reactions).map(([emoji, count]) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                className="chat2-reaction-pill active"
-                                onClick={() => toggleMessageReaction(msg.id, emoji)}
-                              >
-                                <span>{emoji}</span>
-                                <span>{count}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </SwipeableMessageRow>
+                  <ChatGPTMessageRow
+                    msg={msg}
+                    isUser={msg.sender === "user"}
+                    isStreaming={streamingMsgId === msg.id && idx === activeChatMessages.length - 1}
+                    onStreamComplete={() => setStreamingMsgId(null)}
+                    onCopy={(txt) => {
+                      copyToClipboard(txt);
+                      showToast("Nusxa olindi 📋");
+                    }}
+                    onReply={(m) => setReplyingToMsg(m)}
+                    onToggleBookmark={(id) => {
+                      toggleBookmarkMessage(id);
+                      showToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'pga saqlandi ⭐");
+                    }}
+                    onDelete={(id) => {
+                      deleteChatMessage(id);
+                      showToast("Xabar o'chirildi 🗑️");
+                    }}
+                    onEdit={(m) => handleStartEditMessage(m)}
+                    onImageClick={(url) => setLightboxImageUrl(url)}
+                    senderName={msg.sender === "admin" ? "GULI Operator (Siz)" : currentConversation?.userName || "Mijoz"}
+                    senderAvatar={msg.sender === "admin" ? "/guli_logo.jpg" : undefined}
+                  />
                 </div>
               );
             })}
+
+            {/* Floating Jump to Bottom Button */}
+            {showScrollBottom && (
+              <button
+                type="button"
+                className="chatgpt-floating-bottom-btn"
+                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+                title="Pastga tushish"
+              >
+                <ArrowDown size={18} />
+              </button>
+            )}
+
             <div ref={messagesEndRef} />
           </div>
         </SwipeableChatBackground>
@@ -1528,19 +1185,22 @@ export default function AdminChatTab({
 
         {/* Reply Preview Banner */}
         {replyingToMsg && (
-          <div className="chat2-reply-banner">
-            <div className="chat2-reply-banner-info">
-              <span style={{ fontWeight: 700, color: "#b6536b" }}>
-                ↩️ Javob berilmoqda: {replyingToMsg.userName || replyingToMsg.sender}
+          <div className="chatgpt-reply-preview-dock" style={{ margin: "4px 18px" }}>
+            <div className="chatgpt-reply-preview-left">
+              <span className="chatgpt-reply-preview-sender">
+                {replyingToMsg.userName || (replyingToMsg.sender === "admin" ? "Admin" : "Mijoz")}ga javob:
               </span>
-              <span style={{ color: "#475569" }}>{replyingToMsg.text}</span>
+              <span className="chatgpt-reply-preview-text">
+                {replyingToMsg.text || (replyingToMsg.type === "audio" ? "Ovozli xabar" : "Fayl")}
+              </span>
             </div>
             <button
               type="button"
-              className="chat2-reply-cancel"
+              className="chatgpt-icon-btn"
               onClick={() => setReplyingToMsg(null)}
+              title="Bekor qilish"
             >
-              ✕
+              <X size={15} />
             </button>
           </div>
         )}
@@ -1603,83 +1263,83 @@ export default function AdminChatTab({
 
         {/* Telegram Attachment Popover Menu */}
         {attachMenuOpen && (
-          <div className="telegram-attach-sheet">
+          <div className="chatgpt-attach-popover" style={{ bottom: 74, left: 24 }}>
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 galleryInputRef.current?.click();
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon gallery">🖼️</div>
+              <ImageIcon size={16} className="chatgpt-attach-icon" />
               <span>Galereya (Faqat Rasm)</span>
             </button>
 
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 cameraInputRef.current?.click();
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon camera">📸</div>
+              <span style={{ fontSize: 16 }}>📸</span>
               <span>Kamera</span>
             </button>
 
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 setIsVideoRecordingOpen(true);
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon video" style={{ background: "rgba(225, 29, 72, 0.15)", color: "#e11d48" }}>📹</div>
-              <span>Dumaloq video (Video note)</span>
+              <Video size={16} className="chatgpt-attach-icon" />
+              <span>Dumaloq video (Telegram)</span>
             </button>
 
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 fileInputRef.current?.click();
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon file">📁</div>
+              <FileText size={16} className="chatgpt-attach-icon" />
               <span>Fayl / Hujjat</span>
             </button>
 
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 setLocationPickerOpen(true);
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon location">📍</div>
+              <MapPin size={16} className="chatgpt-attach-icon" />
               <span>Lokatsiya / Kartada Geolokatsiya</span>
             </button>
 
             <button
               type="button"
-              className="telegram-attach-item"
+              className="chatgpt-attach-item"
               onClick={() => {
                 setPollModalOpen(true);
                 setAttachMenuOpen(false);
               }}
             >
-              <div className="telegram-attach-icon poll">📊</div>
+              <BarChart2 size={16} className="chatgpt-attach-icon" />
               <span>So'rovnoma yaratish</span>
             </button>
           </div>
         )}
 
-        {/* Telegram-style Composer Bar: [😊 Emoji] [Xabar yozing...][📎 Fayl/Kamera] [🎤 Voice / ➤ Send] */}
-        <form className="chat2-composer" onSubmit={handleSendReply}>
+        {/* Telegram-style Composer Bar: 100% Guli AI / ChatGPT Input Capsule */}
+        <form className="chatgpt-input-dock-container" style={{ padding: "8px 18px 14px" }} onSubmit={handleSendReply}>
           {/* Separate File Inputs for Gallery vs Camera vs File */}
           <input
             ref={galleryInputRef}
@@ -1704,62 +1364,69 @@ export default function AdminChatTab({
             onChange={handleFileUpload}
           />
 
-          {isRecordingVoice ? (
-            /* Voice Recording Active Bar */
-            <div className="chat2-voice-recording-bar">
-              <div>
-                <span className="chat2-voice-pulse" />
-                <span>Ovoz yozilmoqda... {recordingSeconds}s (qo'yib yuborsangiz yuboriladi)</span>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
+          <div className="chatgpt-input-capsule">
+            {isRecordingVoice ? (
+              <div className="chatgpt-recording-bar">
+                <div className="chatgpt-recording-tag">
+                  <span className="chatgpt-rec-pulse" />
+                  <span>Ovoz yozilmoqda...</span>
+                </div>
+                <div className="chatgpt-rec-wave">
+                  {[4, 14, 8, 18, 12, 16, 9, 15, 6, 17, 10, 14].map((h, i) => (
+                    <div
+                      key={i}
+                      className="chatgpt-rec-wave-line"
+                      style={{ height: `${h}px`, animationDelay: `${i * 0.08}s` }}
+                    />
+                  ))}
+                </div>
+                <span className="chatgpt-rec-timer">
+                  0:{recordingSeconds < 10 ? "0" : ""}{recordingSeconds}
+                </span>
                 <button
                   type="button"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#dc2626",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
+                  className="chatgpt-rec-cancel"
                   onClick={cancelVoiceRecording}
                 >
-                  ✕ Bekor qilish
+                  Bekor qilish
                 </button>
                 <button
                   type="button"
-                  style={{
-                    background: "#dc2626",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: 12,
-                    padding: "4px 12px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
+                  className="chatgpt-send-btn active"
                   onClick={sendVoiceRecording}
+                  title="Yuborish"
                 >
-                  ✔ Yuborish
+                  <ArrowUp size={18} />
                 </button>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* Capsule: [😊 Emoji] [Xabar yozing...] [📎 Clip] */}
-              <div className="chat2-input-capsule">
+            ) : (
+              <>
                 <button
                   type="button"
-                  className={`chat2-capsule-btn ${emojiPickerOpen ? "active" : ""}`}
+                  className="chatgpt-dock-btn"
+                  title="Fayl yoki media biriktirish"
+                  onClick={() => {
+                    setAttachMenuOpen(!attachMenuOpen);
+                    setEmojiPickerOpen(false);
+                  }}
+                >
+                  <Plus size={19} />
+                </button>
+
+                <button
+                  type="button"
+                  className={`chatgpt-dock-btn ${emojiPickerOpen ? "active" : ""}`}
                   title="Emoji va Stikerlar"
                   onClick={() => {
                     setEmojiPickerOpen(!emojiPickerOpen);
                     setAttachMenuOpen(false);
                   }}
                 >
-                  😊
+                  <Smile size={19} />
                 </button>
 
                 <textarea
-                  className="chat2-composer-input"
+                  className="chatgpt-dock-textarea"
                   placeholder="Xabar yozing..."
                   rows={1}
                   value={replyText}
@@ -1772,43 +1439,34 @@ export default function AdminChatTab({
                   }}
                 />
 
-                <button
-                  type="button"
-                  className={`chat2-capsule-btn ${attachMenuOpen ? "active" : ""}`}
-                  title="Fayl / Galereya / Kamera / Lokatsiya / So'rovnoma"
-                  onClick={() => {
-                    setAttachMenuOpen(!attachMenuOpen);
-                    setEmojiPickerOpen(false);
-                  }}
-                >
-                  📎
-                </button>
-              </div>
-
-              {/* Dynamic Action Button: [🎤 Voice (Hold to record, release to send) / ➤ Send] */}
-              {replyText.trim().length > 0 ? (
-                <button type="submit" className="chat2-action-circle-btn" title="Yuborish">
-                  ➤
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="chat2-action-circle-btn"
-                  title="Bosib turing: Ovoz yozish, Qo'yib yuboring: Yuborish"
-                  style={{ background: "#b6536b", userSelect: "none", touchAction: "none" }}
-                  onMouseDown={startVoiceRecording}
-                  onMouseUp={sendVoiceRecording}
-                  onTouchStart={startVoiceRecording}
-                  onTouchEnd={sendVoiceRecording}
-                  onMouseLeave={() => {
-                    if (isRecordingVoice) sendVoiceRecording();
-                  }}
-                >
-                  🎤
-                </button>
-              )}
-            </>
-          )}
+                {replyText.trim().length > 0 ? (
+                  <button
+                    type="submit"
+                    className="chatgpt-send-btn active"
+                    title="Yuborish"
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="chatgpt-dock-btn mic-btn"
+                    title="Bosib turing: Ovoz yozish, Qo'yib yuboring: Yuborish"
+                    style={{ color: "#BE123C", touchAction: "none" }}
+                    onMouseDown={startVoiceRecording}
+                    onMouseUp={sendVoiceRecording}
+                    onTouchStart={startVoiceRecording}
+                    onTouchEnd={sendVoiceRecording}
+                    onMouseLeave={() => {
+                      if (isRecordingVoice) sendVoiceRecording();
+                    }}
+                  >
+                    <Mic size={19} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </form>
         </>
       )}

@@ -1577,25 +1577,14 @@ export default function App() {
         order_id: orderId,
       });
 
-      let res = await fetch(`${API_URL}/api/orders/${encodeURIComponent(orderId)}/receipt`, {
+      const res = await fetch(`${API_URL}/api/customer/orders/${encodeURIComponent(orderId)}/receipt`, {
         method: "POST",
         headers,
         body: bodyPayload,
       }).catch((e) => {
-        console.warn("[Receipt upload direct attempt notice]", e);
+        console.warn("[Receipt upload attempt notice]", e);
         return null;
       });
-
-      if (!res || !res.ok) {
-        res = await fetch(`${API_URL}/api/customer/orders/${encodeURIComponent(orderId)}/receipt`, {
-          method: "POST",
-          headers,
-          body: bodyPayload,
-        }).catch((e) => {
-          console.warn("[Receipt upload fallback attempt notice]", e);
-          return null;
-        });
-      }
 
       if (!res) {
         throw new Error("Tarmoq xatosi: Serverga ulanib bo‘lmadi.");
@@ -2572,7 +2561,7 @@ export default function App() {
       cashback_earned: Math.round(total * 0.02),
       total,
       address,
-      payment: "Karta (Uzcard / Humo)",
+      payment: "card_manual",
       status: "⏳ To'lovni tasdiqlash kutilmoqda",
       receipt_url: uploadedReceipt,
       data: uploadedReceipt,
@@ -2580,18 +2569,11 @@ export default function App() {
       promo_code: promoApplied ? promo.trim().toUpperCase() : null,
     };
     try {
-      let r = await fetch(`${API_URL}/api/customer/orders`, {
+      const r = await fetch(`${API_URL}/api/customer/orders`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
       });
-      if (!r.ok) {
-        r = await fetch(`${API_URL}/api/orders`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payload),
-        });
-      }
       const j = await r.json();
       if (!r.ok || !j.success)
         throw new Error(j.message || "Buyurtma yuborilmadi");
@@ -2643,7 +2625,7 @@ export default function App() {
         total,
         address,
         phone: phone.trim(),
-        payment: "Karta (Uzcard / Humo)",
+        payment: "card_manual",
         status: "⏳ To'lovni tasdiqlash kutilmoqda",
         receipt_url: uploadedReceipt,
         createdAt: now,
@@ -2892,7 +2874,7 @@ export default function App() {
   const handleShare = async () => {
     const shareText =
       "GULI Premium — Nafis va sifatli ayollar ichki kiyimlari to‘plami 🌷";
-    const shareUrl = "https://t.me/guli_lingerie_bot";
+    const shareUrl = "https://t.me/guli3550bot";
     if (navigator.share) {
       try {
         await navigator.share({ title: "GULI Premium", text: shareText, url: shareUrl });
@@ -4007,7 +3989,8 @@ export default function App() {
   };
 
   return (
-    <div className="appShell">
+    <div className={`appShell ${page === "chat" ? "chatPageActive" : ""}`}>
+      {page !== "chat" && (
       <header className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
           <button
@@ -4146,6 +4129,7 @@ export default function App() {
           </button>
         </div>
       </header>
+      )}
 
       <div
         className="tabSwipeArea pageAnimEnter"
@@ -4793,7 +4777,8 @@ export default function App() {
         )}
       </div>
 
-      <nav className="bottomNav" aria-label="Asosiy navigatsiya">
+      {page !== "chat" && (
+        <nav className="bottomNav" aria-label="Asosiy navigatsiya">
         <button
           className={page === "home" ? "active" : ""}
           onClick={() => go("home")}
@@ -4842,8 +4827,7 @@ export default function App() {
           className={
             page === "profile" ||
             page === "orders" ||
-            page === "addresses" ||
-            page === "chat"
+            page === "addresses"
               ? "active"
               : ""
           }
@@ -4856,13 +4840,13 @@ export default function App() {
               active={
                 page === "profile" ||
                 page === "orders" ||
-                page === "addresses" ||
-                page === "chat"
+                page === "addresses"
               }
             />
           </span>
         </button>
       </nav>
+      )}
 
       {/* Settings Modal */}
       {isSettingsOpen && (

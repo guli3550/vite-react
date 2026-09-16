@@ -5,21 +5,12 @@ import {
   X,
   Info,
   MoreVertical,
-  Copy,
-  Check,
-  Volume2,
-  VolumeX,
-  Bookmark,
   Trash2,
   Plus,
   Mic,
   Video,
   ArrowUp,
   Image as ImageIcon,
-  Pin,
-  Sparkles,
-  Play,
-  Pause,
   ArrowDown,
   FileText,
   MapPin,
@@ -27,6 +18,7 @@ import {
   CreditCard,
   Truck,
   Percent,
+  Reply,
 } from "lucide-react";
 import { type Language } from "../utils/translations";
 import {
@@ -35,29 +27,25 @@ import {
   sendUserMessage,
   markMessagesAsRead,
   subscribeToChat,
-  toggleMessageReaction,
   toggleBookmarkMessage,
-  togglePinMessage,
-  deleteChatMessage,
   clearChatMessages,
 } from "../utils/chatSync";
-import { CircleVideoNotePlayer, TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 import { copyToClipboard } from "../utils/clipboard";
+import { ChatGPTMessageRow } from "./ChatGPTMessageRow";
+import { TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 import "../admin/components/AdminGuliChat.css";
-
-const REACTION_EMOJIS = ["❤️", "👍", "🔥", "😂", "😮", "🙏"];
 
 const CUSTOMER_SUGGESTIONS = [
   {
     icon: Truck,
     title: "Yetkazib berish muddati",
-    desc: "Toshkent va viloyatlar bo'yicha kuryerlik xizmati",
+    desc: "Qo'qon, Toshkent va viloyatlar bo'yicha tezkor yetkazib berish",
     prompt: "Yetkazib berish shartlari va muddatlari qanday?",
   },
   {
     icon: CreditCard,
     title: "To'lov usullari",
-    desc: "Click, Payme, Uzum va naqd to'lov qabul qilinadimi?",
+    desc: "Click, Payme, Uzum va naqd to'lov",
     prompt: "To'lovni qaysi usullarda amalga oshirish mumkin?",
   },
   {
@@ -99,25 +87,76 @@ export function OnlineChatView({
 
   const [inputText, setInputText] = useState("");
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMessage | null>(null);
-  const [activeMsgMenuId, setActiveMsgMenuId] = useState<string | null>(null);
   const [activeToast, setActiveToast] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+
+  // Horizontal Swipe to exit chat (swiping like flipping photos/tabs)
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const touchStartTime = useRef<number>(0);
+  const isSwipingChat = useRef<boolean>(false);
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest("textarea") ||
+      target.closest("input") ||
+      target.closest("button") ||
+      target.closest(".chatgpt-input-capsule") ||
+      target.closest(".circle-video-recorder-container") ||
+      target.closest("audio")
+    ) {
+      isSwipingChat.current = false;
+      return;
+    }
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+    isSwipingChat.current = true;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isSwipingChat.current) return;
+    isSwipingChat.current = false;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    const diffX = endX - touchStartX.current;
+    const diffY = endY - touchStartY.current;
+    const timeDiff = Date.now() - touchStartTime.current;
+    const absX = Math.abs(diffX);
+    const absY = Math.abs(diffY);
+
+    // Swipe threshold: swipe right or left horizontally
+    if (absX >= 48 && absX > absY * 1.25 && timeDiff < 800) {
+      onBack();
+    }
+  };
+
+  // Lock body scroll while in full screen chat
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   // Attachments & recording
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
-  const [isVideoRecordingOpen, setIsVideoRecordingOpen] = useState(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<number | null>(null);
@@ -142,7 +181,14 @@ export function OnlineChatView({
       const filtered = updatedMsgs.filter(
         (m) => m.id === "welcome-msg-1" || (m.userId && String(m.userId) === uId)
       );
-      setMessages(filtered);
+      setMessages((prevMsgs) => {
+        const lastMsg = filtered[filtered.length - 1];
+        const prevLast = prevMsgs[prevMsgs.length - 1];
+        if (lastMsg && (!prevLast || prevLast.id !== lastMsg.id) && lastMsg.sender === "admin") {
+          setStreamingMsgId(lastMsg.id);
+        }
+        return filtered;
+      });
       markMessagesAsRead(userId, "admin");
     });
     return () => unsubscribe();
@@ -170,7 +216,17 @@ export function OnlineChatView({
     if (!messagesContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
     const distFromBottom = scrollHeight - scrollTop - clientHeight;
-    setShowScrollBottom(distFromBottom > 160);
+    const isScrollingDown = scrollTop > lastScrollTopRef.current;
+    lastScrollTopRef.current = scrollTop;
+
+    // Show button when scrolling down towards the bottom from higher up, or when deeply scrolled up
+    if (distFromBottom <= 80) {
+      setShowScrollBottom(false);
+    } else if (distFromBottom > 140 && isScrollingDown) {
+      setShowScrollBottom(true);
+    } else if (distFromBottom > 400) {
+      setShowScrollBottom(true);
+    }
   };
 
   // Click outside to close menus
@@ -183,9 +239,6 @@ export function OnlineChatView({
       if (topMenuRef.current && !topMenuRef.current.contains(target)) {
         setTopMenuOpen(false);
       }
-      if (!target.closest(".chatgpt-msg-actions-popup") && !target.closest(".chatgpt-msg-more-trigger")) {
-        setActiveMsgMenuId(null);
-      }
     };
     window.addEventListener("mousedown", handleOutsideClick);
     window.addEventListener("touchstart", handleOutsideClick);
@@ -194,37 +247,6 @@ export function OnlineChatView({
       window.removeEventListener("touchstart", handleOutsideClick);
     };
   }, []);
-
-  // Text-To-Speech (TTS)
-  const toggleSpeak = (msgId: string, text: string) => {
-    if (!("speechSynthesis" in window)) {
-      triggerToast("Brauzeringizda ovozli o'qish qo'llab-quvvatlanmaydi");
-      return;
-    }
-    if (speakingMsgId === msgId) {
-      window.speechSynthesis.cancel();
-      setSpeakingMsgId(null);
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const cleanText = text.replace(/[*#`_>-]/g, "").trim();
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = "uz-UZ";
-    utterance.rate = 1.0;
-    utterance.onend = () => setSpeakingMsgId(null);
-    utterance.onerror = () => setSpeakingMsgId(null);
-    setSpeakingMsgId(msgId);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Copy text handler
-  const handleCopy = async (msgId: string, text: string) => {
-    if (!text) return;
-    await copyToClipboard(text);
-    setCopiedId(msgId);
-    triggerToast("Matndan nusxa olindi ✓");
-    setTimeout(() => setCopiedId(null), 2000);
-  };
 
   // Audio playback handler
   const togglePlayAudio = (id: string, url: string) => {
@@ -258,6 +280,38 @@ export function OnlineChatView({
           name: file.name,
         });
         setShowAttachMenu(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Document attachment
+  const handleDocSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (typeof event.target?.result === "string") {
+        sendUserMessage(
+          `📄 Hujjat: ${file.name}`,
+          user,
+          {
+            type: "file",
+            mediaUrl: event.target.result,
+            fileName: file.name,
+          },
+          replyingToMsg
+            ? {
+                id: replyingToMsg.id,
+                sender: replyingToMsg.sender,
+                text: replyingToMsg.text || "Biriktirilgan fayl",
+              }
+            : undefined
+        );
+        setShowAttachMenu(false);
+        setReplyingToMsg(null);
+        triggerToast("Hujjat yuborildi 📄");
       }
     };
     reader.readAsDataURL(file);
@@ -339,29 +393,6 @@ export function OnlineChatView({
     }
   };
 
-  // Video note complete
-  const handleVideoRecorded = (videoUrl: string, durationSec: number) => {
-    setIsVideoRecordingOpen(false);
-    sendUserMessage(
-      "",
-      user,
-      {
-        type: "video_note",
-        mediaUrl: videoUrl,
-        videoDuration: durationSec,
-      },
-      replyingToMsg
-        ? {
-            id: replyingToMsg.id,
-            sender: replyingToMsg.sender,
-            text: replyingToMsg.text || "Biriktirilgan fayl",
-          }
-        : undefined
-    );
-    setReplyingToMsg(null);
-    triggerToast("Dumaloq video xabar yuborildi 📹");
-  };
-
   // Send message
   const handleSend = (overrideText?: string) => {
     const textToSend = overrideText !== undefined ? overrideText : inputText.trim();
@@ -397,24 +428,10 @@ export function OnlineChatView({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Only send on Ctrl+Enter or Cmd+Enter; regular Enter adds a new line freely
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSend();
-    }
-  };
-
-  // Pinned message
-  const pinnedMessage = messages.find((m) => m.pinned);
-
-  const scrollToMessage = (msgId: string) => {
-    const el = document.getElementById(`guli-chat-turn-${msgId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.style.transition = "background-color 0.4s ease";
-      el.style.backgroundColor = "rgba(190, 18, 60, 0.08)";
-      setTimeout(() => {
-        el.style.backgroundColor = "transparent";
-      }, 1400);
     }
   };
 
@@ -424,11 +441,16 @@ export function OnlineChatView({
     : messages;
 
   return (
-    <div className="guli-chat-fullscreen-wrapper is-fullscreen" style={{ zIndex: 90 }}>
+    <div
+      className="guli-chat-fullscreen-wrapper is-fullscreen"
+      style={{ zIndex: 90 }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Floating Toast */}
       {activeToast && <div className="guli-floating-toast">{activeToast}</div>}
 
-      {/* Hidden File Input */}
+      {/* Hidden File Inputs */}
       <input
         type="file"
         ref={fileInputRef}
@@ -436,9 +458,16 @@ export function OnlineChatView({
         style={{ display: "none" }}
         onChange={handleImageSelect}
       />
+      <input
+        type="file"
+        ref={docInputRef}
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+        style={{ display: "none" }}
+        onChange={handleDocSelect}
+      />
 
       {/* ==========================================================================
-          HEADER: 100% Guli AI / ChatGPT Header (← Logo Title Info ⋮)
+          HEADER: Clean Top Header with Verified Checkmark
           ========================================================================== */}
       <div className="chatgpt-clean-header">
         <div className="chatgpt-header-left">
@@ -457,7 +486,11 @@ export function OnlineChatView({
             style={{ cursor: "pointer" }}
             title="Do'kon ma'lumotlari"
           >
-            <img src="/guli_logo.jpg" alt="GULI Lingerie" />
+            <img
+              src="/guli_logo.jpg"
+              alt="GULI Lingerie"
+              style={{ width: "38px", height: "38px", minWidth: "38px", minHeight: "38px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
+            />
           </div>
 
           <div
@@ -465,9 +498,24 @@ export function OnlineChatView({
             onClick={() => setInfoModalOpen(true)}
             style={{ cursor: "pointer" }}
           >
-            <h1 className="chatgpt-header-title" style={{ fontSize: 15.5 }}>
-              GULI Lingerie
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <h1 className="chatgpt-header-title" style={{ fontSize: 15.5, margin: 0 }}>
+                GULI Lingerie
+              </h1>
+              {/* Real Verified Blue Checkmark Badge */}
+              <span style={{ display: "inline-flex", alignItems: "center" }} title="Rasmiy tasdiqlangan do'kon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                  <path
+                    d="M22.5 12.5c0-1.58-.87-2.95-2.18-3.65.5-1.55.19-3.28-.93-4.4-1.12-1.12-2.85-1.43-4.4-.93C14.29 2.21 12.92 1.34 11.34 1.34s-2.95.87-3.65 2.18c-1.55-.5-3.28-.19-4.4.93-1.12 1.12-1.43 2.85-.93 4.4C1.05 9.55.18 10.92.18 12.5s.87 2.95 2.18 3.65c-.5 1.55-.19 3.28.93 4.4 1.12 1.12 2.85 1.43 4.4.93.7 1.31 2.07 2.18 3.65 2.18s2.95-.87 3.65-2.18c1.55.5 3.28.19 4.4-.93 1.12-1.12 1.43-2.85.93-4.4 1.31-.7 2.18-2.07 2.18-3.65z"
+                    fill="#1D9BF0"
+                  />
+                  <path
+                    d="M10.2 16.2L6.5 12.5L7.9 11.1L10.2 13.4L16.1 7.5L17.5 8.9L10.2 16.2Z"
+                    fill="#FFFFFF"
+                  />
+                </svg>
+              </span>
+            </div>
             <div className="chatgpt-header-online-indicator">
               <span className="chatgpt-indicator-dot" />
               <span>Online · Qo'llab-quvvatlash xizmati</span>
@@ -549,42 +597,31 @@ export function OnlineChatView({
         </div>
       </div>
 
-      {/* Pinned Message Top Banner */}
-      {pinnedMessage && (
-        <div
-          className="chatgpt-pinned-banner"
-          onClick={() => scrollToMessage(pinnedMessage.id)}
-        >
-          <div className="chatgpt-pinned-content">
-            <Pin size={14} className="chatgpt-pinned-icon" />
-            <span className="chatgpt-pinned-text">
-              <b>Qadalgan xabar:</b> {pinnedMessage.text || "Biriktirilgan fayl"}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="chatgpt-pinned-close-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePinMessage(pinnedMessage.id);
-              triggerToast("Qadalgan xabar olib tashlandi");
-            }}
-            title="Qadashni bekor qilish"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
       {/* Inline Search Bar */}
       {searchOpen && (
-        <div className="chatgpt-inline-search">
-          <Search size={16} color="#71717A" />
+        <div
+          className="chatgpt-inline-search"
+          style={{
+            border: "none",
+            borderBottom: "1px solid #E4E4E7",
+            outline: "none",
+            boxShadow: "none",
+            background: "#F4F4F5",
+          }}
+        >
+          <Search size={16} color="#71717A" style={{ flexShrink: 0 }} />
           <input
             type="text"
             placeholder="Xabarlardan qidirish..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              border: "none",
+              outline: "none",
+              boxShadow: "none",
+              background: "transparent",
+              color: "#18181B",
+            }}
             autoFocus
           />
           {searchQuery && (
@@ -599,6 +636,7 @@ export function OnlineChatView({
               setSearchQuery("");
               setSearchOpen(false);
             }}
+            title="Qidiruvni yopish"
           >
             <X size={16} />
           </button>
@@ -606,412 +644,128 @@ export function OnlineChatView({
       )}
 
       {/* ==========================================================================
-          MESSAGES SCROLL AREA: Pure Canvas (100% Guli AI typography & soft pills)
+          MESSAGE STREAM (CANVAS)
           ========================================================================== */}
       <div
-        className="chatgpt-messages-scrollview"
+        className="chatgpt-canvas-stream"
         ref={messagesContainerRef}
         onScroll={handleScroll}
       >
         {filteredMessages.length === 0 ? (
-          <div className="guli-chat-empty-state">
-            <div className="guli-chat-empty-logo">
-              <img
-                src="/guli_logo.jpg"
-                alt="GULI Lingerie"
-                className="guli-chat-brand-img"
-              />
-              <div className="guli-chat-empty-sparkle">
-                <Sparkles size={13} />
+          searchQuery.trim() ? (
+            /* Search yielded no results */
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "60px 20px",
+                textAlign: "center",
+                color: "#71717A",
+                margin: "auto",
+              }}
+            >
+              <div
+                style={{
+                  width: "52px",
+                  height: "52px",
+                  borderRadius: "50%",
+                  background: "#F4F4F5",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: "12px",
+                }}
+              >
+                <Search size={22} color="#A1A1AA" />
+              </div>
+              <h3 style={{ fontSize: "16px", fontWeight: 700, color: "#18181B", margin: "0 0 6px 0" }}>
+                Xabarlar topilmadi
+              </h3>
+              <p style={{ fontSize: "13px", margin: 0, maxWidth: "280px", lineHeight: 1.4 }}>
+                "{searchQuery}" so'rovi bo'yicha hech qanday xabar topilmadi
+              </p>
+            </div>
+          ) : (
+            /* Empty / Initial State: Clean ChatGPT Welcome */
+            <div className="chatgpt-empty-stage">
+              <div className="chatgpt-empty-hero">
+                <div className="chatgpt-empty-icon-capsule">
+                  <img
+                    src="/guli_logo.jpg"
+                    alt="GULI Lingerie"
+                    style={{ width: "100%", height: "100%", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                  <h2 className="chatgpt-empty-title" style={{ margin: 0 }}>GULI Lingerie</h2>
+                  <span style={{ display: "inline-flex", alignItems: "center" }} title="Rasmiy tasdiqlangan do'kon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                      <path
+                        d="M22.5 12.5c0-1.58-.87-2.95-2.18-3.65.5-1.55.19-3.28-.93-4.4-1.12-1.12-2.85-1.43-4.4-.93C14.29 2.21 12.92 1.34 11.34 1.34s-2.95.87-3.65 2.18c-1.55-.5-3.28-.19-4.4.93-1.12 1.12-1.43 2.85-.93 4.4C1.05 9.55.18 10.92.18 12.5s.87 2.95 2.18 3.65c-.5 1.55-.19 3.28.93 4.4 1.12 1.12 2.85 1.43 4.4.93.7 1.31 2.07 2.18 3.65 2.18s2.95-.87 3.65-2.18c1.55.5 3.28.19 4.4-.93 1.12-1.12 1.43-2.85.93-4.4 1.31-.7 2.18-2.07 2.18-3.65z"
+                        fill="#1D9BF0"
+                      />
+                      <path
+                        d="M10.2 16.2L6.5 12.5L7.9 11.1L10.2 13.4L16.1 7.5L17.5 8.9L10.2 16.2Z"
+                        fill="#FFFFFF"
+                      />
+                    </svg>
+                  </span>
+                </div>
+                <p className="chatgpt-empty-subtitle">
+                  Assalomu alaykum! GULI Lingerie do'koni rasmiy qo'llab-quvvatlash xizmatiga xush kelibsiz. Sizga qanday yordam bera olamiz?
+                </p>
+              </div>
+
+              {/* Quick Prompt Cards */}
+              <div className="chatgpt-suggestions-grid">
+                {CUSTOMER_SUGGESTIONS.map((item, idx) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={idx}
+                      className="chatgpt-suggestion-card"
+                      onClick={() => handleSend(item.prompt)}
+                    >
+                      <div className="chatgpt-suggestion-top">
+                        <Icon size={16} color="#BE123C" />
+                        <b>{item.title}</b>
+                      </div>
+                      <span>{item.desc}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <h2>Xush kelibsiz! Qanday yordam bera olamiz?</h2>
-            <p>
-              GULI operatorlari sizga mahsulot tanlash, o'lchamlar, yetkazib berish va to'lovlar bo'yicha tezkor yordam berishadi.
-            </p>
-
-            <div className="guli-chat-suggestions-grid">
-              {CUSTOMER_SUGGESTIONS.map((item, idx) => {
-                const IconComp = item.icon;
-                return (
-                  <div
-                    key={idx}
-                    className="guli-chat-suggestion-chip"
-                    onClick={() => handleSend(item.prompt)}
-                  >
-                    <b>
-                      <IconComp size={15} color="#BE123C" />
-                      {item.title}
-                    </b>
-                    <span>{item.desc}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          )
         ) : (
-          filteredMessages.map((msg) => {
+          filteredMessages.map((msg, idx) => {
             const isUser = msg.sender === "user";
+            const isLatest = idx === filteredMessages.length - 1;
 
             return (
-              <div
+              <ChatGPTMessageRow
                 key={msg.id}
-                id={`guli-chat-turn-${msg.id}`}
-                className={`chatgpt-turn-container ${isUser ? "user" : "ai"}`}
-              >
-                {/* 1. USER TURN: Soft pastel pill on right */}
-                {isUser ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", maxWidth: "80%" }}>
-                    <div className="chatgpt-user-bubble">
-                      {/* Quoted reply snippet */}
-                      {msg.replyToText && (
-                        <div className="chatgpt-reply-quote-box user">
-                          <div style={{ fontWeight: 700, fontSize: 11, color: "#2563eb", marginBottom: 1 }}>
-                            {msg.replyToSender || "GULI Admin"}
-                          </div>
-                          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11.5, opacity: 0.85 }}>
-                            {msg.replyToText}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Image attachment */}
-                      {msg.mediaUrl && msg.type === "image" && (
-                        <div
-                          className="chatgpt-user-image"
-                          onClick={() => window.open(msg.mediaUrl, "_blank")}
-                          title="Rasmni to'liq ko'rish"
-                        >
-                          <img src={msg.mediaUrl} alt="Yuklangan rasm" />
-                        </div>
-                      )}
-
-                      {/* Video note player */}
-                      {msg.mediaUrl && (msg.type === "video_note" || msg.type === "video") && (
-                        <div style={{ margin: "4px 0" }}>
-                          <CircleVideoNotePlayer
-                            mediaUrl={msg.mediaUrl}
-                            duration={msg.videoDuration || 5}
-                            size={160}
-                          />
-                        </div>
-                      )}
-
-                      {/* Voice waveform pill */}
-                      {msg.mediaUrl && msg.type === "audio" && (
-                        <div className="chatgpt-voice-pill">
-                          <button
-                            type="button"
-                            className="chatgpt-voice-play-btn"
-                            onClick={() => togglePlayAudio(msg.id, msg.mediaUrl!)}
-                            title={playingAudioId === msg.id ? "Pauza" : "Tinglash"}
-                          >
-                            {playingAudioId === msg.id ? <Pause size={14} /> : <Play size={14} />}
-                          </button>
-
-                          <div className="chatgpt-voice-waveforms">
-                            {[10, 20, 8, 24, 16, 12, 26, 18, 14, 22, 12, 18, 9, 21].map((h, i) => (
-                              <div
-                                key={i}
-                                className={`chatgpt-wave-bar ${playingAudioId === msg.id ? "playing" : ""}`}
-                                style={{
-                                  height: `${h}px`,
-                                  animationDelay: `${i * 0.06}s`,
-                                }}
-                              />
-                            ))}
-                          </div>
-
-                          <span className="chatgpt-voice-duration">
-                            {msg.audioDuration ? `0:${msg.audioDuration < 10 ? "0" : ""}${msg.audioDuration}` : "0:05"}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Text */}
-                      {msg.text && msg.text !== "🎤 Ovozli xabar" && msg.text !== "📹 Dumaloq video" && (
-                        <div className="chatgpt-user-text">{msg.text}</div>
-                      )}
-
-                      {/* Time meta */}
-                      <div className="chatgpt-message-time-meta">
-                        <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                        {msg.isBookmarked && <span title="Xatcho'p">⭐</span>}
-                        {msg.pinned && <span title="Qadalgan">📌</span>}
-                        <span>{msg.read ? "✓✓" : "✓"}</span>
-                      </div>
-                    </div>
-
-                    {/* Signature Guli AI Action Bar underneath */}
-                    <div className="chatgpt-actions-row" style={{ width: "100%", justifyContent: "flex-end", marginTop: 4 }}>
-                      <div className="chatgpt-actions-left" style={{ gap: 8 }}>
-                        {msg.text && (
-                          <button
-                            type="button"
-                            className={`chatgpt-icon-btn ${copiedId === msg.id ? "active-copy" : ""}`}
-                            onClick={() => handleCopy(msg.id, msg.text || "")}
-                            title="Nusxa olish"
-                          >
-                            {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
-                          </button>
-                        )}
-                        {msg.text && (
-                          <button
-                            type="button"
-                            className={`chatgpt-icon-btn ${speakingMsgId === msg.id ? "active-speak" : ""}`}
-                            onClick={() => toggleSpeak(msg.id, msg.text || "")}
-                            title="Ovozli eshitish"
-                          >
-                            {speakingMsgId === msg.id ? <VolumeX size={14} color="#BE123C" /> : <Volume2 size={14} />}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => setReplyingToMsg(msg)}
-                          title="Javob qaytarish"
-                        >
-                          <span style={{ fontSize: 12 }}>↩️</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => {
-                            togglePinMessage(msg.id);
-                            triggerToast(msg.pinned ? "Qadalgan xabar olib tashlandi" : "Xabar chat tepasiga qadaldi 📌");
-                          }}
-                          title={msg.pinned ? "Qadashni bekor qilish" : "Qadash"}
-                        >
-                          <Pin size={13} color={msg.pinned ? "#BE123C" : undefined} />
-                        </button>
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => {
-                            toggleBookmarkMessage(msg.id);
-                            triggerToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'pga saqlandi ⭐");
-                          }}
-                          title={msg.isBookmarked ? "Xatcho'pdan chiqarish" : "Xatcho'pga saqlash"}
-                        >
-                          <Bookmark size={13} color={msg.isBookmarked ? "#F59E0B" : undefined} />
-                        </button>
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => {
-                            deleteChatMessage(msg.id);
-                            triggerToast("Xabar o'chirildi 🗑️");
-                          }}
-                          title="O'chirish"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* 2. ADMIN TURN: Clean partner bubble with Guli avatar */
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", maxWidth: "82%" }}>
-                    <div className="chatgpt-partner-bubble">
-                      <div className="chatgpt-partner-header">
-                        <img
-                          src="/guli_logo.jpg"
-                          alt="GULI Admin"
-                          className="chatgpt-partner-avatar"
-                        />
-                        <span className="chatgpt-partner-name">GULI Admin</span>
-                        <span className="chatgpt-partner-badge">Operator</span>
-                      </div>
-
-                      {/* Quoted reply */}
-                      {msg.replyToText && (
-                        <div className="chatgpt-reply-quote-box">
-                          <div style={{ fontWeight: 700, fontSize: 11, color: "#BE123C", marginBottom: 1 }}>
-                            {msg.replyToSender || "Siz"}
-                          </div>
-                          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: 11.5, opacity: 0.85 }}>
-                            {msg.replyToText}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Image */}
-                      {msg.mediaUrl && msg.type === "image" && (
-                        <div
-                          className="chatgpt-user-image"
-                          onClick={() => window.open(msg.mediaUrl, "_blank")}
-                          title="Rasmni to'liq ko'rish"
-                        >
-                          <img src={msg.mediaUrl} alt="Biriktirilgan rasm" />
-                        </div>
-                      )}
-
-                      {/* Video note player */}
-                      {msg.mediaUrl && (msg.type === "video_note" || msg.type === "video") && (
-                        <div style={{ margin: "4px 0" }}>
-                          <CircleVideoNotePlayer
-                            mediaUrl={msg.mediaUrl}
-                            duration={msg.videoDuration || 5}
-                            size={160}
-                          />
-                        </div>
-                      )}
-
-                      {/* Voice waveform pill */}
-                      {msg.mediaUrl && msg.type === "audio" && (
-                        <div className="chatgpt-voice-pill">
-                          <button
-                            type="button"
-                            className="chatgpt-voice-play-btn"
-                            onClick={() => togglePlayAudio(msg.id, msg.mediaUrl!)}
-                            title={playingAudioId === msg.id ? "Pauza" : "Tinglash"}
-                          >
-                            {playingAudioId === msg.id ? <Pause size={14} /> : <Play size={14} />}
-                          </button>
-
-                          <div className="chatgpt-voice-waveforms">
-                            {[10, 20, 8, 24, 16, 12, 26, 18, 14, 22, 12, 18, 9, 21].map((h, i) => (
-                              <div
-                                key={i}
-                                className={`chatgpt-wave-bar ${playingAudioId === msg.id ? "playing" : ""}`}
-                                style={{
-                                  height: `${h}px`,
-                                  animationDelay: `${i * 0.06}s`,
-                                }}
-                              />
-                            ))}
-                          </div>
-
-                          <span className="chatgpt-voice-duration">
-                            {msg.audioDuration ? `0:${msg.audioDuration < 10 ? "0" : ""}${msg.audioDuration}` : "0:05"}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Text */}
-                      {msg.text && (
-                        <div className="chatgpt-user-text" style={{ whiteSpace: "pre-wrap" }}>
-                          {msg.text}
-                        </div>
-                      )}
-
-                      {/* Reactions bar */}
-                      {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                        <div className="chatgpt-reactions-pill-bar">
-                          {Object.entries(msg.reactions).map(([emoji, count]) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              className="chatgpt-reaction-item"
-                              onClick={() => toggleMessageReaction(msg.id, emoji)}
-                            >
-                              <span>{emoji}</span>
-                              <span>{count}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Time meta */}
-                      <div className="chatgpt-message-time-meta" style={{ justifyContent: "space-between" }}>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          {msg.isBookmarked && <span title="Xatcho'p">⭐</span>}
-                          {msg.pinned && <span title="Qadalgan">📌</span>}
-                        </div>
-                        <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                      </div>
-                    </div>
-
-                    {/* Signature Guli AI Action Bar underneath */}
-                    <div className="chatgpt-actions-row" style={{ width: "100%", justifyContent: "flex-start", marginTop: 4 }}>
-                      <div className="chatgpt-actions-left" style={{ gap: 8 }}>
-                        {msg.text && (
-                          <button
-                            type="button"
-                            className={`chatgpt-icon-btn ${copiedId === msg.id ? "active-copy" : ""}`}
-                            onClick={() => handleCopy(msg.id, msg.text || "")}
-                            title="Nusxa olish"
-                          >
-                            {copiedId === msg.id ? <Check size={14} /> : <Copy size={14} />}
-                          </button>
-                        )}
-                        {msg.text && (
-                          <button
-                            type="button"
-                            className={`chatgpt-icon-btn ${speakingMsgId === msg.id ? "active-speak" : ""}`}
-                            onClick={() => toggleSpeak(msg.id, msg.text || "")}
-                            title="Ovozli eshitish"
-                          >
-                            {speakingMsgId === msg.id ? <VolumeX size={14} color="#BE123C" /> : <Volume2 size={14} />}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => setReplyingToMsg(msg)}
-                          title="Javob qaytarish"
-                        >
-                          <span style={{ fontSize: 12 }}>↩️</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => {
-                            togglePinMessage(msg.id);
-                            triggerToast(msg.pinned ? "Qadalgan xabar olib tashlandi" : "Xabar chat tepasiga qadaldi 📌");
-                          }}
-                          title={msg.pinned ? "Qadashni bekor qilish" : "Qadash"}
-                        >
-                          <Pin size={13} color={msg.pinned ? "#BE123C" : undefined} />
-                        </button>
-                        <button
-                          type="button"
-                          className="chatgpt-icon-btn"
-                          onClick={() => {
-                            toggleBookmarkMessage(msg.id);
-                            triggerToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'pga saqlandi ⭐");
-                          }}
-                          title={msg.isBookmarked ? "Xatcho'pdan chiqarish" : "Xatcho'pga saqlash"}
-                        >
-                          <Bookmark size={13} color={msg.isBookmarked ? "#F59E0B" : undefined} />
-                        </button>
-
-                        {/* Reaction popup trigger */}
-                        <div className="chatgpt-msg-more-wrap">
-                          <button
-                            type="button"
-                            className="chatgpt-icon-btn chatgpt-msg-more-trigger"
-                            onClick={() => setActiveMsgMenuId(activeMsgMenuId === msg.id ? null : msg.id)}
-                            title="Reaksiyalar"
-                          >
-                            <span style={{ fontSize: 12 }}>❤️</span>
-                          </button>
-
-                          {activeMsgMenuId === msg.id && (
-                            <div className="chatgpt-msg-actions-popup" style={{ left: 0 }}>
-                              <div style={{ display: "flex", gap: 4, padding: "4px", justifyContent: "space-between" }}>
-                                {REACTION_EMOJIS.map((emoji) => (
-                                  <button
-                                    key={emoji}
-                                    type="button"
-                                    style={{ background: "transparent", border: "none", fontSize: 18, cursor: "pointer", padding: "2px 4px" }}
-                                    onClick={() => {
-                                      toggleMessageReaction(msg.id, emoji);
-                                      setActiveMsgMenuId(null);
-                                    }}
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+                msg={msg}
+                isUser={isUser}
+                isStreaming={streamingMsgId === msg.id && isLatest}
+                onStreamComplete={() => setStreamingMsgId(null)}
+                onCopy={(txt) => {
+                  copyToClipboard(txt);
+                  triggerToast("Nusxa olindi 📋");
+                }}
+                onReply={(m) => setReplyingToMsg(m)}
+                onToggleBookmark={(id) => {
+                  toggleBookmarkMessage(id);
+                  triggerToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'pga saqlandi ⭐");
+                }}
+                playingAudioId={playingAudioId}
+                onTogglePlayAudio={togglePlayAudio}
+                onImageClick={(url) => window.open(url, "_blank")}
+                senderName="GULI Support"
+                senderAvatar="/guli_logo.jpg"
+              />
             );
           })
         )}
@@ -1030,25 +784,59 @@ export function OnlineChatView({
       )}
 
       {/* ==========================================================================
-          BOTTOM COMMAND DOCK: ➕ 🎤 Capsule Matn kiritish... ⬆
+          BOTTOM COMMAND DOCK: ➕ Capsule Matn kiritish... ⬆
           ========================================================================== */}
       <div className="chatgpt-input-dock-container">
-        {/* Replying-To preview bar */}
+        {/* Replying-To preview bar (distinct separate card above input capsule) */}
         {replyingToMsg && (
-          <div className="chatgpt-reply-preview-dock">
-            <div className="chatgpt-reply-preview-left">
-              <span className="chatgpt-reply-preview-sender">
-                {replyingToMsg.sender === "admin" ? "GULI Admin" : "Siz"}ga javob:
-              </span>
-              <span className="chatgpt-reply-preview-text">
-                {replyingToMsg.text || "Biriktirilgan fayl"}
-              </span>
+          <div
+            className="chatgpt-reply-preview-dock"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "#FFFFFF",
+              border: "1px solid #E4E4E7",
+              borderLeft: "4px solid #BE123C",
+              borderRadius: "12px",
+              padding: "8px 12px",
+              marginBottom: "8px",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+              <Reply size={14} color="#BE123C" style={{ flexShrink: 0 }} />
+              <div style={{ minWidth: 0, overflow: "hidden" }}>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    color: "#BE123C",
+                  }}
+                >
+                  {replyingToMsg.sender === "admin" ? "GULI Support" : "Siz"}ga javob:
+                </span>
+                <span
+                  style={{
+                    display: "block",
+                    fontSize: "12.5px",
+                    color: "#475569",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {replyingToMsg.text || "Biriktirilgan fayl"}
+                </span>
+              </div>
             </div>
             <button
               type="button"
               className="chatgpt-icon-btn"
               onClick={() => setReplyingToMsg(null)}
               title="Javobni bekor qilish"
+              style={{ flexShrink: 0, marginLeft: "8px" }}
             >
               <X size={15} />
             </button>
@@ -1113,7 +901,7 @@ export function OnlineChatView({
             </div>
           ) : (
             <>
-              {/* Left Action: Plus button with attachment menu */}
+              {/* Left Action: Plus button with attachment menu (without round video) */}
               <div className="chatgpt-input-left" ref={attachMenuRef}>
                 <button
                   type="button"
@@ -1142,18 +930,7 @@ export function OnlineChatView({
                       className="chatgpt-attach-item"
                       onClick={() => {
                         setShowAttachMenu(false);
-                        setIsVideoRecordingOpen(true);
-                      }}
-                    >
-                      <Video size={16} className="chatgpt-attach-icon" />
-                      <span>Dumaloq video (Telegram)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="chatgpt-attach-item"
-                      onClick={() => {
-                        setShowAttachMenu(false);
-                        fileInputRef.current?.click();
+                        docInputRef.current?.click();
                       }}
                     >
                       <FileText size={16} className="chatgpt-attach-icon" />
@@ -1185,7 +962,7 @@ export function OnlineChatView({
                 )}
               </div>
 
-              {/* Text Input */}
+              {/* Text Input allowing multi-line text input */}
               <textarea
                 ref={textareaRef}
                 className="chatgpt-dock-textarea"
@@ -1194,13 +971,13 @@ export function OnlineChatView({
                 onChange={(e) => {
                   setInputText(e.target.value);
                   e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 220)}px`;
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder={replyingToMsg ? "Javob yozing..." : "Xabar yozing..."}
               />
 
-              {/* Right Action: Send Button OR Voice / Video Notes */}
+              {/* Right Action: Send Button OR Voice Note & Circular Selfie Video */}
               {inputText.trim() || selectedImage ? (
                 <button
                   type="button"
@@ -1211,7 +988,7 @@ export function OnlineChatView({
                   <ArrowUp size={18} />
                 </button>
               ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
                   <button
                     type="button"
                     className="chatgpt-dock-btn"
@@ -1223,8 +1000,8 @@ export function OnlineChatView({
                   <button
                     type="button"
                     className="chatgpt-dock-btn"
-                    onClick={() => setIsVideoRecordingOpen(true)}
-                    title="Dumaloq video yozish"
+                    onClick={() => setShowVideoRecorder(true)}
+                    title="Yumaloq video (selfi) yozish"
                   >
                     <Video size={19} />
                   </button>
@@ -1234,15 +1011,6 @@ export function OnlineChatView({
           )}
         </div>
       </div>
-
-      {/* Telegram Circular Video Note Recorder Overlay */}
-      {isVideoRecordingOpen && (
-        <TelegramCircularVideoRecorderOverlay
-          onSend={handleVideoRecorded}
-          onCancel={() => setIsVideoRecordingOpen(false)}
-          onShowToast={triggerToast}
-        />
-      )}
 
       {/* Store Information Modal */}
       {infoModalOpen && (
@@ -1279,12 +1047,26 @@ export function OnlineChatView({
                 <img
                   src="/guli_logo.jpg"
                   alt="GULI"
-                  style={{ width: 46, height: 46, borderRadius: "50%", objectFit: "cover" }}
+                  style={{ width: "46px", height: "46px", minWidth: "46px", minHeight: "46px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
                 />
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#18181B" }}>
-                    GULI Lingerie
-                  </h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#18181B" }}>
+                      GULI Lingerie
+                    </h3>
+                    <span style={{ display: "inline-flex", alignItems: "center" }} title="Rasmiy tasdiqlangan do'kon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                        <path
+                          d="M22.5 12.5c0-1.58-.87-2.95-2.18-3.65.5-1.55.19-3.28-.93-4.4-1.12-1.12-2.85-1.43-4.4-.93C14.29 2.21 12.92 1.34 11.34 1.34s-2.95.87-3.65 2.18c-1.55-.5-3.28-.19-4.4.93-1.12 1.12-1.43 2.85-.93 4.4C1.05 9.55.18 10.92.18 12.5s.87 2.95 2.18 3.65c-.5 1.55-.19 3.28.93 4.4 1.12 1.12 2.85 1.43 4.4.93.7 1.31 2.07 2.18 3.65 2.18s2.95-.87 3.65-2.18c1.55.5 3.28.19 4.4-.93 1.12-1.12 1.43-2.85.93-4.4 1.31-.7 2.18-2.07 2.18-3.65z"
+                          fill="#1D9BF0"
+                        />
+                        <path
+                          d="M10.2 16.2L6.5 12.5L7.9 11.1L10.2 13.4L16.1 7.5L17.5 8.9L10.2 16.2Z"
+                          fill="#FFFFFF"
+                        />
+                      </svg>
+                    </span>
+                  </div>
                   <span style={{ fontSize: 12.5, color: "#10B981", fontWeight: 600 }}>
                     ● Qo'llab-quvvatlash xizmati
                   </span>
@@ -1301,14 +1083,21 @@ export function OnlineChatView({
 
             <div style={{ background: "#F4F4F5", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10, fontSize: 13, color: "#27272A" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ color: "#71717A" }}>📞 Call Center:</span>
+                <span style={{ color: "#71717A" }}>📞 Telefon / Call-markaz:</span>
                 <a href="tel:+998905811117" style={{ fontWeight: 700, color: "#BE123C", textDecoration: "none" }}>
                   +998 90 581 11 17
                 </a>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#71717A" }}>💬 Telegram Bot:</span>
-                <span style={{ fontWeight: 600, color: "#0284C7" }}>@guli_lingerie_bot</span>
+                <a
+                  href="https://t.me/guli3550bot"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontWeight: 600, color: "#0284C7", textDecoration: "none" }}
+                >
+                  @guli3550bot
+                </a>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#71717A" }}>⏰ Ish tartibi:</span>
@@ -1316,7 +1105,7 @@ export function OnlineChatView({
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#71717A" }}>📍 Manzil:</span>
-                <span style={{ fontWeight: 500 }}>Toshkent shahri, O'zbekiston</span>
+                <span style={{ fontWeight: 600, color: "#18181B" }}>Qo'qon shahar, O'zbekiston</span>
               </div>
             </div>
 
@@ -1339,6 +1128,35 @@ export function OnlineChatView({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Telegram Circular Video Note (Selfie) Overlay */}
+      {showVideoRecorder && (
+        <TelegramCircularVideoRecorderOverlay
+          onCancel={() => setShowVideoRecorder(false)}
+          onSend={(base64Video, durationSec) => {
+            setShowVideoRecorder(false);
+            sendUserMessage(
+              "",
+              user,
+              {
+                type: "video_note",
+                mediaUrl: base64Video,
+                videoDuration: durationSec,
+              },
+              replyingToMsg
+                ? {
+                    id: replyingToMsg.id,
+                    sender: replyingToMsg.sender,
+                    text: replyingToMsg.text || "Biriktirilgan fayl",
+                  }
+                : undefined
+            );
+            setReplyingToMsg(null);
+            triggerToast("Yumaloq video xabar yuborildi 📹");
+          }}
+          onShowToast={triggerToast}
+        />
       )}
     </div>
   );

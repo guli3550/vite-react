@@ -48,6 +48,8 @@ export async function syncCustomerProfile(
   accessToken: string,
   _extra?: { full_name?: string; phone?: string; avatar_url?: string; auth_provider?: string }
 ): Promise<void> {
+  void _user;
+  void _extra;
   if (!accessToken) return;
   try {
     await fetch(`${BACKEND_API_URL}/api/customer/sync`, {

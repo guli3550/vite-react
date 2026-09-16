@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { Order } from "../App";
 import type { Language } from "../utils/translations";
 import type { Currency } from "../utils/currency";
@@ -9,6 +10,10 @@ import goldCoinsCashbackImg from "../assets/images/gold_coins_cashback_178953047
 import onlineChatBgImg from "../assets/images/online_chat_bg_1789530489414.jpg";
 import operatorCallBgImg from "../assets/images/operator_call_bg_1789530502870.jpg";
 import lionVipBgImg from "../assets/images/lion_vip_bg_1789530516581.jpg";
+
+// Persistent background images for Guli Premium customer card (Day / Night mode)
+import profileCardDayImg from "../assets/images/profile_card_day_1789579089419.jpg";
+import profileCardNightImg from "../assets/images/profile_card_night_1789579107403.jpg";
 
 export const TelegramLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
   <svg
@@ -1160,7 +1165,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                 transition: "border-color 0.4s ease, box-shadow 0.4s ease",
               }}
             >
-              {/* Full-bleed 16:9 Persistent CSS Background Layers (No loading flicker, instant offline & tab switch) */}
+              {/* Full-bleed 16:9 Persistent Day/Night Background Images (Cached in bundle, zero flicker, offline ready) */}
               <div
                 aria-hidden="true"
                 style={{
@@ -1171,46 +1176,54 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   pointerEvents: "none",
                   overflow: "hidden",
                   zIndex: 1,
-                  background: isDark
-                    ? "linear-gradient(135deg, #1c0512 0%, #0c0207 100%)"
-                    : "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%)",
+                  backgroundColor: isDark ? "#12030a" : "#fff1f2",
                 }}
               >
-                {/* Night Mode Background Layer */}
-                <div
+                {/* Night Mode Background Image Layer */}
+                <img
+                  src={profileCardNightImg}
+                  alt=""
+                  loading="eager"
+                  decoding="sync"
                   style={{
                     position: "absolute",
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    background: "linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%)",
+                    objectFit: "cover",
+                    objectPosition: "center",
                     opacity: isDark ? 1 : 0,
-                    transition: "opacity 0.35s ease-in-out",
+                    transition: "opacity 0.4s ease-in-out",
                   }}
                 />
 
-                {/* Day Mode Background Layer */}
-                <div
+                {/* Day Mode Background Image Layer */}
+                <img
+                  src={profileCardDayImg}
+                  alt=""
+                  loading="eager"
+                  decoding="sync"
                   style={{
                     position: "absolute",
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    background: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%)",
+                    objectFit: "cover",
+                    objectPosition: "center",
                     opacity: isDark ? 0 : 1,
-                    transition: "opacity 0.35s ease-in-out",
+                    transition: "opacity 0.4s ease-in-out",
                   }}
                 />
 
-                {/* Subtle uniform scrim for text contrast - completely uniform, NO dividing line */}
+                {/* Scrim overlay for text contrast and readability */}
                 <div
                   style={{
                     position: "absolute",
                     inset: 0,
                     background: isDark
-                      ? "linear-gradient(180deg, rgba(12, 2, 7, 0.18) 0%, rgba(12, 2, 7, 0.38) 100%)"
-                      : "linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.3) 100%)",
-                    transition: "background 0.35s ease",
+                      ? "linear-gradient(180deg, rgba(12, 2, 7, 0.35) 0%, rgba(12, 2, 7, 0.6) 100%)"
+                      : "linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.42) 100%)",
+                    transition: "background 0.4s ease",
                   }}
                 />
               </div>
@@ -2300,65 +2313,74 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: Logout Confirmation (Centered in the viewport, modern platform design) */}
-      {isLogoutConfirmOpen && (
+      {/* MODAL 2: Logout Confirmation (Rendered directly into body for perfect viewport centering) */}
+      {isLogoutConfirmOpen && typeof document !== "undefined" && createPortal(
         <div
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsLogoutConfirmOpen(false);
           }}
           style={{
             position: "fixed",
-            inset: 0,
-            backgroundColor: isDark ? "rgba(0, 0, 0, 0.82)" : "rgba(15, 23, 42, 0.65)",
-            backdropFilter: "blur(12px)",
-            WebkitBackdropFilter: "blur(12px)",
-            zIndex: 999999,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: isDark ? "rgba(0, 0, 0, 0.78)" : "rgba(15, 23, 42, 0.58)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            zIndex: 99999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "16px",
+            padding: "20px 16px",
+            boxSizing: "border-box",
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: "380px",
+              maxWidth: "350px",
               backgroundColor: isDark ? "#1c1317" : "#ffffff",
               color: isDark ? "#fbeff2" : "#1e293b",
-              borderRadius: "26px",
-              padding: "26px 22px",
-              boxShadow: isDark ? "0 24px 80px rgba(0, 0, 0, 0.85)" : "0 24px 80px rgba(0, 0, 0, 0.25)",
+              borderRadius: "24px",
+              padding: "24px 20px",
+              boxShadow: isDark ? "0 24px 80px rgba(0, 0, 0, 0.85)" : "0 20px 60px rgba(0, 0, 0, 0.22)",
               border: isDark ? "1px solid #38262d" : "1px solid #e2e8f0",
               textAlign: "center",
-              margin: "auto",
+              boxSizing: "border-box",
             }}
           >
             {/* Elegant Danger Icon Circle */}
             <div
               style={{
-                width: "56px",
-                height: "56px",
+                width: "52px",
+                height: "52px",
+                minWidth: "52px",
+                minHeight: "52px",
                 borderRadius: "50%",
                 backgroundColor: isDark ? "rgba(239, 68, 68, 0.18)" : "rgba(239, 68, 68, 0.12)",
                 color: "#ef4444",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                margin: "0 auto 16px auto",
-                boxShadow: "0 4px 14px rgba(239, 68, 68, 0.18)",
+                margin: "0 auto 14px auto",
+                boxShadow: "0 4px 14px rgba(239, 68, 68, 0.15)",
+                flexShrink: 0,
               }}
             >
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
             </div>
 
-            <h3 style={{ fontSize: "19px", fontWeight: 800, margin: "0 0 8px", color: isDark ? "#fbeff2" : "#1e293b" }}>
+            <h3 style={{ fontSize: "18px", fontWeight: 800, margin: "0 0 8px", color: isDark ? "#fbeff2" : "#1e293b" }}>
               Tizimdan chiqish
             </h3>
-            <p style={{ fontSize: "13.5px", color: isDark ? "#b89ea6" : "#64748b", lineHeight: 1.5, margin: "0 0 22px" }}>
+            <p style={{ fontSize: "13px", color: isDark ? "#b89ea6" : "#64748b", lineHeight: 1.5, margin: "0 0 20px" }}>
               Haqiqatan ham GULI hisobingizdan chiqmoqchimisiz? Barcha xaridlar tarixi va keshbek balansingiz saqlanib qoladi.
             </p>
 
@@ -2403,7 +2425,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </main>
   );

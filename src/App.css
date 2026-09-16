@@ -85,6 +85,8 @@ button:disabled{cursor:not-allowed}
 img{max-width:100%}
 
 .appShell{min-height:100vh;padding-bottom:86px;background:var(--bg-main);position:relative}
+.appShell.chatPageActive{padding-bottom:0 !important;height:100vh !important;height:100dvh !important;max-height:100dvh !important;min-height:100vh !important;overflow:hidden !important}
+.appShell.chatPageActive .tabSwipeArea{height:100% !important;min-height:100% !important;display:flex !important;flex-direction:column !important;overflow:hidden !important}
 .topbar{height:70px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--bg-card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:1000;border-bottom:1px solid var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,0.03)}
 [data-theme="dark"] .topbar{background:var(--bg-card)}
 

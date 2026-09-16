@@ -163,8 +163,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         </div>
         {error && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(220,38,38,.10)",color:"#b91c1c",fontSize:14}}>{error}</div>}
         {success && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(34,197,94,.10)",color:"#15803d",fontSize:14}}>{success}</div>}
-        <button type="button" onClick={start} disabled={loading||waiting} style={{width:"100%",padding:"15px 18px",border:0,borderRadius:14,cursor:loading?"wait":"pointer",fontSize:15,fontWeight:800,background:"#229ED9",color:"white",display:"flex",alignItems:"center",justifyContent:"center",gap:9,boxShadow:"0 4px 14px rgba(34,158,217,0.35)",opacity:loading||waiting?.7:1}}>
-          {loading ? "⏳ Telegram ochilmoqda…" : status === "ready" ? "🔐 Tasdiqlandi…" : status === "waiting" ? "📲 Telegram tasdig‘i kutilmoqda…" : "Telegram orqali kirish"}
+        <button type="button" onClick={start} disabled={loading||waiting} style={{width:"100%",padding:"15px 18px",border:0,borderRadius:14,cursor:loading?"wait":"pointer",fontSize:15,fontWeight:800,background:"#229ED9",color:"white",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:"0 4px 14px rgba(34,158,217,0.35)",opacity:loading||waiting?.7:1}}>
+          <svg width="20" height="20" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
+            <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white"/>
+          </svg>
+          <span>{loading ? "⏳ Telegram ochilmoqda…" : status === "ready" ? "🔐 Tasdiqlandi…" : status === "waiting" ? "📲 Telegram tasdig‘i kutilmoqda…" : "Telegram orqali kirish"}</span>
         </button>
         {waiting && <div style={{marginTop:14,padding:12,borderRadius:12,background:"var(--bg-card-sub,rgba(100,116,139,.08))",color:"var(--text-main)",fontSize:13,lineHeight:1.5}}>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</div>}
         {!forceGate && onClose && <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",color:"var(--text-muted,#64748b)",cursor:"pointer",opacity:.8,fontSize:13.5,fontWeight:600}}>Yopish</button>}

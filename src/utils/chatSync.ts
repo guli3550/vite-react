@@ -111,15 +111,42 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
       saveChatMessages(combined);
       return combined;
     }
-  } catch (err) {
-    console.error("Backend sync failed:", err);
+  } catch {
+    // Backend sync offline/local mode fallback
   }
   return getStoredChatMessages(telegramId);
 }
 
 export async function sendChatMessage(msg: Partial<ChatMessage>): Promise<ChatMessage | null> {
   if (!msg.userId || (!msg.text?.trim() && !msg.mediaUrl) || !msg.sender) return null;
-  try { const res = await fetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ telegram_id: msg.userId, sender: msg.sender, text: msg.text?.trim() || "" }) }); const json = await res.json(); if (json.success) { const newMsg: ChatMessage = { id: json.data.id, sender: json.data.sender === "customer" ? "user" : "admin", text: json.data.text, timestamp: json.data.created_at, read: true, userId: json.data.telegram_id, userName: msg.userName }; saveChatMessages([...getStoredChatMessages(), newMsg]); return newMsg; } } catch (err) { console.error("Failed to send message to backend:", err); } return null;
+  try {
+    const res = await fetch(`${API_URL}/api/chat/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        telegram_id: msg.userId,
+        sender: msg.sender,
+        text: msg.text?.trim() || "",
+      }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      const newMsg: ChatMessage = {
+        id: json.data.id,
+        sender: json.data.sender === "customer" ? "user" : "admin",
+        text: json.data.text,
+        timestamp: json.data.created_at,
+        read: true,
+        userId: json.data.telegram_id,
+        userName: msg.userName,
+      };
+      saveChatMessages([...getStoredChatMessages(), newMsg]);
+      return newMsg;
+    }
+  } catch {
+    // Local fallback
+  }
+  return null;
 }
 
 let broadcastChannel: BroadcastChannel | null = null;
@@ -262,8 +289,8 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
           }
         })
       });
-    } catch (e) {
-      console.error("Chat backend sync failed:", e);
+    } catch {
+      // Backend sync fallback
     }
   }
   return newMsg;
@@ -295,8 +322,8 @@ export async function sendAdminReply(userId: string, text: string, media?: { typ
         }
       })
     });
-  } catch (e) {
-    console.error("Admin chat backend sync failed:", e);
+  } catch {
+    // Admin chat sync fallback
   }
   notifyNewAdminMessage(reply);
   return reply;
