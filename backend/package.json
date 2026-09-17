@@ -6,9 +6,11 @@
   "scripts": {
     "start": "node -r ./canonicalServerBoundary.js -r ./canonicalAuthOnlyGuard.js -r ./adminEnvNormalizationPatch.js -r ./authenticatedCardPaymentPatch.js -r ./googleAuthPatch.js -r ./productionConfigPatch.js -r ./orderSecurityPatch.js -r ./telegramProductPublisherRuntime.js -r ./telegramRateLimitPatch.js -r ./telegramRuntimePatch.js -r ./guliTelegramProfileAuthPatch.js -r ./canonicalTelegramSessionAuthPatch.js -r ./authRuntimePatch.js -r ./paymentReceiptFinalRuntime.js -r ./manualCardPaymentRuntime.js -r ./customerGuestModeDisabledPatch.js -r ./atomicPaymentDecisionPatch.js -r ./orderStatusIntegrityPatch.js -r ./orderCreationIntegrityPatch.js -r ./chatMessageAuthBoundaryPatch.js -r ./chatMediaStorageRuntime.js -r ./paymentConfirmationRuntime.js -r ./paymentOrderUrlSanitizer.js -r ./paymentReceiptPaymentsOnlyRuntime.js -r ./categoryResiliencePatch.js -r ./category-settings-patch.js -r ./customerOrdersSyncPatch.js -r ./canonicalCustomerProfileRuntime.js -r ./telegramRealtimeFanoutPatch.js -r ./chatRealtimePatch.js -r ./chatGuestSessionHardeningPatch.js -r ./telegramChatBridgePatch.js -r ./chatPersistencePatch.js -r ./telegramAdminConfigPatch.js -r ./telegramSecureTestPatch.js -r ./broadcastDirectRoutePatch.js -r ./broadcastReliabilityPatch.js -r ./telegramCanonicalWebAppPatch.js -r ./telegramAdminBotProduction.js -r ./guliOrderAuthBoundaryRuntime.js -r ./telegramWebhookSecretPatch.js -r ./reviewCanonicalAuthBridge.js -r ./canonicalReviewRuntime.js -r ./canonicalCategoryRuntime.js -r ./adminAiChatRuntime.js index.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "@google/genai": "^0.1.2",
+    "@google/genai": "^2.23.0",
     "@supabase/supabase-js": "^2.57.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
