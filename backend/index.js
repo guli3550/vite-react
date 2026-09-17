@@ -7,6 +7,9 @@ const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculateP
 
 const app = express();
 
+// Render/Cloudflare reverse-proxy boundary: trust exactly one proxy hop.
+app.set("trust proxy", 1);
+
 const ALLOWED_STATIC_ORIGINS = new Set([
   "https://guli-gateway.parizodabaxtiyorov.workers.dev",
   "https://vite-react-seven-inky-10.vercel.app",
