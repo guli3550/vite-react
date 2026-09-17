@@ -52,7 +52,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: "4mb" }));
+app.use(express.json({ limit: "15mb" }));
 
 function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");

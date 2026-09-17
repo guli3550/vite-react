@@ -47,7 +47,33 @@ export type AdminGuliChatMessage = {
   feedback?: "like" | "dislike" | null;
   processingTime?: string;
   sources?: { name: string; icon?: string }[];
+  model?: string;
+  fallback?: boolean;
+  fallbackFrom?: string;
+  requestId?: string;
 };
+
+export const AVAILABLE_MODELS = [
+  {
+    id: "gemini-3.8-flash",
+    name: "Gemini 3.8 Flash",
+    tag: "Asosiy / Tavsiya etiladi",
+    tier: "Free Tier",
+  },
+  {
+    id: "gemini-3.1-flash-lite",
+    name: "Gemini 3.1 Flash Lite",
+    tag: "Tezkor / Yengil",
+    tier: "Free Tier",
+  },
+  {
+    id: "gemini-3.5-flash",
+    name: "Gemini 3.5 Flash",
+    tag: "Zaxira / Fallback",
+    tier: "Free Tier",
+  },
+];
+
 
 export type AdminChatSession = {
   id: string;
@@ -95,11 +121,7 @@ const DEFAULT_SUGGESTIONS = [
 ];
 
 export default function AdminGuliChatTab({
-  orders = [],
-  products = [],
-  dashboardData,
-  promos = [],
-  users = [],
+  token,
 }: AdminGuliChatTabProps) {
   // Sessions state (ChatGPT & Gemini Style history)
   const [sessions, setSessions] = useState<AdminChatSession[]>(() => {
@@ -218,6 +240,11 @@ export default function AdminGuliChatTab({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const optionsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Gemini AI Model state (Free Tier models)
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return localStorage.getItem("guli_admin_ai_model") || "gemini-3.8-flash";
+  });
 
   // Audio Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -338,9 +365,16 @@ export default function AdminGuliChatTab({
   // Process image file
   const processImageFile = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      alert("Iltimos, rasm faylini tanlang (PNG, JPG, WEBP).");
+      triggerToast("Iltimos, faqat rasm faylini tanlang (PNG, JPG, WEBP).");
       return;
     }
+
+    const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
+    if (file.size > MAX_IMAGE_BYTES) {
+      triggerToast("Rasm hajmi 8 MB dan oshmasligi kerak. Iltimos, kichikroq rasm tanlang.");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       if (typeof event.target?.result === "string") {
@@ -407,11 +441,12 @@ export default function AdminGuliChatTab({
         const audioUrl = URL.createObjectURL(audioBlob);
         const durationStr = `0:${recordSeconds < 10 ? "0" : ""}${recordSeconds}`;
 
-        // Only send the voice note - NO redundant text ("🎤 Ovozli xabar" olib tashlandi)
+        // Only send the voice note with raw audioBlob for transcription & multimodal analysis
         sendUserMessage({
           text: "",
           audioUrl,
           audioDuration: durationStr,
+          audioBlob,
         });
       };
 
@@ -536,118 +571,143 @@ export default function AdminGuliChatTab({
     }
   };
 
-  // Store context summary for intelligent replies
-  const storeContext = useMemo(() => {
-    const totalOrdersCount = orders.length;
-    const pendingOrders = orders.filter((o) => o.status === "new" || o.status === "pending" || !o.status).length;
-    const deliveredOrders = orders.filter((o) => o.status === "delivered" || o.status === "completed").length;
-    
-    // Revenue
-    const totalRevenue = dashboardData?.totalSales || orders.reduce((acc, o) => {
-      const sum = Number(o.total_price || o.total || 0);
-      return acc + (isNaN(sum) ? 0 : sum);
-    }, 0);
-
-    // Products
-    const totalProducts = products.length;
-    const lowStockProducts = products.filter((p) => (Number(p.stock) || 0) <= 5 && (Number(p.stock) || 0) > 0);
-    const outOfStockProducts = products.filter((p) => (Number(p.stock) || 0) === 0);
-
-    return {
-      totalOrdersCount,
-      pendingOrders,
-      deliveredOrders,
-      totalRevenue: totalRevenue.toLocaleString(),
-      totalProducts,
-      lowStockCount: lowStockProducts.length,
-      outOfStockCount: outOfStockProducts.length,
-      promosCount: promos.length,
-      usersCount: users.length,
-      sampleProductNames: products.slice(0, 5).map((p) => p.name).join(", "),
-      lowStockNames: lowStockProducts.slice(0, 4).map((p) => `${p.name} (${p.stock} dona)`).join(", "),
-    };
-  }, [orders, products, promos, users, dashboardData]);
-
-  // AI Response Generator
-  const generateAIResponse = (userPrompt: string, hasImage = false, isVoice = false): { text: string; time: string; sources?: { name: string; icon?: string }[] } => {
-    const query = userPrompt.toLowerCase();
-
-    // 1. Image analysis request
-    if (hasImage) {
-      return {
-        text: `🌷 **GULI Visual AI Tahlili:**\n\nYuklangan rasm muvaffaqiyatli tahlil qilindi:\n\n- **Mahsulot toifasi:** Nafis ayollar kiyimi / Premium kolleksiya\n- **Rang va uslub:** Yuqori sifatli mato teksturasi, to'g'ri yoritilgan va estetik jozibador\n- **Tavsiya:** Ushbu rasm do'kon vitrinasi va Telegram kanal banneri uchun juda mos keladi.\n- **Post matni:** *"GULI kolleksiyasidan yangi joziba — nafislik va qulaylik uyg'unligi. O'zingizga munosibini tanlang 🌷"*\n\nAdmin paneldagi mahsulot kartasiga biriktirish yoki reklama kampaniyasida foydalanish mumkin.`,
-        time: "Обработка заняла 2s",
-        sources: [{ name: "Vision AI" }, { name: "Guli Katalog" }],
-      };
-    }
-
-    // 2. Orders and revenue inquiry
-    if (query.includes("savdo") || query.includes("buyurtma") || query.includes("tushum") || query.includes("hisobot")) {
-      return {
-        text: `📊 **GULI Do'koni Hozirgi Ko'rsatkichlari:**\n\n- **Jami buyurtmalar:** ${storeContext.totalOrdersCount} ta\n- **Kutilayotgan (yangi):** ${storeContext.pendingOrders} ta\n- **Yetkazilgan:** ${storeContext.deliveredOrders} ta\n- **Umumiy savdo tushumi:** ${storeContext.totalRevenue} so'm\n- **Ro'yxatdan o'tgan mijozlar:** ${storeContext.usersCount} nafar\n\n💡 **Tavsiya:** Yangi tushgan buyurtmalarni kuryerga tezroq topshirish orqali mijozlar qoniqishini 98% dan yuqori darajada ushlab turishingiz mumkin.`,
-        time: "Обработка заняла 1s",
-        sources: [{ name: "GULI DB" }, { name: "Buyurtmalar" }],
-      };
-    }
-
-    // 3. Stock / Inventory inquiry
-    if (query.includes("ombor") || query.includes("qoldiq") || query.includes("mahsulot") || query.includes("kam qolgan")) {
-      return {
-        text: `📦 **Ombor holati bo'yicha hisobot:**\n\n- **Jami faol mahsulotlar:** ${storeContext.totalProducts} xil\n- **Kam qolganlar (≤ 5 dona):** ${storeContext.lowStockCount} ta ${storeContext.lowStockNames ? `(${storeContext.lowStockNames})` : ""}\n- **Tugagan mahsulotlar:** ${storeContext.outOfStockCount} ta\n\n⚠️ **Harakat rejasi:**\n1. Kam qolgan o'lchamlar uchun yetkazib beruvchiga oldindan buyurtma bering.\n2. Do'kon vitrinasida eng ko'p talab qilinayotgan to'plamlarni birinchi o'ringa chiqaring.`,
-        time: "Обработка заняla 1s",
-        sources: [{ name: "Omborxona" }],
-      };
-    }
-
-    // 4. Merge / Code / Deployment request (matching screenshot style)
-    if (query.includes("merge") || query.includes("deploy") || query.includes("audit") || query.includes("vercel") || query.includes("pr")) {
-      return {
-        text: `Bajarildi. ✅\n\n**PR #37** fix(reviews): real canonical reviews and realtime identity → **main ga merge qilindi.**\n\n● **Merge commit:**\n\`af0e126495a62cff2e9069a8da982e153ae03e05\`\n\n● **main** endi review audit/fix kodlarini to'liq o'z ichiga oladi.\n\n**Muhim:** \`vercel.com/drop\` orqali yangi loyiha ochib yuborishni hozir qilmaymiz — u mavjud GULI Vercel projectini yangilash o'rniga yangi project yaratishi mumkin. \n\nAgar xohlasangiz, **Vercel Dashboard**'da aynan qaysi tugmalarni bosishingizni 1–2–3 qilib aytib beraman.`,
-        time: "Обработка заняла 13s",
-        sources: [{ name: "Vercel" }, { name: "GitHub" }],
-      };
-    }
-
-    // 5. Marketing post & copywriting
-    if (query.includes("post") || query.includes("instagram") || query.includes("telegram") || query.includes("matn") || query.includes("tavsif")) {
-      return {
-        text: `✨ **GULI Premium uchun tayyor Telegram / Instagram posti:**\n\n🌷 *Har bir ayol o‘zini betakror his qilishga loyiq.*\n\nNafis ipak va yumshoq paxtadan ishlangan yangi GULI to‘plami — bu shunchaki kiyim emas, balki sizning ichki ishonchingiz va qulayligingiz ramzidir.\n\n✨ **Nega GULI Premium?**\n• Tanaga yoqimli nafas oluvchi tabiiy matolar\n• Fransuzcha nozik biser va to‘rli bezaklar\n• Har bir o‘lcham uchun mukammal bichim\n\n🛍 *Bugun buyurtma bering va xushbo‘y sovg‘aga ega bo‘ling!*\n\n👉 Buyurtma berish: @guli_premium_bot\n📞 Aloqa: +998 (90) 123-45-67\n\n#GuliPremium #AyollarKiyimi #Nafislik #Toshkent`,
-        time: "Обработка заняла 2s",
-        sources: [{ name: "Kopirayting" }],
-      };
-    }
-
-    // 6. Promo campaign / discount
-    if (query.includes("aksiya") || query.includes("chegirma") || query.includes("promo") || query.includes("kupon")) {
-      return {
-        text: `🎟 **Dam olish kunlari uchun aksiya strategiyasi:**\n\n1. **Aksiya nomi:** *"Bahoriy Nafislik — 15% Chegirma"*\n2. **Promo kod:** \`GULI-SPRING15\`\n3. **Amal qilish muddati:** Juma 18:00 dan Yakshanba 23:59 gacha\n4. **Shart:** 350 000 so'mdan yuqori xaridlarga bepul yetkazib berish bilan birga qo'llaniladi.\n\n💬 **SMS / Telegram bildirishnoma matni:**\n> *"Assalomu alaykum, aziz mijozimiz! Faqat dam olish kunlari GULI do'konida barcha to'plamlarga 15% bayramona chegirma. Promo kod: GULI-SPRING15. Saytga kirish: t.me/guli_premium_bot"*`,
-        time: "Обработка заняла 1s",
-        sources: [{ name: "Marketing" }],
-      };
-    }
-
-    // 7. Voice query specific acknowledgement
-    if (isVoice) {
-      return {
-        text: `🎙️ **Ovozli xabaringiz qabul qilindi va tahlil qilindi.**\n\nBarcha ma'lumotlar qayta ishlandi. Guli do'konining hozirgi ko'rsatkichlari barqaror. Yana qanday vazifa yoki hisobot bo'yicha yordam beray?`,
-        time: "Обработка заняла 1s",
-        sources: [{ name: "Golos AI" }],
-      };
-    }
-
-    // 8. General fallback
-    return {
-      text: `Salom, Hurmatli Admin! ✨\n\nMen **GULI AI Assistant** — do'koningizni boshqarish, savdo tahlillarini yuritish, marketing postlari yozish va mahsulot sifatini tekshirishda sizga sokin va ishonchli yordamchiman.\n\nSiz quyidagi amallarni bajarishingiz mumkin:\n- 📊 Buyurtmalar va tushumlar statistikasini so'rash\n- 🖼️ Mahsulot rasmini yuklab, unga tavsif va narx taklifini olish\n- 🎤 Ovozli xabar orqali tezkor vazifa berish\n- ✍️ Reklama e'lonlari va promo-kodlar strategiyasini tuzish\n\nQanday vazifani ko'rib chiqamiz?`,
-      time: "Обработка заняла 1s",
-      sources: [{ name: "Guli AI" }],
-    };
+  // Helper for Admin Token
+  const getAdminToken = (): string => {
+    return (
+      token ||
+      sessionStorage.getItem("guli_admin_token") ||
+      localStorage.getItem("guli_admin_token") ||
+      ""
+    );
   };
 
-  // Send message handler
-  const sendUserMessage = (options: {
+  // Real Gemini AI Chat API caller
+  const callAdminAiChatApi = async (params: {
+    message: string;
+    history: { sender: string; text: string }[];
+    model: string;
+    image?: { data: string; mimeType: string } | null;
+    audio?: { data: string; mimeType: string } | null;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    model?: string;
+    fallback?: boolean;
+    fallbackFrom?: string;
+    requestId?: string;
+    sources?: { name: string; icon?: string }[];
+  }> => {
+    const customBase = (sessionStorage.getItem("guli_custom_api_url") || "").replace(/\/$/, "");
+    const endpoint = customBase ? `${customBase}/api/admin/ai/chat` : "/api/admin/ai/chat";
+    const currentToken = getAdminToken();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
+    const payload = {
+      sessionId: currentSessionId,
+      message: params.message,
+      history: params.history,
+      model: params.model,
+      image: params.image,
+      audio: params.audio,
+    };
+
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      // If custom remote endpoint failed with 404/502, try relative dev/local endpoint
+      if (!res.ok && customBase && (res.status === 404 || res.status >= 500)) {
+        res = await fetch("/api/admin/ai/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      }
+    } catch (netErr) {
+      if (customBase) {
+        res = await fetch("/api/admin/ai/chat", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+        });
+      } else {
+        throw netErr;
+      }
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.message || data?.error || `Server xatosi (${res.status})`);
+    }
+    return data;
+  };
+
+  // Audio transcription API caller
+  const callAdminAiTranscribeApi = async (params: {
+    audioBase64: string;
+    mimeType: string;
+  }): Promise<string> => {
+    const customBase = (sessionStorage.getItem("guli_custom_api_url") || "").replace(/\/$/, "");
+    const endpoint = customBase ? `${customBase}/api/admin/ai/transcribe` : "/api/admin/ai/transcribe";
+    const currentToken = getAdminToken();
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (currentToken) {
+      headers["Authorization"] = `Bearer ${currentToken}`;
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(params),
+      });
+
+      if (!res.ok && customBase && (res.status === 404 || res.status >= 500)) {
+        res = await fetch("/api/admin/ai/transcribe", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(params),
+        });
+      }
+    } catch (netErr) {
+      if (customBase) {
+        res = await fetch("/api/admin/ai/transcribe", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(params),
+        });
+      } else {
+        throw netErr;
+      }
+    }
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.message || "Ovozni matnga aylantirishda xatolik");
+    }
+    return data.text || "";
+  };
+
+  // Send message handler (Integrated with Gemini AI)
+  const sendUserMessage = async (options: {
     text?: string;
     audioUrl?: string;
     audioDuration?: string;
+    audioBlob?: Blob;
     image?: { url: string; name: string } | null;
   }) => {
     const textToSend = options.text !== undefined ? options.text : inputText.trim();
@@ -656,10 +716,62 @@ export default function AdminGuliChatTab({
 
     if (!textToSend && !imageToSend && !isVoice) return;
 
+    const startTime = Date.now();
+    let effectiveUserText = textToSend;
+    let audioPayload: { data: string; mimeType: string } | null = null;
+
+    // Handle voice note and transcription
+    if (isVoice && options.audioBlob) {
+      try {
+        const base64Audio = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = reader.result as string;
+            const commaIdx = res.indexOf(",");
+            resolve(commaIdx >= 0 ? res.slice(commaIdx + 1) : res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(options.audioBlob!);
+        });
+
+        audioPayload = {
+          data: base64Audio,
+          mimeType: options.audioBlob.type || "audio/webm",
+        };
+
+        // Attempt speech-to-text transcription with Gemini
+        try {
+          const transcribed = await callAdminAiTranscribeApi({
+            audioBase64: base64Audio,
+            mimeType: options.audioBlob.type || "audio/webm",
+          });
+          if (transcribed && transcribed.trim()) {
+            effectiveUserText = transcribed.trim();
+          }
+        } catch (trErr) {
+          console.warn("Transcription note:", trErr);
+        }
+      } catch (voiceErr) {
+        console.error("Audio encoding error:", voiceErr);
+      }
+    }
+
+    // Handle image payload
+    let imagePayload: { data: string; mimeType: string } | null = null;
+    if (imageToSend?.url) {
+      const commaIdx = imageToSend.url.indexOf(",");
+      const rawBase64 = commaIdx >= 0 ? imageToSend.url.slice(commaIdx + 1) : imageToSend.url;
+      const mimeMatch = imageToSend.url.match(/^data:(image\/[a-zA-Z0-9.-]+);base64,/);
+      imagePayload = {
+        data: rawBase64,
+        mimeType: mimeMatch ? mimeMatch[1] : "image/jpeg",
+      };
+    }
+
     const userMessage: AdminGuliChatMessage = {
       id: `msg-${Date.now()}`,
       sender: "user",
-      text: textToSend,
+      text: effectiveUserText,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       audioUrl: options.audioUrl,
       audioDuration: options.audioDuration,
@@ -679,22 +791,60 @@ export default function AdminGuliChatTab({
     // Show thinking indicator
     setIsThinking(true);
 
-    // Simulate AI generation with intelligent delay
-    setTimeout(() => {
-      const { text: aiReplyText, time: procTime, sources } = generateAIResponse(textToSend, !!imageToSend, isVoice);
+    try {
+      const historyPayload = messages.map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+
+      const aiData = await callAdminAiChatApi({
+        message: effectiveUserText,
+        history: historyPayload,
+        model: selectedModel,
+        image: imagePayload,
+        audio: audioPayload,
+      });
+
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      if (aiData.fallback) {
+        triggerToast(`ℹ️ Limit sababli avtomatik ${aiData.model} modeliga o'tildi.`);
+      }
 
       const aiMessage: AdminGuliChatMessage = {
         id: `ai-${Date.now()}`,
         sender: "ai",
-        text: aiReplyText,
+        text: aiData.message,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        processingTime: procTime,
-        sources: sources,
+        processingTime: `Tahlil: ${elapsedSeconds}s`,
+        sources: aiData.sources || [{ name: "GULI Gemini AI" }],
+        model: aiData.model || selectedModel,
+        fallback: aiData.fallback,
+        fallbackFrom: aiData.fallbackFrom,
+        requestId: aiData.requestId,
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (err: any) {
+      console.error("AI Generation Error:", err);
+      const errText = err?.message || "Aloqa uzildi";
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      const errorAiMsg: AdminGuliChatMessage = {
+        id: `ai-err-${Date.now()}`,
+        sender: "ai",
+        text: `⚠️ **GULI AI xabari:**\n\n${errText}\n\n*Iltimos, qaytadan urinib ko‘ring yoki boshqa savol bering.*`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        processingTime: `${elapsedSeconds}s`,
+        sources: [{ name: "Xatolik" }],
+        model: selectedModel,
+      };
+
+      setMessages((prev) => [...prev, errorAiMsg]);
+      triggerToast("GULI AI xatolik berdi ⚠️");
+    } finally {
       setIsThinking(false);
-    }, 750);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -814,7 +964,7 @@ export default function AdminGuliChatTab({
   }, [sessions, historySearchQuery]);
 
   // Message 3-Dots Small but Useful Action Handlers
-  const handleRegenerate = (msgId: string) => {
+  const handleRegenerate = async (msgId: string) => {
     setActiveMsgMenuId(null);
     const msgIndex = messages.findIndex((m) => m.id === msgId);
     if (msgIndex === -1) return;
@@ -826,96 +976,149 @@ export default function AdminGuliChatTab({
     const promptText = prevUserMsg?.text || "Guli do'koni uchun yangilangan tavsiya ber.";
     setIsThinking(true);
     triggerToast("Yangi variant tayyorlanmoqda...");
+    const startTime = Date.now();
 
-    setTimeout(() => {
-      const { text: newReply, time: procTime, sources } = generateAIResponse(
-        promptText + " yangi variant",
-        false,
-        false
-      );
+    try {
+      const historyPayload = messages.slice(0, msgIndex).map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+
+      const aiData = await callAdminAiChatApi({
+        message: promptText + " (yangi muqobil variant ber)",
+        history: historyPayload,
+        model: selectedModel,
+      });
+
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
+
+      if (aiData.fallback) {
+        triggerToast(`ℹ️ Limit sababli avtomatik ${aiData.model} modeliga o'tildi.`);
+      }
+
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id === msgId) {
             return {
               ...m,
-              text: newReply,
-              processingTime: procTime,
-              sources,
+              text: aiData.message,
+              processingTime: `Tahlil: ${elapsedSeconds}s`,
+              sources: aiData.sources || [{ name: "GULI Gemini AI" }],
+              model: aiData.model || selectedModel,
+              fallback: aiData.fallback,
+              fallbackFrom: aiData.fallbackFrom,
+              requestId: aiData.requestId,
               timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             };
           }
           return m;
         })
       );
-      setIsThinking(false);
       triggerToast("Javob yangilandi ✓");
-    }, 650);
+    } catch (err: any) {
+      triggerToast(`Xatolik: ${err?.message || "Yangilab bo'lmadi"}`);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
-  const handleSummarizeMessage = (msg: AdminGuliChatMessage) => {
+  const handleSummarizeMessage = async (msg: AdminGuliChatMessage) => {
     setActiveMsgMenuId(null);
     setIsThinking(true);
     triggerToast("Qisqa xulosa tayyorlanmoqda...");
+    const startTime = Date.now();
 
-    setTimeout(() => {
-      const firstPart = msg.text.split("\n")[0]?.slice(0, 70) || "Topshiriq";
-      const summaryText = `📋 **Qisqacha xulosa (3 ta asosiy punkt):**\n\n1. **Asosiy mavzu:** "${firstPart}" bo'yicha tahlil yakunlandi.\n2. **Muhim jihat:** Ma'lumotlar tizim qoidalariga to'liq mos keladi.\n3. **Amaliy tavsiya:** Keyingi qadam sifatida darhol qo'llashingiz mumkin.\n\n*Batafsil matn yuqoridagi to'liq xabarda keltirilgan.*`;
+    try {
+      const aiData = await callAdminAiChatApi({
+        message: `Ushbu ma'lumotni do'kon boshqaruvi uchun 3 ta asosiy punktda qisqa va tushunarli qilib umumlashtirib ber:\n\n${msg.text}`,
+        history: [],
+        model: selectedModel,
+      });
+
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
 
       const summaryAiMsg: AdminGuliChatMessage = {
         id: `ai-summary-${Date.now()}`,
         sender: "ai",
-        text: summaryText,
+        text: aiData.message,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        processingTime: "Обработка заняла 1s",
-        sources: [{ name: "Qisqacha tahlil" }],
+        processingTime: `Xulosa: ${elapsedSeconds}s`,
+        sources: [{ name: "GULI AI Xulosa" }],
+        model: aiData.model || selectedModel,
+        fallback: aiData.fallback,
       };
       setMessages((prev) => [...prev, summaryAiMsg]);
+    } catch (err: any) {
+      triggerToast(`Xatolik: ${err?.message || "Xulosa tayyorlab bo'lmadi"}`);
+    } finally {
       setIsThinking(false);
-    }, 550);
+    }
   };
 
-  const handleExpandMessage = (msg: AdminGuliChatMessage) => {
+  const handleExpandMessage = async (msg: AdminGuliChatMessage) => {
     setActiveMsgMenuId(null);
     setIsThinking(true);
     triggerToast("Batafsil ma'lumot tayyorlanmoqda...");
+    const startTime = Date.now();
 
-    setTimeout(() => {
-      const topicSnippet = msg.text.slice(0, 60).replace(/[*#`_]/g, "").trim();
-      const expandedText = `🔍 **"${topicSnippet}..." bo'yicha batafsil qo'llanma:**\n\n1. **Birinchi bosqich — Tayyorgarlik:** Barcha ma'lumotlarni do'kon bazasi bilan solishtirish va o'zgarishlarni aniqlash.\n2. **Ikkinchi bosqich — Ijro:** Buyurtma, to'lov yoki reklama kontentini mezonlarga ko'ra amalga oshirish.\n3. **Uchinchi bosqich — Nazorat va monitoring:** Natijalarni tahlil qilib, mijozlar qoniqish darajasini kuzatib borish.\n\n💡 *Guli AI sizga har bir bosqichda qo'shimcha ko'rsatma berishi mumkin.*`;
+    try {
+      const aiData = await callAdminAiChatApi({
+        message: `Ushbu mavzuni do'kon administratori uchun amaliy qadamlar va professional tavsiyalar bilan batafsilroq yoritib ber:\n\n${msg.text}`,
+        history: [],
+        model: selectedModel,
+      });
+
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
 
       const expandedAiMsg: AdminGuliChatMessage = {
         id: `ai-expand-${Date.now()}`,
         sender: "ai",
-        text: expandedText,
+        text: aiData.message,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        processingTime: "Обработка заняла 2s",
-        sources: [{ name: "Kengaytirilgan tahlil" }],
+        processingTime: `Batafsil: ${elapsedSeconds}s`,
+        sources: [{ name: "Kengaytirilgan Tahlil" }],
+        model: aiData.model || selectedModel,
+        fallback: aiData.fallback,
       };
       setMessages((prev) => [...prev, expandedAiMsg]);
+    } catch (err: any) {
+      triggerToast(`Xatolik: ${err?.message || "Kengaytirib bo'lmadi"}`);
+    } finally {
       setIsThinking(false);
-    }, 600);
+    }
   };
 
-  const handleConvertToTelegram = (msg: AdminGuliChatMessage) => {
+  const handleConvertToTelegram = async (msg: AdminGuliChatMessage) => {
     setActiveMsgMenuId(null);
     setIsThinking(true);
     triggerToast("Telegram post formatiga o'tkazilmoqda...");
+    const startTime = Date.now();
 
-    setTimeout(() => {
-      const cleanSnippet = msg.text.slice(0, 160).replace(/[#*`_]/g, "").trim();
-      const postText = `📢 **GULI Kanal uchun tayyor xabar:**\n\n✨ **Nafislik va sifat — GULI bilan yangi bosqichda!**\n\n${cleanSnippet}...\n\n🛍 *Hoziroq xarid qiling yoki buyurtma bering:*\n👉 @guli_premium_bot\n📞 +998 (90) 581-11-17\n\n#Guli #Premium #Lingerie #Toshkent`;
+    try {
+      const aiData = await callAdminAiChatApi({
+        message: `Ushbu matn asosida GULI Lingerie (@guli_premium_bot) rasmiy Telegram kanali uchun jozibali, professional va emojilar bilan bezatilgan post matnini yozib ber:\n\n${msg.text}`,
+        history: [],
+        model: selectedModel,
+      });
+
+      const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
 
       const tgMsg: AdminGuliChatMessage = {
         id: `ai-tg-${Date.now()}`,
         sender: "ai",
-        text: postText,
+        text: aiData.message,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        processingTime: "Обработка заняла 1s",
-        sources: [{ name: "Telegram Bot" }],
+        processingTime: `Post: ${elapsedSeconds}s`,
+        sources: [{ name: "Telegram Bot Post" }],
+        model: aiData.model || selectedModel,
+        fallback: aiData.fallback,
       };
       setMessages((prev) => [...prev, tgMsg]);
+    } catch (err: any) {
+      triggerToast(`Xatolik: ${err?.message || "Post yaratib bo'lmadi"}`);
+    } finally {
       setIsThinking(false);
-    }, 550);
+    }
   };
 
   const handleBookmarkMessage = (msg: AdminGuliChatMessage) => {
@@ -1053,10 +1256,31 @@ export default function AdminGuliChatTab({
             <img src="/guli_logo.jpg" alt="Guli Logo" />
           </div>
           <div className="chatgpt-header-title-box">
-            <h2 className="chatgpt-header-title">Guli web app audit bo'limi</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <h2 className="chatgpt-header-title" style={{ margin: 0 }}>GULI AI</h2>
+              <div className="chatgpt-model-selector-wrapper">
+                <select
+                  value={selectedModel}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedModel(val);
+                    localStorage.setItem("guli_admin_ai_model", val);
+                    triggerToast(`Model tanlandi: ${val}`);
+                  }}
+                  className="chatgpt-model-select"
+                  title="Gemini AI modelini tanlang (Free Tier)"
+                >
+                  {AVAILABLE_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.tag})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="chatgpt-header-online-indicator">
               <span className="chatgpt-indicator-dot" />
-              <span>Guli AI 4.0</span>
+              <span>Gemini Free Tier • Faol</span>
             </div>
           </div>
         </div>
@@ -1374,11 +1598,23 @@ export default function AdminGuliChatTab({
               ) : (
                 /* AI TURN: Completely transparent background, text directly on canvas */
                 <div className="chatgpt-ai-response-block">
-                  {/* Processing / Thinking time badge (e.g. "Обработка заняла 13s >") */}
+                  {/* Processing / Thinking time & Model badge */}
                   <div className="chatgpt-processing-badge">
-                    <span>{msg.processingTime || "Обработка заняла 1s"}</span>
+                    <span>{msg.processingTime || "Tahlil: 1s"}</span>
+                    {msg.model && (
+                      <span style={{ marginLeft: "6px", fontSize: "11px", color: "#71717A", fontWeight: 500 }}>
+                        • {msg.model}
+                      </span>
+                    )}
                     <ChevronRight size={13} />
                   </div>
+
+                  {/* Fallback notification badge */}
+                  {msg.fallback && (
+                    <div className="chatgpt-fallback-badge">
+                      <span>ℹ️ Limit sababli {msg.fallbackFrom || "asosiy model"}dan {msg.model || "muqobil model"}ga o‘tildi</span>
+                    </div>
+                  )}
 
                   {/* Main AI Body - pure clean typography */}
                   <div className="chatgpt-ai-body">
