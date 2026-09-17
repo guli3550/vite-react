@@ -1,7 +1,9 @@
 name: GULI AI Final Hardening
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - audit/guli-ai-final-20260918
 
 permissions:
   contents: write
@@ -23,12 +25,10 @@ jobs:
           const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
           pkg.dependencies['@google/genai'] = '^2.23.0';
           fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-
           const indexPath = 'backend/index.js';
           let index = fs.readFileSync(indexPath, 'utf8');
           if (!index.includes('app.set("trust proxy", 1);')) index = index.replace('const app = express();', 'const app = express();\n\n// Render/Cloudflare reverse-proxy boundary: trust exactly one proxy hop.\napp.set("trust proxy", 1);');
           fs.writeFileSync(indexPath, index);
-
           const aiPath = 'backend/adminAiChatRuntime.js';
           let ai = fs.readFileSync(aiPath, 'utf8');
           ai = ai.replace(/\/\/ Built-in GULI catalog and promo data[\s\S]*?const FALLBACK_PROMOS = \[[\s\S]*?\];\n\n/, [
@@ -70,4 +70,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add backend/package.json backend/package-lock.json backend/index.js backend/adminAiChatRuntime.js
           git diff --cached --quiet || git commit -m "fix(security): harden GULI AI production runtime"
-          git push
+          git push origin HEAD:audit/guli-ai-final-20260918
