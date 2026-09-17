@@ -1,5 +1,6 @@
 // Unified realtime auth bridge for Telegram Mini App, browser-linked users, browser guests and admin.
-const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+import { getApiBaseUrl } from "../lib/apiOrigin";
+const API_URL = getApiBaseUrl();
 const CHANNEL_NAME = "guli_chat_channel_v1";
 const STORAGE_KEY = "guli_chat_messages";
 const GUEST_ID_KEY = "guli_chat_guest_id";

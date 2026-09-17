@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ChangeEvent } from "react";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { type PlatformType } from "../../utils/platformAdapter";
 import { getSocialLinks, saveSocialLinks, DEFAULT_SOCIAL_LINKS } from "../../utils/socialLinks";
 
@@ -18,7 +19,7 @@ type TelegramChat = {
   active?: boolean;
 };
 
-const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API = getApiBaseUrl();
 
 function adminHeaders() {
   const token = sessionStorage.getItem("guli_admin_token") || "";

@@ -23,5 +23,169 @@ async function updateCustomer(o){if(!CUSTOMER_BOT||!o?.telegram_id)return;let mi
 async function getOrder(id){if(!db)return null;let r=await db.from('orders').select('*').eq('id',id).maybeSingle();if(!r.data&&/GULI-/i.test(String(id)))r=await db.from('orders').select('*').eq('order_number',id).maybeSingle();return r.data||null}
 async function callback(c){const chat=Number(c?.message?.chat?.id||0),from=Number(c?.from?.id||0),d=String(c?.data||'');if(!chat||chat!==from||!d.startsWith('guli_pay:'))return;const ids=await admins();if(!ids.includes(String(chat))){await tg('answerCallbackQuery',{callback_query_id:c.id,text:'⛔ Ruxsat yo‘q',show_alert:true}).catch(()=>{});return}const[,decision,id]=d.split(':');if(!['verified','rejected'].includes(decision)||!id)return;const o=await getOrder(id);if(!o)return;const ps=String(o.payment_status||'pending');if(!['pending','receipt_uploaded'].includes(ps)){await tg('answerCallbackQuery',{callback_query_id:c.id,text:'Bu to‘lov bo‘yicha qaror allaqachon qabul qilingan'}).catch(()=>{});return}const patch={payment_status:decision,status:decision==='verified'?'Qabul qilindi':'Bekor qilindi',updated_at:new Date().toISOString()};patch[decision==='verified'?'payment_verified_at':'payment_rejected_at']=new Date().toISOString();const r=await db.from('orders').update(patch).eq('id',o.id).select('*').single();if(r.error)throw r.error;await updateControl(chat,r.data,decision==='verified'?'💳 TO‘LOV TASDIQLANDI':'💳 TO‘LOV RAD ETILDI');await updateCustomer(r.data);await tg('answerCallbackQuery',{callback_query_id:c.id,text:decision==='verified'?'✅ To‘lov tasdiqlandi':'❌ To‘lov rad etildi'}).catch(()=>{})}
 async function poll(){if(state.running||!ADMIN_BOT||!db)return;state.running=true;try{for(const u of await tg('getUpdates',{offset:state.offset,timeout:0,allowed_updates:['callback_query']})||[]){state.offset=Math.max(state.offset,Number(u.update_id||0)+1);if(u.callback_query)await callback(u.callback_query).catch(e=>console.error('[GULI admin callback]',e))}}finally{state.running=false}}
-async function sync(){if(!db||!ADMIN_BOT)return;const ids=await admins();if(!ids.length)return;const r=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);if(r.error)throw r.error;for(const o of r.data||[]){const sig=crypto.createHash('sha256').update(JSON.stringify({status:o.status,payment_status:o.payment_status,items:o.items,payment_receipt_history:o.payment_receipt_history,payment_receipt_path:o.payment_receipt_path,total:o.total})).digest('hex');const eventKey=`${o.id}-${sig}`;const{error:insertError}=await db.from('telegram_admin_bot_events').insert({event_key:eventKey,event_type:'order_update',order_id:o.id});if(!insertError){const{data:prev}=await db.from('telegram_admin_bot_events').select('id').eq('order_id',o.id).neq('event_key',eventKey).limit(1);const isUpdate=prev&&prev.length>0;if(!isUpdate){if(new Date(o.created_at||0)>=new Date(state.startedAt)){for(const chat of ids){await sendAlbum(chat,o,'🛒 YANGI BUYURTMA').catch(()=>{})}await ensureCustomerStatusMessage(o)}}else{const ps=String(o.payment_status||'').toLowerCase();const title=ps==='verified'?'💳 TO‘LOV TASDIQLANDI':ps==='rejected'?'💳 TO‘LOV RAD ETILDI':ps==='receipt_uploaded'?'🧾 CHEK YUKLANDI — BUYURTMA YANGILANDI':'📦 BUYURTMA YANGILANDI';for(const chat of ids){if(ps==='receipt_uploaded')await replaceAlbum(chat,o,title).catch(()=>{});else await updateControl(chat,o,title).catch(()=>{})}await updateCustomer(o)}}}}
+async function claimEvent(eventKey, eventType, orderId, maxRetries = 5) {
+  if (!db) return { claimed: false, reason: 'no_db' };
+
+  // 1. Primary: Production Atomic Locking via PostgreSQL RPC (FOR UPDATE SKIP LOCKED)
+  try {
+    const { data, error } = await db.rpc('claim_telegram_admin_event', {
+      p_event_key: eventKey,
+      p_event_type: eventType,
+      p_order_id: String(orderId),
+      p_max_retries: maxRetries
+    });
+    if (!error && data && typeof data.claimed === 'boolean') {
+      return data;
+    }
+    if (error) {
+      console.warn('[P1-C RPC WARNING] claim_telegram_admin_event RPC call failed:', error.message);
+    }
+  } catch (rpcErr) {
+    console.warn('[P1-C RPC EXCEPTION]', rpcErr.message);
+  }
+
+  // 2. Production Enforcement: If strict RPC required, fail-closed
+  if (process.env.STRICT_RPC_REQUIRED === 'true') {
+    console.error('[P1-C PRODUCTION ALERT] claim_telegram_admin_event RPC is missing and STRICT_RPC_REQUIRED=true. Event aborted to prevent duplicates.');
+    return { claimed: false, reason: 'rpc_missing_fail_closed' };
+  }
+
+  // 3. Fallback: Optimistic Concurrency Control via Unique Constraint & Conditional Update
+  // NOTE: This fallback is NOT a distributed ACID lock with FOR UPDATE SKIP LOCKED.
+  // The PostgreSQL RPC migration is a MANDATORY production requirement for true concurrency safety.
+  try {
+    const now = new Date();
+
+    // Atomic Insert Attempt (PostgreSQL guarantees only 1 concurrent worker can insert with unique event_key)
+    const { error: insertError } = await db.from('telegram_admin_bot_events').insert({
+      event_key: eventKey,
+      event_type: eventType,
+      order_id: String(orderId),
+      status: 'processing',
+      retry_count: 0,
+      next_attempt_at: now.toISOString(),
+      updated_at: now.toISOString()
+    });
+
+    if (!insertError) {
+      return { claimed: true, retry_count: 0 };
+    }
+
+    // If duplicate key, event already exists
+    if (!/duplicate|unique/i.test(insertError.message || '')) {
+      return { claimed: false, reason: 'insert_failed' };
+    }
+
+    // Row exists: inspect status and attempt atomic conditional claim
+    const { data: existing } = await db
+      .from('telegram_admin_bot_events')
+      .select('id, status, retry_count, next_attempt_at, updated_at')
+      .eq('event_key', eventKey)
+      .maybeSingle();
+
+    if (!existing) return { claimed: false, reason: 'not_found' };
+    if (existing.status === 'sent') return { claimed: false, reason: 'already_sent' };
+    if (existing.status === 'processing' && existing.updated_at && (now.getTime() - new Date(existing.updated_at).getTime() < 120000)) {
+      return { claimed: false, reason: 'currently_processing' };
+    }
+    if (Number(existing.retry_count || 0) >= maxRetries) {
+      return { claimed: false, reason: 'max_retries_exceeded' };
+    }
+    if (existing.next_attempt_at && new Date(existing.next_attempt_at) > now) {
+      return { claimed: false, reason: 'backoff_waiting' };
+    }
+
+    // Conditional update: only update if status hasn't changed concurrently
+    const { data: updated, error: updateError } = await db
+      .from('telegram_admin_bot_events')
+      .update({ status: 'processing', updated_at: now.toISOString() })
+      .eq('id', existing.id)
+      .eq('status', existing.status)
+      .select('id');
+
+    if (updateError || !updated || updated.length === 0) {
+      return { claimed: false, reason: 'concurrent_claim_conflict' };
+    }
+
+    return { claimed: true, retry_count: Number(existing.retry_count || 0) };
+  } catch (err) {
+    console.warn('[GULI admin bot claim error]', err.message);
+    return { claimed: false, reason: 'exception' };
+  }
+}
+
+async function markEventSent(eventKey) {
+  if (!db) return;
+  try {
+    await db
+      .from('telegram_admin_bot_events')
+      .update({ status: 'sent', error: null, updated_at: new Date().toISOString() })
+      .eq('event_key', eventKey);
+  } catch {}
+}
+
+async function markEventFailed(eventKey, error, retryCount) {
+  if (!db) return;
+  try {
+    const nextRetry = (Number(retryCount) || 0) + 1;
+    const delaySec = Math.min(300, Math.pow(2, nextRetry) * 10);
+    const nextAttempt = new Date(Date.now() + delaySec * 1000).toISOString();
+    await db
+      .from('telegram_admin_bot_events')
+      .update({
+        status: 'failed',
+        retry_count: nextRetry,
+        error: String(error?.message || error || 'Delivery failed').slice(0, 500),
+        next_attempt_at: nextAttempt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('event_key', eventKey);
+  } catch {}
+}
+
+async function sync(){
+  if(!db||!ADMIN_BOT)return;
+  const ids=await admins();
+  if(!ids.length)return;
+  const r=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  if(r.error)throw r.error;
+  for(const o of r.data||[]){
+    const sig=crypto.createHash('sha256').update(JSON.stringify({status:o.status,payment_status:o.payment_status,items:o.items,payment_receipt_history:o.payment_receipt_history,payment_receipt_path:o.payment_receipt_path,total:o.total})).digest('hex');
+    const eventKey=`${o.id}-${sig}`;
+    const claim = await claimEvent(eventKey, 'order_update', o.id, 5);
+    if (!claim.claimed) continue;
+    try {
+      const{data:prev}=await db.from('telegram_admin_bot_events').select('id').eq('order_id',o.id).neq('event_key',eventKey).limit(1);
+      const isUpdate=prev&&prev.length>0;
+      let allSucceeded = true;
+      if(!isUpdate){
+        if(new Date(o.created_at||0)>=new Date(state.startedAt)){
+          for(const chat of ids){
+            const sentMid = await sendAlbum(chat,o,'🛒 YANGI BUYURTMA').catch(()=>null);
+            if (!sentMid) allSucceeded = false;
+          }
+          await ensureCustomerStatusMessage(o).catch(()=>{});
+        }
+      }else{
+        const ps=String(o.payment_status||'').toLowerCase();
+        const title=ps==='verified'?'💳 TO‘LOV TASDIQLANDI':ps==='rejected'?'💳 TO‘LOV RAD ETILDI':ps==='receipt_uploaded'?'🧾 CHEK YUKLANDI — BUYURTMA YANGILANDI':'📦 BUYURTMA YANGILANDI';
+        for(const chat of ids){
+          let sentMid = null;
+          if(ps==='receipt_uploaded') sentMid = await replaceAlbum(chat,o,title).catch(()=>null);
+          else sentMid = await updateControl(chat,o,title).catch(()=>null);
+          if (!sentMid) allSucceeded = false;
+        }
+        await updateCustomer(o).catch(()=>{});
+      }
+      if (allSucceeded) {
+        await markEventSent(eventKey);
+      } else {
+        await markEventFailed(eventKey, new Error('Delivery failed for some admin chats'), claim.retry_count);
+      }
+    } catch (e) {
+      console.warn('[GULI admin event error]', e.message);
+      await markEventFailed(eventKey, e, claim.retry_count);
+    }
+  }
+}
 if(!globalThis.__GULI_ADMIN_PROD_BOT_STARTED__){globalThis.__GULI_ADMIN_PROD_BOT_STARTED__=true;(async()=>{while(true){try{await poll();await sync()}catch(e){console.error('[GULI admin bot]',e)}await new Promise(r=>setTimeout(r,5000))}})()}

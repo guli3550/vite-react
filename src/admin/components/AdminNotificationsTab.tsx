@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { MetricCard } from "./AdminUIComponents";
 
 export type BroadcastMsg = { id:string; title:string; body:string; imageUrl?:string; imageCount?:number; target:string; sentAt:string; recipientsCount:number; failedCount?:number };
@@ -7,7 +8,7 @@ type ApiResponse = { success?:boolean; message?:string; data?:any };
 type SelectedImage = { id:string; dataUrl:string; name:string };
 type TargetMode = "channel"|"group"|"bot"|"groups"|"channels"|"all";
 
-const API=(import.meta.env.VITE_API_URL||"https://guli-lingerie-api.onrender.com").replace(/\/$/,"");
+const API=getApiBaseUrl();
 const MINI_APP_URL="https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829";
 function adminRequest(path:string,options:RequestInit={}){const token=sessionStorage.getItem("guli_admin_token")||"";const base=(sessionStorage.getItem("guli_custom_api_url")||API).replace(/\/$/,"");return fetch(`${base}${path}`,{...options,headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`,...(options.headers||{})}});}
 async function prepareImage(file:File):Promise<SelectedImage>{const raw=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||""));r.onerror=()=>reject(new Error("Rasmni o'qib bo'lmadi"));r.readAsDataURL(file)});try{const image=await new Promise<HTMLImageElement>((resolve,reject)=>{const x=new Image();x.onload=()=>resolve(x);x.onerror=()=>reject(new Error("Rasm formati qo'llab-quvvatlanmadi"));x.src=raw});const max=1400,scale=Math.min(1,max/Math.max(image.naturalWidth||image.width,image.naturalHeight||image.height));if(scale===1&&raw.length<=700000)return{id:`${Date.now()}-${Math.random()}`,dataUrl:raw,name:file.name};const canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round((image.naturalWidth||image.width)*scale));canvas.height=Math.max(1,Math.round((image.naturalHeight||image.height)*scale));const ctx=canvas.getContext("2d");if(!ctx)return{id:`${Date.now()}-${Math.random()}`,dataUrl:raw,name:file.name};ctx.drawImage(image,0,0,canvas.width,canvas.height);return{id:`${Date.now()}-${Math.random()}`,dataUrl:canvas.toDataURL("image/jpeg",0.78),name:file.name}}catch{return{id:`${Date.now()}-${Math.random()}`,dataUrl:raw,name:file.name}}}

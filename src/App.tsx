@@ -23,6 +23,7 @@ import {
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
+import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
@@ -159,9 +160,7 @@ type Page =
   | "product"
   | "chat";
 const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
-const API_URL = (
-  import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com"
-).replace(/\/$/, "");
+const API_URL = getApiBaseUrl();
 
 const uzbekistanRegionsData: Record<string, string[]> = {
   "Toshkent sh.": [

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, type FC } from "react";
+import { buildApiUrl } from "../lib/apiOrigin";
 import type { Language } from "../utils/translations";
 import { copyToClipboard } from "../utils/clipboard";
 
@@ -54,7 +55,7 @@ export const PromosModal: FC<{
   // Fetch admin created promos
   useEffect(() => {
     let isMounted = true;
-    fetch((import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "") + "/api/promos")
+    fetch(buildApiUrl("/api/promos"))
       .then((res) => res.json())
       .then((data) => {
         if (isMounted && data.success && Array.isArray(data.data)) {
@@ -131,7 +132,7 @@ export const PromosModal: FC<{
       }
 
       // 2. Query backend validate endpoint
-      const res = await fetch((import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "") + "/api/promo/validate", {
+      const res = await fetch(buildApiUrl("/api/promo/validate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: query, subtotal: 100000 }),

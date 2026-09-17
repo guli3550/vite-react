@@ -3,7 +3,7 @@
   if (window.__GULI_CUSTOMER_ORDERS_LIVE_V3__) return;
   window.__GULI_CUSTOMER_ORDERS_LIVE_V3__ = true;
 
-  const API = String(window.__GULI_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
+  const API = String(window.__GULI_API_URL || 'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/, '');
   const nativeFetch = window.fetch.bind(window);
   const STEPS = [
     ['Buyurtma kutilmoqda','📝'],

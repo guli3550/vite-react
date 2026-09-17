@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import "./ReviewsAdmin.css";
 import { DEFAULT_PRODUCTS } from "../utils/defaultProducts";
 
@@ -25,7 +26,7 @@ export type AdminReview = {
   created_at: string;
 };
 
-const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API = getApiBaseUrl();
 const money = (n: number | null | undefined) => `${Math.round(Number(n) || 0).toLocaleString("uz-UZ")} so'm`;
 const dateText = (v: string) => {
   const d = new Date(v);

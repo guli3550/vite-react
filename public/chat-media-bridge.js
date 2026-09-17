@@ -5,7 +5,7 @@
    4) Resilient fallback: network or storage issues never break or block message delivery.
 */
 (function () {
-  const API = String(window.__GULI_API_URL || sessionStorage.getItem("guli_custom_api_url") || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+  const API = String(window.__GULI_API_URL || sessionStorage.getItem("guli_custom_api_url") || "https://guli-gateway.parizodabaxtiyorov.workers.dev").replace(/\/$/, "");
   const STORAGE = "guli_chat_messages";
   const baseFetch = window.fetch.bind(window);
 

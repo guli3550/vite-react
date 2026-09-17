@@ -1,9 +1,7 @@
 (() => {
   'use strict';
 
-  const API = (location.hostname.includes('vercel.app') || location.hostname.includes('guli'))
-    ? 'https://guli-lingerie-api.onrender.com'
-    : '';
+  const API = String(window.__GULI_API_URL || 'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/, '');
   let busy = false;
 
   function getAccessToken() {

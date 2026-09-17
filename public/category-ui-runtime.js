@@ -1,5 +1,5 @@
 (() => {
-  const API=(window.__GULI_API__||'https://guli-lingerie-api.onrender.com').replace(/\/$/,'');
+  const API=(window.__GULI_API_URL||window.__GULI_API__||'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/,'');
   const ORDER=['pinyuar','pijama','byustgalter','mayka','tursik'];
   const NAMES={pinyuar:'Pinyuar',pijama:'Pijama',byustgalter:'Byusgalter',mayka:'Mayka',tursik:'Tursik'};
   const FALLBACKS={pinyuar:'https://images.unsplash.com/photo-1618244972963-dbee1a7edc95?auto=format&fit=crop&w=900&q=82',pijama:'https://images.unsplash.com/photo-1608234807905-4466023792f5?auto=format&fit=crop&w=900&q=82',byustgalter:'https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=900&q=82',mayka:'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=900&q=82',tursik:'https://images.unsplash.com/photo-1566206091558-7f218b696731?auto=format&fit=crop&w=900&q=82'};

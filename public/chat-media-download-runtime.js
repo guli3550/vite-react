@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const API = String(window.__GULI_API_URL || sessionStorage.getItem('guli_custom_api_url') || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
+  const API = String(window.__GULI_API_URL || sessionStorage.getItem('guli_custom_api_url') || 'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/, '');
   const selector = `img[src*="/api/chat/"]`;
 
   async function download(url, fileName) {

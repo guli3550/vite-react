@@ -1,5 +1,5 @@
 (() => {
-  const API = "https://guli-lingerie-api.onrender.com";
+  const API = String(window.__GULI_API_URL || "https://guli-gateway.parizodabaxtiyorov.workers.dev").replace(/\/$/, "");
   const tg = () => window.Telegram?.WebApp;
   const initData = () => tg()?.initData || "";
   const money = n => `${Math.round(Number(n) || 0).toLocaleString("uz-UZ")} so'm`;

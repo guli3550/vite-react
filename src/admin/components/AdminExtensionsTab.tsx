@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { MetricCard } from "./AdminUIComponents";
 import { AgentOffice3D } from "./AgentOffice3D";
 import { AgentOrchestratorPanel } from "./AgentOrchestratorPanel";
 import { AgentWorkflowPanel } from "./AgentWorkflowPanel";
 import { AgentTaskLenta, AgentAuditLenta, AgentTask, AgentEvent } from "./AgentLentaViews";
 
-const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API = getApiBaseUrl();
 type Agent = { id: string; name: string; role: string; capabilities: string[]; status: "working" | "idle" };
 
 export function AdminExtensionsTab({ notify }: { notify: (m: string) => void }) {

@@ -1,9 +1,10 @@
 import { useState } from "react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import { type Language, getTranslation } from "../utils/translations";
 import { playTapSound, triggerHaptic } from "../utils/soundEffects";
 import { copyToClipboard } from "../utils/clipboard";
 
-const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API_URL = getApiBaseUrl();
 
 type HelpSupportModalProps = {
   language: Language;

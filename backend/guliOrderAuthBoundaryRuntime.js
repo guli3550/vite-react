@@ -9,14 +9,17 @@ if (!globalThis.__GULI_ORDER_AUTH_BOUNDARY__) {
 
   express.application.handle = function guliOrderAuthBoundary(req, res, next) {
     const path = String(req.url || '').split('?')[0].replace(/\/$/, '') || '/';
-    const protectedOrderPath = path === '/api/orders' || path === '/api/guest/orders';
+    const protectedOrderPath =
+      path === '/api/orders' ||
+      path === '/api/customer/orders' ||
+      path === '/api/auth/orders' ||
+      path === '/api/guest/orders';
 
     if (protectedOrderPath) {
       const initData = String(req.headers?.['x-telegram-init-data'] || '').trim();
       const authorization = String(req.headers?.authorization || '').trim();
-      const guestToken = String(req.headers?.['x-guli-guest-token'] || '').trim();
 
-      if (!initData && !/^Bearer\s+\S+$/i.test(authorization) && !guestToken) {
+      if (!initData && !/^Bearer\s+\S+$/i.test(authorization)) {
         res.statusCode = 401;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');

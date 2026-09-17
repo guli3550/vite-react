@@ -6,7 +6,7 @@
       const configured = sessionStorage.getItem('guli_custom_api_url') || '';
       if (configured.trim()) return configured.trim().replace(/\/$/, '');
     } catch {}
-    return (window.__GULI_API_URL || 'https://guli-lingerie-api.onrender.com').replace(/\/$/, '');
+    return (window.__GULI_API_URL || 'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/, '');
   };
 
   const customerHeaders = () => {

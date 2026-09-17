@@ -133,4 +133,3 @@ async function listOrders(req, res) {
 install('get', '/api/orders', listOrders);
 install('get', '/api/customer/orders', listOrders);
 install('get', '/api/guest/orders', listOrders);
-

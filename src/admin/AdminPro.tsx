@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
 import AdminGuliChatTab from "./components/AdminGuliChatTab";
@@ -160,9 +161,7 @@ type Promo = {
   active: boolean;
 };
 
-const API = (
-  import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com"
-).replace(/\/$/, "");
+const API = getApiBaseUrl();
 
 const STATUSES = [
   "Qabul qilindi",

@@ -34,7 +34,7 @@ async function handleReceiptUpload(req, res) {
   let path = '';
   try {
     if (!supabase) throw new Error('Supabase sozlanmagan');
-    
+
     const identifier = String(req.params.orderNumber || req.params.id || '').trim();
     if (!identifier) return res.status(400).json({ success: false, message: 'Buyurtma raqami topilmadi.' });
 
@@ -42,9 +42,9 @@ async function handleReceiptUpload(req, res) {
     let { data: order, error: oe } = await supabase.from('orders')
       .select('id,order_number,total,telegram_id,auth_user_id,payment,payment_status,payment_receipt_path')
       .eq('order_number', identifier).maybeSingle();
-      
+
     if (oe) throw oe;
-    
+
     if (!order) {
       // Try by ID fallback
       const byId = await supabase.from('orders')
@@ -53,53 +53,53 @@ async function handleReceiptUpload(req, res) {
       if (byId.error) throw byId.error;
       order = byId.data;
     }
-    
+
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi' });
-    
+
     // Check ownership
     const isOwner = u.auth_user_id
       ? (order.auth_user_id && String(order.auth_user_id) === String(u.auth_user_id)) || (u.id && order.telegram_id != null && Number(order.telegram_id) === Number(u.id))
       : (order.telegram_id != null && Number(order.telegram_id) === Number(u.id));
-      
+
     if (!isOwner) return res.status(403).json({ success: false, message: 'Siz bu buyurtmaga chek yuklay olmaysiz' });
-    
+
     if (String(order.payment || '') !== 'card_manual') return res.status(400).json({ success: false, message: 'Bu buyurtma karta to‘lovi uchun yaratilmagan' });
     if (String(order.payment_status || '') === 'verified') return res.status(409).json({ success: false, message: 'To‘lov allaqachon tasdiqlangan' });
     if (order.payment_receipt_path) return res.status(409).json({ success: false, message: 'Chek allaqachon yuklangan. Yangi chek uchun avval admin mavjud chekni o‘chirishi kerak.' });
-    
+
     let rawData = req.body?.data || req.body?.receipt_url || '';
     let mimeType = String(req.body?.mimeType || 'image/jpeg');
     if (typeof rawData === 'string' && rawData.startsWith('data:')) {
       const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
       if (match) { mimeType = match[1]; rawData = match[2]; }
     }
-    
+
     if (!rawData || typeof rawData !== 'string') return res.status(400).json({ success: false, message: 'Chek rasmi topilmadi' });
     if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || '')) && mimeType !== 'application/pdf') return res.status(400).json({ success: false, message: 'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin' });
-    
+
     const buffer = decode(rawData, mimeType);
     await ensureBucket();
-    
+
     path = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext(mimeType)}`;
-    
+
     const { error: up } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: '31536000', upsert: false });
     if (up) throw up;
-    
+
     const patchData = { payment_receipt_path: path, payment_status: 'receipt_uploaded', payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data: updated, error: ue } = await supabase.from('orders').update(patchData).eq('id', order.id).select('id,order_number,total,payment_status,payment_receipt_uploaded_at,payment_receipt_path').single();
-    
+
     if (ue) {
       await remove(path).catch(() => {});
       path = '';
       throw ue;
     }
-    
+
     let signedReceiptUrl = '';
     try {
       const { data: sData } = await supabase.storage.from(BUCKET).createSignedUrl(path, 86400);
       signedReceiptUrl = sData?.signedUrl || '';
     } catch {}
-    
+
     return res.json({ success: true, message: 'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.', data: { ...updated, receipt_url: signedReceiptUrl } });
   } catch (e) {
     if (path) await remove(path).catch(() => {});

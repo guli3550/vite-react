@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "../lib/apiOrigin";
+
 export type ChatSender = "user" | "admin";
 
 export type ChatMessage = {
@@ -37,7 +39,7 @@ const STORAGE_KEY = "guli_chat_messages";
 const METADATA_KEY = "guli_chat_conv_metadata";
 const NOTIFICATIONS_KEY = "guli_unread_notifications_count";
 const CHANNEL_NAME = "guli_chat_channel_v1";
-const API_URL = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API_URL = getApiBaseUrl();
 
 export function getStoredMetadataMap(): Record<string, ConversationMetadata> { try { const raw = localStorage.getItem(METADATA_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
 export function saveMetadataMap(map: Record<string, ConversationMetadata>): void { try { localStorage.setItem(METADATA_KEY, JSON.stringify(map)); window.dispatchEvent(new CustomEvent("guli_chat_metadata_updated", { detail: map })); } catch (err) { console.error("Failed to save conversation metadata:", err); } }

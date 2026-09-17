@@ -40,23 +40,8 @@ async function ensureBucket() {
   const created = await supabase.storage.createBucket(BUCKET, { public: false, allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "application/pdf"], fileSizeLimit: `${MAX_RECEIPT_BYTES}B` });
   if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
 }
-install("post", "/api/auth/orders", async (req, res) => {
-  const user = await customer(req);
-  if (!user) return fail(res, 401, "Mijoz sessiyasi topilmadi. Telegram orqali qayta kiring.");
-  try {
-    if (!supabase) return fail(res, 503, "Supabase serverda sozlanmagan.");
-    const { items, address, promo_code } = req.body || {};
-    const canonicalPhone = String(user.phone || "").trim();
-    if (!canonicalPhone) return fail(res, 409, "Mijozning tasdiqlangan telefon raqami topilmadi.");
-    if (!Array.isArray(items) || !items.length || items.length > 100) return fail(res, 400, "Buyurtma mahsulotlari noto‘g‘ri");
-    const order = { order_number: null, items, address: address || null, payment: "card_manual", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
-    const { data: created, error } = await supabase.rpc("create_secure_order_for_user", { p_order: order, p_auth_user_id: user.id });
-    if (error) throw error;
-    const row = Array.isArray(created) ? created[0] : created;
-    if (!row?.id) throw new Error("Buyurtma yaratildi, ammo identifikatori qaytmadi");
-    return res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data: row });
-  } catch (error) { console.error("Authenticated checkout error:", error); const status = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori|canonical/i.test(error.message || "") ? 400 : 500; return fail(res, status, error.message || "Buyurtmani saqlashda xatolik"); }
-});
+// /api/auth/orders is canonically handled with unified security in orderCreationIntegrityPatch.js
+
 install("post", "/api/auth/orders/:orderNumber/receipt", async (req, res) => {
   const user = await customer(req);
   if (!user) return fail(res, 401, "Mijoz sessiyasi topilmadi. Telegram orqali qayta kiring.");

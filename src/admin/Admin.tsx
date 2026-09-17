@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import { SocialLinksAdminPanel } from "./SocialLinksAdminPanel";
 import ReviewsAdmin from "./ReviewsAdmin";
 import "./Admin.css";
@@ -7,7 +8,7 @@ type Product = { id?: number; name: string; category: string; description: strin
 type Order = { id: string | number; order_number?: string; telegram_id?: number; username?: string; first_name?: string; phone?: string; total: number; subtotal: number; delivery: number; discount: number; payment: string; status: string; address?: any; items: any[]; created_at: string };
 type Promo = { id?: number; code: string; discount_type: "percent" | "fixed"; discount_value: number; max_discount_amount?: number | null; min_order_amount: number; usage_limit: number | null; used_count: number; starts_at?: string | null; expires_at?: string | null; active: boolean };
 
-const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API = getApiBaseUrl();
 const emptyProduct: Product = { name: "", category: "Byusgalter", description: "", price: 0, old_price: null, image: "", images: [], sizes: [], colors: [], rating: 0, reviews: 0, stock: 0, featured: false, active: true, sort_order: 0 };
 const emptyPromo: Promo = { code: "", discount_type: "percent", discount_value: 10, max_discount_amount: null, min_order_amount: 0, usage_limit: null, used_count: 0, starts_at: null, expires_at: null, active: true };
 const statuses = ["⏳ Buyurtma kutilmoqda", "⏳ To'lovni tasdiqlash kutilmoqda", "Qabul qilindi", "Tayyorlanmoqda", "Yo‘lda", "Yetkazildi", "Bekor qilindi"];

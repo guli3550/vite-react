@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { MetricCard } from "./AdminUIComponents";
 import { sendAdminReply, updateConversationMetadata } from "../../utils/chatSync";
 
 type PaymentTx = { id:string; dbId?:string; telegramId?:number; orderId:string; customerName:string; amount:number; method:"card"|"click"|"payme"; status:"verified"|"pending"|"rejected"; paymentStatus?:string; receiptUrl:string; receiptMime?:string; timestamp:string };
-const API=(import.meta.env.VITE_API_URL||"https://guli-lingerie-api.onrender.com").replace(/\/$/,"");
+const API=getApiBaseUrl();
 const money=(n:number)=>`${Math.round(Number(n)||0).toLocaleString("uz-UZ")} so'm`;
 const methodOf=(v:any):PaymentTx["method"]=>/click/i.test(String(v))?"click":/payme/i.test(String(v))?"payme":"card";
 const stateOf=(o:any):PaymentTx["status"]=>{const p=String(o?.payment_status||"").toLowerCase();if(p==="rejected")return"rejected";if(p==="verified")return"verified";if(p==="pending"||p==="receipt_uploaded")return"pending";return !p&&["Qabul qilindi","Yetkazildi"].includes(String(o?.status||""))?"verified":"pending";};

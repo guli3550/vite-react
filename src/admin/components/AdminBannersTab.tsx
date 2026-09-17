@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { EmptyState } from "./AdminUIComponents";
 
 export type Banner = {
@@ -110,7 +111,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
   const [ctaText, setCtaText] = useState("");
 
   useEffect(() => {
-    const apiBase = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+    const apiBase = getApiBaseUrl();
     fetch(`${apiBase}/api/banners`)
       .then((res) => res.json())
       .then((json) => {
@@ -137,7 +138,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
 
     window.dispatchEvent(new Event("guli_banners_updated"));
 
-    const apiBase = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+    const apiBase = getApiBaseUrl();
     const adminToken = sessionStorage.getItem("guli_admin_token") || "";
 
     fetch(`${apiBase}/api/admin/banners`, {

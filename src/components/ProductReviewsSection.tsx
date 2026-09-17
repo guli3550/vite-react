@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import "./ProductReviewsSection.css";
 import { getSupabase } from "../lib/supabaseClient";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 
 export interface ReviewItem {
   id: number | string; product_id?: number | string; product_code?: string; product_name?: string;
@@ -15,7 +16,7 @@ interface ProductReviewsSectionProps {
 }
 export function getStoredReviews(): ReviewItem[] { return []; }
 export function saveStoredReviews(): void { /* DB/API is the only source of truth. */ }
-const API = (import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "");
+const API = getApiBaseUrl();
 function safeName(first?: string, last?: string) { const n = [first,last].map(v=>String(v||"").trim()).filter(Boolean).join(" "); return n || "Anonim mijoz"; }
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0,2).map(v=>v[0]).join("").toUpperCase() || "M"; }
 function stars(value: number) { const n=Math.max(0,Math.min(5,Math.round(value))); return `${"★".repeat(n)}${"☆".repeat(5-n)}`; }
