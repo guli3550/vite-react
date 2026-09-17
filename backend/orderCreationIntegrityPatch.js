@@ -220,7 +220,7 @@ async function handleSecureOrderCreation(req, res) {
         .select("telegram_phone")
         .eq("telegram_id", tgUser.id)
         .maybeSingle();
-      orderPhone = String(tu?.telegram_phone || rawBody.phone || "").trim();
+      orderPhone = String(tu?.telegram_phone || "").trim();
     }
     if (!orderPhone) {
       return res.status(400).json({ success: false, message: "Mijozning tasdiqlangan telefon raqami topilmadi." });
@@ -231,7 +231,7 @@ async function handleSecureOrderCreation(req, res) {
       .select("telegram_phone")
       .eq("telegram_id", tgUser.id)
       .maybeSingle();
-    orderPhone = String(tu?.telegram_phone || rawBody.phone || "").trim();
+    orderPhone = String(tu?.telegram_phone || "").trim();
     if (!orderPhone) {
       return res.status(400).json({ success: false, message: "Iltimos telefon raqamingizni kiriting" });
     }
