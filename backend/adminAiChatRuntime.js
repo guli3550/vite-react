@@ -30,22 +30,13 @@ const db = isSupabaseConfigured()
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
 
-// Built-in GULI catalog and promo data for resilient offline / demo operation
-const FALLBACK_PRODUCTS = [
-  { id: 101, name: "Velvet Elegance Push-Up To‘plami", category: "Byustgalter", price: 340000, old_price: 420000, stock: 14, active: true },
-  { id: 102, name: "Silk Satin Romantic Bezgalter", category: "Byustgalter", price: 260000, old_price: 310000, stock: 9, active: true },
-  { id: 103, name: "Lace Temptation Bodysuit", category: "Penyuar", price: 390000, old_price: 480000, stock: 3, active: true },
-  { id: 104, name: "Royal Silk Pijama To‘plami", category: "Pijama", price: 520000, old_price: 650000, stock: 2, active: true },
-  { id: 105, name: "Flora Soft Cotton Kundalik To‘plam", category: "Kundalik", price: 180000, old_price: 220000, stock: 18, active: true },
-  { id: 106, name: "Sensual Kimono Xalat", category: "Xalat", price: 450000, old_price: 540000, stock: 4, active: true },
-  { id: 107, name: "Classic Cotton Bra", category: "Byustgalter", price: 150000, old_price: 190000, stock: 12, active: true },
-];
-
-const FALLBACK_PROMOS = [
-  { kod: "GULI2026", chegirma_turi: "percent", chegirma_qiymati: 15, chegirma: "15%", minimal_buyurtma: 200000, maksimal_chegirma: 50000, holati: "faol", faol: true, ishlatilgan: 24, limit: 100, amal_qilish_muddati: "2026-12-31" },
-  { kod: "YANGI20", chegirma_turi: "percent", chegirma_qiymati: 20, chegirma: "20%", minimal_buyurtma: 300000, maksimal_chegirma: 60000, holati: "faol", faol: true, ishlatilgan: 8, limit: 50, amal_qilish_muddati: "2026-12-31" },
-  { kod: "BAHOR30K", chegirma_turi: "fixed", chegirma_qiymati: 30000, chegirma: "30,000 so'm", minimal_buyurtma: 250000, maksimal_chegirma: null, holati: "faol", faol: true, ishlatilgan: 15, limit: 50, amal_qilish_muddati: "2026-12-31" },
-];
+// No operational demo/fallback data is permitted in GULI AI.
+const DB_UNAVAILABLE_ERROR = "Ma'lumotlar bazasi vaqtinchalik ishlamayapti";
+function createDbUnavailableProxy() {
+  return new Proxy([], { get() { throw new Error(DB_UNAVAILABLE_ERROR); } });
+}
+const FALLBACK_PRODUCTS = createDbUnavailableProxy();
+const FALLBACK_PROMOS = createDbUnavailableProxy();
 
 // --- Allowed Models Whitelist ---
 const ALLOWED_MODELS = {
@@ -94,14 +85,7 @@ function checkRateLimit(key) {
 
 // Helper to safely extract client IP behind reverse proxies
 function getClientIp(req) {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.trim()) {
-    return fwd.split(",")[0].trim();
-  }
-  if (Array.isArray(fwd) && fwd.length > 0) {
-    return String(fwd[0]).trim();
-  }
-  return req.socket?.remoteAddress || req.ip || "admin";
+  return String(req.ip || req.socket?.remoteAddress || "admin").trim() || "admin";
 }
 
 // Clean up old rate limit entries every 5 minutes
@@ -286,11 +270,11 @@ async function executeTool(name, args) {
               kam_qolgan_mahsulotlar: lowStockResult.data || [],
             };
           } catch (dbErr) {
-            console.warn("[GULI-AI] get_store_metrics DB query failed, using resilient catalog fallback:", dbErr.message);
+            console.warn("[GULI-AI] get_store_metrics DB query failed, database unavailable:", dbErr.message);
           }
         }
 
-        // Resilient store metrics fallback
+        // Database unavailable
         const lowStock = FALLBACK_PRODUCTS.filter((p) => p.stock < 5);
         return {
           davr: period,
@@ -336,7 +320,7 @@ async function executeTool(name, args) {
               };
             }
           } catch (dbErr) {
-            console.warn("[GULI-AI] search_catalog DB query failed, using resilient catalog fallback:", dbErr.message);
+            console.warn("[GULI-AI] search_catalog DB query failed, database unavailable:", dbErr.message);
           }
         }
 
@@ -366,9 +350,9 @@ async function executeTool(name, args) {
 
         if (db) {
           try {
-            let { data, error } = await db.from("orders").select("*").eq("id", orderNum).maybeSingle();
+            let { data, error } = await db.from("orders").select("id, order_number, status, total, items, created_at, payment_status, receipt_url").eq("id", orderNum).maybeSingle();
             if (!data) {
-              const byNumber = await db.from("orders").select("*").eq("order_number", orderNum).maybeSingle();
+              const byNumber = await db.from("orders").select("id, order_number, status, total, items, created_at, payment_status, receipt_url").eq("order_number", orderNum).maybeSingle();
               data = byNumber.data;
             }
 
@@ -425,11 +409,11 @@ async function executeTool(name, args) {
               };
             }
           } catch (dbErr) {
-            console.warn("[GULI-AI] inspect_inventory DB query failed, using resilient catalog fallback:", dbErr.message);
+            console.warn("[GULI-AI] inspect_inventory DB query failed, database unavailable:", dbErr.message);
           }
         }
 
-        // Resilient fallback inventory inspection
+        // Database unavailable
         const lowStockItems = FALLBACK_PRODUCTS.filter((p) => p.stock <= threshold);
         return {
           kritik_chegara: threshold,
