@@ -333,7 +333,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   const [activePromosCount, setActivePromosCount] = useState<number | null>(null);
   useEffect(() => {
     let isMounted = true;
-    fetch("/api/promos")
+    fetch((import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "") + "/api/promos")
       .then((r) => r.json())
       .then((d) => {
         if (isMounted && d.success && Array.isArray(d.data)) {
@@ -373,7 +373,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       const tgData = (window as any).Telegram?.WebApp?.initData;
       if (tgData) headers["X-Telegram-Init-Data"] = tgData;
 
-      await fetch("/api/customer/profile", {
+      await fetch((import.meta.env.VITE_API_URL || "https://guli-lingerie-api.onrender.com").replace(/\/$/, "") + "/api/customer/profile", {
         method: "PUT",
         headers,
         body: JSON.stringify({

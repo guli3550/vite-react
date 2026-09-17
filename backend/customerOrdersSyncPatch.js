@@ -130,63 +130,7 @@ async function listOrders(req, res) {
   }
 }
 
-async function uploadReceipt(req, res) {
-  if (!supabase) return res.status(503).json({ success: false, message: 'Xizmat sozlanmagan.' });
-  try {
-    const user = customer(req);
-    if (!user || !['auth', 'telegram'].includes(user.type)) return res.status(401).json({ success: false, message: 'Telegram autentifikatsiyasi talab qilinadi.' });
-    const orderIdentifier = String(req.params.orderNumber || req.params.id || '').trim();
-    if (!orderIdentifier) return res.status(400).json({ success: false, message: 'Buyurtma identifikatori topilmadi.' });
-
-    let { data: order, error } = await supabase.from('orders').select('*').eq('order_number', orderIdentifier).maybeSingle();
-    if (error) throw error;
-    if (!order) {
-      const byId = await supabase.from('orders').select('*').eq('id', orderIdentifier).maybeSingle();
-      if (byId.error) throw byId.error;
-      order = byId.data;
-    }
-    if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi.' });
-
-    const owns = user.type === 'auth'
-      ? (order.auth_user_id && String(order.auth_user_id) === String(user.id)) || (user.telegram_id && order.telegram_id != null && Number(order.telegram_id) === Number(user.telegram_id))
-      : order.telegram_id != null && Number(order.telegram_id) === Number(user.id);
-    if (!owns) return res.status(403).json({ success: false, message: 'Bu buyurtma sizga tegishli emas.' });
-
-    let rawData = req.body?.data || req.body?.receipt_url || '';
-    let mimeType = String(req.body?.mimeType || 'image/jpeg');
-    if (typeof rawData === 'string' && rawData.startsWith('data:')) {
-      const match = rawData.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) { mimeType = match[1]; rawData = match[2]; }
-    }
-    if (!rawData) return res.status(400).json({ success: false, message: 'Chek rasmi taqdim etilmadi.' });
-    if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType)) return res.status(400).json({ success: false, message: 'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin.' });
-
-    const buffer = Buffer.from(rawData, 'base64');
-    if (!buffer.length || buffer.length > 10 * 1024 * 1024) return res.status(400).json({ success: false, message: 'Chek hajmi juda katta yoki fayl yaroqsiz.' });
-    const ext = mimeType === 'application/pdf' ? 'pdf' : mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
-    const filePath = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-    const up = await supabase.storage.from('payment-receipts').upload(filePath, buffer, { contentType: mimeType, cacheControl: '31536000', upsert: false });
-    if (up.error) throw up.error;
-    let signedReceiptUrl = '';
-    try {
-      const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(filePath, 86400);
-      signedReceiptUrl = sData?.signedUrl || '';
-    } catch {}
-    const patchData = { payment_receipt_path: filePath, payment_status: 'receipt_uploaded', payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    const { data: updated, error: ue } = await supabase.from('orders').update(patchData).eq('id', order.id).select('*').single();
-    if (ue) throw ue;
-    if (order.payment_receipt_path && order.payment_receipt_path !== filePath) supabase.storage.from('payment-receipts').remove([order.payment_receipt_path]).catch(() => {});
-    return res.json({ success: true, message: 'Chek muvaffaqiyatli saqlandi. Admin tez orada tekshiradi.', data: { ...updated, receipt_url: signedReceiptUrl } });
-  } catch (error) {
-    console.error('[Upload receipt error]', error);
-    return res.status(500).json({ success: false, message: 'Chekni yuborishda xatolik yuz berdi.' });
-  }
-}
-
 install('get', '/api/orders', listOrders);
 install('get', '/api/customer/orders', listOrders);
 install('get', '/api/guest/orders', listOrders);
-install('post', '/api/orders/:orderNumber/receipt', uploadReceipt);
-install('post', '/api/customer/orders/:orderNumber/receipt', uploadReceipt);
-install('post', '/api/orders/:id/receipt', uploadReceipt);
-install('post', '/api/orders/:orderNumber/payment-receipt', uploadReceipt);
+

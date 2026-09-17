@@ -67,7 +67,7 @@
 
   const buildCanonicalUrl = (input) => {
     const raw = String(typeof input === 'string' ? input : input?.url || '');
-    const u = new URL(raw, window.location.origin);
+    const u = new URL(raw, API.startsWith('http') ? API : window.location.origin);
     const params = new URLSearchParams(u.search);
     const phone = getPhone();
     const tgId = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').trim();
