@@ -1,0 +1,67 @@
+name: GULI AI Clean Hardening
+
+on:
+  push:
+    branches:
+      - audit/guli-ai-final-clean-20260918
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply security hardening
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const indexPath = 'backend/index.js';
+          let index = fs.readFileSync(indexPath, 'utf8');
+          if (!index.includes('app.set("trust proxy", 1);')) index = index.replace('const app = express();', 'const app = express();\n\n// Render/Cloudflare reverse-proxy boundary: trust exactly one proxy hop.\napp.set("trust proxy", 1);');
+          fs.writeFileSync(indexPath, index);
+
+          const aiPath = 'backend/adminAiChatRuntime.js';
+          let ai = fs.readFileSync(aiPath, 'utf8');
+          ai = ai.replace(/\/\/ Built-in GULI catalog and promo data[\s\S]*?const FALLBACK_PROMOS = \[[\s\S]*?\];\n\n/, [
+            '// No operational demo/fallback data is permitted in GULI AI.\n',
+            'const DB_UNAVAILABLE_ERROR = "Ma\'lumotlar bazasi vaqtinchalik ishlamayapti";\n',
+            'function createDbUnavailableProxy() {\n',
+            '  return new Proxy([], { get() { throw new Error(DB_UNAVAILABLE_ERROR); } });\n',
+            '}\n',
+            'const FALLBACK_PRODUCTS = createDbUnavailableProxy();\n',
+            'const FALLBACK_PROMOS = createDbUnavailableProxy();\n\n',
+          ].join(''));
+          ai = ai.replace(/function getClientIp\(req\) \{[\s\S]*?\n\}/, 'function getClientIp(req) {\n  return String(req.ip || req.socket?.remoteAddress || "admin").trim() || "admin";\n}');
+          ai = ai.replace(/using resilient catalog fallback/g, 'database unavailable');
+          ai = ai.replace(/Resilient store metrics fallback/g, 'Database unavailable');
+          ai = ai.replace(/Resilient fallback inventory inspection/g, 'Database unavailable');
+          ai = ai.replace(/resilient fallback inventory inspection/g, 'database unavailable');
+          ai = ai.replace(/\.from\("orders"\)\.select\("\*"\)/g, '.from("orders").select("id, order_number, status, total, items, created_at, payment_status, receipt_url")');
+          fs.writeFileSync(aiPath, ai);
+          NODE
+      - name: Validate
+        working-directory: backend
+        run: |
+          npm install
+          node --check adminAiChatRuntime.js
+          node --check index.js
+      - name: Verify invariants
+        run: |
+          set -euo pipefail
+          grep -q 'app.set("trust proxy", 1);' backend/index.js
+          grep -q 'DB_UNAVAILABLE_ERROR' backend/adminAiChatRuntime.js
+          ! grep -q 'GULI2026\|YANGI20\|BAHOR30K\|Velvet Elegance' backend/adminAiChatRuntime.js
+          ! grep -q 'x-forwarded-for' backend/adminAiChatRuntime.js
+          ! grep -q 'select("\\*")' backend/adminAiChatRuntime.js
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/index.js backend/adminAiChatRuntime.js backend/package-lock.json
+          git diff --cached --quiet || git commit -m "fix(security): harden GULI AI production runtime"
+          git push
