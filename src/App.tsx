@@ -1614,9 +1614,20 @@ export default function App() {
     }
 
     const offset = append ? productsOffset : 0;
+    const params = new URLSearchParams({
+      limit: String(PRODUCTS_PAGE_SIZE),
+      offset: String(offset),
+    });
+    if (selectedCategory && selectedCategory !== "Barchasi") {
+      params.set("category", selectedCategory);
+    }
+    const normalizedSearch = search.trim();
+    if (normalizedSearch) {
+      params.set("search", normalizedSearch);
+    }
 
     try {
-      const r = await fetch(`${API_URL}/api/products?limit=${PRODUCTS_PAGE_SIZE}&offset=${offset}`, {
+      const r = await fetch(`${API_URL}/api/products?${params.toString()}`.replace("? ", "?"), {
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
@@ -1659,7 +1670,7 @@ export default function App() {
         setProductsLoading(false);
       }
     }
-  }, [productsHasMore, productsOffset]);
+  }, [productsHasMore, productsOffset, selectedCategory, search]);
 
   const [phoneLookupInput, setPhoneLookupInput] = useState(() => {
     return localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || "";
@@ -2317,25 +2328,16 @@ export default function App() {
     [products],
   );
   const filtered = useMemo(
-    () => {
-      const list = products.filter(
-        (p) =>
-          p.active !== false &&
-          (selectedCategory === "Barchasi" ||
-            normalizeCategory(p.category) === normalizeCategory(selectedCategory)) &&
-          (!search.trim() ||
-            p.product_code?.includes(search.trim()) ||
-            p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-            normalizeCategory(p.category).toLowerCase().includes(search.trim().toLowerCase())),
-      );
-      return [...list].sort((a, b) => {
-        const catA = normalizeCategory(a.category);
-        const catB = normalizeCategory(b.category);
-        if (catA !== catB) return catA.localeCompare(catB);
-        return (a.sort_order || 0) - (b.sort_order || 0);
-      });
-    },
-    [products, selectedCategory, search],
+    () =>
+      [...products]
+        .filter((p) => p.active !== false)
+        .sort((a, b) => {
+          const catA = normalizeCategory(a.category);
+          const catB = normalizeCategory(b.category);
+          if (catA !== catB) return catA.localeCompare(catB);
+          return (a.sort_order || 0) - (b.sort_order || 0);
+        }),
+    [products],
   );
   const applyPromo = async () => {
     try {
