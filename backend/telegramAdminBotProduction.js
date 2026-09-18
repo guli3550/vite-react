@@ -22,6 +22,23 @@ async function ensureCustomerStatusMessage(o){if(!CUSTOMER_BOT||!db||!o?.telegra
 async function updateCustomer(o){if(!CUSTOMER_BOT||!o?.telegram_id)return;let mid=Number(o.telegram_status_message_id||0)||null;if(!mid)mid=await ensureCustomerStatusMessage(o);if(!mid)return;try{await tg('editMessageText',{chat_id:Number(o.telegram_id),message_id:mid,text:customerBody(o),parse_mode:'HTML',disable_web_page_preview:true},CUSTOMER_BOT)}catch(e){if(!/message is not modified/i.test(e.message||''))console.warn('[GULI customer status edit]',e.message)}}
 async function getOrder(id){if(!db)return null;let r=await db.from('orders').select('*').eq('id',id).maybeSingle();if(!r.data&&/GULI-/i.test(String(id)))r=await db.from('orders').select('*').eq('order_number',id).maybeSingle();return r.data||null}
 async function callback(c){const chat=Number(c?.message?.chat?.id||0),from=Number(c?.from?.id||0),d=String(c?.data||'');if(!chat||chat!==from)return;const ids=await admins();if(!ids.includes(String(chat))){await tg('answerCallbackQuery',{callback_query_id:c.id,text:'⛔ Ruxsat yo‘q',show_alert:true}).catch(()=>{});return}
+  if(d.startsWith('guli_ai_clear:')){
+    const action=d.slice('guli_ai_clear:'.length);
+    if(action==='context'){
+      state.aiHistory.delete(String(chat));
+      await tg('answerCallbackQuery',{callback_query_id:c.id,text:'🧠 Suhbat konteksti tozalandi'});
+      await tg('editMessageText',{chat_id:chat,message_id:Number(c?.message?.message_id||0),text:'🧠 Suhbat konteksti tozalandi. AI xabarlari saqlanib qoldi.'}).catch(()=>{});
+      return;
+    }
+    if(action==='messages'){
+      const n=await deleteAiMessages(chat);
+      state.aiHistory.delete(String(chat));
+      await tg('answerCallbackQuery',{callback_query_id:c.id,text:'🗑️ AI xabarlari tozalandi'});
+      await tg('editMessageText',{chat_id:chat,message_id:Number(c?.message?.message_id||0),text:`🗑️ GULI AI tomonidan yozilgan ${n} ta xabar o‘chirildi. Suhbat konteksti ham tozalandi.`}).catch(()=>{});
+      return;
+    }
+    return;
+  }
   if(d.startsWith('guli_ai_model:')){
     const model=d.slice('guli_ai_model:'.length);
     if(!AI_MODELS[model]){await tg('answerCallbackQuery',{callback_query_id:c.id,text:'Noma’lum AI modeli',show_alert:true}).catch(()=>{});return}
@@ -75,6 +92,12 @@ async function deleteAiMessages(chat){
   state.aiMessages.delete(key);
   return deleted;
 }
+async function sendAiClearMenu(chat){
+  await sendTrackedAiMessage(chat,'🧠 GULI AI — nima qilish kerak?',{reply_markup:{inline_keyboard:[
+    [{text:'🧠 Suhbat kontekstini tozalash',callback_data:'guli_ai_clear:context'}],
+    [{text:'🗑️ AI xabarlarini tozalash',callback_data:'guli_ai_clear:messages'}]
+  ]}});
+}
 async function sendAiModelMenu(chat){
   const selected=aiModelName(chat);
   await sendTrackedAiMessage(chat,'🤖 GULI AI — modelni tanlang:',{reply_markup:{inline_keyboard:[
@@ -92,7 +115,7 @@ async function handleAdminAiMessage(m,ids){
     await sendTrackedAiMessage(chat,'🛑 GULI AI suhbat yakunlandi. Qayta boshlash uchun /ai yuboring.');
     return true;
   }
-  if(/^\/ai_delete(?:@\w+)?(?:\s+.*)?$/i.test(text)){const n=await deleteAiMessages(chat);await tg('sendMessage',{chat_id:chat,text:`🗑 GULI AI yozgan ${n} ta xabar o‘chirildi.`});return true}
+  if(/^\/ai_delete(?:@\w+)?(?:\s+.*)?$/i.test(text)){const n=await deleteAiMessages(chat);state.aiHistory.delete(key);await tg('sendMessage',{chat_id:chat,text:`🗑 GULI AI yozgan ${n} ta xabar o‘chirildi. Suhbat konteksti ham tozalandi.`});return true}
   if(/^\/ai_model(?:@\w+)?(?:\s+.*)?$/i.test(text)){await sendAiModelMenu(chat);return true}
   if(/^\/ai_clear(?:@\w+)?(?:\s+.*)?$/i.test(text)){
     await sendTrackedAiMessage(chat,'🧹 GULI AI — qaysi amalni bajarish kerak?',{reply_markup:{inline_keyboard:[
