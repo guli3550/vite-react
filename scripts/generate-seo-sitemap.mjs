@@ -22,7 +22,7 @@ const absolute = (value) => {
 async function main() {
   let products = [];
   try {
-    const response = await fetch(`${API}/api/products?limit=100`, {
+    const response = await fetch(`${API}/api/products?limit=1000`, {
       headers: { "Accept": "application/json" },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
