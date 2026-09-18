@@ -773,14 +773,23 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
-  const [productsOffset, setProductsOffset] = useState(0);
   const [productsHasMore, setProductsHasMore] = useState(true);
+  const productsOffsetRef = useRef(0);
+  const productsHasMoreRef = useRef(true);
   const productsLoadingMoreRef = useRef(false);
   const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [cart, setCart] = useState<CartItem[]>(() => readStorage("cart", []));
   const [wishlist, setWishlist] = useState<number[]>(() =>
     readStorage("wishlist", []),
@@ -1606,14 +1615,19 @@ export default function App() {
   };
   const loadProducts = useCallback(async (silent = false, append = false) => {
     if (append) {
-      if (productsLoadingMoreRef.current || !productsHasMore) return [];
+      if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
       setProductsLoadingMore(true);
-    } else if (!silent) {
-      setProductsLoading(true);
+    } else {
+      productsOffsetRef.current = 0;
+      productsHasMoreRef.current = true;
+      setProductsHasMore(true);
+      if (!silent) {
+        setProductsLoading(true);
+      }
     }
 
-    const offset = append ? productsOffset : 0;
+    const offset = append ? productsOffsetRef.current : 0;
     const params = new URLSearchParams({
       limit: String(PRODUCTS_PAGE_SIZE),
       offset: String(offset),
@@ -1621,7 +1635,7 @@ export default function App() {
     if (selectedCategory && selectedCategory !== "Barchasi") {
       params.set("category", selectedCategory);
     }
-    const normalizedSearch = search.trim();
+    const normalizedSearch = debouncedSearch.trim();
     if (normalizedSearch) {
       params.set("search", normalizedSearch);
     }
@@ -1639,25 +1653,29 @@ export default function App() {
       }
 
       const rows: Product[] = j.data;
+      const nextOffset = offset + rows.length;
+      const hasMore = Boolean(j.pagination?.hasMore);
 
-      if (!append && rows.length === 0) {
-        setProducts([]);
-        setProductsOffset(0);
-        setProductsHasMore(false);
-        throw new Error("Hozircha faol mahsulotlar topilmadi");
-      }
-
-      setProducts((prev) => (append ? [...prev, ...rows] : rows));
-      setProductsOffset(offset + rows.length);
-      setProductsHasMore(Boolean(j.pagination?.hasMore));
+      productsOffsetRef.current = nextOffset;
+      productsHasMoreRef.current = hasMore;
+      setProductsHasMore(hasMore);
       setProductsError("");
+
+      setProducts((prev) => {
+        if (!append) return rows;
+        const existingIds = new Set(prev.map((p) => String(p.id)));
+        const uniqueNew = rows.filter((p) => !existingIds.has(String(p.id)));
+        return [...prev, ...uniqueNew];
+      });
+
       return rows;
     } catch (error) {
       if (!append) {
         const message =
           error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
         setProducts([]);
-        setProductsOffset(0);
+        productsOffsetRef.current = 0;
+        productsHasMoreRef.current = false;
         setProductsHasMore(false);
         setProductsError(message);
       }
@@ -1670,7 +1688,7 @@ export default function App() {
         setProductsLoading(false);
       }
     }
-  }, [productsHasMore, productsOffset, selectedCategory, search]);
+  }, [selectedCategory, debouncedSearch]);
 
   const [phoneLookupInput, setPhoneLookupInput] = useState(() => {
     return localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || "";
@@ -4278,7 +4296,8 @@ export default function App() {
           <PullToRefresh
             language={language}
             onRefresh={async () => {
-              setProductsOffset(0);
+              productsOffsetRef.current = 0;
+              productsHasMoreRef.current = true;
               setProductsHasMore(true);
               productsLoadingMoreRef.current = false;
               await loadProducts(true);
@@ -4323,15 +4342,35 @@ export default function App() {
                   <div className="productGrid">
                     {filtered.map((p) => card(p))}
                   </div>
-                  <div ref={productsLoadMoreRef} aria-hidden="true" style={{ height: "1px" }} />
+                  <div ref={productsLoadMoreRef} aria-hidden="true" style={{ height: "4px", margin: "10px 0" }} />
                   {productsLoadingMore ? (
                     <div style={{ padding: "18px 0" }}>
                       <ProductGridSkeleton count={2} />
                     </div>
                   ) : null}
-                  {!productsHasMore && products.length > PRODUCTS_PAGE_SIZE ? (
-                    <p className="muted" style={{ textAlign: "center", padding: "10px 0 20px" }}>
-                      Barcha mahsulotlar yuklandi
+                  {productsHasMore && !productsLoadingMore && !productsLoading ? (
+                    <div style={{ textAlign: "center", padding: "12px 0 24px" }}>
+                      <button
+                        type="button"
+                        onClick={() => loadProducts(true, true)}
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #f0dfe3",
+                          color: "#c9526b",
+                          borderRadius: "12px",
+                          padding: "8px 20px",
+                          fontWeight: 600,
+                          fontSize: "13px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Yana yuklash ↓
+                      </button>
+                    </div>
+                  ) : null}
+                  {!productsHasMore && products.length > 0 ? (
+                    <p className="muted" style={{ textAlign: "center", padding: "16px 0 24px", fontSize: "13px" }}>
+                      Barcha faol mahsulotlar ko‘rsatildi ({products.length} ta)
                     </p>
                   ) : null}
                 </>

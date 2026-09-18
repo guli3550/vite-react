@@ -73,26 +73,46 @@ const toProduct = (row) => ({
 });
 
 async function listProducts({ category, search, featured, limit = 100, offset = 0 } = {}) {
+  const numLimit = Math.min(Math.max(Number(limit) || 40, 1), 100);
+  const numOffset = Math.max(Number(offset) || 0, 0);
+
   let query = supabase
     .from("products")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
-    .range(Math.max(Number(offset) || 0, 0), Math.max(Number(offset) || 0, 0) + Math.min(Math.max(Number(limit) || 100, 1), 100) - 1);
+    .range(numOffset, numOffset + numLimit - 1);
 
-  if (category && category !== "Barchasi") query = query.eq("category", category);
+  if (category && category !== "Barchasi") {
+    const trimmedCat = String(category).trim();
+    const lower = trimmedCat.toLowerCase();
+    if (lower === "tursik" || lower === "trusik") {
+      query = query.or("category.ilike.%tursik%,category.ilike.%trusik%");
+    } else if (lower === "penyuar" || lower === "pinyuar") {
+      query = query.or("category.ilike.%penyuar%,category.ilike.%pinyuar%");
+    } else if (lower.includes("byus") || lower.includes("begalter") || lower.includes("bra")) {
+      query = query.or("category.ilike.%byus%,category.ilike.%begalter%,category.ilike.%bra%");
+    } else {
+      query = query.ilike("category", `%${trimmedCat}%`);
+    }
+  }
 
   if (search?.trim()) {
-    const safe = search.trim().replace(/[%(),]/g, " ");
-    query = query.or(`name.ilike.%${safe}%,category.ilike.%${safe}%,product_code.eq.${safe}`);
+    const safe = search.trim().replace(/[%(),]/g, " ").trim();
+    if (safe) {
+      query = query.or(`name.ilike.%${safe}%,category.ilike.%${safe}%,description.ilike.%${safe}%,product_code.ilike.%${safe}%`);
+    }
   }
 
   if (featured !== undefined) query = query.eq("featured", featured);
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
-  return (data || []).map(toProduct);
+  const products = (data || []).map(toProduct);
+  products.totalCount = typeof count === "number" ? count : products.length;
+  products.count = products.totalCount;
+  return products;
 }
 
 async function getProduct(id) {

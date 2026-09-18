@@ -185,7 +185,35 @@ async function ensureProductCode(payload) { if (/^\d{6}$/.test(String(payload.pr
 
 app.get("/", (req, res) => res.json({ success: true, message: "GULI Premium API ishlayapti 🌷" }));
 app.get("/api/health", (req, res) => res.json({ success: true, status: "online" }));
-app.get("/api/products", async (req, res) => { try { const limit = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100); const offset = Math.max(Number(req.query.offset) || 0, 0); const data = await listProducts({ category: req.query.category, search: req.query.search, featured: req.query.featured === undefined ? undefined : req.query.featured === "true", limit, offset }); res.setHeader("Cache-Control", "no-store, max-age=0"); res.json({ success: true, data, pagination: { limit, offset, hasMore: data.length === limit } }); } catch (error) { console.error("Products API error:", error); res.status(500).json({ success: false, message: "Mahsulotlarni yuklashda xatolik" }); } });
+app.get("/api/products", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const data = await listProducts({
+      category: req.query.category,
+      search: req.query.search,
+      featured: req.query.featured === undefined ? undefined : req.query.featured === "true",
+      limit,
+      offset
+    });
+    const total = typeof data?.totalCount === "number" ? data.totalCount : data.length;
+    const hasMore = typeof data?.totalCount === "number" ? (offset + data.length < data.totalCount) : (data.length === limit);
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    res.json({
+      success: true,
+      data,
+      pagination: {
+        limit,
+        offset,
+        hasMore,
+        total
+      }
+    });
+  } catch (error) {
+    console.error("Products API error:", error);
+    res.status(500).json({ success: false, message: "Mahsulotlarni yuklashda xatolik" });
+  }
+});
 app.get("/api/orders", requireTelegramUser, async (req, res) => { try { const { data, error } = await supabase.from("orders").select("*").eq("telegram_id", req.telegramUser.id).order("created_at", { ascending: false }).limit(100); if (error) throw error; res.json({ success: true, data: data || [] }); } catch (error) { console.error("Orders API error:", error); res.status(500).json({ success: false, message: "Buyurtmalarni yuklashda xatolik" }); } });
 app.get("/api/telegram-user", requireTelegramUser, async (req, res) => { try { const { data, error } = await supabase.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone").eq("telegram_id", req.telegramUser.id).maybeSingle(); if (error) throw error; res.json({ success: true, data: data || null }); } catch (error) { console.error("Telegram user API error:", error); res.status(500).json({ success: false, message: "Telegram foydalanuvchisini olishda xatolik" }); } });
 app.get("/api/reverse-geocode", async (req, res) => { try { const lat = Number(req.query.lat); const lon = Number(req.query.lon); if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ success: false, message: "Koordinatalar noto'g'ri" }); const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=18&addressdetails=1`, { headers: { "User-Agent": "GULI-Premium-Telegram-Mini-App/2.0" } }); if (!response.ok) throw new Error(`Geocoding HTTP ${response.status}`); const result = await response.json(); const a = result.address || {}; res.json({ success: true, data: { region: a.state || a.region || a.province || "", district: a.city_district || a.district || a.county || a.city || "", street: a.road || a.pedestrian || a.street || "", display_name: result.display_name || "" } }); } catch (error) { console.error("Reverse geocode error:", error); res.status(502).json({ success: false, message: "Manzilni avtomatik aniqlab bo'lmadi" }); } });
