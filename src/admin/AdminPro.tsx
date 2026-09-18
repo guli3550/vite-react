@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { getApiBaseUrl } from "../lib/apiOrigin";
+import { getApiBaseUrl, LEGACY_RENDER_ORIGIN } from "../lib/apiOrigin";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
 import AdminGuliChatTab from "./components/AdminGuliChatTab";
@@ -643,8 +643,9 @@ export default function AdminPro() {
     setLoginError("");
     const cleanLogin = login.trim();
     const cleanPassword = password.trim();
-    const targetApi = (customApiUrl.trim() || API).replace(/\/$/, "");
-    try {
+    const configuredApi = (customApiUrl.trim() || API).replace(/\/$/, "");
+    const renderApi = LEGACY_RENDER_ORIGIN.replace(/\/$/, "");
+    const loginAt = async (targetApi: string) => {
       const r = await fetch(`${targetApi}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -664,12 +665,31 @@ export default function AdminPro() {
         }
         throw Error(j?.message || `Server xatosi (${r.status})`);
       }
-      sessionStorage.setItem("guli_custom_api_url", targetApi);
-      sessionStorage.setItem("guli_admin_token", j.token);
-      setToken(j.token);
+      return { targetApi, token: j.token };
+    };
+
+    try {
+      let result: { targetApi: string; token: string };
+      try {
+        result = await loginAt(configuredApi);
+      } catch (primaryError) {
+        const isNetworkFailure =
+          primaryError instanceof TypeError ||
+          /failed to fetch|networkerror|load failed|fetch failed/i.test(
+            primaryError instanceof Error ? primaryError.message : String(primaryError)
+          );
+        if (!isNetworkFailure || configuredApi === renderApi) throw primaryError;
+
+        // Cloudflare Gateway unavailable: authenticate directly against Render.
+        result = await loginAt(renderApi);
+      }
+
+      sessionStorage.setItem("guli_custom_api_url", result.targetApi);
+      sessionStorage.setItem("guli_admin_token", result.token);
+      setToken(result.token);
     } catch (e) {
       setLoginError(e instanceof Error ? e.message : "Kirishda xatolik");
-    } finally {
+    }    } finally {
       setBusy(false);
     }
   };
