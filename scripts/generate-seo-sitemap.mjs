@@ -1,7 +1,7 @@
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 
 const API = "https://guli-gateway.parizodabaxtiyorov.workers.dev";
-const SITE = "https://www.gulii.uz";
+const SITE = "https://gulii.uz";
 
 const escapeXml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
