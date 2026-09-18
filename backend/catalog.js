@@ -48,7 +48,7 @@ async function listProducts({ category, search, featured, limit = 100 } = {}) {
     .select("*")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(Number(limit) || 100, 1), 100));
+    .limit(Math.min(Math.max(Number(limit) || 100, 1), 1000));
 
   if (category && category !== "Barchasi") query = query.eq("category", category);
 
