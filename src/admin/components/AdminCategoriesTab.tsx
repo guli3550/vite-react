@@ -1,7 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { EmptyState } from "./AdminUIComponents";
 import { normalizeCategory } from "../../utils/categoryUtils";
-import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
 
 export type Category = {
   id: number;
@@ -37,7 +36,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
 
   // Calculate live product counts for each category
   const categoriesWithLiveCounts = useMemo(() => {
-    let allProds = DEFAULT_PRODUCTS;
+    let allProds: any[] = [];
     try {
       const savedProds = localStorage.getItem("guli_products");
       if (savedProds) {
@@ -56,6 +55,17 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
       return { ...cat, productCount: count };
     });
   }, [categories]);
+
+  useEffect(() => {
+    fetch(`${window.location.origin}/api/products`, { cache: "no-store" })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && Array.isArray(json.data)) {
+          try { localStorage.setItem("guli_products", JSON.stringify(json.data)); } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
