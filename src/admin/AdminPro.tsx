@@ -271,9 +271,16 @@ function playBellChimeSound() {
 }
 
 export default function AdminPro() {
-  const [customApiUrl, setCustomApiUrl] = useState<string>(
-    () => sessionStorage.getItem("guli_custom_api_url") || API
-  );
+  const [customApiUrl, setCustomApiUrl] = useState<string>(() => {
+    const stored = sessionStorage.getItem("guli_custom_api_url") || "";
+    // Old sessions may contain the legacy Render origin. Clear it so
+    // production login uses the canonical Cloudflare API instead.
+    if (/guli-lingerie-api\.onrender\.com/i.test(stored)) {
+      sessionStorage.removeItem("guli_custom_api_url");
+      return API;
+    }
+    return stored.trim() || API;
+  });
   const [token, setToken] = useState(
     () => sessionStorage.getItem("guli_admin_token") || ""
   );
