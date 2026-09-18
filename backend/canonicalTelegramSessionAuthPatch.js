@@ -24,7 +24,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
-const { issueAccessToken, issueRefreshToken } = require('./guliCustomAuth.js');
+const { issueAccessToken, issueRefreshToken, rotateRefreshToken } = require('./guliCustomAuth.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
@@ -310,8 +310,56 @@ async function exchange(req, res) {
   }
 }
 
+/**
+ * POST /api/v1/auth/refresh
+ *
+ * Rotates a previously issued GULI refresh token and mints a fresh
+ * short-lived access token. The refresh token is the only credential
+ * accepted here; no client-supplied user/telegram/phone identity is trusted.
+ */
+async function refresh(req, res) {
+  if (!supabase) return fail(res, 503, 'Autentifikatsiya xizmati sozlanmagan.');
+  try {
+    const refreshToken = String(req.body?.refresh_token || '').trim();
+    if (!refreshToken || refreshToken.length < 40) return fail(res, 401, 'Refresh sessiyasi yaroqsiz.');
+
+    const rotated = await rotateRefreshToken(supabase, refreshToken);
+    if (!rotated) return fail(res, 401, 'Refresh sessiyasi tugagan yoki allaqachon ishlatilgan.');
+
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, phone_number, telegram_id, full_name, telegram_username, telegram_photo_url, created_at')
+      .eq('id', rotated.userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!user) return fail(res, 401, 'Foydalanuvchi topilmadi.');
+
+    return res.json({
+      success: true,
+      data: {
+        access_token: issueAccessToken(user),
+        refresh_token: rotated.refreshToken,
+        user: {
+          id: user.id,
+          phone_number: user.phone_number,
+          full_name: user.full_name,
+          telegram_id: user.telegram_id,
+          telegram_username: user.telegram_username,
+          telegram_photo_url: user.telegram_photo_url,
+          created_at: user.created_at,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[auth/refresh]', error.message);
+    return fail(res, 500, 'Sessiyani yangilashda xatolik.');
+  }
+}
+
+
 install('post', '/api/v1/auth/init-session', initSession);
 install('get', '/api/v1/auth/check-status/:session_id', checkStatus);
 install('post', '/api/v1/auth/exchange', exchange);
+install('post', '/api/v1/auth/refresh', refresh);
 
 module.exports = {};
