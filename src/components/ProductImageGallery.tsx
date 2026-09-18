@@ -51,6 +51,17 @@ const formatImageUrl = (url: string) => {
   }
 };
 
+const getResponsiveSources = (url: string) => {
+  if (!url) return null;
+  const match = url.match(/^(.*)-(400|800|1600)\.webp(?:([?#].*))?$/i);
+  if (!match) return null;
+  const [, base, , suffix = ""] = match;
+  return {
+    srcSet: [400, 800, 1600].map((width) => `${base}-${width}.webp${suffix} ${width}w`).join(", "),
+    sizes: "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
+  };
+};
+
 export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false, onOpen }) => {
   const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
@@ -130,6 +141,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
   };
 
   const currentUrl = imageList[index] ? formatImageUrl(imageList[index]) : placeholder(product.name);
+  const responsive = currentUrl ? getResponsiveSources(currentUrl) : null;
 
   return (
     <div
@@ -141,6 +153,8 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
       <div className="galleryImageContainer">
         <img
           src={!imgError && currentUrl ? currentUrl : placeholder(product.name)}
+          srcSet={!imgError ? responsive?.srcSet : undefined}
+          sizes={!imgError ? responsive?.sizes : undefined}
           alt={`${product.name} - rasm ${index + 1}`}
           loading={detail ? "eager" : "lazy"}
           decoding="async"
