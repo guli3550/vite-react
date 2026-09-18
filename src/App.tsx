@@ -725,45 +725,6 @@ function LocationPicker({
   );
 }
 
-const DEFAULT_HERO_BANNERS: Banner[] = [
-  {
-    id: 1,
-    title: "Eksklyuziv Pijamalar Sets ✨",
-    subtitle: "Uydagi har bir lahjangizni go‘zallashtiring",
-    imageUrl: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "TOP SOTILGAN",
-    ctaText: "Xarid qilish",
-    active: true,
-  },
-  {
-    id: 2,
-    title: "Yangi Bahor Kolleksiyasi 🌸",
-    subtitle: "Nafis ipak, qulay bichim va zamonaviy uslub",
-    imageUrl: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "YANGILIK ✦",
-    ctaText: "Kolleksiyani ko‘rish",
-    active: true,
-  },
-  {
-    id: 3,
-    title: "Premium Ipak & To‘rli Komplektlar ✨",
-    subtitle: "Nafislik, qulaylik va o‘zingizga bo‘lgan ishonch",
-    imageUrl: "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "PREMIUM",
-    ctaText: "Kashf qilish",
-    active: true,
-  },
-  {
-    id: 4,
-    title: "Maxsus Chegirmalar — 30% Gacha 🎁",
-    subtitle: "Barcha sara to‘plamlar uchun cheklangan taklif",
-    imageUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "AKSIYA 🔥",
-    ctaText: "Tanlash",
-    active: true,
-  },
-];
-
 export default function App() {
   const isTelegramWebapp = useMemo(() => detectPlatform().isTelegram, []);
   const telegramUser = tg()?.initDataUnsafe?.user;
@@ -940,20 +901,7 @@ export default function App() {
     };
   }, []);
 
-  const [heroBanners, setHeroBanners] = useState<Banner[]>(() => {
-    let list = (window as any).__GULI_ADMIN_BANNERS__;
-    if (!list) {
-      try {
-        const saved = localStorage.getItem("guli_admin_banners");
-        if (saved) list = JSON.parse(saved);
-      } catch {}
-    }
-    if (Array.isArray(list) && list.length > 0) {
-      const active = list.filter((b: Banner) => b.active !== false);
-      if (active.length > 0) return active;
-    }
-    return DEFAULT_HERO_BANNERS;
-  });
+  const [heroBanners, setHeroBanners] = useState<Banner[]>([]);
 
   const [activeBannerIdx, setActiveBannerIdx] = useState<number>(0);
   const [heroDragOffset, setHeroDragOffset] = useState<number>(0);
@@ -1057,36 +1005,24 @@ export default function App() {
 
   useEffect(() => {
     const syncBanners = async () => {
-      let list = (window as any).__GULI_ADMIN_BANNERS__;
-      if (!list) {
-        try {
-          const saved = localStorage.getItem("guli_admin_banners");
-          if (saved) list = JSON.parse(saved);
-        } catch {}
-      }
       try {
-        const res = await fetch(`${API_URL}/api/banners`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-            list = json.data;
-            try {
-              localStorage.setItem("guli_admin_banners", JSON.stringify(list));
-            } catch {}
-          }
+        const res = await fetch(`${API_URL}/api/banners`, {
+          cache: "no-store",
+          headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        });
+        if (!res.ok) throw new Error(`Banner API status: ${res.status}`);
+        const json = await res.json();
+        if (json.success !== true || !Array.isArray(json.data)) {
+          throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
         }
-      } catch {}
-
-      if (Array.isArray(list) && list.length > 0) {
-        const active = list.filter((b: Banner) => b.active !== false);
-        if (active.length > 0) {
-          setHeroBanners(active);
-          setActiveBannerIdx(0);
-          return;
-        }
+        const active = json.data.filter((b: Banner) => b.active !== false);
+        setHeroBanners(active);
+        setActiveBannerIdx(0);
+      } catch (error) {
+        console.warn("[GULI] Production banner load failed", error);
+        setHeroBanners([]);
+        setActiveBannerIdx(0);
       }
-      // Fallback
-      setHeroBanners(DEFAULT_HERO_BANNERS);
     };
 
     syncBanners();
