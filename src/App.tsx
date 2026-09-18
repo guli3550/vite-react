@@ -769,8 +769,14 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
+  const PRODUCTS_PAGE_SIZE = 40;
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoadingMore, setProductsLoadingMore] = useState(false);
+  const [productsOffset, setProductsOffset] = useState(0);
+  const [productsHasMore, setProductsHasMore] = useState(true);
+  const productsLoadingMoreRef = useRef(false);
+  const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
@@ -1605,37 +1611,62 @@ export default function App() {
       setReuploadingOrderId(null);
     }
   };
-  const loadProducts = useCallback(async (silent = false) => {
-    if (!silent) setProductsLoading(true);
+  const loadProducts = useCallback(async (silent = false, append = false) => {
+    if (append) {
+      if (productsLoadingMoreRef.current || !productsHasMore) return [];
+      productsLoadingMoreRef.current = true;
+      setProductsLoadingMore(true);
+    } else if (!silent) {
+      setProductsLoading(true);
+    }
+
+    const offset = append ? productsOffset : 0;
+
     try {
-      const r = await fetch(`${API_URL}/api/products?limit=100`);
+      const r = await fetch(`${API_URL}/api/products?limit=${PRODUCTS_PAGE_SIZE}&offset=${offset}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
       if (!r.ok) throw new Error(`Status: ${r.status}`);
-      const text = await r.text();
-      let j: any = null;
-      try {
-        j = JSON.parse(text);
-      } catch {
-        // Not JSON
-      }
+
+      const j = await r.json();
       if (!j || j.success !== true || !Array.isArray(j.data)) {
         throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
       }
-      if (j.data.length === 0) {
+
+      const rows: Product[] = j.data;
+
+      if (!append && rows.length === 0) {
+        setProducts([]);
+        setProductsOffset(0);
+        setProductsHasMore(false);
         throw new Error("Hozircha faol mahsulotlar topilmadi");
       }
-      setProducts(j.data);
+
+      setProducts((prev) => (append ? [...prev, ...rows] : rows));
+      setProductsOffset(offset + rows.length);
+      setProductsHasMore(Boolean(j.pagination?.hasMore));
       setProductsError("");
-      return j.data;
+      return rows;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
-      setProducts([]);
-      setProductsError(message);
+      if (!append) {
+        const message =
+          error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
+        setProducts([]);
+        setProductsOffset(0);
+        setProductsHasMore(false);
+        setProductsError(message);
+      }
       return [];
     } finally {
-      if (!silent) setProductsLoading(false);
+      if (append) {
+        productsLoadingMoreRef.current = false;
+        setProductsLoadingMore(false);
+      } else if (!silent) {
+        setProductsLoading(false);
+      }
     }
-  }, []);
+  }, [productsHasMore, productsOffset]);
 
   const [phoneLookupInput, setPhoneLookupInput] = useState(() => {
     return localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || "";
@@ -1834,6 +1865,26 @@ export default function App() {
   useEffect(() => {
     loadProducts(false).catch(() => {});
   }, [loadProducts]);
+
+  useEffect(() => {
+    if (page !== "catalog" || !productsHasMore || productsLoading || productsLoadingMore) {
+      return;
+    }
+    const sentinel = productsLoadMoreRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadProducts(true, true).catch(() => {});
+        }
+      },
+      { rootMargin: "800px 0px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [page, productsHasMore, productsLoading, productsLoadingMore, loadProducts]);
 
   useEffect(() => {
     loadOrders(false).catch(() => {});
@@ -4227,6 +4278,9 @@ export default function App() {
           <PullToRefresh
             language={language}
             onRefresh={async () => {
+              setProductsOffset(0);
+              setProductsHasMore(true);
+              productsLoadingMoreRef.current = false;
               await loadProducts(true);
               showToast("✓ Katalog yangilandi");
             }}
@@ -4265,9 +4319,22 @@ export default function App() {
                   <p>{productsError}</p>
                 </div>
               ) : filtered.length ? (
-                <div className="productGrid">
-                  {filtered.map((p) => card(p))}
-                </div>
+                <>
+                  <div className="productGrid">
+                    {filtered.map((p) => card(p))}
+                  </div>
+                  <div ref={productsLoadMoreRef} aria-hidden="true" style={{ height: "1px" }} />
+                  {productsLoadingMore ? (
+                    <div style={{ padding: "18px 0" }}>
+                      <ProductGridSkeleton count={2} />
+                    </div>
+                  ) : null}
+                  {!productsHasMore && products.length > PRODUCTS_PAGE_SIZE ? (
+                    <p className="muted" style={{ textAlign: "center", padding: "10px 0 20px" }}>
+                      Barcha mahsulotlar yuklandi
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <div className="empty">
                   <div>⌕</div>
