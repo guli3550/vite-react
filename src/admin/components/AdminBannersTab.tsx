@@ -13,45 +13,6 @@ export type Banner = {
   actionTarget: string;
 };
 
-const DEFAULT_BANNERS: Banner[] = [
-  {
-    id: 1,
-    title: "Eksklyuziv Pijamalar Sets ✨",
-    subtitle: "Uydagi har bir lahjangizni go‘zallashtiring",
-    imageUrl: "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "TOP SOTILGAN",
-    ctaText: "Xarid qilish",
-    active: true,
-  },
-  {
-    id: 2,
-    title: "Yangi Bahor Kolleksiyasi 🌸",
-    subtitle: "Nafis ipak, qulay bichim va zamonaviy uslub",
-    imageUrl: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "YANGILIK ✦",
-    ctaText: "Kolleksiyani ko‘rish",
-    active: true,
-  },
-  {
-    id: 3,
-    title: "Premium Ipak & To‘rli Komplektlar ✨",
-    subtitle: "Nafislik, qulaylik va o‘zingizga bo‘lgan ishonch",
-    imageUrl: "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "PREMIUM",
-    ctaText: "Kashf qilish",
-    active: true,
-  },
-  {
-    id: 4,
-    title: "Maxsus Chegirmalar — 30% Gacha 🎁",
-    subtitle: "Barcha sara to‘plamlar uchun cheklangan taklif",
-    imageUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=1200&q=85",
-    badgeText: "AKSIYA 🔥",
-    ctaText: "Tanlash",
-    active: true,
-  },
-];
-
 const compressImage = (file: File, maxWidth = 1400, maxHeight = 900, quality = 0.82): Promise<{ data: string; mimeType: string; extension: string }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -112,7 +73,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
     fetch(`${apiBase}/api/banners`)
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && Array.isArray(json.data) && json.data.length >= 0) {
+        if (json.success && Array.isArray(json.data)) {
           setBanners(json.data);
           (window as any).__GULI_ADMIN_BANNERS__ = json.data;
           try {
