@@ -60,7 +60,8 @@ async function handleAdminAiMessage(m,ids){
     await tg('sendMessage',{chat_id:chat,text:'🛑 GULI AI suhbat yakunlandi. Qayta boshlash uchun /ai yuboring.'});
     return true;
   }
-  if(/^\/ai_model(?:@\w+)?(?:\s+.*)?$/i.test(text)){await sendAiModelMenu(chat);return true}\n  if(/^\/ai_clear(?:@\w+)?(?:\s+.*)?$/i.test(text)){
+  if(/^\/ai_model(?:@\w+)?(?:\s+.*)?$/i.test(text)){await sendAiModelMenu(chat);return true}
+  if(/^\/ai_clear(?:@\w+)?(?:\s+.*)?$/i.test(text)){
     state.aiHistory.delete(key);
     await tg('sendMessage',{chat_id:chat,text:'🧠 GULI AI suhbat konteksti tozalandi.'});
     return true;
@@ -85,7 +86,8 @@ async function runAdminAiPrompt(chat,prompt){
   const key=String(chat),history=Array.isArray(state.aiHistory.get(key))?state.aiHistory.get(key):[];
   try{
     const started=Date.now();
-    const modelName=aiModelName(chat);\n    const answer=await runGeminiConversation({modelName,userPrompt:prompt,history});
+    const modelName=aiModelName(chat);
+    const answer=await runGeminiConversation({modelName,userPrompt:prompt,history});
     const clean=aiRedact(answer);
     state.aiHistory.set(key,[...history,{sender:'user',text:prompt},{sender:'model',text:clean}].slice(-14));
     for(const [i,chunk] of aiChunks(clean).entries())await tg('sendMessage',{chat_id:chat,text:(i===0?'🤖 GULI AI • Gemini 3.1 Flash Lite\n\n':'')+chunk});
