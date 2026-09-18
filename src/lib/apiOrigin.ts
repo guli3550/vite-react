@@ -15,7 +15,10 @@ export const LEGACY_RENDER_ORIGIN = "https://guli-lingerie-api.onrender.com";
 export function getApiBaseUrl(): string {
   const envUrl = typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL;
   if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
-    return envUrl.trim().replace(/\/+$/, "");
+    const normalized = envUrl.trim().replace(/\/+$/, "");
+    // Production must not silently fall back to the legacy Render origin.
+    // That split-origin state is a major source of stale/CORS auth failures.
+    if (!/guli-lingerie-api\.onrender\.com/i.test(normalized)) return normalized;
   }
 
   if (typeof window !== "undefined") {
