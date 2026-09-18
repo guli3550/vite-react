@@ -1,5 +1,5 @@
 const API = "https://guli-gateway.parizodabaxtiyorov.workers.dev";
-const SITE = "https://www.gulii.uz";
+const SITE = "https://gulii.uz";
 const esc = (v) => String(v ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&apos;");
 const absolute = (v) => { try { const u=new URL(String(v||"")); return /^https?:$/.test(u.protocol) ? u.toString() : ""; } catch { return ""; } };
 
@@ -25,6 +25,6 @@ module.exports = async function handler(req,res) {
   } catch(error) {
     console.error("Dynamic sitemap error:",error);
     res.setHeader("Content-Type","application/xml; charset=utf-8");
-    return res.status(503).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://www.gulii.uz/</loc></url></urlset>');
+    return res.status(503).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://gulii.uz/</loc></url></urlset>');
   }
 };
