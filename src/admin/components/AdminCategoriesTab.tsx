@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { EmptyState } from "./AdminUIComponents";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { normalizeCategory } from "../../utils/categoryUtils";
 
 export type Category = {
@@ -35,8 +36,10 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
   });
 
   // Calculate live product counts for each category
+  const [liveProducts, setLiveProducts] = useState<any[]>([]);
+
   const categoriesWithLiveCounts = useMemo(() => {
-    let allProds: any[] = [];
+    const allProds = liveProducts;
     try {
       const savedProds = localStorage.getItem("guli_products");
       if (savedProds) {
@@ -54,15 +57,13 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
       ).length;
       return { ...cat, productCount: count };
     });
-  }, [categories]);
+  }, [categories, liveProducts]);
 
   useEffect(() => {
-    fetch(`${window.location.origin}/api/products`, { cache: "no-store" })
+    fetch(`${getApiBaseUrl()}/api/products?limit=100`, { cache: "no-store" })
       .then((res) => res.json())
       .then((json) => {
-        if (json?.success && Array.isArray(json.data)) {
-          try { localStorage.setItem("guli_products", JSON.stringify(json.data)); } catch {}
-        }
+        if (json?.success && Array.isArray(json.data)) setLiveProducts(json.data);
       })
       .catch(() => {});
   }, []);
