@@ -14,6 +14,8 @@ app.set("trust proxy", 1);
 const ALLOWED_STATIC_ORIGINS = new Set([
   "https://guli-gateway.parizodabaxtiyorov.workers.dev",
   "https://vite-react-seven-inky-10.vercel.app",
+  "https://gulii.uz",
+  "https://www.gulii.uz",
   "https://guli-lingerie.pages.dev",
   "https://guli3550.github.io",
   "https://web.telegram.org",
