@@ -34,6 +34,46 @@
     }
   };
 
+  const updateSeo = (product) => {
+    const name = String(product?.name || '').trim();
+    if (!name) return;
+    const category = String(product?.category || '').trim();
+    const description = String(product?.description || '').trim() || `${name} — Guli Market onlayn do‘konida. ${category}`;
+    const canonical = `${location.origin}${location.pathname}${location.search}`;
+    document.title = `${name} | Guli Market`;
+    const setMeta = (selector, attrs) => {
+      let el = document.head.querySelector(selector);
+      if (!el) { el = document.createElement('meta'); document.head.appendChild(el); }
+      Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
+    };
+    setMeta('meta[name="description"]', { name: 'description', content: description.slice(0, 300) });
+    setMeta('meta[property="og:title"]', { property: 'og:title', content: `${name} | Guli Market` });
+    setMeta('meta[property="og:description"]', { property: 'og:description', content: description.slice(0, 300) });
+    setMeta('meta[property="og:url"]', { property: 'og:url', content: canonical });
+    const image = product.image || (Array.isArray(product.images) ? product.images[0] : '');
+    if (image) setMeta('meta[property="og:image"]', { property: 'og:image', content: image });
+    let link = document.head.querySelector('link[rel="canonical"]');
+    if (!link) { link = document.createElement('link'); link.setAttribute('rel', 'canonical'); document.head.appendChild(link); }
+    link.setAttribute('href', canonical);
+    const oldLd = document.head.querySelector('script[data-guli-product-schema]');
+    oldLd?.remove();
+    const ld = document.createElement('script');
+    ld.type = 'application/ld+json';
+    ld.setAttribute('data-guli-product-schema', 'true');
+    ld.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name,
+      description,
+      image: [product.image, ...(Array.isArray(product.images) ? product.images : [])].filter(Boolean),
+      sku: product.product_code || product.id,
+      category,
+      brand: { '@type': 'Brand', name: 'Guli Market' },
+      offers: { '@type': 'Offer', url: canonical, priceCurrency: 'UZS', price: Number(product.price || 0), availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' },
+    });
+    document.head.appendChild(ld);
+  };
+
   const loadTarget = async () => {
     try {
       const r = await fetch(`${api}/api/products?limit=100&search=${encodeURIComponent(ref)}`);
@@ -41,6 +81,7 @@
       const list = Array.isArray(j.data) ? j.data : [];
       const product = list.find((p) => String(p.product_code || '') === ref) || list.find((p) => String(p.id || '') === ref) || list[0];
       if (product) {
+        updateSeo(product);
         targetName = String(product.name || '').trim();
         targetCode = String(product.product_code || ref).trim();
       }
