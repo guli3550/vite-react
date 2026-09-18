@@ -4191,9 +4191,7 @@ export default function App() {
                       {/* Content / Banner Bio covering entire surface */}
                       <div
                         className="heroOverlay"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
+
                       >
                         <span className="heroBadge">{badge}</span>
                         <h1 className="heroTitle">{title}</h1>
