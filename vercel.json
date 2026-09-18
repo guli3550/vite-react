@@ -13,6 +13,16 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://gulii.uz/:path*",
+      "permanent": true,
+      "has": [
+        { "type": "host", "value": "www.gulii.uz" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/product/:ref/", "destination": "/api/product/:ref" },
