@@ -159,9 +159,8 @@ function installRoutes(app) {
         .eq("slug", "promo_banner")
         .maybeSingle();
       if (error) throw error;
-      const defaultUrl = "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78";
       res.setHeader("Cache-Control", "no-store, max-age=0");
-      res.json({ success: true, url: data?.image_url || defaultUrl });
+      res.json({ success: true, url: data?.image_url || null });
     } catch (error) {
       console.error("Get banner error:", error);
       res.status(500).json({ success: false, message: "Banner rasmini yuklashda xatolik" });
