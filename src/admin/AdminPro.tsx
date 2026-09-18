@@ -689,7 +689,7 @@ export default function AdminPro() {
       setToken(result.token);
     } catch (e) {
       setLoginError(e instanceof Error ? e.message : "Kirishda xatolik");
-    }    } finally {
+    } finally {
       setBusy(false);
     }
   };
