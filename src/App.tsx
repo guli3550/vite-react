@@ -40,7 +40,6 @@ import { SocialLinksModal } from "./components/SocialLinksModal";
 import { SavedAddressesManager } from "./components/SavedAddressesManager";
 import { CheckoutView } from "./components/CheckoutView";
 import { OrderConfirmedModal } from "./components/OrderConfirmedModal";
-import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import { GULI_LOGO_BASE64 } from "./utils/guliLogoBase64";
 import {
   parseColorValue,
