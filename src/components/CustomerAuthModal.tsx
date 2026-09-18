@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Language } from "../utils/translations";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 
 export interface AuthUser {
   id: string;
@@ -26,7 +27,7 @@ interface CustomerAuthModalProps {
 }
 
 type Status = "idle" | "waiting" | "ready";
-const API = (import.meta.env.VITE_API_URL || "https://guli-gateway.parizodabaxtiyorov.workers.dev").replace(/\/$/, "");
+const API = getApiBaseUrl();
 
 async function api(path: string, options: RequestInit = {}) {
   const response = await fetch(`${API}${path}`, {
