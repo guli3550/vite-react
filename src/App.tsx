@@ -4163,9 +4163,20 @@ export default function App() {
                     banner.subtitle ||
                     "Uydagi har bir lahjangizni go‘zallashtiring";
                   const cta = banner.ctaText || "Xarid qilish";
+                  const bannerTarget = String(banner.actionTarget || "").trim();
+                  const handleBannerClick = () => {
+                    if (bannerTarget && /^https?:\/\//i.test(bannerTarget)) {
+                      window.location.assign(bannerTarget);
+                      return;
+                    }
+                    setSelectedCategory("Barchasi");
+                    setSearch("");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    go("catalog");
+                  };
 
                   return (
-                    <div key={banner.id || idx} className="heroSlideItem">
+                    <div key={banner.id || idx} className="heroSlideItem" onClick={handleBannerClick}>
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
                         src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
@@ -4182,10 +4193,6 @@ export default function App() {
                         className="heroOverlay"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedCategory("Barchasi");
-                          setSearch("");
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                          go("catalog");
                         }}
                       >
                         <span className="heroBadge">{badge}</span>
