@@ -32,6 +32,11 @@ async function proxy(request, env) {
   for (const [key, value] of Object.entries(corsHeaders(origin))) outHeaders.set(key, value);
   outHeaders.set("X-GULI-Gateway", "cloudflare-proxy");
   outHeaders.set("X-GULI-Canonical-Upstream", "guli-api");
+  if (/^\/api\/v1\/auth\//i.test(url.pathname)) {
+    outHeaders.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    outHeaders.set("Pragma", "no-cache");
+    outHeaders.set("Expires", "0");
+  }
 
   return new Response(upstream.body, {
     status: upstream.status,
