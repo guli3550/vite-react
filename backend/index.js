@@ -263,7 +263,57 @@ app.get("/api/promos", async (req, res) => {
   }
 });
 
-app.post("/api/admin/upload-image", requireAdmin, async (req, res) => { try { const { data, mimeType, extension } = req.body || {}; if (!data || typeof data !== "string") return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" }); if (!String(mimeType || "").startsWith("image/")) return res.status(400).json({ success: false, message: "Faqat rasm fayli yuklash mumkin" }); if (data.length > 3200000) return res.status(413).json({ success: false, message: "Rasm hajmi juda katta" }); const bucket = "product-images"; const existing = await supabase.storage.getBucket(bucket); if (existing.error) { const created = await supabase.storage.createBucket(bucket, { public: true, allowedMimeTypes: ["image/*"], fileSizeLimit: "3MB" }); if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error; } const cleanExt = String(extension || "webp").replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp"; const path = `products/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`; const buffer = Buffer.from(data, "base64"); const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false }); if (error) throw error; const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path); res.json({ success: true, data: { path, url: publicData.publicUrl } }); } catch (error) { console.error("Admin image upload error:", error); res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" }); } });
+app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
+  try {
+    const { data, mimeType, extension, folder } = req.body || {};
+    if (!data || typeof data !== "string") {
+      return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" });
+    }
+    const normalizedMime = String(mimeType || "").toLowerCase();
+    if (!["image/webp", "image/avif", "image/jpeg", "image/png"].includes(normalizedMime)) {
+      return res.status(400).json({ success: false, message: "Faqat WebP, AVIF, JPEG yoki PNG rasm yuklash mumkin" });
+    }
+    if (data.length > 3200000) {
+      return res.status(413).json({ success: false, message: "Rasm hajmi juda katta" });
+    }
+
+    const bucket = "product-images";
+    const existing = await supabase.storage.getBucket(bucket);
+    if (existing.error) {
+      const created = await supabase.storage.createBucket(bucket, {
+        public: true,
+        allowedMimeTypes: ["image/*"],
+        fileSizeLimit: "3MB",
+      });
+      if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) {
+        throw created.error;
+      }
+    }
+
+    const cleanExt = String(extension || (normalizedMime === "image/avif" ? "avif" : "webp"))
+      .replace(/[^a-z0-9]/gi, "")
+      .toLowerCase() || "webp";
+    if (!["webp", "avif", "jpg", "jpeg", "png"].includes(cleanExt)) {
+      return res.status(400).json({ success: false, message: "Rasm kengaytmasi qo‘llab-quvvatlanmaydi" });
+    }
+
+    const cleanFolder = folder === "banners" ? "banners" : "products";
+    const path = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
+    const buffer = Buffer.from(data, "base64");
+    const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
+      contentType: normalizedMime,
+      cacheControl: "31536000",
+      upsert: false,
+    });
+    if (error) throw error;
+
+    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+    res.json({ success: true, data: { path, url: publicData.publicUrl, mimeType: normalizedMime } });
+  } catch (error) {
+    console.error("Admin image upload error:", error);
+    res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" });
+  }
+});
 app.post("/api/admin/login", (req, res) => {
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_SECRET) {
     return res.status(503).json({

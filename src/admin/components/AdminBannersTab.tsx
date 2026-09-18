@@ -51,40 +51,33 @@ const DEFAULT_BANNERS: Banner[] = [
   },
 ];
 
-const compressImage = (file: File, maxWidth = 1200, maxHeight = 800, quality = 0.82): Promise<string> => {
-  return new Promise((resolve) => {
+const compressImage = (file: File, maxWidth = 1400, maxHeight = 900, quality = 0.82): Promise<{ data: string; mimeType: string; extension: string }> => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onerror = () => reject(new Error("Rasmni o‘qib bo‘lmadi"));
+    reader.onload = () => {
       const img = new Image();
+      img.onerror = () => reject(new Error("Rasm formati qo‘llab-quvvatlanmadi"));
       img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth || height > maxHeight) {
-          if (width / height > maxWidth / maxHeight) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
-
+        const scale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(e.target?.result as string);
+        if (!ctx) return reject(new Error("Rasmni tayyorlashda xatolik"));
+        ctx.drawImage(img, 0, 0, width, height);
+        const webp = canvas.toDataURL("image/webp", quality);
+        if (webp.startsWith("data:image/webp,")) {
+          resolve({ data: webp.split(",")[1], mimeType: "image/webp", extension: "webp" });
           return;
         }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
+        const jpeg = canvas.toDataURL("image/jpeg", quality);
+        resolve({ data: jpeg.split(",")[1], mimeType: "image/jpeg", extension: "jpg" });
       };
-      img.onerror = () => resolve(e.target?.result as string);
-      img.src = e.target?.result as string;
+      img.src = String(reader.result || "");
     };
-    reader.onerror = () => resolve("");
     reader.readAsDataURL(file);
   });
 };
@@ -345,10 +338,27 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
                           const file = e.target.files?.[0];
                           if (file) {
                             try {
-                              const compressed = await compressImage(file, 1280, 800);
-                              if (compressed) {
-                                setImageUrl(compressed);
+                              const compressed = await compressImage(file);
+                              const apiBase = getApiBaseUrl();
+                              const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+                              const uploadResponse = await fetch(`${apiBase}/api/admin/upload-image`, {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
+                                },
+                                body: JSON.stringify({
+                                  data: compressed.data,
+                                  mimeType: compressed.mimeType,
+                                  extension: compressed.extension,
+                                  folder: "banners",
+                                }),
+                              });
+                              const uploadJson = await uploadResponse.json().catch(() => ({}));
+                              if (!uploadResponse.ok || !uploadJson?.success || !uploadJson?.data?.url) {
+                                throw new Error(uploadJson?.message || "Banner rasmini yuklashda xatolik");
                               }
+                              setImageUrl(uploadJson.data.url);
                             } catch {
                               const reader = new FileReader();
                               reader.onload = (evt) => {

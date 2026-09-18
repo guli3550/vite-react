@@ -98,7 +98,7 @@ function installRoutes(app) {
   originalGet.call(app, "/api/categories", async (_req, res) => {
     try {
       const data = await readCategories();
-      res.set("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
       res.json({ success: true, data });
     } catch (error) {
       console.error("Categories API error:", error);
@@ -122,7 +122,7 @@ function installRoutes(app) {
             : "",
         };
       });
-      res.set("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
       res.json({ success: true, data: rows });
     } catch (error) {
       console.error("Admin categories API error:", error);
@@ -160,7 +160,7 @@ function installRoutes(app) {
         .maybeSingle();
       if (error) throw error;
       const defaultUrl = "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78";
-      res.set("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
       res.json({ success: true, url: data?.image_url || defaultUrl });
     } catch (error) {
       console.error("Get banner error:", error);
@@ -176,7 +176,7 @@ function installRoutes(app) {
         .like("slug", "banner_%")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      res.set("Cache-Control", "no-store, max-age=0");
+      res.setHeader("Cache-Control", "no-store, max-age=0");
       if (data && data.length) {
         const banners = data.map((item, idx) => {
           let meta = {};

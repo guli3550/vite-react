@@ -40,7 +40,6 @@ import { SocialLinksModal } from "./components/SocialLinksModal";
 import { SavedAddressesManager } from "./components/SavedAddressesManager";
 import { CheckoutView } from "./components/CheckoutView";
 import { OrderConfirmedModal } from "./components/OrderConfirmedModal";
-import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import { GULI_LOGO_BASE64 } from "./utils/guliLogoBase64";
 import {
   parseColorValue,
@@ -1682,17 +1681,21 @@ export default function App() {
       } catch {
         // Not JSON
       }
-      const list =
-        j && j.success && Array.isArray(j.data) && j.data.length > 0
-          ? j.data
-          : DEFAULT_PRODUCTS;
-      setProducts(list);
+      if (!j || j.success !== true || !Array.isArray(j.data)) {
+        throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
+      }
+      if (j.data.length === 0) {
+        throw new Error("Hozircha faol mahsulotlar topilmadi");
+      }
+      setProducts(j.data);
       setProductsError("");
-      return list;
-    } catch {
-      setProducts(DEFAULT_PRODUCTS);
-      setProductsError("");
-      return DEFAULT_PRODUCTS;
+      return j.data;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
+      setProducts([]);
+      setProductsError(message);
+      return [];
     } finally {
       if (!silent) setProductsLoading(false);
     }
