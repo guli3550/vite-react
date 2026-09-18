@@ -2,7 +2,12 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
-const sharp = require("sharp");
+let sharp = null;
+try {
+  sharp = require("sharp");
+} catch (e) {
+  console.warn("[Startup] Optional dependency 'sharp' could not be loaded:", e.message);
+}
 const { listProducts, getProduct } = require("./catalog");
 const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
 
@@ -64,7 +69,38 @@ function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");
 }
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+function getSupabaseClient() {
+  const url = cleanEnv(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
+  const key = cleanEnv(
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_KEY
+  );
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = getSupabaseClient();
+  }
+  return _supabase;
+}
+
+const supabase = new Proxy({}, {
+  get(target, prop) {
+    const client = getSupabase();
+    if (!client) {
+      throw new Error("Supabase is not configured (SUPABASE_URL or SUPABASE_SECRET_KEY missing)");
+    }
+    const val = client[prop];
+    return typeof val === "function" ? val.bind(client) : val;
+  },
+});
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com";
 const ADMIN_USERNAME = cleanEnv(process.env.ADMIN_USERNAME);

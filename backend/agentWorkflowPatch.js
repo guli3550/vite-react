@@ -2,7 +2,37 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+function getSupabaseClient() {
+  const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/^['"]|['"]$/g, "");
+  const key = String(
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_KEY ||
+    ""
+  ).trim().replace(/^['"]|['"]$/g, "");
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+let _supabase = null;
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = getSupabaseClient();
+  }
+  return _supabase;
+}
+
+const supabase = new Proxy({}, {
+  get(target, prop) {
+    const client = getSupabase();
+    if (!client) {
+      throw new Error("Supabase is not configured (SUPABASE_URL or SUPABASE_SECRET_KEY missing)");
+    }
+    const val = client[prop];
+    return typeof val === "function" ? val.bind(client) : val;
+  },
+});
 
 async function emitEvent({ taskId = null, agentId, eventType, message, metadata = {}, createdBy = "orchestrator" }) {
   const { error } = await supabase.from("agent_events").insert({ task_id: taskId, agent_id: agentId, event_type: eventType, message, metadata, created_by: createdBy });
