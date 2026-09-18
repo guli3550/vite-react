@@ -10,6 +10,7 @@ export type Banner = {
   badgeText: string;
   ctaText: string;
   active: boolean;
+  actionTarget: string;
 };
 
 const DEFAULT_BANNERS: Banner[] = [
@@ -83,7 +84,8 @@ const compressImage = (file: File, maxWidth = 1400, maxHeight = 900, quality = 0
 };
 
 export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
-  const [banners, setBanners] = useState<Banner[]>(() => {
+  const [banners, setBanners] = useState<Banner[]>([]);
+/*
     if ((window as any).__GULI_ADMIN_BANNERS__) {
       return (window as any).__GULI_ADMIN_BANNERS__;
     }
@@ -94,6 +96,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
       return DEFAULT_BANNERS;
     }
   });
+*/
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
@@ -102,13 +105,14 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
   const [imageUrl, setImageUrl] = useState("");
   const [badgeText, setBadgeText] = useState("");
   const [ctaText, setCtaText] = useState("");
+  const [actionTarget, setActionTarget] = useState("");
 
   useEffect(() => {
     const apiBase = getApiBaseUrl();
     fetch(`${apiBase}/api/banners`)
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && Array.isArray(json.data) && json.data.length) {
+        if (json.success && Array.isArray(json.data) && json.data.length >= 0) {
           setBanners(json.data);
           (window as any).__GULI_ADMIN_BANNERS__ = json.data;
           try {
@@ -160,9 +164,10 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
     setEditingBanner(null);
     setTitle("");
     setSubtitle("");
-    setImageUrl("https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78");
+    setImageUrl("");
     setBadgeText("PREMIUM COLLECTION");
     setCtaText("Kolleksiyani ko'rish");
+    setActionTarget("");
     setModalOpen(true);
   };
 
@@ -173,15 +178,21 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
     setImageUrl(b.imageUrl);
     setBadgeText(b.badgeText);
     setCtaText(b.ctaText);
+    setActionTarget(b.actionTarget || "");
     setModalOpen(true);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !imageUrl.trim()) return;
+    const normalizedUrl = actionTarget.trim();
+    if (normalizedUrl && !/^https?:\/\//i.test(normalizedUrl)) {
+      notify("URL http:// yoki https:// bilan boshlanishi kerak");
+      return;
+    }
 
     if (editingBanner) {
-      const target = { ...editingBanner, title: title.trim(), subtitle: subtitle.trim(), imageUrl, badgeText, ctaText, active: true };
+      const target = { ...editingBanner, title: title.trim(), subtitle: subtitle.trim(), imageUrl, badgeText, ctaText, actionTarget: normalizedUrl, active: true };
       const otherBanners = banners.filter((b) => b.id !== editingBanner.id);
       saveToStorage([target, ...otherBanners]);
       notify("Banner yangilandi va asosiy ekranga joylandi ✓");
@@ -194,6 +205,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
         badgeText: badgeText || "PREMIUM COLLECTION",
         ctaText: ctaText || "Kolleksiyani ko'rish",
         active: true,
+        actionTarget: normalizedUrl,
       };
       saveToStorage([newB, ...banners]);
       notify("Yangi banner qo‘shildi va asosiy ekranga o‘rnatildi ✓");
@@ -309,6 +321,10 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
                   />
                 </label>
                 <label className="fullRow">
+                  Yo‘naltirish URL manzili (ixtiyoriy)
+                  <input type="url" value={actionTarget} onChange={(e) => setActionTarget(e.target.value)} placeholder="https://example.com" />
+                </label>
+                <label className="fullRow">
                   Qisqa tavsif (Subtitle)
                   <input
                     type="text"
@@ -360,13 +376,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
                               }
                               setImageUrl(uploadJson.data.url);
                             } catch {
-                              const reader = new FileReader();
-                              reader.onload = (evt) => {
-                                if (evt.target?.result) {
-                                  setImageUrl(evt.target.result as string);
-                                }
-                              };
-                              reader.readAsDataURL(file);
+                              notify("Banner rasmi serverga yuklanmadi. Qayta urinib ko‘ring.");
                             }
                           }
                         }}
