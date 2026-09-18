@@ -41,6 +41,7 @@ import { SavedAddressesManager } from "./components/SavedAddressesManager";
 import { CheckoutView } from "./components/CheckoutView";
 import { OrderConfirmedModal } from "./components/OrderConfirmedModal";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
+import { GULI_LOGO_BASE64 } from "./utils/guliLogoBase64";
 import {
   parseColorValue,
   formatColorName,
@@ -924,12 +925,12 @@ export default function App() {
   );
 
   const [appLogo, setAppLogo] = useState<string>(() => {
-    return localStorage.getItem("guli_custom_logo") || "/guli_logo.jpg";
+    return localStorage.getItem("guli_custom_logo") || GULI_LOGO_BASE64;
   });
 
   useEffect(() => {
     const handleLogoUpdate = (e: any) => {
-      const newLogo = e?.detail || localStorage.getItem("guli_custom_logo") || "/guli_logo.jpg";
+      const newLogo = e?.detail || localStorage.getItem("guli_custom_logo") || GULI_LOGO_BASE64;
       setAppLogo(newLogo);
     };
     window.addEventListener("guli_logo_updated", handleLogoUpdate);
@@ -1187,7 +1188,7 @@ export default function App() {
     showToast("✓ Hisobingizdan chiqdingiz. Qayta kirishingiz mumkin.");
   };
 
-  const handleUpdateProfile = (updated: Partial<AuthUser>) => {
+  const handleUpdateProfile = (updated: Partial<AuthUser> & { birth_date?: string }) => {
     setAuthUser((prev) => {
       const next = prev ? { ...prev, ...updated } : ({ id: "user_" + Date.now(), ...updated } as AuthUser);
       localStorage.setItem("guli_auth_user", JSON.stringify(next));
@@ -1197,6 +1198,38 @@ export default function App() {
     if (updated.avatar_url && key) {
       localStorage.setItem(`guli_avatar_${key}`, updated.avatar_url);
     }
+
+    // Buyurtma rasmiylashtirish (Checkout) maydonlariga avtomatik kiritish
+    if (updated.full_name) {
+      const parts = updated.full_name.trim().split(/\s+/);
+      const fName = parts[0] || "";
+      const lName = parts.slice(1).join(" ") || "";
+      setFirstName(fName);
+      setLastName(lName);
+      localStorage.setItem("guli_first_name", fName);
+      localStorage.setItem("guli_last_name", lName);
+      if (key) {
+        localStorage.setItem(`guli_name_${key}`, updated.full_name.trim());
+      }
+    }
+    if (updated.phone) {
+      const p = updated.phone.trim();
+      setPhone(p);
+      localStorage.setItem("guli_phone", p);
+      if (key) {
+        localStorage.setItem(`guli_phone_${key}`, p);
+      }
+    }
+    const dob = updated.birth_date || (updated as any)?.dob;
+    if (dob) {
+      const d = dob.trim();
+      setBirthDate(d);
+      localStorage.setItem("guli_birth_date", d);
+      if (key) {
+        localStorage.setItem(`guli_dob_${key}`, d);
+      }
+    }
+
     showToast("✓ Profil muvaffaqiyatli saqlandi!");
   };
 
@@ -1995,6 +2028,23 @@ export default function App() {
       try {
         window.history.pushState({ guliPage: next }, "", "");
       } catch {}
+
+      // Buyurtma rasmiylashtirish sahifasiga o'tganda profil ma'lumotlarini avtomatik tekshirib to'ldirish
+      if (next === "checkout") {
+        try {
+          const uKey = authUser?.id || currentUserId;
+          const pName = authUser?.full_name || (uKey ? localStorage.getItem(`guli_name_${uKey}`) : "") || localStorage.getItem("guli_first_name") || "";
+          if (pName) {
+            const parts = pName.trim().split(/\s+/);
+            if (parts[0]) setFirstName(parts[0]);
+            if (parts.slice(1).join(" ")) setLastName(parts.slice(1).join(" "));
+          }
+          const pPhone = authUser?.phone || (uKey ? localStorage.getItem(`guli_phone_${uKey}`) : "") || localStorage.getItem("guli_phone");
+          if (pPhone) setPhone(pPhone);
+          const pDob = (authUser as any)?.birth_date || (uKey ? localStorage.getItem(`guli_dob_${uKey}`) : "") || localStorage.getItem("guli_birth_date");
+          if (pDob) setBirthDate(pDob);
+        } catch {}
+      }
     }
     setPage(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3999,7 +4049,7 @@ export default function App() {
             aria-label="GULI Home"
           >
             <span
-              className="brandIcon"
+              className="brandIcon guli-brand-circle-logo"
               style={{
                 width: "42px",
                 height: "42px",
@@ -4017,7 +4067,7 @@ export default function App() {
               }}
             >
               <img
-                src={appLogo}
+                src={appLogo || GULI_LOGO_BASE64}
                 alt="Guli Premium"
                 style={{
                   width: "100%",
@@ -4025,7 +4075,8 @@ export default function App() {
                   minWidth: "100%",
                   minHeight: "100%",
                   aspectRatio: "1 / 1",
-                  objectFit: "cover",
+                  objectFit: "contain",
+                  padding: "2px",
                   borderRadius: "50%",
                   display: "block",
                   flexShrink: 0,
@@ -4033,7 +4084,7 @@ export default function App() {
                   userSelect: "none",
                 }}
                 onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg";
+                  (e.currentTarget as HTMLImageElement).src = GULI_LOGO_BASE64;
                 }}
               />
             </span>
@@ -4042,40 +4093,6 @@ export default function App() {
               <small>{t("brand_sub")}</small>
             </span>
           </button>
-
-          {/* Admin panelga o'tish tugmasi */}
-          <a
-            href="/admin"
-            id="topbar-admin-btn"
-            title="Admin panelga o'tish"
-            aria-label="Admin panel"
-            onClick={(e) => {
-              e.preventDefault();
-              window.location.href = "/admin";
-            }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              padding: "4px 8px",
-              borderRadius: "10px",
-              fontSize: "11px",
-              fontWeight: 800,
-              letterSpacing: "0.2px",
-              textDecoration: "none",
-              backgroundColor: theme === "dark" ? "rgba(225, 29, 72, 0.16)" : "rgba(225, 29, 72, 0.08)",
-              color: theme === "dark" ? "#fda4af" : "#be123c",
-              border: theme === "dark" ? "1px solid rgba(244, 63, 94, 0.3)" : "1px solid rgba(225, 29, 72, 0.22)",
-              boxShadow: theme === "dark" ? "0 2px 6px rgba(0, 0, 0, 0.3)" : "0 2px 5px rgba(225, 29, 72, 0.08)",
-              transition: "all 0.15s ease",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ fontSize: "11px", lineHeight: 1 }}>⚙️</span>
-            <span>Admin</span>
-          </a>
         </div>
         <div className="headerActions">
           <button
@@ -4544,7 +4561,11 @@ export default function App() {
                 <div>🛍️</div>
                 <h3>{t("cart_empty_title")}</h3>
                 <p>{t("cart_empty_desc")}</p>
-                <button className="primaryButton" onClick={() => go("catalog")}>
+                <button
+                  className="primaryButton"
+                  onClick={() => go("catalog")}
+                  style={{ margin: "14px auto 0", maxWidth: "260px" }}
+                >
                   {t("go_to_catalog")}
                 </button>
               </div>
@@ -4651,6 +4672,7 @@ export default function App() {
         )}
         {page === "checkout" && (
           <CheckoutView
+            language={language}
             onBack={() => go("cart")}
             firstName={firstName}
             setFirstName={setFirstName}
@@ -4699,8 +4721,8 @@ export default function App() {
               <div className="wishlistEmptyWrap">
                 <div className="empty">
                   <div>♡</div>
-                  <h3>Sevimlilar bo‘sh</h3>
-                  <p>Yoqtirgan mahsulotlaringizni shu yerda saqlang.</p>
+                  <h3>{t("empty_wishlist")}</h3>
+                  <p>{t("empty_wishlist_desc")}</p>
                   <button
                     className="primaryButton"
                     onClick={() => go("catalog")}
@@ -4712,8 +4734,8 @@ export default function App() {
                   <div className="wishlistPopularSection">
                     <div className="sectionTitle">
                       <div>
-                        <span className="sectionEyebrow">TAVSIYA ETILADI</span>
-                        <h2>Ommabop mahsulotlar</h2>
+                        <span className="sectionEyebrow">{t("badge_featured")}</span>
+                        <h2>{t("popular_products")}</h2>
                       </div>
                     </div>
                     <ProductGridSkeleton count={4} />
@@ -4722,10 +4744,10 @@ export default function App() {
                   <section className="wishlistPopularSection">
                     <div className="sectionTitle">
                       <div>
-                        <span className="sectionEyebrow">TAVSIYA ETILADI</span>
-                        <h2>Ommabop mahsulotlar</h2>
+                        <span className="sectionEyebrow">{t("badge_featured")}</span>
+                        <h2>{t("popular_products")}</h2>
                       </div>
-                      <button onClick={() => go("catalog")}>Barchasi →</button>
+                      <button onClick={() => go("catalog")}>{t("all")} →</button>
                     </div>
                     <div className="productGrid">
                       {(products.filter((p) => p.featured).length
@@ -4745,6 +4767,7 @@ export default function App() {
         {page === "profile" && profilePage()}
         {page === "addresses" && (
           <SavedAddressesManager
+            language={language}
             address={address}
             setAddress={setAddress}
             onBack={() => go("profile")}
@@ -4898,6 +4921,7 @@ export default function App() {
       <SocialLinksModal
         isOpen={isSocialLinksOpen}
         onClose={() => setIsSocialLinksOpen(false)}
+        language={language}
       />
 
       {/* Notifications Modal */}
@@ -4972,7 +4996,7 @@ export default function App() {
             style={{ maxWidth: "440px", width: "92%", padding: "20px" }}
           >
             <div className="modalHeader">
-              <h2>💳 Karta orqali to‘lov</h2>
+              <h2>💳 {language === "ru" ? "Оплата картой" : language === "en" ? "Card Payment" : "Karta orqali to‘lov"}</h2>
               <button
                 className="closeModalBtn"
                 onClick={() => {
@@ -4997,8 +5021,8 @@ export default function App() {
 
                   <h3 className="processingTitle3D">
                     {processingProgress < 100
-                      ? "To‘lov va chek tasdiqlanmoqda..."
-                      : "Buyurtma rasmiylashtirildi!"}
+                      ? (language === "ru" ? "Проверка оплаты и чека..." : language === "en" ? "Verifying payment and receipt..." : "To‘lov va chek tasdiqlanmoqda...")
+                      : (language === "ru" ? "Заказ успешно оформлен!" : language === "en" ? "Order successfully placed!" : "Buyurtma rasmiylashtirildi!")}
                   </h3>
 
                   <div className="progressTrack3D">
@@ -5022,7 +5046,7 @@ export default function App() {
                         {processingStep > 1 ? "✓" : "📷"}
                       </span>
                       <span className="stepText">
-                        Chek va kvitansiya fayli tekshirilmoqda
+                        {language === "ru" ? "Проверка файла чека / квитанции" : language === "en" ? "Verifying receipt / invoice file" : "Chek va kvitansiya fayli tekshirilmoqda"}
                       </span>
                     </div>
 
@@ -5035,7 +5059,7 @@ export default function App() {
                         {processingStep > 2 ? "✓" : "💳"}
                       </span>
                       <span className="stepText">
-                        To‘lov ma’lumotlari serverga uzatilmoqda
+                        {language === "ru" ? "Передача данных об оплате на сервер" : language === "en" ? "Sending payment data to server" : "To‘lov ma’lumotlari serverga uzatilmoqda"}
                       </span>
                     </div>
 
@@ -5048,8 +5072,8 @@ export default function App() {
                         {processingStep >= 3 ? "⏳" : "📝"}
                       </span>
                       <span className="stepText">
-                        Status:{" "}
-                        <strong>"⏳ To'lovni tasdiqlash kutilmoqda"</strong>
+                        {language === "ru" ? "Статус: " : language === "en" ? "Status: " : "Status: "}
+                        <strong>{language === "ru" ? '"⏳ Ожидается подтверждение оплаты"' : language === "en" ? '"⏳ Awaiting payment confirmation"' : '"⏳ To\'lovni tasdiqlash kutilmoqda"'}</strong>
                       </span>
                     </div>
                   </div>
@@ -5057,12 +5081,20 @@ export default function App() {
               ) : !timerActive ? (
                 <>
                   <div className="paymentNoticeBox">
-                    <div className="noticeTitle">💳 To‘lov usuli va qoidalari</div>
+                    <div className="noticeTitle">💳 {language === "ru" ? "Способ оплаты и правила" : language === "en" ? "Payment method and rules" : "To‘lov usuli va qoidalari"}</div>
                     <p>
-                      Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat <b>Uzcard / Humo plastik kartasi</b> orqali amalga oshiriladi.
+                      {language === "ru"
+                        ? "Независимо от платформ Click, Payme, Beepul и других, оплата производится переводом на пластиковую карту Uzcard / Humo."
+                        : language === "en"
+                        ? "Regardless of platforms like Click, Payme, Beepul, payment is made via Uzcard / Humo plastic card transfer."
+                        : "Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat Uzcard / Humo plastik kartasi orqali amalga oshiriladi."}
                     </p>
                     <p style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-muted)" }}>
-                      "💸 To‘lov qilish" tugmasini bosganingizdan so‘ng karta rekvizitlari ko‘rinadi. Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi.
+                      {language === "ru"
+                        ? "После нажатия кнопки «💸 Перейти к оплате» отобразятся реквизиты карты. Отправленный чек подтверждается администратором в течение 2 часов."
+                        : language === "en"
+                        ? 'Click "💸 Proceed to Payment" to see card details. Uploaded receipt is verified by admin within 2 hours.'
+                        : '"💸 To‘lov qilish" tugmasini bosganingizdan so‘ng karta rekvizitlari ko‘rinadi. Yuborilgan to‘lov cheki 2 soat ichida admin tomonidan tasdiqlanadi.'}
                     </p>
                   </div>
 
@@ -5077,7 +5109,7 @@ export default function App() {
                       } catch {}
                     }}
                   >
-                    💸 To‘lov qilish
+                    💸 {language === "ru" ? "Оплатить" : language === "en" ? "Pay Now" : "To‘lov qilish"}
                   </button>
                 </>
               ) : (
@@ -5085,7 +5117,7 @@ export default function App() {
                   <div className="cardVisualBox">
                     <div className="cardChip">💳 Uzcard / Humo</div>
                     <div className="cardHolderName">
-                      <span className="cardLabel">Karta egasi:</span>
+                      <span className="cardLabel">{language === "ru" ? "Владелец карты:" : language === "en" ? "Cardholder:" : "Karta egasi:"}</span>
                       <strong className="holderText">
                         {localStorage.getItem("guli_payment_card_holder") || "X.Yusufaliyev"}
                       </strong>
@@ -5103,11 +5135,13 @@ export default function App() {
                           ).replace(/\s+/g, "");
                           await copyToClipboard(num);
                           setCopiedCard(true);
-                          showToast("✓ Karta raqami nusxalandi!");
+                          showToast(language === "ru" ? "✓ Номер карты скопирован!" : language === "en" ? "✓ Card number copied!" : "✓ Karta raqami nusxalandi!");
                           setTimeout(() => setCopiedCard(false), 2500);
                         }}
                       >
-                        {copiedCard ? "✓ Nusxalandi" : "📋 Nusxa olish"}
+                        {copiedCard
+                          ? (language === "ru" ? "✓ Скопировано" : language === "en" ? "✓ Copied" : "✓ Nusxalandi")
+                          : (language === "ru" ? "📋 Скопировать" : language === "en" ? "📋 Copy" : "📋 Nusxa olish")}
                       </button>
                     </div>
                   </div>
@@ -5116,7 +5150,7 @@ export default function App() {
                     <div className="timerBox3D">
                       <span className="sticker3D">⏳</span>
                       <div className="timerTextWrap">
-                        <span className="timerLabel">To‘lov muddati:</span>
+                        <span className="timerLabel">{language === "ru" ? "Время на оплату:" : language === "en" ? "Time left:" : "To‘lov muddati:"}</span>
                         <strong className={`timerDigits ${paymentTimer < 120 ? "urgent" : ""}`}>
                           {formatTimer(paymentTimer)}
                         </strong>
@@ -5125,12 +5159,12 @@ export default function App() {
 
                     <div style={{ padding: "8px 12px", background: "rgba(217, 119, 6, 0.08)", border: "1px solid rgba(217, 119, 6, 0.2)", borderRadius: "10px", fontSize: "11.5px", color: "#b45309", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
                       <span>⏱️</span>
-                      <span><b>Eslatma:</b> Yuborilgan chek 2 soat ichida admin tomonidan tasdiqlanadi.</span>
+                      <span><b>{language === "ru" ? "Примечание:" : language === "en" ? "Note:" : "Eslatma:"}</b> {language === "ru" ? "Отправленный чек проверяется администратором в течение 2 часов." : language === "en" ? "Submitted receipt is verified by admin within 2 hours." : "Yuborilgan chek 2 soat ichida admin tomonidan tasdiqlanadi."}</span>
                     </div>
 
                     <div className="receiptUploadBox">
                       <label className="receiptUploadLabel">
-                        <span>📷 Chek rasmini (kvitansiya) yuklash uchun bosing</span>
+                        <span>📷 {language === "ru" ? "Нажмите для загрузки фото чека (квитанции)" : language === "en" ? "Click to upload receipt / payment proof photo" : "Chek rasmini (kvitansiya) yuklash uchun bosing"}</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -5141,7 +5175,7 @@ export default function App() {
 
                       {isUploadingReceipt && (
                         <div className="uploadingSpinner">
-                          ⏳ Rasm ishlanmoqda...
+                          {language === "ru" ? "⏳ Обработка изображения..." : language === "en" ? "⏳ Processing image..." : "⏳ Rasm ishlanmoqda..."}
                         </div>
                       )}
 
@@ -5149,11 +5183,11 @@ export default function App() {
                         <div className="uploadedReceiptStatus">
                           <div className="happyStickerHeader">
                             <span className="sticker3DHappy">☺️</span>
-                            <span>Chek muvaffaqiyatli yuklandi!</span>
+                            <span>{language === "ru" ? "Чек успешно загружен!" : language === "en" ? "Receipt uploaded successfully!" : "Chek muvaffaqiyatli yuklandi!"}</span>
                           </div>
                           <img
                             src={uploadedReceipt}
-                            alt="Yuklangan chek"
+                            alt={language === "ru" ? "Загруженный чек" : language === "en" ? "Uploaded receipt" : "Yuklangan chek"}
                             className="receiptPreviewImg"
                           />
                         </div>
@@ -5165,7 +5199,7 @@ export default function App() {
                       style={{ width: "100%", marginTop: "16px" }}
                       onClick={submitOrderWithCard}
                     >
-                      ☺️ To‘lov qildim
+                      ☺️ {language === "ru" ? "Я оплатил(а)" : language === "en" ? "I have paid" : "To‘lov qildim"}
                     </button>
                   </div>
                 </>
@@ -5202,6 +5236,7 @@ export default function App() {
       {/* Real Order Confirmed Modal matching Dark/Light Mode specs */}
       {confirmedOrder && (
         <OrderConfirmedModal
+          language={language}
           orderNumber={confirmedOrder.orderNumber}
           onViewOrders={() => {
             setConfirmedOrder(null);

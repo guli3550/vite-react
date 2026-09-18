@@ -42,7 +42,7 @@ async function api(path: string, options: RequestInit = {}) {
 }
 
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
-  isOpen, onClose, onSuccess, initialTab = "signin", forceGate = false, customTitle, customSubtitle,
+  isOpen, onClose, onSuccess, language = "uz", initialTab = "signin", forceGate = false, customTitle, customSubtitle,
 }) => {
   const [status, setStatus] = useState<Status>("idle");
   const [loading, setLoading] = useState(false);
@@ -147,9 +147,32 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   };
 
   if (!isOpen) return null;
-  const title = customTitle || "Telegram orqali kirish";
-  const subtitle = customSubtitle || "Telefon raqamingiz Telegram orqali xavfsiz tasdiqlanadi. OTP kodni qo‘lda kiritish shart emas.";
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
+  const defaultTitle = isRu
+    ? "Вход через Telegram"
+    : isEn
+    ? "Sign in with Telegram"
+    : "Telegram orqali kirish";
+
+  const defaultSubtitle = isRu
+    ? "Ваш номер телефона будет безопасно подтвержден через Telegram. Вводить OTP вручную не требуется."
+    : isEn
+    ? "Your phone number will be securely verified via Telegram. No manual OTP entry required."
+    : "Telefon raqamingiz Telegram orqali xavfsiz tasdiqlanadi. OTP kodni qo‘lda kiritish shart emas.";
+
+  const title = customTitle || defaultTitle;
+  const subtitle = customSubtitle || defaultSubtitle;
   const waiting = status === "waiting" || status === "ready";
+
+  const buttonText = loading
+    ? (isRu ? "⏳ Открытие Telegram…" : isEn ? "⏳ Opening Telegram…" : "⏳ Telegram ochilmoqda…")
+    : status === "ready"
+    ? (isRu ? "🔐 Подтверждено…" : isEn ? "🔐 Verified…" : "🔐 Tasdiqlandi…")
+    : status === "waiting"
+    ? (isRu ? "📲 Ожидание подтверждения в Telegram…" : isEn ? "📲 Waiting for Telegram verification…" : "📲 Telegram tasdig‘i kutilmoqda…")
+    : defaultTitle;
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:999999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(15,23,42,.72)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}} onClick={e=>{if(!forceGate&&e.target===e.currentTarget)onClose?.();}}>
@@ -167,10 +190,24 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
           <svg width="20" height="20" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
             <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white"/>
           </svg>
-          <span>{loading ? "⏳ Telegram ochilmoqda…" : status === "ready" ? "🔐 Tasdiqlandi…" : status === "waiting" ? "📲 Telegram tasdig‘i kutilmoqda…" : "Telegram orqali kirish"}</span>
+          <span>{buttonText}</span>
         </button>
-        {waiting && <div style={{marginTop:14,padding:12,borderRadius:12,background:"var(--bg-card-sub,rgba(100,116,139,.08))",color:"var(--text-main)",fontSize:13,lineHeight:1.5}}>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</div>}
-        {!forceGate && onClose && <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",color:"var(--text-muted,#64748b)",cursor:"pointer",opacity:.8,fontSize:13.5,fontWeight:600}}>Yopish</button>}
+        {waiting && (
+          <div style={{marginTop:14,padding:12,borderRadius:12,background:"var(--bg-card-sub,rgba(100,116,139,.08))",color:"var(--text-main)",fontSize:13,lineHeight:1.5}}>
+            {isRu ? (
+              <>В Telegram нажмите кнопку <b>Start</b>, затем <b>Отправить мой номер телефона</b>. Браузер автоматически завершит вход.</>
+            ) : isEn ? (
+              <>In Telegram, click <b>Start</b>, then click <b>Share Phone Number</b>. Browser will automatically complete sign-in.</>
+            ) : (
+              <>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</>
+            )}
+          </div>
+        )}
+        {!forceGate && onClose && (
+          <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",color:"var(--text-muted,#64748b)",cursor:"pointer",opacity:.8,fontSize:13.5,fontWeight:600}}>
+            {isRu ? "Закрыть" : isEn ? "Close" : "Yopish"}
+          </button>
+        )}
       </div>
     </div>
   );

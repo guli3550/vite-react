@@ -57,13 +57,24 @@ async function handleReceiptUpload(req, res) {
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi' });
 
     // Check ownership
+    let userTelegramId = u.id;
+    if (u.auth_user_id && !userTelegramId) {
+      try {
+        const { data: uData } = await supabase.from('users').select('telegram_id').eq('id', u.auth_user_id).maybeSingle();
+        if (uData?.telegram_id) userTelegramId = uData.telegram_id;
+      } catch {}
+    }
+
     const isOwner = u.auth_user_id
-      ? (order.auth_user_id && String(order.auth_user_id) === String(u.auth_user_id)) || (u.id && order.telegram_id != null && Number(order.telegram_id) === Number(u.id))
+      ? (order.auth_user_id && String(order.auth_user_id) === String(u.auth_user_id)) || (userTelegramId && order.telegram_id != null && Number(order.telegram_id) === Number(userTelegramId))
       : (order.telegram_id != null && Number(order.telegram_id) === Number(u.id));
 
     if (!isOwner) return res.status(403).json({ success: false, message: 'Siz bu buyurtmaga chek yuklay olmaysiz' });
 
-    if (String(order.payment || '') !== 'card_manual') return res.status(400).json({ success: false, message: 'Bu buyurtma karta to‘lovi uchun yaratilmagan' });
+    const payMethod = String(order.payment || '').toLowerCase();
+    const isCard = ['card_manual', 'card', 'karta', 'karta (uzcard / humo)'].includes(payMethod) ||
+                   payMethod.includes('card') || payMethod.includes('karta') || payMethod.includes('uzcard') || payMethod.includes('humo');
+    if (!isCard) return res.status(400).json({ success: false, message: 'Bu buyurtma karta to‘lovi uchun yaratilmagan' });
     if (String(order.payment_status || '') === 'verified') return res.status(409).json({ success: false, message: 'To‘lov allaqachon tasdiqlangan' });
     if (order.payment_receipt_path) return res.status(409).json({ success: false, message: 'Chek allaqachon yuklangan. Yangi chek uchun avval admin mavjud chekni o‘chirishi kerak.' });
 

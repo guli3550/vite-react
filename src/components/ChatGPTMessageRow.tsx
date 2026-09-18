@@ -15,6 +15,7 @@ import {
 import { ChatGPTMarkdown } from "./ChatGPTMarkdown";
 import { CircleVideoNotePlayer } from "./CircleVideoNote";
 import type { ChatMessage } from "../utils/chatSync";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 
 interface ChatGPTMessageRowProps {
   msg: ChatMessage;
@@ -47,7 +48,7 @@ export const ChatGPTMessageRow: React.FC<ChatGPTMessageRowProps> = ({
   onTogglePlayAudio,
   onImageClick,
   senderName = "GULI Support",
-  senderAvatar = "/guli_logo.jpg",
+  senderAvatar = GULI_LOGO_BASE64,
 }) => {
   const [copied, setCopied] = useState(false);
   const [reaction, setReaction] = useState<"like" | "dislike" | null>(null);
@@ -347,7 +348,7 @@ export const ChatGPTMessageRow: React.FC<ChatGPTMessageRowProps> = ({
             display: "block",
           }}
           onError={(e) => {
-            (e.currentTarget as HTMLImageElement).src = "/guli_logo.jpg";
+            (e.currentTarget as HTMLImageElement).src = GULI_LOGO_BASE64;
           }}
         />
         <span style={{ fontWeight: 650, fontSize: "13.5px", color: "#09090B" }}>

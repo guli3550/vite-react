@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { Address } from "../types";
 import { copyToClipboard } from "../utils/clipboard";
+import type { Language } from "../utils/translations";
 
 interface SavedAddressesManagerProps {
   address: Address;
@@ -16,6 +17,7 @@ interface SavedAddressesManagerProps {
     longitude: number;
     onChange: (lat: number, lon: number) => void;
   }>;
+  language?: Language;
 }
 
 export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
@@ -28,7 +30,11 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
   uzbekistanRegionsData,
   showToast,
   LocationPicker,
+  language = "uz",
 }) => {
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
   const [isEditing, setIsEditing] = useState(false);
   const [copiedCoords, setCopiedCoords] = useState(false);
 
@@ -44,11 +50,23 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
     e.preventDefault();
     setAddress(draft);
     setIsEditing(false);
-    showToast("✓ Manzil muvaffaqiyatli saqlandi!");
+    showToast(
+      isRu
+        ? "✓ Адрес успешно сохранен!"
+        : isEn
+        ? "✓ Address saved successfully!"
+        : "✓ Manzil muvaffaqiyatli saqlandi!"
+    );
   };
 
   const handleClear = () => {
-    if (window.confirm("Rostdan ham saqlangan manzilni tozalashni xohlaysizmi?")) {
+    const confirmMsg = isRu
+      ? "Вы действительно хотите удалить сохраненный адрес?"
+      : isEn
+      ? "Are you sure you want to clear the saved address?"
+      : "Rostdan ham saqlangan manzilni tozalashni xohlaysizmi?";
+
+    if (window.confirm(confirmMsg)) {
       const emptyAddr: Address = {
         latitude: 41.2995,
         longitude: 69.2401,
@@ -61,7 +79,13 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
       };
       setAddress(emptyAddr);
       setDraft(emptyAddr);
-      showToast("Saqlangan manzil tozalandi.");
+      showToast(
+        isRu
+          ? "Сохраненный адрес удален."
+          : isEn
+          ? "Saved address cleared."
+          : "Saqlangan manzil tozalandi."
+      );
     }
   };
 
@@ -70,7 +94,13 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
     const text = `${address.latitude.toFixed(6)}, ${address.longitude.toFixed(6)}`;
     await copyToClipboard(text);
     setCopiedCoords(true);
-    showToast("📍 Koordinatalar nusxalandi!");
+    showToast(
+      isRu
+        ? "📍 Координаты скопированы!"
+        : isEn
+        ? "📍 Coordinates copied!"
+        : "📍 Koordinatalar nusxalandi!"
+    );
     setTimeout(() => setCopiedCoords(false), 2000);
   };
 
@@ -116,7 +146,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             cursor: "pointer",
           }}
         >
-          ← Profilga qaytish
+          ← {isRu ? "Назад в профиль" : isEn ? "Back to Profile" : "Profilga qaytish"}
         </button>
 
         {!isEditing && hasSavedDetails && (
@@ -138,18 +168,24 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
               boxShadow: "0 4px 12px rgba(190,18,60,0.2)",
             }}
           >
-            ✏️ Tahrirlash
+            ✏️ {isRu ? "Редактировать" : isEn ? "Edit" : "Tahrirlash"}
           </button>
         )}
       </div>
 
       <div className="pageHeader" style={{ marginBottom: 20 }}>
         <span style={{ fontSize: "11px", fontWeight: "800", letterSpacing: "1px", color: "var(--primary, #be123c)" }}>
-          PROFIL & SOZLAMALAR
+          {isRu ? "ПРОФИЛЬ И НАСТРОЙКИ" : isEn ? "PROFILE & SETTINGS" : "PROFIL & SOZLAMALAR"}
         </span>
-        <h1 style={{ fontSize: "24px", fontWeight: "900", margin: "4px 0" }}>Manzillarim</h1>
+        <h1 style={{ fontSize: "24px", fontWeight: "900", margin: "4px 0" }}>
+          {isRu ? "Мои адреса" : isEn ? "My Addresses" : "Manzillarim"}
+        </h1>
         <p style={{ color: "var(--text-muted, #64748b)", fontSize: "13px" }}>
-          Buyurtmalarni tezkor va aniq yetkazib berish uchun asosiy manzilingiz va lokatsiyangiz
+          {isRu
+            ? "Основной адрес и локация для быстрой и точной доставки ваших заказов"
+            : isEn
+            ? "Your primary delivery address and location for fast and accurate order delivery"
+            : "Buyurtmalarni tezkor va aniq yetkazib berish uchun asosiy manzilingiz va lokatsiyangiz"}
         </p>
       </div>
 
@@ -169,8 +205,12 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-color, #e2e8f0)", paddingBottom: "12px" }}>
-            <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "850" }}>📍 Manzilni tahrirlash</h3>
-            <span style={{ fontSize: "12px", color: "var(--text-muted, #64748b)" }}>Aniq lokatsiya</span>
+            <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "850" }}>
+              📍 {isRu ? "Редактировать адрес" : isEn ? "Edit Address" : "Manzilni tahrirlash"}
+            </h3>
+            <span style={{ fontSize: "12px", color: "var(--text-muted, #64748b)" }}>
+              {isRu ? "Точная локация" : isEn ? "Precise location" : "Aniq lokatsiya"}
+            </span>
           </div>
 
           {/* GPS Auto Detect Button */}
@@ -197,9 +237,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
               }}
             >
               {locationLoading ? (
-                <>⏳ Joylashuv aniqlanmoqda...</>
+                <>{isRu ? "⏳ Определение локации..." : isEn ? "⏳ Detecting location..." : "⏳ Joylashuv aniqlanmoqda..."}</>
               ) : (
-                <>🎯 Hozirgi joylashuvimni aniqlash (GPS)</>
+                <>{isRu ? "🎯 Определить мое местоположение (GPS)" : isEn ? "🎯 Detect my location (GPS)" : "🎯 Hozirgi joylashuvimni aniqlash (GPS)"}</>
               )}
             </button>
           </div>
@@ -219,7 +259,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
           {/* Region & District Pickers */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Viloyat / Shahar:</span>
+              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+                {isRu ? "Область / Город:" : isEn ? "Region / City:" : "Viloyat / Shahar:"}
+              </span>
               <select
                 value={draft.region || "Toshkent sh."}
                 onChange={(e) => {
@@ -249,7 +291,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             </label>
 
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Tuman / Shaharcha:</span>
+              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+                {isRu ? "Район / Город:" : isEn ? "District / Area:" : "Tuman / Shaharcha:"}
+              </span>
               <select
                 value={draft.district || ""}
                 onChange={(e) => setDraft((prev) => ({ ...prev, district: e.target.value }))}
@@ -269,7 +313,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                     </option>
                   ))
                 ) : (
-                  <option value="">Tumanni tanlang</option>
+                  <option value="">{isRu ? "Выберите район" : isEn ? "Select district" : "Tumanni tanlang"}</option>
                 )}
               </select>
             </label>
@@ -278,12 +322,14 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
           {/* Street & House & Apartment */}
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Ko'cha nomi:</span>
+              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+                {isRu ? "Улица:" : isEn ? "Street name:" : "Ko'cha nomi:"}
+              </span>
               <input
                 type="text"
                 value={draft.street || ""}
                 onChange={(e) => setDraft((prev) => ({ ...prev, street: e.target.value }))}
-                placeholder="Masalan: Amir Temur ko'chasi"
+                placeholder={isRu ? "Например: ул. Амира Темура" : isEn ? "E.g.: Amir Temur str." : "Masalan: Amir Temur ko'chasi"}
                 style={{
                   padding: "12px 14px",
                   borderRadius: "14px",
@@ -296,7 +342,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             </label>
 
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Uy:</span>
+              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+                {isRu ? "Дом:" : isEn ? "House:" : "Uy:"}
+              </span>
               <input
                 type="text"
                 value={draft.house || ""}
@@ -314,7 +362,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             </label>
 
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Xonadon:</span>
+              <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+                {isRu ? "Кв.:" : isEn ? "Apt:" : "Xonadon:"}
+              </span>
               <input
                 type="text"
                 value={draft.apartment || ""}
@@ -334,12 +384,14 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
 
           {/* Landmark */}
           <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>Mo'ljal (orientir):</span>
+            <span style={{ fontSize: "12.5px", fontWeight: "750", color: "var(--text-main)" }}>
+              {isRu ? "Ориентир:" : isEn ? "Landmark:" : "Mo'ljal (orientir):"}
+            </span>
             <input
               type="text"
               value={draft.landmark || ""}
               onChange={(e) => setDraft((prev) => ({ ...prev, landmark: e.target.value }))}
-              placeholder="Masalan: Korzinka ro'parasida, 3-podyezd"
+              placeholder={isRu ? "Например: напротив Корзинки, 3-й подъезд" : isEn ? "E.g.: opposite Korzinka, entrance 3" : "Masalan: Korzinka ro'parasida, 3-podyezd"}
               style={{
                 padding: "12px 14px",
                 borderRadius: "14px",
@@ -367,7 +419,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 cursor: "pointer",
               }}
             >
-              Bekor qilish
+              {isRu ? "Отмена" : isEn ? "Cancel" : "Bekor qilish"}
             </button>
             <button
               type="submit"
@@ -383,7 +435,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 boxShadow: "0 4px 14px rgba(190,18,60,0.25)",
               }}
             >
-              ✓ Manzilni saqlash
+              ✓ {isRu ? "Сохранить адрес" : isEn ? "Save Address" : "Manzilni saqlash"}
             </button>
           </div>
         </form>
@@ -410,7 +462,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 12px", borderRadius: "999px", background: "rgba(16, 185, 129, 0.1)", border: "1px solid rgba(16, 185, 129, 0.25)" }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
                 <span style={{ fontSize: "11.5px", fontWeight: "800", color: "#059669", letterSpacing: "0.5px" }}>
-                  ASOSIY YETKAZIB BERISH MANZILI
+                  {isRu ? "ОСНОВНОЙ АДРЕС ДОСТАВКИ" : isEn ? "PRIMARY DELIVERY ADDRESS" : "ASOSIY YETKAZIB BERISH MANZILI"}
                 </span>
               </div>
 
@@ -432,11 +484,12 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                     cursor: "pointer",
                   }}
                 >
-                  ✏️ Tahrirlash
+                  ✏️ {isRu ? "Редактировать" : isEn ? "Edit" : "Tahrirlash"}
                 </button>
                 <button
                   type="button"
                   onClick={handleClear}
+                  title={isRu ? "Удалить адрес" : isEn ? "Clear address" : "Manzilni o'chirish"}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -477,23 +530,23 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
 
               <div style={{ flex: 1 }}>
                 <h3 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "850", color: "var(--text-main)" }}>
-                  {address.region || "O'zbekiston"}
+                  {address.region || (isRu ? "Узбекистан" : isEn ? "Uzbekistan" : "O'zbekiston")}
                   {address.district ? `, ${address.district}` : ""}
                 </h3>
 
                 <p style={{ margin: "0 0 6px 0", fontSize: "14px", color: "var(--text-main)", lineHeight: "1.5" }}>
                   {[
                     address.street ? `${address.street}` : null,
-                    address.house ? `${address.house}-uy` : null,
-                    address.apartment ? `${address.apartment}-xonadon` : null,
+                    address.house ? (isRu ? `д. ${address.house}` : isEn ? `House ${address.house}` : `${address.house}-uy`) : null,
+                    address.apartment ? (isRu ? `кв. ${address.apartment}` : isEn ? `Apt ${address.apartment}` : `${address.apartment}-xonadon`) : null,
                   ]
                     .filter(Boolean)
-                    .join(", ") || "Ko'cha kiritilmagan"}
+                    .join(", ") || (isRu ? "Улица не указана" : isEn ? "No street specified" : "Ko'cha kiritilmagan")}
                 </p>
 
                 {address.landmark && (
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: "10px", background: "var(--bg-card-sub)", fontSize: "12px", color: "var(--text-muted)", marginTop: 2 }}>
-                    <span>🚩 Mo'ljal:</span>
+                    <span>🚩 {isRu ? "Ориентир:" : isEn ? "Landmark:" : "Mo'ljal:"}</span>
                     <b style={{ color: "var(--text-main)" }}>{address.landmark}</b>
                   </div>
                 )}
@@ -519,7 +572,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   <span style={{ fontSize: "14px" }}>🌐</span>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <span style={{ fontSize: "10.5px", fontWeight: "800", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                      GPS Koordinatalari
+                      {isRu ? "GPS Координаты" : isEn ? "GPS Coordinates" : "GPS Koordinatalari"}
                     </span>
                     <span style={{ fontSize: "13px", fontWeight: "750", fontFamily: "monospace", color: "var(--text-main)" }}>
                       {address.latitude.toFixed(6)}, {address.longitude.toFixed(6)}
@@ -545,7 +598,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                     transition: "all 0.2s ease",
                   }}
                 >
-                  {copiedCoords ? "✓ Nusxalandi" : "📋 Nusxalash"}
+                  {copiedCoords
+                    ? (isRu ? "✓ Скопировано" : isEn ? "✓ Copied" : "✓ Nusxalandi")
+                    : (isRu ? "📋 Скопировать" : isEn ? "📋 Copy" : "📋 Nusxalash")}
                 </button>
               </div>
             )}
@@ -583,7 +638,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   boxShadow: "0 4px 12px rgba(252,63,29,0.2)",
                 }}
               >
-                <span>🗺️</span> Yandex Xaritada ochish
+                <span>🗺️</span> {isRu ? "Открыть в Яндекс Картах" : isEn ? "Open in Yandex Maps" : "Yandex Xaritada ochish"}
               </button>
 
               <button
@@ -605,7 +660,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   boxShadow: "0 4px 12px rgba(66,133,244,0.2)",
                 }}
               >
-                <span>📍</span> Google Maps-da ochish
+                <span>📍</span> {isRu ? "Открыть в Google Maps" : isEn ? "Open in Google Maps" : "Google Maps-da ochish"}
               </button>
 
               <button
@@ -627,7 +682,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                   cursor: "pointer",
                 }}
               >
-                {locationLoading ? "⏳ Aniqlanmoqda..." : "🎯 Hozirgi joylashuvni yangilash"}
+                {locationLoading
+                  ? (isRu ? "⏳ Определение..." : isEn ? "⏳ Detecting..." : "⏳ Aniqlanmoqda...")
+                  : (isRu ? "🎯 Обновить местоположение" : isEn ? "🎯 Update location" : "🎯 Hozirgi joylashuvni yangilash")}
               </button>
             </div>
           </div>
@@ -662,9 +719,15 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
             📍
           </div>
 
-          <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "850" }}>Manzil hali saqlanmagan</h3>
+          <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "850" }}>
+            {isRu ? "Адрес еще не сохранен" : isEn ? "No address saved yet" : "Manzil hali saqlanmagan"}
+          </h3>
           <p style={{ margin: 0, color: "var(--text-muted, #64748b)", fontSize: "13.5px", maxWidth: "420px", lineHeight: "1.5" }}>
-            Buyurtmalaringizni o‘z vaqtida va aniq manzilga yetkazishimiz uchun joylashuvingizni belgilang yoki qo‘lda kiriting.
+            {isRu
+              ? "Укажите или введите вручную ваш адрес для своевременной и точной доставки ваших заказов."
+              : isEn
+              ? "Set your location or enter your address manually so we can deliver your orders accurately and on time."
+              : "Buyurtmalaringizni o‘z vaqtida va aniq manzilga yetkazishimiz uchun joylashuvingizni belgilang yoki qo‘lda kiriting."}
           </p>
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 10 }}>
@@ -687,7 +750,9 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 boxShadow: "0 4px 14px rgba(2,132,199,0.25)",
               }}
             >
-              {locationLoading ? "⏳ Aniqlanmoqda..." : "🎯 Hozirgi joylashuvni aniqlash"}
+              {locationLoading
+                ? (isRu ? "⏳ Определение..." : isEn ? "⏳ Detecting..." : "⏳ Aniqlanmoqda...")
+                : (isRu ? "🎯 Определить местоположение" : isEn ? "🎯 Detect location" : "🎯 Hozirgi joylashuvni aniqlash")}
             </button>
 
             <button
@@ -708,7 +773,7 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
                 boxShadow: "0 4px 14px rgba(190,18,60,0.25)",
               }}
             >
-              ✍️ Manzil kiritish
+              ✍️ {isRu ? "Ввести адрес" : isEn ? "Enter address" : "Manzil kiritish"}
             </button>
           </div>
         </div>
@@ -716,3 +781,4 @@ export const SavedAddressesManager: React.FC<SavedAddressesManagerProps> = ({
     </main>
   );
 };
+

@@ -33,6 +33,7 @@ import {
 import { copyToClipboard } from "../utils/clipboard";
 import { ChatGPTMessageRow } from "./ChatGPTMessageRow";
 import { TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "../admin/components/AdminGuliChat.css";
 
 const CUSTOMER_SUGGESTIONS = [
@@ -481,15 +482,15 @@ export function OnlineChatView({
           </button>
 
           <div
-            className="chatgpt-header-brand-logo"
+            className="chatgpt-header-brand-logo guli-brand-circle-logo"
             onClick={() => setInfoModalOpen(true)}
             style={{ cursor: "pointer" }}
             title="Do'kon ma'lumotlari"
           >
             <img
-              src="/guli_logo.jpg"
+              src={GULI_LOGO_BASE64}
               alt="GULI Lingerie"
-              style={{ width: "38px", height: "38px", minWidth: "38px", minHeight: "38px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
+              style={{ width: "38px", height: "38px", minWidth: "38px", minHeight: "38px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "contain", display: "block" }}
             />
           </div>
 
@@ -691,11 +692,11 @@ export function OnlineChatView({
             /* Empty / Initial State: Clean ChatGPT Welcome */
             <div className="chatgpt-empty-stage">
               <div className="chatgpt-empty-hero">
-                <div className="chatgpt-empty-icon-capsule">
+                <div className="chatgpt-empty-icon-capsule guli-brand-circle-logo">
                   <img
-                    src="/guli_logo.jpg"
+                    src={GULI_LOGO_BASE64}
                     alt="GULI Lingerie"
-                    style={{ width: "100%", height: "100%", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
+                    style={{ width: "100%", height: "100%", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "contain", display: "block" }}
                   />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
@@ -764,7 +765,7 @@ export function OnlineChatView({
                 onTogglePlayAudio={togglePlayAudio}
                 onImageClick={(url) => window.open(url, "_blank")}
                 senderName="GULI Support"
-                senderAvatar="/guli_logo.jpg"
+                senderAvatar={GULI_LOGO_BASE64}
               />
             );
           })
@@ -1044,11 +1045,13 @@ export function OnlineChatView({
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <img
-                  src="/guli_logo.jpg"
-                  alt="GULI"
-                  style={{ width: "46px", height: "46px", minWidth: "46px", minHeight: "46px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "cover", display: "block" }}
-                />
+                <div className="guli-brand-circle-logo" style={{ width: "46px", height: "46px", minWidth: "46px", minHeight: "46px", borderRadius: "50%", overflow: "hidden" }}>
+                  <img
+                    src={GULI_LOGO_BASE64}
+                    alt="GULI"
+                    style={{ width: "100%", height: "100%", aspectRatio: "1 / 1", objectFit: "contain", display: "block" }}
+                  />
+                </div>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#18181B" }}>

@@ -1,10 +1,12 @@
 import React from "react";
+import type { Language } from "../utils/translations";
 
 interface OrderConfirmedModalProps {
   orderNumber: string;
   onViewOrders: () => void;
   onGoHome: () => void;
   onClose: () => void;
+  language?: Language;
 }
 
 export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
@@ -12,7 +14,11 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
   onViewOrders,
   onGoHome,
   onClose,
+  language = "uz",
 }) => {
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
   return (
     <div
       style={{
@@ -71,7 +77,7 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
             color: "var(--text-main, #1e293b)",
           }}
         >
-          Buyurtma qabul qilindi!
+          {isRu ? "Заказ принят!" : isEn ? "Order Confirmed!" : "Buyurtma qabul qilindi!"}
         </h2>
 
         <p
@@ -82,7 +88,11 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
             lineHeight: 1.5,
           }}
         >
-          Buyurtmangiz muvaffaqiyatli rasmiylashtirildi. Buyurtma raqami:
+          {isRu
+            ? "Ваш заказ успешно оформлен. Номер заказа:"
+            : isEn
+            ? "Your order has been placed successfully. Order number:"
+            : "Buyurtmangiz muvaffaqiyatli rasmiylashtirildi. Buyurtma raqami:"}
         </p>
 
         <div
@@ -119,7 +129,7 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
               transition: "transform 0.15s ease",
             }}
           >
-            📦 Buyurtmalarim bo‘limiga o‘tish
+            📦 {isRu ? "Перейти в мои заказы" : isEn ? "Go to My Orders" : "Buyurtmalarim bo‘limiga o‘tish"}
           </button>
 
           <button
@@ -137,10 +147,11 @@ export const OrderConfirmedModal: React.FC<OrderConfirmedModalProps> = ({
               cursor: "pointer",
             }}
           >
-            🛍️ Xaridni davom ettirish
+            🛍️ {isRu ? "Продолжить покупки" : isEn ? "Continue Shopping" : "Xaridni davom ettirish"}
           </button>
         </div>
       </div>
     </div>
   );
 };
+

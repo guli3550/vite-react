@@ -102,8 +102,15 @@ async function listOrders(req, res) {
       .select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
       .order('created_at', { ascending: false }).limit(100);
     if (user.type === 'auth') {
-      if (user.telegram_id) {
-        query = query.or(`auth_user_id.eq.${user.id},telegram_id.eq.${user.telegram_id}`);
+      let linkedTelegramId = user.telegram_id;
+      if (!linkedTelegramId) {
+        try {
+          const { data: uData } = await supabase.from('users').select('telegram_id').eq('id', user.id).maybeSingle();
+          if (uData?.telegram_id) linkedTelegramId = uData.telegram_id;
+        } catch {}
+      }
+      if (linkedTelegramId) {
+        query = query.or(`auth_user_id.eq.${user.id},telegram_id.eq.${linkedTelegramId}`);
       } else {
         query = query.eq('auth_user_id', user.id);
       }

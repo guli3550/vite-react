@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { Address, CartItem } from "../types";
 import { formatColorName } from "../utils/colorHelpers";
 import { getDeliveryEstimate } from "../utils/delivery";
+import { type Language } from "../utils/translations";
 
 interface CheckoutViewProps {
   onBack: () => void;
+  language?: Language;
   firstName: string;
   setFirstName: (v: string) => void;
   lastName: string;
@@ -41,6 +43,7 @@ interface CheckoutViewProps {
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
   onBack,
+  language = "uz",
   firstName,
   setFirstName,
   lastName,
@@ -70,7 +73,80 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   cashbackDiscount = 0,
   LocationPicker,
 }) => {
+  const isRu = language === "ru";
+  const isEn = language === "en";
   const [showOrderSummary, setShowOrderSummary] = useState(false);
+
+  // Avtomatik ravishda profil ma'lumotlarini buyurtma rasmiylashtirish maydonlariga kiritish (Sync & Prefill)
+  useEffect(() => {
+    try {
+      const authUserRaw = localStorage.getItem("guli_auth_user");
+      let authUser: any = null;
+      if (authUserRaw) {
+        try {
+          authUser = JSON.parse(authUserRaw);
+        } catch {}
+      }
+
+      const userKey = authUser?.id || (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id;
+
+      // 1. Ism va Familiya
+      let fullName = authUser?.full_name || "";
+      if (!fullName && userKey) {
+        fullName = localStorage.getItem(`guli_name_${userKey}`) || "";
+      }
+      const storedFirstName = localStorage.getItem("guli_first_name") || "";
+      const storedLastName = localStorage.getItem("guli_last_name") || "";
+
+      if (fullName) {
+        const parts = fullName.trim().split(/\s+/);
+        if (!firstName && parts[0]) setFirstName(parts[0]);
+        if (!lastName && parts.slice(1).join(" ")) setLastName(parts.slice(1).join(" "));
+      } else {
+        if (!firstName && storedFirstName) setFirstName(storedFirstName);
+        if (!lastName && storedLastName) setLastName(storedLastName);
+      }
+
+      // 2. Telefon raqam
+      let profilePhone = authUser?.phone || "";
+      if (!profilePhone && userKey) {
+        profilePhone = localStorage.getItem(`guli_phone_${userKey}`) || "";
+      }
+      if (!profilePhone) {
+        profilePhone = localStorage.getItem("guli_phone") || "";
+      }
+      if (!phone && profilePhone) {
+        setPhone(profilePhone);
+      }
+
+      // 3. Tug'ilgan kun
+      let profileDob = authUser?.birth_date || "";
+      if (!profileDob && userKey) {
+        profileDob = localStorage.getItem(`guli_dob_${userKey}`) || "";
+      }
+      if (!profileDob) {
+        profileDob = localStorage.getItem("guli_birth_date") || "";
+      }
+      if (!birthDate && profileDob) {
+        setBirthDate(profileDob);
+      }
+
+      // Real vaqtda profil yangilanishini tinglash
+      const handleProfileUpdated = (ev: Event) => {
+        const detail = (ev as CustomEvent)?.detail;
+        if (detail) {
+          if (detail.firstName) setFirstName(detail.firstName);
+          if (detail.lastName) setLastName(detail.lastName);
+          if (detail.phone) setPhone(detail.phone);
+          if (detail.birthDate) setBirthDate(detail.birthDate);
+        }
+      };
+      window.addEventListener("guli_profile_updated", handleProfileUpdated);
+      return () => {
+        window.removeEventListener("guli_profile_updated", handleProfileUpdated);
+      };
+    } catch {}
+  }, []);
 
   const availableRegions = Object.keys(uzbekistanRegionsData);
   const isCustomRegion = Boolean(address.region && !availableRegions.includes(address.region));
@@ -88,34 +164,38 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
   const handlePayClick = () => {
     if (!firstName.trim()) {
-      showToast("Iltimos ismingizni kiriting");
+      showToast(isRu ? "Пожалуйста, введите ваше имя" : isEn ? "Please enter your name" : "Iltimos ismingizni kiriting");
       return;
     }
     if (!phone.trim()) {
-      showToast("Iltimos telefon raqamingizni kiriting");
+      showToast(isRu ? "Пожалуйста, введите номер телефона" : isEn ? "Please enter your phone number" : "Iltimos telefon raqamingizni kiriting");
       return;
     }
     if (!address.region?.trim() || !address.district?.trim() || !address.street?.trim()) {
-      showToast("Iltimos manzilni (viloyat, tuman va ko‘cha) to‘liq kiriting");
+      showToast(isRu ? "Пожалуйста, заполните адрес (область, район и улица)" : isEn ? "Please enter full address (region, district, street)" : "Iltimos manzilni (viloyat, tuman va ko‘cha) to‘liq kiriting");
       return;
     }
     if (!cart.length) {
-      showToast("Savat bo‘sh");
+      showToast(isRu ? "Корзина пуста" : isEn ? "Cart is empty" : "Savat bo‘sh");
       return;
     }
     onProceedPayment();
   };
 
   const getMissingFieldsTip = () => {
-    if (!cart.length) return "Xarid savatingiz bo‘sh";
+    if (!cart.length) return isRu ? "Корзина пуста" : isEn ? "Cart is empty" : "Xarid savatingiz bo‘sh";
     const missing: string[] = [];
-    if (!firstName.trim()) missing.push("Ism");
-    if (!phone.trim()) missing.push("Telefon raqam");
-    if (!address.region?.trim()) missing.push("Viloyat");
-    if (!address.district?.trim()) missing.push("Tuman");
-    if (!address.street?.trim()) missing.push("Ko‘cha");
+    if (!firstName.trim()) missing.push(isRu ? "Имя" : isEn ? "Name" : "Ism");
+    if (!phone.trim()) missing.push(isRu ? "Телефон" : isEn ? "Phone" : "Telefon raqam");
+    if (!address.region?.trim()) missing.push(isRu ? "Область" : isEn ? "Region" : "Viloyat");
+    if (!address.district?.trim()) missing.push(isRu ? "Район" : isEn ? "District" : "Tuman");
+    if (!address.street?.trim()) missing.push(isRu ? "Улица" : isEn ? "Street" : "Ko‘cha");
     if (missing.length === 0) return null;
-    return `To‘lovga o‘tish uchun to‘ldiring: ${missing.join(", ")}`;
+    return isRu
+      ? `Для перехода к оплате заполните: ${missing.join(", ")}`
+      : isEn
+      ? `To proceed to payment, please fill: ${missing.join(", ")}`
+      : `To‘lovga o‘tish uchun to‘ldiring: ${missing.join(", ")}`;
   };
 
   const missingTip = getMissingFieldsTip();
@@ -144,7 +224,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             cursor: "pointer",
           }}
         >
-          ← Savatga qaytish
+          {isRu ? "← Назад в корзину" : isEn ? "← Back to Cart" : "← Savatga qaytish"}
         </button>
 
         <span
@@ -158,18 +238,24 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             borderRadius: "999px",
           }}
         >
-          🔒 Xavfsiz to‘lov
+          {isRu ? "🔒 Безопасная оплата" : isEn ? "🔒 Secure Checkout" : "🔒 Xavfsiz to‘lov"}
         </span>
       </div>
 
       {/* Modern Page Header */}
       <div className="pageHeader" style={{ marginBottom: "16px" }}>
         <span style={{ fontSize: "11px", fontWeight: "850", letterSpacing: "1px", color: "var(--primary)" }}>
-          BUYURTMA BOSQICHI
+          {isRu ? "ЭТАП ОФОРМЛЕНИЯ" : isEn ? "CHECKOUT STEP" : "BUYURTMA BOSQICHI"}
         </span>
-        <h1 style={{ fontSize: "23px", fontWeight: "900", margin: "4px 0", color: "var(--text-main)" }}>Buyurtmani rasmiylashtirish</h1>
+        <h1 style={{ fontSize: "23px", fontWeight: "900", margin: "4px 0", color: "var(--text-main)" }}>
+          {isRu ? "Оформление заказа" : isEn ? "Checkout Order" : "Buyurtmani rasmiylashtirish"}
+        </h1>
         <p style={{ color: "var(--text-muted)", fontSize: "12.5px" }}>
-          Ma’lumotlarni kiriting va buyurtmangizni 1 bosishda rasmiylashtiring.
+          {isRu
+            ? "Введите данные и оформите заказ в 1 клик."
+            : isEn
+            ? "Enter your details and place your order in 1 click."
+            : "Ma’lumotlarni kiriting va buyurtmangizni 1 bosishda rasmiylashtiring."}
         </p>
       </div>
 
@@ -204,7 +290,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           >
             {firstName && phone ? "✓" : "1"}
           </span>
-          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>Ma’lumotlar</span>
+          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>
+            {isRu ? "Данные" : isEn ? "Details" : "Ma’lumotlar"}
+          </span>
         </div>
 
         <span style={{ color: "var(--border-color)", fontSize: "14px" }}>—</span>
@@ -225,7 +313,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           >
             {address.street && address.region ? "✓" : "2"}
           </span>
-          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>Manzil</span>
+          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>
+            {isRu ? "Адрес" : isEn ? "Address" : "Manzil"}
+          </span>
         </div>
 
         <span style={{ color: "var(--border-color)", fontSize: "14px" }}>—</span>
@@ -246,7 +336,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           >
             3
           </span>
-          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>To‘lov</span>
+          <span style={{ fontSize: "12px", fontWeight: "750", color: "var(--text-main)" }}>
+            {isRu ? "Оплата" : isEn ? "Payment" : "To‘lov"}
+          </span>
         </div>
       </div>
 
@@ -281,10 +373,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               <span style={{ fontSize: "18px" }}>🛍️</span>
               <div>
                 <b style={{ fontSize: "13px", color: "var(--text-main)" }}>
-                  Savatdagi mahsulotlar ({cart.reduce((acc, it) => acc + (it.quantity || 1), 0)} ta)
+                  {isRu
+                    ? `Товары в корзине (${cart.reduce((acc, it) => acc + (it.quantity || 1), 0)} шт)`
+                    : isEn
+                    ? `Cart items (${cart.reduce((acc, it) => acc + (it.quantity || 1), 0)})`
+                    : `Savatdagi mahsulotlar (${cart.reduce((acc, it) => acc + (it.quantity || 1), 0)} ta)`}
                 </b>
                 <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)" }}>
-                  {formatPrice(total)} · Ko‘rish uchun bosing
+                  {formatPrice(total)} · {isRu ? "Нажмите для просмотра" : isEn ? "Click to view" : "Ko‘rish uchun bosing"}
                 </span>
               </div>
             </div>
@@ -319,8 +415,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                         {item.product.name}
                       </h4>
                       <div style={{ fontSize: "11px", color: "var(--text-muted)", display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
-                        {item.size && <span>O‘lcham: <b>{item.size}</b></span>}
-                        {item.color && <span>Rang: <b>{formatColorName(item.color)}</b></span>}
+                        {item.size && <span>{isRu ? "Размер:" : isEn ? "Size:" : "O‘lcham:"} <b>{item.size}</b></span>}
+                        {item.color && <span>{isRu ? "Цвет:" : isEn ? "Color:" : "Rang:"} <b>{formatColorName(item.color)}</b></span>}
                         <span>× {item.quantity}</span>
                       </div>
                     </div>
@@ -365,10 +461,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "850", color: "var(--text-main)" }}>
-              Shaxsiy ma’lumotlar
+              {isRu ? "Личные данные" : isEn ? "Personal Information" : "Shaxsiy ma’lumotlar"}
             </h3>
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-              Qabul qiluvchi ismi, tug‘ilgan kuni va telefon raqami
+              {isRu ? "Имя получателя, дата рождения и телефон" : isEn ? "Recipient name, birth date and phone number" : "Qabul qiluvchi ismi, tug‘ilgan kuni va telefon raqami"}
             </p>
           </div>
         </div>
@@ -377,13 +473,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         <div className="twoInputs" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Ism <span style={{ color: "#e11d48" }}>*</span>
+              {isRu ? "Имя" : isEn ? "First Name" : "Ism"} <span style={{ color: "#e11d48" }}>*</span>
             </label>
             <input
               className="input full"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Ismingiz (masalan: Malika)"
+              placeholder={isRu ? "Ваше имя (например: Малика)" : isEn ? "Your first name (e.g. Malika)" : "Ismingiz (masalan: Malika)"}
               style={{
                 width: "100%",
                 padding: "11px 12px",
@@ -398,13 +494,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Familiya
+              {isRu ? "Фамилия" : isEn ? "Last Name" : "Familiya"}
             </label>
             <input
               className="input full"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              placeholder="Familiyangiz"
+              placeholder={isRu ? "Ваша фамилия" : isEn ? "Your last name" : "Familiyangiz"}
               style={{
                 width: "100%",
                 padding: "11px 12px",
@@ -422,7 +518,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         {/* Birth Date */}
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-            🎂 Tug‘ilgan sana
+            {isRu ? "🎂 Дата рождения" : isEn ? "🎂 Date of Birth" : "🎂 Tug‘ilgan sana"}
           </label>
           <input
             className="input full"
@@ -441,14 +537,18 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             }}
           />
           <span style={{ fontSize: "10.5px", color: "var(--text-muted)", display: "block", marginTop: 4, lineHeight: "1.4" }}>
-            ✨ Tug‘ilgan kuningizda GULI brendidan maxsus bayram sovg‘alari va chegirmalarni taqdim etamiz.
+            {isRu
+              ? "✨ В день рождения дарим праздничные подарки и скидки от бренда GULI."
+              : isEn
+              ? "✨ We offer special birthday gifts and discounts from GULI brand."
+              : "✨ Tug‘ilgan kuningizda GULI brendidan maxsus bayram sovg‘alari va chegirmalarni taqdim etamiz."}
           </span>
         </div>
 
         {/* Phone Number */}
         <div>
           <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-            📱 Telefon raqami <span style={{ color: "#e11d48" }}>*</span>
+            {isRu ? "📱 Номер телефона" : isEn ? "📱 Phone Number" : "📱 Telefon raqami"} <span style={{ color: "#e11d48" }}>*</span>
           </label>
           <input
             className="input full"
@@ -491,11 +591,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             }}
           >
             {phoneLoading ? (
-              <>⏳ Telegramdan olinmoqda…</>
+              <>{isRu ? "⏳ Получаем из Telegram…" : isEn ? "⏳ Fetching from Telegram…" : "⏳ Telegramdan olinmoqda…"}</>
             ) : phone ? (
-              <>✓ Telegram raqamini yangilash</>
+              <>{isRu ? "✓ Обновить номер из Telegram" : isEn ? "✓ Update Telegram phone" : "✓ Telegram raqamini yangilash"}</>
             ) : (
-              <>📱 Telegram raqamimni avtomatik olish</>
+              <>{isRu ? "📱 Получить номер из Telegram" : isEn ? "📱 Auto-get phone from Telegram" : "📱 Telegram raqamimni avtomatik olish"}</>
             )}
           </button>
         </div>
@@ -531,10 +631,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "850", color: "var(--text-main)" }}>
-              Yetkazib berish manzili
+              {isRu ? "Адрес доставки" : isEn ? "Delivery Address" : "Yetkazib berish manzili"}
             </h3>
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-              GPS orqali aniqlang yoki xaritadan tanlang
+              {isRu ? "Определите по GPS или выберите на карте" : isEn ? "Detect via GPS or select on map" : "GPS orqali aniqlang yoki xaritadan tanlang"}
             </p>
           </div>
         </div>
@@ -564,11 +664,11 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           }}
         >
           {locationLoading ? (
-            <>⌛ Joylashuv aniqlanmoqda...</>
+            <>{isRu ? "⌛ Определение местоположения..." : isEn ? "⌛ Detecting location..." : "⌛ Joylashuv aniqlanmoqda..."}</>
           ) : address.latitude ? (
-            <>↻ Joylashuvni qayta aniqlash (GPS)</>
+            <>{isRu ? "↻ Переопределить GPS" : isEn ? "↻ Redetect GPS" : "↻ Joylashuvni qayta aniqlash (GPS)"}</>
           ) : (
-            <>🎯 Hozirgi joylashuvimni aniqlash (GPS)</>
+            <>{isRu ? "🎯 Определить местоположение (GPS)" : isEn ? "🎯 Detect my location (GPS)" : "🎯 Hozirgi joylashuvimni aniqlash (GPS)"}</>
           )}
         </button>
 
@@ -587,7 +687,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         <div className="twoInputs" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Viloyat / Shahar <span style={{ color: "#e11d48" }}>*</span>
+              {isRu ? "Область / Город" : isEn ? "Region / City" : "Viloyat / Shahar"} <span style={{ color: "#e11d48" }}>*</span>
             </label>
             <select
               className="input"
@@ -614,17 +714,17 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                 boxSizing: "border-box",
               }}
             >
-              <option value="">Viloyatni tanlang...</option>
+              <option value="">{isRu ? "Выберите область..." : isEn ? "Select region..." : "Viloyatni tanlang..."}</option>
               {availableRegions.map((reg) => (
                 <option key={reg} value={reg}>{reg}</option>
               ))}
-              <option value="Boshqa">✍️ Boshqa (qo‘lda kiritish)</option>
+              <option value="Boshqa">{isRu ? "✍️ Другое (ввести вручную)" : isEn ? "✍️ Other (manual input)" : "✍️ Boshqa (qo‘lda kiritish)"}</option>
             </select>
           </div>
 
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Tuman / Shaharcha <span style={{ color: "#e11d48" }}>*</span>
+              {isRu ? "Район / Город" : isEn ? "District / Town" : "Tuman / Shaharcha"} <span style={{ color: "#e11d48" }}>*</span>
             </label>
             {currentDistricts.length > 0 ? (
               <select
@@ -649,18 +749,18 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   boxSizing: "border-box",
                 }}
               >
-                <option value="">Tumanni tanlang...</option>
+                <option value="">{isRu ? "Выберите район..." : isEn ? "Select district..." : "Tumanni tanlang..."}</option>
                 {currentDistricts.map((dist) => (
                   <option key={dist} value={dist}>{dist}</option>
                 ))}
-                <option value="Boshqa">✍️ Boshqa (qo‘lda kiritish)</option>
+                <option value="Boshqa">{isRu ? "✍️ Другое (ввести вручную)" : isEn ? "✍️ Other (manual input)" : "✍️ Boshqa (qo‘lda kiritish)"}</option>
               </select>
             ) : (
               <input
                 className="input"
                 value={address.district || ""}
                 onChange={(e) => setAddressField("district", e.target.value)}
-                placeholder="Tuman nomi"
+                placeholder={isRu ? "Название района" : isEn ? "District name" : "Tuman nomi"}
                 style={{
                   width: "100%",
                   padding: "11px 12px",
@@ -692,7 +792,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             }}
             value={address.region || ""}
             onChange={(e) => setAddressField("region", e.target.value)}
-            placeholder="Viloyatni qo‘lda kiriting (masalan: Toshkent)"
+            placeholder={isRu ? "Введите область вручную (например: Ташкент)" : isEn ? "Enter region manually (e.g. Tashkent)" : "Viloyatni qo‘lda kiriting (masalan: Toshkent)"}
           />
         )}
 
@@ -712,20 +812,20 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             }}
             value={address.district || ""}
             onChange={(e) => setAddressField("district", e.target.value)}
-            placeholder="Tumanni qo‘lda kiriting (masalan: Chilonzor)"
+            placeholder={isRu ? "Введите район вручную (например: Чиланзар)" : isEn ? "Enter district manually (e.g. Chilanzar)" : "Tumanni qo‘lda kiriting (masalan: Chilonzor)"}
           />
         )}
 
         {/* Street Name */}
         <div style={{ marginBottom: 10 }}>
           <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-            Ko‘cha nomi va manzil <span style={{ color: "#e11d48" }}>*</span>
+            {isRu ? "Улица и адрес" : isEn ? "Street & Address" : "Ko‘cha nomi va manzil"} <span style={{ color: "#e11d48" }}>*</span>
           </label>
           <input
             className="input full"
             value={address.street || ""}
             onChange={(e) => setAddressField("street", e.target.value)}
-            placeholder="Ko‘cha nomi va uyingiz manzili (masalan: Mustaqillik ko'chasi)"
+            placeholder={isRu ? "Название улицы и адрес (например: ул. Мустакиллик)" : isEn ? "Street name and address (e.g. Mustaqillik str)" : "Ko‘cha nomi va uyingiz manzili (masalan: Mustaqillik ko'chasi)"}
             style={{
               width: "100%",
               padding: "11px 12px",
@@ -743,13 +843,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         <div className="twoInputs" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Uy raqami / Dom
+              {isRu ? "Номер дома" : isEn ? "House Number" : "Uy raqami / Dom"}
             </label>
             <input
               className="input"
               value={address.house || ""}
               onChange={(e) => setAddressField("house", e.target.value)}
-              placeholder="Masalan: 42"
+              placeholder="42"
               style={{
                 width: "100%",
                 padding: "11px 12px",
@@ -765,13 +865,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
           <div>
             <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-              Xonadon / Padezd
+              {isRu ? "Квартира / Подъезд" : isEn ? "Apt / Entrance" : "Xonadon / Padezd"}
             </label>
             <input
               className="input"
               value={address.apartment || ""}
               onChange={(e) => setAddressField("apartment", e.target.value)}
-              placeholder="Masalan: 15"
+              placeholder="15"
               style={{
                 width: "100%",
                 padding: "11px 12px",
@@ -789,13 +889,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         {/* Landmark */}
         <div>
           <label style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 750, display: "block", marginBottom: 5 }}>
-            Mo‘ljal (orientir)
+            {isRu ? "Ориентир (необязательно)" : isEn ? "Landmark (optional)" : "Mo‘ljal (orientir)"}
           </label>
           <input
             className="input full"
             value={address.landmark || ""}
             onChange={(e) => setAddressField("landmark", e.target.value)}
-            placeholder="Masalan: Korzinka ro‘parasida, 3-podyezd"
+            placeholder={isRu ? "Например: напротив Корзинки, 3-й подъезд" : isEn ? "E.g.: Opposite Korzinka, 3rd entrance" : "Masalan: Korzinka ro‘parasida, 3-podyezd"}
             style={{
               width: "100%",
               padding: "11px 12px",
@@ -841,10 +941,10 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             </div>
             <div>
               <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-main)" }}>
-                Keshbekdan foydalanish
+                {isRu ? "Использовать кешбэк" : isEn ? "Use Cashback" : "Keshbekdan foydalanish"}
               </div>
               <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "2px" }}>
-                Mavjud keshbek: <b style={{ color: "#ca8a04", fontWeight: 800 }}>{formatPrice(availableCashback)}</b>
+                {isRu ? "Доступный кешбэк:" : isEn ? "Available cashback:" : "Mavjud keshbek:"} <b style={{ color: "#ca8a04", fontWeight: 800 }}>{formatPrice(availableCashback)}</b>
               </div>
             </div>
           </div>
@@ -910,16 +1010,24 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               justifyContent: "space-between",
             }}
           >
-            <span>✓ Keshbek chegirmasi qo‘llandi</span>
+            <span>{isRu ? "✓ Скидка кешбэком применена" : isEn ? "✓ Cashback discount applied" : "✓ Keshbek chegirmasi qo‘llandi"}</span>
             <span>−{formatPrice(cashbackDiscount)}</span>
           </div>
         ) : availableCashback > 0 ? (
           <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
-            💡 Keshbekni yoqsangiz, buyurtma summasidan {formatPrice(cashbackDiscount || availableCashback)} chegirib tashlanadi.
+            {isRu
+              ? `💡 При включении кешбэка с суммы заказа будет списано ${formatPrice(cashbackDiscount || availableCashback)}.`
+              : isEn
+              ? `💡 Enabling cashback will deduct ${formatPrice(cashbackDiscount || availableCashback)} from your order.`
+              : `💡 Keshbekni yoqsangiz, buyurtma summasidan ${formatPrice(cashbackDiscount || availableCashback)} chegirib tashlanadi.`}
           </div>
         ) : (
           <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-muted)" }}>
-            ℹ️ Har bir xaridingizdan 2% keshbek hisoblanadi va keyingi xaridlarda sarflanadi.
+            {isRu
+              ? "ℹ️ С каждой покупки начисляется 2% кешбэка для использования в будущих заказах."
+              : isEn
+              ? "ℹ️ 2% cashback is earned on each purchase for future orders."
+              : "ℹ️ Har bir xaridingizdan 2% keshbek hisoblanadi va keyingi xaridlarda sarflanadi."}
           </div>
         )}
       </div>
@@ -936,26 +1044,32 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
-          <span>Mahsulotlar qiymati:</span>
+          <span>{isRu ? "Стоимость товаров:" : isEn ? "Items total:" : "Mahsulotlar qiymati:"}</span>
           <b style={{ color: "var(--text-main)" }}>{formatPrice(subtotal || total)}</b>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-muted)", marginBottom: 8 }}>
-          <span>Yetkazib berish xizmati:</span>
+          <span>{isRu ? "Служба доставки:" : isEn ? "Delivery service:" : "Yetkazib berish xizmati:"}</span>
           <b style={{ color: deliveryFee && deliveryFee > 0 ? "var(--text-main)" : "var(--success-badge-color, #059669)" }}>
-            {deliveryFee && deliveryFee > 0 ? formatPrice(deliveryFee) : "Bepul (600 000+ so‘m)"}
+            {deliveryFee && deliveryFee > 0
+              ? formatPrice(deliveryFee)
+              : isRu
+              ? "Бесплатно (от 600 000 сум)"
+              : isEn
+              ? "Free (from 600,000 UZS)"
+              : "Bepul (600 000+ so‘m)"}
           </b>
         </div>
 
         {Boolean(useCashback && cashbackDiscount && cashbackDiscount > 0) && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--success-badge-color, #059669)", marginBottom: 8, fontWeight: 700 }}>
-            <span>💎 Keshbek orqali chegirma:</span>
+            <span>{isRu ? "💎 Скидка через кешбэк:" : isEn ? "💎 Cashback discount:" : "💎 Keshbek orqali chegirma:"}</span>
             <b>−{formatPrice(cashbackDiscount)}</b>
           </div>
         )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "var(--text-muted)", marginBottom: 10, background: "var(--bg-card-sub)", padding: "7px 10px", borderRadius: "10px" }}>
-          <span>🕒 Yetkazib berish muddati:</span>
+          <span>{isRu ? "🕒 Срок доставки:" : isEn ? "🕒 Delivery time:" : "🕒 Yetkazib berish muddati:"}</span>
           <b style={{ color: "var(--primary)", fontWeight: 700 }}>{deliveryEst.badge}</b>
         </div>
 
@@ -969,7 +1083,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           }}
         >
           <div>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "block" }}>Jami to‘lov miqdori:</span>
+            <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "block" }}>
+              {isRu ? "Итого к оплате:" : isEn ? "Total payment:" : "Jami to‘lov miqdori:"}
+            </span>
             <b style={{ fontSize: "21px", color: "var(--primary)", fontWeight: "900" }}>
               {formatPrice(total)}
             </b>
@@ -986,7 +1102,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               fontWeight: "750",
             }}
           >
-            {(!deliveryFee || deliveryFee === 0) ? "✓ Yetkazib berish bepul" : "600 000+ so‘mda bepul"}
+            {(!deliveryFee || deliveryFee === 0)
+              ? (isRu ? "✓ Доставка бесплатная" : isEn ? "✓ Free Delivery" : "✓ Yetkazib berish bepul")
+              : (isRu ? "Бесплатно от 600 000 сум" : isEn ? "Free from 600,000 UZS" : "600 000+ so‘mda bepul")}
           </span>
         </div>
       </div>
@@ -1021,10 +1139,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "850", color: "var(--text-main)" }}>
-              To‘lov usuli (Uzcard / Humo)
+              {isRu ? "Способ оплаты (Uzcard / Humo)" : isEn ? "Payment Method (Uzcard / Humo)" : "To‘lov usuli (Uzcard / Humo)"}
             </h3>
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-              Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar faqat plastik karta orqali
+              {isRu
+                ? "Через Click, Payme, Beepul или банковские приложения на карту Uzcard/Humo"
+                : isEn
+                ? "Via Click, Payme, Beepul or any banking app to Uzcard/Humo card"
+                : "Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar faqat plastik karta orqali"}
             </p>
           </div>
         </div>
@@ -1056,7 +1178,9 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
 
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <b style={{ fontSize: "14px", color: "var(--text-main)" }}>Plastik karta (Uzcard / Humo)</b>
+              <b style={{ fontSize: "14px", color: "var(--text-main)" }}>
+                {isRu ? "Пластиковая карта (Uzcard / Humo)" : isEn ? "Bank Card (Uzcard / Humo)" : "Plastik karta (Uzcard / Humo)"}
+              </b>
               <span
                 style={{
                   fontSize: "10px",
@@ -1067,11 +1191,15 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   borderRadius: "6px",
                 }}
               >
-                Tanlangan
+                {isRu ? "Выбрано" : isEn ? "Selected" : "Tanlangan"}
               </span>
             </div>
             <small style={{ fontSize: "11.5px", color: "var(--text-muted)", display: "block", marginTop: 2 }}>
-              Click, Payme, Beepul va boshqa barcha ilovalardan faqat Uzcard/Humo kartaga to‘lov qilinadi va chek yuklanadi
+              {isRu
+                ? "Оплата с Click, Payme, Beepul и других приложений на карту Uzcard/Humo и загрузка чека"
+                : isEn
+                ? "Payment from Click, Payme, Beepul or banking apps to Uzcard/Humo card with receipt upload"
+                : "Click, Payme, Beepul va boshqa barcha ilovalardan faqat Uzcard/Humo kartaga to‘lov qilinadi va chek yuklanadi"}
             </small>
           </div>
 
@@ -1096,12 +1224,25 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         {/* 2-Hour SLA Notification box */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "8px 12px", borderRadius: "12px", background: "rgba(217, 119, 6, 0.08)", border: "1px solid rgba(217, 119, 6, 0.2)", fontSize: "11px", color: "#b45309" }}>
           <span>⏱️</span>
-          <span><b>Muhim:</b> Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi.</span>
+          <span>
+            <b>{isRu ? "Важно:" : isEn ? "Important:" : "Muhim:"}</b>{" "}
+            {isRu
+              ? "Отправленный чек об оплате проверяется администратором в течение 2 часов."
+              : isEn
+              ? "Submitted payment receipt is verified by administrator within 2 hours."
+              : "Yuborilgan to‘lov cheki 2 soat ichida admin tomonidan tasdiqlanadi."}
+          </span>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, padding: "8px 12px", borderRadius: "12px", background: "var(--bg-card-sub)", fontSize: "11px", color: "var(--text-muted)" }}>
           <span>🛡️</span>
-          <span>To‘lovlar 256-bitli SSL orqali to‘liq himoyalangan va xavfsiz.</span>
+          <span>
+            {isRu
+              ? "Платежи защищены 256-битным SSL шифрованием и полностью безопасны."
+              : isEn
+              ? "Payments are fully secured with 256-bit SSL encryption."
+              : "To‘lovlar 256-bitli SSL orqali to‘liq himoyalangan va xavfsiz."}
+          </span>
         </div>
       </div>
 
@@ -1155,7 +1296,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         }}
       >
         <span>💳</span>
-        <span>Karta orqali to‘lov qilish — {formatPrice(total)}</span>
+        <span>
+          {isRu
+            ? `Оплатить картой — ${formatPrice(total)}`
+            : isEn
+            ? `Pay with Card — ${formatPrice(total)}`
+            : `Karta orqali to‘lov qilish — ${formatPrice(total)}`}
+        </span>
       </button>
     </main>
   );

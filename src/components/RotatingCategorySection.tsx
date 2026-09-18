@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
 import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 
 export type { CategoryInfo };
 
@@ -127,8 +128,8 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           />
         ) : (
           <div className="catCardFallback">
-            <span className="catFallbackIcon" style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
-              <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <span className="catFallbackIcon guli-brand-circle-logo" style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
+              <img src={GULI_LOGO_BASE64} alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
             </span>
           </div>
         )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, type FC } from "react";
 import { buildApiUrl } from "../lib/apiOrigin";
 import type { Language } from "../utils/translations";
 import { copyToClipboard } from "../utils/clipboard";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 
 interface AdminPromo {
   id?: string | number;
@@ -629,7 +630,10 @@ export const PromosModal: FC<{
 export const DeliveryTermsModal: FC<{
   language: Language;
   onClose: () => void;
-}> = ({ onClose }) => {
+}> = ({ language = "uz", onClose }) => {
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
       <div
@@ -640,8 +644,12 @@ export const DeliveryTermsModal: FC<{
       >
         <div className="modalHeader">
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">QOIDALAR & KAFOLAT</span>
-            <h2>Yetkazib berish va To‘lov</h2>
+            <span className="modalEyebrow">
+              {isRu ? "ПРАВИЛА И ГАРАНТИЯ" : isEn ? "RULES & GUARANTEE" : "QOIDALAR & KAFOLAT"}
+            </span>
+            <h2>
+              {isRu ? "Доставка и Оплата" : isEn ? "Delivery and Payment" : "Yetkazib berish va To‘lov"}
+            </h2>
           </div>
           <button className="modalCloseBtn" onClick={onClose} aria-label="Yopish">
             ×
@@ -652,19 +660,49 @@ export const DeliveryTermsModal: FC<{
           <div className="termItem">
             <div className="termIcon">🎁</div>
             <div>
-              <b>Bepul yetkazib berish (600 000 so‘m+)</b>
-              <p>Bepul yetkazib berish faqatgina <b>600 000 so‘mdan oshgan</b> buyurtmalar uchun butun O‘zbekiston bo‘ylab amal qiladi. 600 000 so‘mgacha bo‘lgan buyurtmalar uchun standart yetkazib berish narxi 20 000 so‘m.</p>
+              <b>
+                {isRu
+                  ? "Бесплатная доставка (от 600 000 сум)"
+                  : isEn
+                  ? "Free Delivery (from 600,000 UZS)"
+                  : "Bepul yetkazib berish (600 000 so‘m+)"}
+              </b>
+              <p>
+                {isRu
+                  ? "Бесплатная доставка действует по всему Узбекистану только для заказов на сумму от 600 000 сум. Для заказов до 600 000 сум стоимость доставки составляет 20 000 сум."
+                  : isEn
+                  ? "Free delivery applies across Uzbekistan for orders over 600,000 UZS. For orders under 600,000 UZS, the standard delivery fee is 20,000 UZS."
+                  : "Bepul yetkazib berish faqatgina 600 000 so‘mdan oshgan buyurtmalar uchun butun O‘zbekiston bo‘ylab amal qiladi. 600 000 so‘mgacha bo‘lgan buyurtmalar uchun standart yetkazib berish narxi 20 000 so‘m."}
+              </p>
             </div>
           </div>
 
           <div className="termItem">
             <div className="termIcon">🚚</div>
             <div>
-              <b>Yetkazib berish muddatlari</b>
+              <b>
+                {isRu ? "Сроки доставки" : isEn ? "Delivery Times" : "Yetkazib berish muddatlari"}
+              </b>
               <ul style={{ margin: "6px 0 0", paddingLeft: "18px", fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                <li><b>Qo‘qon ichida:</b> 1 ish kuni</li>
-                <li><b>Toshkent, Andijon, Namangan, Farg‘onaga:</b> 3 ish kuni</li>
-                <li><b>Voha viloyatlariga:</b> 5 ish kuni</li>
+                {isRu ? (
+                  <>
+                    <li><b>В Коканде:</b> 1 рабочий день</li>
+                    <li><b>В Ташкент, Андижан, Наманган, Фергану:</b> 3 рабочих дня</li>
+                    <li><b>В другие регионы:</b> 5 рабочих дней</li>
+                  </>
+                ) : isEn ? (
+                  <>
+                    <li><b>Inside Kokand:</b> 1 business day</li>
+                    <li><b>Tashkent, Andijan, Namangan, Fergana:</b> 3 business days</li>
+                    <li><b>Other regions:</b> 5 business days</li>
+                  </>
+                ) : (
+                  <>
+                    <li><b>Qo‘qon ichida:</b> 1 ish kuni</li>
+                    <li><b>Toshkent, Andijon, Namangan, Farg‘onaga:</b> 3 ish kuni</li>
+                    <li><b>Voha viloyatlariga:</b> 5 ish kuni</li>
+                  </>
+                )}
               </ul>
             </div>
           </div>
@@ -672,31 +710,55 @@ export const DeliveryTermsModal: FC<{
           <div className="termItem">
             <div className="termIcon">💳</div>
             <div>
-              <b>To‘lov usuli (Uzcard / Humo)</b>
-              <p>Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat rasmiy <b>Uzcard / Humo plastik kartasi</b> orqali amalga oshiriladi.</p>
+              <b>
+                {isRu ? "Способ оплаты (Uzcard / Humo)" : isEn ? "Payment Method (Uzcard / Humo)" : "To‘lov usuli (Uzcard / Humo)"}
+              </b>
+              <p>
+                {isRu
+                  ? "Независимо от платежных систем (Click, Payme, Beepul), оплата принимается только на официальную карту Uzcard / Humo."
+                  : isEn
+                  ? "Payments can be made via official Uzcard / Humo cards through Click, Payme, Beepul and banking apps."
+                  : "Click, Payme, Beepul va boshqa barcha moliyaviy platformalardan qat'i nazar, to‘lov faqat rasmiy Uzcard / Humo plastik kartasi orqali amalga oshiriladi."}
+              </p>
             </div>
           </div>
 
           <div className="termItem">
             <div className="termIcon">⏱️</div>
             <div>
-              <b>Chekni tasdiqlash (2 soat ichida)</b>
-              <p>Yuborilgan to‘lov cheki <b>2 soat ichida</b> admin tomonidan tasdiqlanadi. Agar tasdiqlash vaqti uzayib ketsa, mijozga 1 marta bildirishnoma («To‘lovingiz admin tomonidan tasdiqlanishi kutilmoqda, tez orada tasdiqlanadi. Iltimos kuting yoki qo‘llab-quvvatlash markazi bilan bog‘laning») yuboriladi.</p>
+              <b>
+                {isRu ? "Подтверждение чека (в течение 2 часов)" : isEn ? "Receipt Verification (within 2 hours)" : "Chekni tasdiqlash (2 soat ichida)"}
+              </b>
+              <p>
+                {isRu
+                  ? "Отправленный чек об оплате проверяется администратором в течение 2 часов."
+                  : isEn
+                  ? "Submitted receipt is verified by administrator within 2 hours."
+                  : "Yuborilgan to‘lov cheki 2 soat ichida admin tomonidan tasdiqlanadi."}
+              </p>
             </div>
           </div>
 
           <div className="termItem">
             <div className="termIcon">🔒</div>
             <div>
-              <b>100% Maxfiy va Nozik qadoqlash</b>
-              <p>Ichki kiyim buyurtmalari shaffof bo‘lmagan, neytral va xavfsiz qadoqda yuboriladi. Qadoq tashqarisida buyurtma mazmuni yozilmaydi.</p>
+              <b>
+                {isRu ? "100% Конфиденциальная упаковка" : isEn ? "100% Confidential & Discreet Packaging" : "100% Maxfiy va Nozik qadoqlash"}
+              </b>
+              <p>
+                {isRu
+                  ? "Заказы нижнего белья отправляются в непрозрачной, нейтральной и безопасной упаковке без указания содержимого."
+                  : isEn
+                  ? "Lingerie orders are sent in non-transparent, discreet and secure packaging with zero content indication."
+                  : "Ichki kiyim buyurtmalari shaffof bo‘lmagan, neytral va xavfsiz qadoqda yuboriladi. Qadoq tashqarisida buyurtma mazmuni yozilmaydi."}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="modalFooterSingle">
           <button className="primaryButton" onClick={onClose}>
-            Tushunarli
+            {isRu ? "Понятно" : isEn ? "Got it" : "Tushunarli"}
           </button>
         </div>
       </div>
@@ -707,8 +769,10 @@ export const DeliveryTermsModal: FC<{
 export const SizeGuideModal: FC<{
   language: Language;
   onClose: () => void;
-}> = ({ onClose }) => {
+}> = ({ language = "uz", onClose }) => {
   const [tab, setTab] = useState<"bra" | "panties">("bra");
+  const isRu = language === "ru";
+  const isEn = language === "en";
 
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
@@ -720,8 +784,12 @@ export const SizeGuideModal: FC<{
       >
         <div className="modalHeader">
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">QO‘LLANMA</span>
-            <h2>O‘lchamlar jadvali (Size Guide)</h2>
+            <span className="modalEyebrow">
+              {isRu ? "РУКОВОДСТВО" : isEn ? "GUIDE" : "QO‘LLANMA"}
+            </span>
+            <h2>
+              {isRu ? "Таблица размеров" : isEn ? "Size Guide" : "O‘lchamlar jadvali (Size Guide)"}
+            </h2>
           </div>
           <button className="modalCloseBtn" onClick={onClose} aria-label="Yopish">
             ×
@@ -734,27 +802,31 @@ export const SizeGuideModal: FC<{
               className={`guideTab ${tab === "bra" ? "active" : ""}`}
               onClick={() => setTab("bra")}
             >
-              Byustgalter o‘lchami
+              {isRu ? "Размер бюстгальтера" : isEn ? "Bra Size" : "Byustgalter o‘lchami"}
             </button>
             <button
               className={`guideTab ${tab === "panties" ? "active" : ""}`}
               onClick={() => setTab("panties")}
             >
-              Trusik va Pijamalar
+              {isRu ? "Трусики и пижамы" : isEn ? "Panties & Pajamas" : "Trusik va Pijamalar"}
             </button>
           </div>
 
           {tab === "bra" ? (
             <div className="sizeTableWrap">
               <p className="sizeGuideHint">
-                📏 Ko‘krak osti aylanasi va eng bo‘rtgan nuqtasini santimetr lenta bilan o‘lchang:
+                {isRu
+                  ? "📏 Измерьте обхват под грудью и обхват груди сантиметровой лентой:"
+                  : isEn
+                  ? "📏 Measure underbust and bust circumference using measuring tape:"
+                  : "📏 Ko‘krak osti aylanasi va eng bo‘rtgan nuqtasini santimetr lenta bilan o‘lchang:"}
               </p>
               <table className="sizeTable">
                 <thead>
                   <tr>
-                    <th>O‘lcham</th>
-                    <th>Ko‘krak osti</th>
-                    <th>Ko‘krak aylanasi</th>
+                    <th>{isRu ? "Размер" : isEn ? "Size" : "O‘lcham"}</th>
+                    <th>{isRu ? "Под грудью" : isEn ? "Underbust" : "Ko‘krak osti"}</th>
+                    <th>{isRu ? "Обхват груди" : isEn ? "Bust" : "Ko‘krak aylanasi"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -799,14 +871,18 @@ export const SizeGuideModal: FC<{
           ) : (
             <div className="sizeTableWrap">
               <p className="sizeGuideHint">
-                📏 Bel va son aylanasi bo‘yicha mos o‘lchamni tanlang:
+                {isRu
+                  ? "📏 Выберите подходящий размер по обхвату талии и бедер:"
+                  : isEn
+                  ? "📏 Choose matching size based on waist and hips circumference:"
+                  : "📏 Bel va son aylanasi bo‘yicha mos o‘lchamni tanlang:"}
               </p>
               <table className="sizeTable">
                 <thead>
                   <tr>
-                    <th>Xalqaro</th>
-                    <th>O‘zbekiston</th>
-                    <th>Bel / Son</th>
+                    <th>{isRu ? "Международный" : isEn ? "International" : "Xalqaro"}</th>
+                    <th>{isRu ? "Узбекистан" : isEn ? "Uzbekistan" : "O‘zbekiston"}</th>
+                    <th>{isRu ? "Талия / Бедра" : isEn ? "Waist / Hips" : "Bel / Son"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -843,7 +919,7 @@ export const SizeGuideModal: FC<{
 
         <div className="modalFooterSingle">
           <button className="primaryButton" onClick={onClose}>
-            Tushunarli
+            {isRu ? "Понятно" : isEn ? "Got it" : "Tushunarli"}
           </button>
         </div>
       </div>
@@ -854,7 +930,10 @@ export const SizeGuideModal: FC<{
 export const AboutBrandModal: FC<{
   language: Language;
   onClose: () => void;
-}> = ({ onClose }) => {
+}> = ({ language = "uz", onClose }) => {
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
       <div
@@ -865,7 +944,9 @@ export const AboutBrandModal: FC<{
       >
         <div className="modalHeader">
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">BREND HAQIDA</span>
+            <span className="modalEyebrow">
+              {isRu ? "О БРЕНДЕ" : isEn ? "ABOUT BRAND" : "BREND HAQIDA"}
+            </span>
             <h2>GULI Lingerie Premium</h2>
           </div>
           <button className="modalCloseBtn" onClick={onClose} aria-label="Yopish">
@@ -875,36 +956,46 @@ export const AboutBrandModal: FC<{
 
         <div className="modalBodyContent brandAboutBody">
           <div className="brandHeroCard">
-            <span className="brandHeroIcon" style={{ overflow: "hidden", borderRadius: "50%", display: "inline-grid", placeItems: "center" }}>
-              <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <span className="brandHeroIcon guli-brand-circle-logo" style={{ overflow: "hidden", borderRadius: "50%", display: "inline-grid", placeItems: "center" }}>
+              <img src={GULI_LOGO_BASE64} alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "contain", padding: "2px" }} />
             </span>
-            <h3>Go‘zallik va O‘zingizga bo‘lgan ishonch</h3>
+            <h3>
+              {isRu
+                ? "Красота и Уверенность в себе"
+                : isEn
+                ? "Beauty and Self-Confidence"
+                : "Go‘zallik va O‘zingizga bo‘lgan ishonch"}
+            </h3>
             <p>
-              GULI — har bir ayolning betakror go‘zalligi, nozikligi va qulayligini ta’minlashga bag‘ishlangan premium ichki kiyimlar brendi. Biz faqat yuqori sifatli, teriga yoqimli va gipoallergen matolardan foydalanamiz.
+              {isRu
+                ? "GULI — премиальный бренд нижнего белья, созданный подчеркнуть женскую красоту, грацию и непревзойденный комфорт. Мы используем только высококачественные гипоаллергенные ткани и французские кружева."
+                : isEn
+                ? "GULI is a premium lingerie brand dedicated to enhancing every woman's elegance, charm, and comfort. We use only top-grade, hypoallergenic fabrics and French lace."
+                : "GULI — har bir ayolning betakror go‘zalligi, nozikligi va qulayligini ta’minlashga bag‘ishlangan premium ichki kiyimlar brendi. Biz faqat yuqori sifatli, teriga yoqimli va gipoallergen matolardan foydalanamiz."}
             </p>
           </div>
 
           <div className="brandFeaturesGrid">
             <div className="brandFeat">
-              <b>✨ Premium Sifat</b>
-              <p>Fransuz to‘rlari, ipak va paxta</p>
+              <b>✨ {isRu ? "Премиум качество" : isEn ? "Premium Quality" : "Premium Sifat"}</b>
+              <p>{isRu ? "Французские кружева, шелк и хлопок" : isEn ? "French lace, silk and cotton" : "Fransuz to‘rlari, ipak va paxta"}</p>
             </div>
             <div className="brandFeat">
-              <b>🛡️ 100% Maxfiylik</b>
-              <p>To‘liq anonim xavfsiz qadoq</p>
+              <b>🛡️ {isRu ? "100% Конфиденциальность" : isEn ? "100% Privacy" : "100% Maxfiylik"}</b>
+              <p>{isRu ? "Полностью анонимная упаковка" : isEn ? "Fully anonymous secure packaging" : "To‘liq anonim xavfsiz qadoq"}</p>
             </div>
             <div className="brandFeat">
-              <b>🚀 24/7 Xizmat</b>
-              <p>Doimiy onlayn qo‘llab-quvvatlash</p>
+              <b>🚀 {isRu ? "24/7 Сервис" : isEn ? "24/7 Service" : "24/7 Xizmat"}</b>
+              <p>{isRu ? "Постоянная онлайн поддержка" : isEn ? "Always-on customer support" : "Doimiy onlayn qo‘llab-quvvatlash"}</p>
             </div>
             <div className="brandFeat">
-              <b>📍 O‘zbekiston bo‘ylab</b>
-              <p>Tezkor va ishonchli yetkazish</p>
+              <b>📍 {isRu ? "По всему Узбекистану" : isEn ? "Across Uzbekistan" : "O‘zbekiston bo‘ylab"}</b>
+              <p>{isRu ? "Быстрая и надежная доставка" : isEn ? "Fast & reliable courier delivery" : "Tezkor va ishonchli yetkazish"}</p>
             </div>
           </div>
 
           <div className="brandContactsBlock">
-            <h4>Biz bilan bog‘lanish:</h4>
+            <h4>{isRu ? "Связаться с нами:" : isEn ? "Contact us:" : "Biz bilan bog‘lanish:"}</h4>
             <div className="contactLinks">
               <a
                 href="https://t.me/guli_lingerie_admin"
@@ -912,7 +1003,7 @@ export const AboutBrandModal: FC<{
                 rel="noreferrer"
                 className="socialLinkBtn"
               >
-                <span>✈️</span> Telegram Kanal & Menejer
+                <span>✈️</span> {isRu ? "Telegram канал и менеджер" : isEn ? "Telegram channel & manager" : "Telegram Kanal & Menejer"}
               </a>
               <a
                 href="tel:+998905811117"
@@ -926,7 +1017,7 @@ export const AboutBrandModal: FC<{
 
         <div className="modalFooterSingle">
           <button className="primaryButton" onClick={onClose}>
-            Yopish
+            {isRu ? "Закрыть" : isEn ? "Close" : "Yopish"}
           </button>
         </div>
       </div>

@@ -534,11 +534,11 @@ html[data-theme="dark"] .deliveryBanner p{color:#f3a4b5 !important}
 .tab{white-space:nowrap;padding:9px 12px;border-radius:30px;background:var(--bg-card);color:var(--text-muted);border:1px solid var(--border-color);font-size:10px;flex-shrink:0}
 .tab.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 7px 16px rgba(215,93,119,.18)}
 
-.empty{text-align:center;padding:50px 20px;color:var(--text-muted)}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:50px 20px;color:var(--text-muted)}
 .empty>div{font-size:34px;margin-bottom:10px}
 .empty h3{margin:4px 0 6px;color:var(--text-main)}
-.empty p{font-size:12px;line-height:1.5}
-.empty .primaryButton{margin-top:14px;max-width:260px}
+.empty p{font-size:13px;line-height:1.5;margin:0 0 16px 0;max-width:320px}
+.empty .primaryButton{margin:0 auto;max-width:260px;width:100%}
 
 .primaryButton{width:100%;padding:14px 18px;border-radius:15px;background:var(--primary-gradient);color:#fff;font-weight:850;box-shadow:0 8px 20px rgba(201,82,107,.25);border:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box}
 .primaryButton.large{min-height:53px;margin-top:12px}
@@ -5167,5 +5167,21 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
 
 .orderConfirmedCard {
   animation: orderModalFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Center Modal Animation for Profile Edit Modal */
+@keyframes guliCenterModalIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(14px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.guli-profile-edit-modal {
+  animation: guliCenterModalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

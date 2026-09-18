@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { getSocialLinks, SocialLinks } from "../utils/socialLinks";
+import { type Language, getTranslation } from "../utils/translations";
 
 interface SocialLinksModalProps {
   isOpen: boolean;
   onClose: () => void;
+  language?: Language;
 }
 
-export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onClose }) => {
+export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onClose, language = "uz" }) => {
   const [links, setLinks] = useState<SocialLinks>(getSocialLinks());
 
   useEffect(() => {
@@ -28,6 +30,9 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const isRu = language === "ru";
+  const isEn = language === "en";
+
   return (
     <div className="modalBackdrop modalBackdropCenter" onMouseDown={onClose}>
       <div
@@ -42,23 +47,29 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
       >
         <div className="modalHeader" style={{ marginBottom: "12px", paddingBottom: "12px" }}>
           <div className="modalTitleWrap">
-            <span className="modalEyebrow">RASMIY SAHIFALARIMIZ</span>
+            <span className="modalEyebrow">
+              {isRu ? "ОФИЦИАЛЬНЫЕ СТРАНИЦЫ" : isEn ? "OFFICIAL PAGES" : "RASMIY SAHIFALARIMIZ"}
+            </span>
             <h2 style={{ fontSize: "20px", fontWeight: "800", marginTop: "2px" }}>
-              Ijtimoiy tarmoqlar
+              {isRu ? "Социальные сети" : isEn ? "Social Networks" : "Ijtimoiy tarmoqlar"}
             </h2>
           </div>
           <button
             type="button"
             className="modalCloseBtn"
             onClick={onClose}
-            aria-label="Yopish"
+            aria-label={getTranslation("close", language)}
           >
             ×
           </button>
         </div>
 
         <p className="modalIntroText" style={{ fontSize: "12.5px", marginBottom: "18px" }}>
-          GULI Premium do‘konining rasmiy ijtimoiy tarmoqlariga a’zo bo‘ling va eng so‘nggi to‘plamlar hamda chegirmalardan xabardor bo‘ling:
+          {isRu
+            ? "Подписывайтесь на официальные социальные сети магазина GULI Premium и будьте в курсе новинок и скидок:"
+            : isEn
+            ? "Subscribe to official GULI Premium store social channels to stay updated on new arrivals and discounts:"
+            : "GULI Premium do‘konining rasmiy ijtimoiy tarmoqlariga a’zo bo‘ling va eng so‘nggi to‘plamlar hamda chegirmalardan xabardor bo‘ling:"}
         </p>
 
         <div style={{ display: "grid", gap: "12px" }}>
@@ -129,7 +140,7 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
                 </span>
               </div>
               <small style={{ display: "block", fontSize: "11.5px", color: "var(--text-muted, #786b70)", marginTop: "2px" }}>
-                Foto va video to‘plamlar, story'lar
+                {isRu ? "Фото и видео коллекции, сторис" : isEn ? "Photo & video collections, stories" : "Foto va video to‘plamlar, story'lar"}
               </small>
             </div>
           </button>
@@ -189,7 +200,7 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
                 </span>
               </div>
               <small style={{ display: "block", fontSize: "11.5px", color: "var(--text-muted, #786b70)", marginTop: "2px" }}>
-                Rasmiy kanal va yangi assortimentlar
+                {isRu ? "Официальный канал и новый ассортимент" : isEn ? "Official channel & new arrivals" : "Rasmiy kanal va yangi assortimentlar"}
               </small>
             </div>
           </button>
@@ -257,7 +268,7 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
                 </span>
               </div>
               <small style={{ display: "block", fontSize: "11.5px", color: "var(--text-muted, #786b70)", marginTop: "2px" }}>
-                Qisqa va qiziqarli video sharhlar
+                {isRu ? "Короткие и интересные видеообзоры" : isEn ? "Short & trendy video reviews" : "Qisqa va qiziqarli video sharhlar"}
               </small>
             </div>
           </button>
@@ -280,10 +291,11 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
               cursor: "pointer",
             }}
           >
-            Yopish
+            {getTranslation("close", language)}
           </button>
         </div>
       </div>
     </div>
   );
 };
+

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { GULI_LOGO_BASE64 } from "./guliLogoBase64";
 
-export const DEFAULT_LOGO = "/guli_logo.jpg";
+export const DEFAULT_LOGO = GULI_LOGO_BASE64;
 export const LOGO_STORAGE_KEY = "guli_custom_logo";
 
 export function getAppLogo(): string {
