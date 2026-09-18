@@ -20,11 +20,12 @@ module.exports = async function handler(req,res) {
     }
     const xml=`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">${urls.join("")}</urlset>`;
     res.setHeader("Content-Type","application/xml; charset=utf-8");
-    res.setHeader("Cache-Control","public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control","no-store, max-age=0, must-revalidate");
     return res.status(200).send(xml);
   } catch(error) {
     console.error("Dynamic sitemap error:",error);
     res.setHeader("Content-Type","application/xml; charset=utf-8");
+    res.setHeader("Cache-Control","no-store, max-age=0, must-revalidate");
     return res.status(503).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://gulii.uz/</loc></url></urlset>');
   }
 };
