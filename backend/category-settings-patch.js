@@ -5,6 +5,12 @@ const { createClient } = require("@supabase/supabase-js");
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 const originalGet = express.application.get;
 const originalPut = express.application.put;
+// Register routes through the unpatched Express Router API. Other runtime patches
+// may wrap express.application.get, and chaining through those wrappers can pass
+// the wrong arguments into route handlers (observed as res.json/res.status errors).
+function routeGet(app, path, ...handlers) {
+  return app.route(path).get(...handlers);
+}
 let installed = false;
 
 const CATEGORIES = [
@@ -95,7 +101,7 @@ function installRoutes(app) {
   if (installed) return;
   installed = true;
 
-  originalGet.call(app, "/api/categories", async (_req, res) => {
+  routeGet(app, "/api/categories", async (_req, res) => {
     try {
       const data = await readCategories();
       res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -106,7 +112,7 @@ function installRoutes(app) {
     }
   });
 
-  originalGet.call(app, "/api/admin/categories", requireAdmin, async (_req, res) => {
+  routeGet(app, "/api/admin/categories", requireAdmin, async (_req, res) => {
     try {
       const { data, error } = await supabase
         .from("categories")
@@ -151,7 +157,7 @@ function installRoutes(app) {
     }
   });
 
-  originalGet.call(app, "/api/settings/banner", async (_req, res) => {
+  routeGet(app, "/api/settings/banner", async (_req, res) => {
     try {
       const { data, error } = await supabase
         .from("category_settings")
@@ -167,7 +173,7 @@ function installRoutes(app) {
     }
   });
 
-  originalGet.call(app, "/api/banners", async (_req, res) => {
+  routeGet(app, "/api/banners", async (_req, res) => {
     try {
       const { data, error } = await supabase
         .from("category_settings")
