@@ -7,7 +7,6 @@ const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry.js");
 const { verifyAccessToken } = require("./guliCustomAuth.js");
-const { calculateOrder } = require("./orderSecurityPatch.js");
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
@@ -275,7 +274,26 @@ async function handleSecureOrderCreation(req, res) {
   try {
     let createdOrder = null;
 
-    if (primaryType === "telegram") {
+    // When a verified browser JWT exists, use the canonical user RPC even if
+    // Telegram initData is also present. This keeps auth_user_id + telegram_id
+    // ownership and the checkout transaction atomic in one database function.
+    if (browserUser) {
+      const { data: rpcData, error: rpcError } = await supabase.rpc("create_secure_order_for_user", {
+        p_order: orderPayload,
+        p_auth_user_id: browserUser.id,
+      });
+
+      if (rpcError) {
+        console.error("[OrderCreation] create_secure_order_for_user error:", rpcError);
+        const userFacing = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori/i.test(rpcError.message || "");
+        if (userFacing) {
+          return res.status(400).json({ success: false, message: rpcError.message });
+        }
+        throw rpcError;
+      }
+
+      createdOrder = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    } else {
       const { data: rpcData, error: rpcError } = await supabase.rpc("create_secure_order", {
         p_order: orderPayload,
         p_telegram_id: tgUser.id,
@@ -291,95 +309,6 @@ async function handleSecureOrderCreation(req, res) {
       }
 
       createdOrder = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-
-      // Link browser JWT user if present
-      if (browserUser && createdOrder?.id) {
-        await supabase
-          .from("orders")
-          .update({ auth_user_id: browserUser.id, updated_at: new Date().toISOString() })
-          .eq("id", createdOrder.id);
-        createdOrder.auth_user_id = browserUser.id;
-      }
-    } else {
-      // Browser authenticated user
-      const { data: rpcData, error: rpcError } = await supabase.rpc("create_secure_order_for_user", {
-        p_order: orderPayload,
-        p_auth_user_id: browserUser.id,
-      });
-
-      if (!rpcError && rpcData) {
-        createdOrder = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-      } else {
-        if (rpcError) {
-          console.warn("[OrderCreation] create_secure_order_for_user warning:", rpcError.message);
-          const userFacing = /telefon|mahsulot|omborda|promo|minimal buyurtma|sotuvda|miqdori/i.test(rpcError.message || "");
-          if (userFacing) {
-            return res.status(400).json({ success: false, message: rpcError.message });
-          }
-        }
-
-        // Safe atomic fallback using calculateOrder
-        const calculated = await calculateOrder(orderPayload);
-        const { data: insertedOrder, error: insertError } = await supabase
-          .from("orders")
-          .insert({
-            order_number: orderNumber,
-            auth_user_id: browserUser.id,
-            telegram_id: browserUser.telegram_id || null,
-            customer_name: customerName,
-            first_name: orderPayload.first_name || null,
-            last_name: orderPayload.last_name || null,
-            phone: orderPhone,
-            items: calculated.normalizedItems,
-            subtotal: calculated.subtotal,
-            delivery: calculated.delivery,
-            discount: calculated.discount,
-            cashback_used: calculated.cashback_used,
-            total: calculated.total,
-            address: address,
-            payment: payment,
-            status: INITIAL_STATUS,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .select("*")
-          .single();
-
-        if (insertError) throw insertError;
-        createdOrder = insertedOrder;
-
-        // Deduct inventory for normalized items
-        for (const it of calculated.normalizedItems) {
-          if (it.product_id && it.quantity > 0) {
-            const { data: curProd } = await supabase
-              .from("products")
-              .select("stock")
-              .eq("id", it.product_id)
-              .maybeSingle();
-            if (curProd && Number.isFinite(curProd.stock)) {
-              await supabase
-                .from("products")
-                .update({ stock: Math.max(0, curProd.stock - it.quantity), updated_at: new Date().toISOString() })
-                .eq("id", it.product_id);
-            }
-          }
-        }
-
-        // Increment promo usage if used
-        if (calculated.promo?.id) {
-          const { data: curPromo } = await supabase
-            .from("promo_codes")
-            .select("used_count")
-            .eq("id", calculated.promo.id)
-            .maybeSingle();
-          if (curPromo) {
-            await supabase
-              .from("promo_codes")
-              .update({ used_count: (curPromo.used_count || 0) + 1 })
-              .eq("id", calculated.promo.id);
-          }
-        }
-      }
     }
 
     if (!createdOrder?.id) {
