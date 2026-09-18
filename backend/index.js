@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const sharp = require("sharp");
 const { listProducts, getProduct } = require("./catalog");
 const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
 
@@ -265,10 +266,11 @@ app.get("/api/promos", async (req, res) => {
 
 app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
   try {
-    const { data, mimeType, extension, folder } = req.body || {};
+    const { data, mimeType, folder } = req.body || {};
     if (!data || typeof data !== "string") {
       return res.status(400).json({ success: false, message: "Rasm ma'lumoti topilmadi" });
     }
+
     const normalizedMime = String(mimeType || "").toLowerCase();
     if (!["image/webp", "image/avif", "image/jpeg", "image/png"].includes(normalizedMime)) {
       return res.status(400).json({ success: false, message: "Faqat WebP, AVIF, JPEG yoki PNG rasm yuklash mumkin" });
@@ -290,25 +292,37 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
       }
     }
 
-    const cleanExt = String(extension || (normalizedMime === "image/avif" ? "avif" : "webp"))
-      .replace(/[^a-z0-9]/gi, "")
-      .toLowerCase() || "webp";
-    if (!["webp", "avif", "jpg", "jpeg", "png"].includes(cleanExt)) {
-      return res.status(400).json({ success: false, message: "Rasm kengaytmasi qo‘llab-quvvatlanmaydi" });
-    }
-
     const cleanFolder = folder === "banners" ? "banners" : "products";
-    const path = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${cleanExt}`;
-    const buffer = Buffer.from(data, "base64");
-    const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
-      contentType: normalizedMime,
+    const baseName = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+    const inputBuffer = Buffer.from(data, "base64");
+
+    // Server-side normalization: every admin image becomes optimized WebP.
+    // This keeps storage and delivery predictable even when the client sends JPEG/PNG/AVIF.
+    const optimizedBuffer = await sharp(inputBuffer, { limitInputPixels: 40_000_000 })
+      .rotate()
+      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer();
+
+    const path = `${baseName}.webp`;
+    const { error } = await supabase.storage.from(bucket).upload(path, optimizedBuffer, {
+      contentType: "image/webp",
       cacheControl: "31536000",
       upsert: false,
     });
     if (error) throw error;
 
     const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
-    res.json({ success: true, data: { path, url: publicData.publicUrl, mimeType: normalizedMime } });
+    res.json({
+      success: true,
+      data: {
+        path,
+        url: publicData.publicUrl,
+        mimeType: "image/webp",
+        originalMimeType: normalizedMime,
+        optimized: true,
+      },
+    });
   } catch (error) {
     console.error("Admin image upload error:", error);
     res.status(500).json({ success: false, message: "Rasmni yuklashda xatolik" });
