@@ -208,13 +208,17 @@ function installRoutes(app) {
       for (let i = 0; i < banners.length; i++) {
         const b = banners[i];
         const slug = `banner_${b.id || i + 1}`;
+        const actionTarget = String(b.actionTarget || "").trim();
+        if (actionTarget && !/^https?:\/\//i.test(actionTarget)) {
+          return res.status(400).json({ success: false, message: "Banner yo‘naltirish URL manzili http:// yoki https:// bilan boshlanishi kerak" });
+        }
         const metaStr = JSON.stringify({
           title: b.title || "",
           subtitle: b.subtitle || "",
           badgeText: b.badgeText || "",
           ctaText: b.ctaText || "",
           actionType: b.actionType || "catalog",
-          actionTarget: b.actionTarget || ""
+          actionTarget
         });
         await supabase
           .from("category_settings")
