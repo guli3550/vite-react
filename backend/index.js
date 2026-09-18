@@ -296,31 +296,39 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
     const baseName = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
     const inputBuffer = Buffer.from(data, "base64");
 
-    // Server-side normalization: every admin image becomes optimized WebP.
-    // This keeps storage and delivery predictable even when the client sends JPEG/PNG/AVIF.
-    const optimizedBuffer = await sharp(inputBuffer, { limitInputPixels: 40_000_000 })
-      .rotate()
-      .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 82, effort: 4 })
-      .toBuffer();
+    // Server-side normalization: create responsive WebP derivatives once.
+    // Keep the 1600px URL as the backward-compatible primary image.
+    const widths = [400, 800, 1600];
+    const variants = {};
+    for (const width of widths) {
+      const optimizedBuffer = await sharp(inputBuffer, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width, height: width, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: width <= 400 ? 78 : 82, effort: 4 })
+        .toBuffer();
 
-    const path = `${baseName}.webp`;
-    const { error } = await supabase.storage.from(bucket).upload(path, optimizedBuffer, {
-      contentType: "image/webp",
-      cacheControl: "31536000",
-      upsert: false,
-    });
-    if (error) throw error;
+      const variantPath = `${baseName}-${width}.webp`;
+      const { error } = await supabase.storage.from(bucket).upload(variantPath, optimizedBuffer, {
+        contentType: "image/webp",
+        cacheControl: "31536000",
+        upsert: false,
+      });
+      if (error) throw error;
 
-    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
+      const { data: variantPublic } = supabase.storage.from(bucket).getPublicUrl(variantPath);
+      variants[width] = variantPublic.publicUrl;
+    }
+
     res.json({
       success: true,
       data: {
-        path,
-        url: publicData.publicUrl,
+        path: `${baseName}-1600.webp`,
+        url: variants[1600],
         mimeType: "image/webp",
         originalMimeType: normalizedMime,
         optimized: true,
+        variants,
+        srcSet: widths.map((width) => `${variants[width]} ${width}w`).join(", "),
       },
     });
   } catch (error) {
