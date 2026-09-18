@@ -2,7 +2,7 @@
 const crypto=require('crypto');const {createClient}=require('@supabase/supabase-js');const {runGeminiConversation}=require('./adminAiChatRuntime');
 const ADMIN_BOT=String(process.env.TELEGRAM_ADMIN_BOT_TOKEN||'').trim(),CUSTOMER_BOT=String(process.env.TELEGRAM_BOT_TOKEN||'').trim(),URL=String(process.env.SUPABASE_URL||'').trim(),KEY=String(process.env.SUPABASE_SECRET_KEY||'').trim();
 const db=URL&&KEY?createClient(URL,KEY,{auth:{persistSession:false,autoRefreshToken:false}}):null;
-const state=globalThis.__GULI_ADMIN_PROD_BOT__||{running:false,offset:0,sigs:new Map(),startedAt:new Date().toISOString(),aiHistory:new Map(),aiRate:new Map(),aiActive:new Set(),aiModel:new Map()};globalThis.__GULI_ADMIN_PROD_BOT__=state;
+const state=globalThis.__GULI_ADMIN_PROD_BOT__||{running:false,offset:0,sigs:new Map(),startedAt:new Date().toISOString(),aiHistory:new Map(),aiRate:new Map(),aiActive:new Set(),aiModel:new Map(),aiMessages:new Map()};globalThis.__GULI_ADMIN_PROD_BOT__=state;
 async function tg(method,body,token=ADMIN_BOT){if(!token)throw Error('Telegram bot token sozlanmagan');const r=await fetch(`https://api.telegram.org/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw Error(j?.description||`Telegram ${r.status}`);return j.result}
 async function admins(){const s=new Set(String(process.env.TELEGRAM_ADMIN_CHAT_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));if(db){const r=await db.from('telegram_admin_bot_chats').select('chat_id').eq('active',true);for(const x of r.data||[])s.add(String(x.chat_id))}return[...s]}
 const money=v=>`${Math.round(Number(v||0)).toLocaleString('uz-UZ')} so‘m`;
@@ -43,9 +43,29 @@ const AI_MODELS={
 };
 const DEFAULT_AI_MODEL='gemini-3.1-flash-lite';
 function aiModelName(chat){return AI_MODELS[state.aiModel.get(String(chat))] ? state.aiModel.get(String(chat)) : DEFAULT_AI_MODEL}
+function rememberAiMessage(chat,messageId){
+  const key=String(chat),list=Array.isArray(state.aiMessages.get(key))?state.aiMessages.get(key):[];
+  const id=Number(messageId||0); if(!id)return;
+  if(!list.includes(id))list.push(id);
+  state.aiMessages.set(key,list.slice(-200));
+}
+async function sendTrackedAiMessage(chat,text,extra={}){
+  const sent=await tg('sendMessage',{chat_id:chat,text,...extra});
+  rememberAiMessage(chat,sent?.message_id);
+  return sent;
+}
+async function deleteAiMessages(chat){
+  const key=String(chat),ids=Array.isArray(state.aiMessages.get(key))?state.aiMessages.get(key):[];
+  let deleted=0;
+  for(const id of ids){
+    try{await tg('deleteMessage',{chat_id:chat,message_id:id});deleted++}catch(e){}
+  }
+  state.aiMessages.delete(key);
+  return deleted;
+}
 async function sendAiModelMenu(chat){
   const selected=aiModelName(chat);
-  await tg('sendMessage',{chat_id:chat,text:'🤖 GULI AI — modelni tanlang:',reply_markup:{inline_keyboard:[
+  await sendTrackedAiMessage(chat,'🤖 GULI AI — modelni tanlang:',{reply_markup:{inline_keyboard:[
     [{text:(selected==='gemini-3.8-flash'?'✅ ':'')+'Gemini 3.8 Flash',callback_data:'guli_ai_model:gemini-3.8-flash'}],
     [{text:(selected==='gemini-3.1-flash-lite'?'✅ ':'')+'Gemini 3.1 Flash Lite',callback_data:'guli_ai_model:gemini-3.1-flash-lite'}],
     [{text:(selected==='gemini-3.5-flash'?'✅ ':'')+'Gemini 3.5 Flash',callback_data:'guli_ai_model:gemini-3.5-flash'}]
@@ -57,13 +77,14 @@ async function handleAdminAiMessage(m,ids){
   const key=String(chat);
   if(/^\/stopai(?:@\w+)?(?:\s+.*)?$/i.test(text)){
     state.aiActive.delete(key);
-    await tg('sendMessage',{chat_id:chat,text:'🛑 GULI AI suhbat yakunlandi. Qayta boshlash uchun /ai yuboring.'});
+    await sendTrackedAiMessage(chat,'🛑 GULI AI suhbat yakunlandi. Qayta boshlash uchun /ai yuboring.');
     return true;
   }
+  if(/^\/ai_delete(?:@\w+)?(?:\s+.*)?$/i.test(text)){const n=await deleteAiMessages(chat);await tg('sendMessage',{chat_id:chat,text:`🗑 GULI AI yozgan ${n} ta xabar o‘chirildi.`});return true}
   if(/^\/ai_model(?:@\w+)?(?:\s+.*)?$/i.test(text)){await sendAiModelMenu(chat);return true}
   if(/^\/ai_clear(?:@\w+)?(?:\s+.*)?$/i.test(text)){
     state.aiHistory.delete(key);
-    await tg('sendMessage',{chat_id:chat,text:'🧠 GULI AI suhbat konteksti tozalandi.'});
+    await sendTrackedAiMessage(chat,'🧠 GULI AI suhbat konteksti tozalandi.');
     return true;
   }
   const match=text.match(/^\/ai(?:@\w+)?(?:\s+([\s\S]*))?$/i);
@@ -71,7 +92,7 @@ async function handleAdminAiMessage(m,ids){
     state.aiActive.add(key);
     const prompt=String(match[1]||'').trim();
     if(!prompt){
-      await tg('sendMessage',{chat_id:chat,text:'🤖 GULI AI suhbat boshlandi. Endi oddiy xabar yuborishingiz mumkin. Yakunlash: /StopAi'});
+      await sendTrackedAiMessage(chat,'🤖 GULI AI suhbat boshlandi. Endi oddiy xabar yuborishingiz mumkin. Yakunlash: /StopAi');
       return true;
     }
     if(!aiRateAllowed(chat)){await tg('sendMessage',{chat_id:chat,text:'⏳ GULI AI uchun vaqtinchalik limitga yetdingiz. Birozdan keyin qayta urinib ko‘ring.'});return true}
@@ -90,7 +111,7 @@ async function runAdminAiPrompt(chat,prompt){
     const answer=await runGeminiConversation({modelName,userPrompt:prompt,history});
     const clean=aiRedact(answer);
     state.aiHistory.set(key,[...history,{sender:'user',text:prompt},{sender:'model',text:clean}].slice(-14));
-    for(const [i,chunk] of aiChunks(clean).entries())await tg('sendMessage',{chat_id:chat,text:(i===0?'🤖 GULI AI • '+AI_MODELS[modelName]+'\n\n':'')+chunk});
+    for(const [i,chunk] of aiChunks(clean).entries())await sendTrackedAiMessage(chat,(i===0?'🤖 GULI AI • '+AI_MODELS[modelName]+'\n\n':'')+chunk);
     console.log('[GULI admin AI] chat=%s ms=%s',chat,Date.now()-started);
   }catch(e){
     console.error('[GULI admin AI]',e?.message||e);
