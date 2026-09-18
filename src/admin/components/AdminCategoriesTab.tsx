@@ -39,7 +39,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
   const [liveProducts, setLiveProducts] = useState<any[]>([]);
 
   const categoriesWithLiveCounts = useMemo(() => {
-    const allProds = liveProducts;
+    let allProds = liveProducts;
     try {
       const savedProds = localStorage.getItem("guli_products");
       if (savedProds) {
