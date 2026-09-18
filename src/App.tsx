@@ -886,9 +886,7 @@ export default function App() {
     return saved === "false" ? false : true;
   });
 
-  const [promoBannerUrl, setPromoBannerUrl] = useState<string>(
-    "https://images.unsplash.com/photo-1596755389378-c31d21fd1273?auto=format&fit=crop&w=1100&q=78"
-  );
+  const [promoBannerUrl, setPromoBannerUrl] = useState<string>("");
 
   const [appLogo, setAppLogo] = useState<string>(() => {
     return localStorage.getItem("guli_custom_logo") || GULI_LOGO_BASE64;
@@ -1037,18 +1035,13 @@ export default function App() {
 
     const fetchBanner = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/settings/banner`);
-        if (res.ok) {
-          const text = await res.text();
-          let j: any = null;
-          try {
-            j = JSON.parse(text);
-          } catch {}
-          if (j && j.success && j.url) {
-            setPromoBannerUrl(j.url);
-          }
-        }
-      } catch {}
+        const res = await fetch(`${API_URL}/api/settings/banner`, { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        setPromoBannerUrl(json?.success === true && typeof json.url === "string" ? json.url : "");
+      } catch {
+        setPromoBannerUrl("");
+      }
     };
     fetchBanner();
 
@@ -4175,7 +4168,7 @@ export default function App() {
                     <div key={banner.id || idx} className="heroSlideItem">
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
-                        src={banner.imageUrl || promoBannerUrl}
+                        src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
                         onError={(e) => {
