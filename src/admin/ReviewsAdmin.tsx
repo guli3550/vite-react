@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getApiBaseUrl } from "../lib/apiOrigin";
 import "./ReviewsAdmin.css";
-import { DEFAULT_PRODUCTS } from "../utils/defaultProducts";
 
 export type AdminReview = {
   id: number | string;
@@ -39,7 +38,7 @@ const nameOf = (r: AdminReview) => {
 
 export default function ReviewsAdmin({ token }: { token: string }) {
   const [reviews, setReviews] = useState<AdminReview[]>([]);
-  const [products, setProducts] = useState<any[]>(DEFAULT_PRODUCTS);
+  const [products, setProducts] = useState<any[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | "approved" | "hidden" | "pinned">("all");
   const [rating, setRating] = useState("all");
@@ -65,7 +64,7 @@ export default function ReviewsAdmin({ token }: { token: string }) {
     try {
       const res = await fetch(`${API}/api/products`, { cache: "no-store" });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(json?.data) && json.data.length) setProducts(json.data);
+      if (res.ok && Array.isArray(json?.data)) setProducts(json.data);
     } catch { /* review moderation must still work without product enrichment */ }
   }, []);
 
