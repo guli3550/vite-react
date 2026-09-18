@@ -90,7 +90,7 @@ async function runAdminAiPrompt(chat,prompt){
     const answer=await runGeminiConversation({modelName,userPrompt:prompt,history});
     const clean=aiRedact(answer);
     state.aiHistory.set(key,[...history,{sender:'user',text:prompt},{sender:'model',text:clean}].slice(-14));
-    for(const [i,chunk] of aiChunks(clean).entries())await tg('sendMessage',{chat_id:chat,text:(i===0?'🤖 GULI AI • Gemini 3.1 Flash Lite\n\n':'')+chunk});
+    for(const [i,chunk] of aiChunks(clean).entries())await tg('sendMessage',{chat_id:chat,text:(i===0?'🤖 GULI AI • '+AI_MODELS[modelName]+'\n\n':'')+chunk});
     console.log('[GULI admin AI] chat=%s ms=%s',chat,Date.now()-started);
   }catch(e){
     console.error('[GULI admin AI]',e?.message||e);
