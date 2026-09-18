@@ -42,14 +42,14 @@ const toProduct = (row) => ({
       : undefined,
 });
 
-async function listProducts({ category, search, featured, limit = 100 } = {}) {
+async function listProducts({ category, search, featured, limit = 100, offset = 0 } = {}) {
   let query = supabase
     .from("products")
     .select("*")
     .eq("active", true)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false })
-    .limit(Math.min(Math.max(Number(limit) || 100, 1), 1000));
+    .range(Math.max(Number(offset) || 0, 0), Math.max(Number(offset) || 0, 0) + Math.min(Math.max(Number(limit) || 100, 1), 100) - 1);
 
   if (category && category !== "Barchasi") query = query.eq("category", category);
 
