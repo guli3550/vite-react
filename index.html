@@ -54,7 +54,10 @@
   </head>
   <body>
     <script>
-      window.__GULI_API_URL = window.__GULI_API_URL || "https://guli-gateway.parizodabaxtiyorov.workers.dev";
+      // Production API is same-origin. Vercel /api/* rewrites directly to the live Render backend.
+      // Keep the legacy global because several runtime bridges consume it, but never point
+      // customer production traffic at the retired/unreliable Cloudflare gateway.
+      window.__GULI_API_URL = window.__GULI_API_URL || "";
     </script>
     <div id="root"></div>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
