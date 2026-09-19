@@ -1253,7 +1253,7 @@ export default function AdminGuliChatTab({
             <ArrowLeft size={20} />
           </button>
           <div className="chatgpt-header-brand-logo">
-            <img src="/guli_logo.jpg" alt="Guli Logo" />
+            <img src="/guli-logo.webp" alt="Guli Logo" />
           </div>
           <div className="chatgpt-header-title-box">
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -1508,7 +1508,7 @@ export default function AdminGuliChatTab({
           <div className="guli-chat-empty-state">
             <div className="guli-chat-empty-logo">
               <img
-                src="/guli_logo.jpg"
+                src="/guli-logo.webp"
                 alt="Guli Premium"
                 className="guli-chat-brand-img"
               />
