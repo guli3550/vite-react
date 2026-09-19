@@ -122,7 +122,7 @@ export function AdminHeader({
           style={{ overflow: "hidden", padding: 0 }}
         >
           <img
-            src="/guli-logo-compact.svg"
+            src="/guli-logo.webp"
             alt="Guli"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
