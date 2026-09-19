@@ -75,6 +75,7 @@ declare global {
         initData?: string;
         version?: string;
         isVersionAtLeast?: (version: string) => boolean;
+        openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
         requestContact?: (callback: (ok: boolean) => void) => void;
         onEvent?: (event: string, callback: (data?: any) => void) => void;
         offEvent?: (event: string, callback: (data?: any) => void) => void;
@@ -936,7 +937,16 @@ export default function App() {
   };
   const openHeroBanner = (banner?: Banner) => {
     const target = String(banner?.actionTarget || "").trim();
-    if (target && (/^https?:\/\//i.test(target) || target.startsWith("/"))) {
+    if (target && /^https?:\/\//i.test(target)) {
+      const telegramWebApp = window.Telegram?.WebApp;
+      if (telegramWebApp?.openLink) {
+        telegramWebApp.openLink(target);
+      } else {
+        window.location.href = target;
+      }
+      return;
+    }
+    if (target.startsWith("/")) {
       window.location.href = target;
       return;
     }
