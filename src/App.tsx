@@ -1643,21 +1643,40 @@ export default function App() {
     try {
       const query = params.toString();
       const primaryUrl = `${API_URL}/api/products?${query}`.replace("? ", "?");
-      let r = await fetch(primaryUrl, {
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      });
+      let r: Response | null = null;
+      let lastError: unknown = null;
 
-      // Production resilience: if an edge/proxy returns 429 for the storefront
-      // catalog, immediately bypass that edge and read the same public catalog
-      // from the live Render origin. This endpoint is public and read-only.
-      if (r.status === 429 && API_URL !== LEGACY_RENDER_ORIGIN) {
-        r = await fetch(`${LEGACY_RENDER_ORIGIN}/api/products?${query}`, {
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
+      // Do not make a customer refresh the whole app because Render/Vercel had
+      // a transient cold-start/network failure. The catalog request itself is
+      // retried, then the live Render origin is used as a final read-only fallback.
+      const targets = [
+        primaryUrl,
+        API_URL !== LEGACY_RENDER_ORIGIN ? `${LEGACY_RENDER_ORIGIN}/api/products?${query}` : "",
+      ].filter(Boolean);
+
+      for (let attempt = 0; attempt < 3 && !r; attempt += 1) {
+        const target = targets[Math.min(attempt, targets.length - 1)];
+        try {
+          const candidate = await fetch(target, {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          });
+          if (candidate.ok) {
+            r = candidate;
+            break;
+          }
+          lastError = new Error(`Status: ${candidate.status}`);
+          if (![429, 500, 502, 503, 504].includes(candidate.status)) {
+            r = candidate;
+            break;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
       }
 
+      if (!r) throw (lastError instanceof Error ? lastError : new Error("Katalog serveri vaqtincha javob bermadi"));
       if (!r.ok) throw new Error(`Status: ${r.status}`);
 
       const j = await r.json();
