@@ -1222,6 +1222,22 @@ export default function App() {
     try { localStorage.setItem(orderStatesKey, JSON.stringify(nextStates)); } catch {}
   }, [orderNotificationsKey, orderStatesKey]);
 
+  const markOrderNotificationRead = useCallback((id: string) => {
+    setOrderNotifications((current) => {
+      const next = current.map((item) => item.id === id ? { ...item, read: true } : item);
+      try { localStorage.setItem(orderNotificationsKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [orderNotificationsKey]);
+
+  const markAllOrderNotificationsRead = useCallback(() => {
+    setOrderNotifications((current) => {
+      const next = current.map((item) => ({ ...item, read: true }));
+      try { localStorage.setItem(orderNotificationsKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [orderNotificationsKey]);
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
@@ -1464,14 +1480,6 @@ export default function App() {
         const chatMsgs = getStoredChatMessages(currentUserId);
         const chatIds = chatMsgs.map((m) => `chat-${m.id}`);
         const next = Array.from(new Set([...dismissed, ...chatIds]));
-        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
-      } catch {}
-    } else if (page === "orders") {
-      try {
-        const raw = localStorage.getItem("guli_dismissed_notifs");
-        const dismissed: string[] = raw ? JSON.parse(raw) : [];
-        const orderIds = (orders || []).map((o) => `order-${o.id}`);
-        const next = Array.from(new Set([...dismissed, ...orderIds]));
         localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
       } catch {}
     }
@@ -5201,8 +5209,10 @@ export default function App() {
         <NotificationModal
           language={language}
           unreadMessages={unreadMessages}
-          orders={orders}
+          orderNotifications={orderNotifications}
           userId={currentUserId}
+          onMarkOrderNotificationRead={markOrderNotificationRead}
+          onMarkAllOrderNotificationsRead={markAllOrderNotificationsRead}
           onClose={() => setIsNotificationsOpen(false)}
           onOpenChat={() => {
             setIsNotificationsOpen(false);
