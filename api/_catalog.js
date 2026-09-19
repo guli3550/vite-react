@@ -13,7 +13,7 @@ function getClient() {
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     process.env.VITE_SUPABASE_ANON_KEY ||
-    ""
+    DEFAULT_SUPABASE_PUBLISHABLE_KEY
   ).trim();
   if (!url || !key) throw new Error("Supabase catalog is not configured");
   cachedClient = createClient(url, key, {
