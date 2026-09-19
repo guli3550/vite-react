@@ -78,7 +78,7 @@ async function main() {
     const category = String(p.category || "").trim();
     const description = String(p.description || "").trim() ||
       `${name} — Guli Market onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
-    const mainImage = images[0] || `${SITE}/guli_logo.png`;
+    const mainImage = images[0] || `${SITE}/guli-logo.webp`;
     const price = Number(p.price || 0);
     const schema = {
       "@context": "https://schema.org",
