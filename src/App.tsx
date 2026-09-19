@@ -23,7 +23,7 @@ import {
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
-import { getApiBaseUrl, LEGACY_RENDER_ORIGIN } from "./lib/apiOrigin";
+import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
@@ -1649,21 +1649,12 @@ export default function App() {
       let r: Response | null = null;
       let lastError: unknown = null;
 
-      // Do not make a customer refresh the whole app because Render/Vercel had
-      // a transient cold-start/network failure. The catalog request itself is
-      // retried, then the live Render origin is used as a final read-only fallback.
-      const targets = [
-        primaryUrl,
-        API_URL !== LEGACY_RENDER_ORIGIN ? `${LEGACY_RENDER_ORIGIN}/api/products?${query}` : "",
-      ].filter(Boolean);
-
-      // Render may need several seconds to wake from an idle state. Keep the
-      // customer request alive long enough to recover automatically instead of
-      // surfacing "Failed to fetch" and requiring a manual refresh.
-      for (let attempt = 0; attempt < 8 && !r; attempt += 1) {
-        const target = targets[Math.min(attempt, targets.length - 1)];
+      // Customer catalog is served by Vercel -> Supabase.
+      // Render is deliberately NOT part of this read path, so a sleeping
+      // backend cannot block the first storefront load.
+      for (let attempt = 0; attempt < 3 && !r; attempt += 1) {
         try {
-          const candidate = await fetch(target, {
+          const candidate = await fetch(primaryUrl, {
             cache: "no-store",
             headers: { Accept: "application/json" },
           });
@@ -1679,8 +1670,8 @@ export default function App() {
         } catch (error) {
           lastError = error;
         }
-        if (attempt < 7) {
-          await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
         }
       }
 
