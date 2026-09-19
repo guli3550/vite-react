@@ -1641,10 +1641,23 @@ export default function App() {
     }
 
     try {
-      const r = await fetch(`${API_URL}/api/products?${params.toString()}`.replace("? ", "?"), {
+      const query = params.toString();
+      const primaryUrl = `${API_URL}/api/products?${query}`.replace("? ", "?");
+      let r = await fetch(primaryUrl, {
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
+
+      // Production resilience: if an edge/proxy returns 429 for the storefront
+      // catalog, immediately bypass that edge and read the same public catalog
+      // from the live Render origin. This endpoint is public and read-only.
+      if (r.status === 429 && API_URL !== LEGACY_RENDER_ORIGIN) {
+        r = await fetch(`${LEGACY_RENDER_ORIGIN}/api/products?${query}`, {
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+        });
+      }
+
       if (!r.ok) throw new Error(`Status: ${r.status}`);
 
       const j = await r.json();
