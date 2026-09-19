@@ -853,22 +853,24 @@ export default function App() {
       return [];
     }
   });
-  const initialOrderStateMap = useMemo(() => {
+  const orderStateRef = useRef<Record<string, string>>({});
+  const orderStateInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (orderStateInitializedRef.current) return;
     try {
       const raw = localStorage.getItem(orderStateStorageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") return parsed as Record<string, string>;
+        if (parsed && typeof parsed === "object") {
+          orderStateRef.current = parsed as Record<string, string>;
+          orderStateInitializedRef.current = true;
+          return;
+        }
       }
     } catch {}
-    const map: Record<string, string> = {};
-    orders.forEach((order) => {
-      map[String(order.order_number || order.id)] = getOrderStateKey(order);
-    });
-    return map;
+    // No prior snapshot: the first successful server load becomes the baseline.
   }, [orderStateStorageKey]);
-  const orderStateRef = useRef<Record<string, string>>(initialOrderStateMap);
-  const orderStateInitializedRef = useRef(Object.keys(initialOrderStateMap).length > 0);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<
