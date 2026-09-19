@@ -934,6 +934,17 @@ export default function App() {
       heroSuppressClickRef.current = false;
     }, 400);
   };
+  const openHeroBanner = (banner?: Banner) => {
+    const target = String(banner?.actionTarget || "").trim();
+    if (target && (/^https?:\/\//i.test(target) || target.startsWith("/"))) {
+      window.location.href = target;
+      return;
+    }
+    setSelectedCategory("Barchasi");
+    setSearch("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    go("catalog");
+  };
 
   const handleHeroTouchStart = (e: React.TouchEvent) => {
     e.stopPropagation();
@@ -980,6 +991,8 @@ export default function App() {
       } else if (heroDragOffset > 35 || (isQuickFlick && heroDragOffset > 0)) {
         setActiveBannerIdx((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
       }
+    } else if (Math.abs(heroDragOffset) < 12 && duration < 450) {
+      openHeroBanner(heroBanners[activeBannerIdx]);
     }
     setHeroDragOffset(0);
     isHorizontalHeroSwipe.current = null;
@@ -4239,21 +4252,12 @@ export default function App() {
                     banner.subtitle ||
                     "Uydagi har bir lahjangizni go‘zallashtiring";
                   const cta = banner.ctaText || "Xarid qilish";
-                  const bannerTarget = String(banner.actionTarget || "").trim();
                   const handleBannerClick = () => {
                     if (heroSuppressClickRef.current) {
                       heroSuppressClickRef.current = false;
                       return;
                     }
-                    // Admin-configured banner URLs take precedence over the catalog fallback.
-                    if (bannerTarget && (/^https?:\/\//i.test(bannerTarget) || bannerTarget.startsWith("/"))) {
-                      window.location.assign(bannerTarget);
-                      return;
-                    }
-                    setSelectedCategory("Barchasi");
-                    setSearch("");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                    go("catalog");
+                    openHeroBanner(banner);
                   };
 
                   return (
