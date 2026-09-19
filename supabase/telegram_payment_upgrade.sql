@@ -143,7 +143,7 @@ begin
   if order_no is null then order_no:='GULI-'||lpad((floor(random()*900000)+100000)::int::text,6,'0'); end if;
 
   insert into orders(order_number,telegram_id,username,first_name,phone,telegram_phone,items,subtotal,delivery,discount,total,address,payment,payment_status,status,promo_code,promo_discount_type,promo_discount_value,created_at,updated_at)
-  values(order_no,p_telegram_id,nullif(p_order->>'username',''),nullif(p_order->>'first_name',''),nullif(p_order->>'phone',''),telegram_phone,normalized,subtotal,delivery,discount,total,p_order->'address',payment_value,payment_status_value,coalesce(nullif(p_order->>'status',''),'Qabul qilindi'),nullif(p_order->>'promo_code',''),nullif(p_order->>'promo_discount_type',''),nullif(p_order->>'promo_discount_value','')::numeric,coalesce(nullif(p_order->>'created_at','')::timestamptz,now()),now())
+  values(order_no,p_telegram_id,nullif(p_order->>'username',''),nullif(p_order->>'first_name',''),nullif(p_order->>'phone',''),telegram_phone,normalized,subtotal,delivery,discount,total,p_order->'address',payment_value,payment_status_value,case when payment_value='card_manual' then '⏳ To‘lovni tasdiqlash kutilmoqda' else 'Qabul qilindi' end,nullif(p_order->>'promo_code',''),nullif(p_order->>'promo_discount_type',''),nullif(p_order->>'promo_discount_value','')::numeric,coalesce(nullif(p_order->>'created_at','')::timestamptz,now()),now())
   returning to_jsonb(orders.*) into existing;
 
   return existing;
