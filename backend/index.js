@@ -920,6 +920,34 @@ app.get("/api/admin/contributions", requireAdmin, async (req, res) => {
 
 
 // --- CHAT ENDPOINTS ---
+
+// Customer bot bridge for messages/status notices created from the admin Web App.
+// The DB insert remains the source of truth; Telegram delivery is best-effort and
+// never makes the customer Web App request fail.
+async function sendCustomerBotMessage(telegramId, text) {
+  const bot = cleanEnv(process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN);
+  const chatId = String(telegramId || "").trim();
+  const message = String(text || "").trim();
+  if (!bot || !/^\\d+$/.test(chatId) || !message) return;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: Number(chatId),
+        text: message,
+        disable_web_page_preview: true,
+      }),
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok || !json?.ok) {
+      console.warn("[Customer bot bridge] send failed:", json?.description || `Telegram ${response.status}`);
+    }
+  } catch (error) {
+    console.warn("[Customer bot bridge] send error:", error.message);
+  }
+}
+
 app.get("/api/chat/messages/:telegram_id", async (req, res) => {
   try {
     const { telegram_id } = req.params;
@@ -947,6 +975,14 @@ app.post("/api/chat/messages", async (req, res) => {
       .select("*")
       .single();
     if (error) throw error;
+
+    // Admin Web App -> customer Telegram bot.
+    // Only admin-originated chat messages are forwarded; customer messages are
+    // already handled by the Telegram webhook bridge and must not echo back.
+    if (String(sender).toLowerCase() === "admin") {
+      await sendCustomerBotMessage(telegram_id, text);
+    }
+
     res.status(201).json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: "Xabar yuborishda xatolik" });
