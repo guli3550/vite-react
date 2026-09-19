@@ -490,7 +490,7 @@ export function OnlineChatView({
             <img
               src={GULI_LOGO_BASE64}
               alt="GULI Lingerie"
-              style={{ width: "38px", height: "38px", minWidth: "38px", minHeight: "38px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "contain", display: "block" }}
+              style={{ width: "44px", height: "44px", minWidth: "44px", minHeight: "44px", aspectRatio: "1 / 1", borderRadius: "50%", objectFit: "contain", display: "block" }}
             />
           </div>
 
