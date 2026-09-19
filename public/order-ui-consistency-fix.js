@@ -23,9 +23,15 @@
     if (!page || !paymentButton || !total) return;
 
     const parent = paymentButton.parentElement;
-    if (!parent) return;
+    if (!parent || paymentButton.parentNode !== parent || total.parentNode !== parent) return;
     if (total.nextElementSibling !== paymentButton) {
-      parent.insertBefore(total, paymentButton);
+      try {
+        parent.insertBefore(total, paymentButton);
+      } catch (error) {
+        // React can replace this subtree between the checks above and the DOM write.
+        // Never let a cosmetic DOM enhancer break checkout.
+        if (error instanceof DOMException) return;
+      }
     }
   }
 
