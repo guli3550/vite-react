@@ -497,15 +497,14 @@ app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => {
   try {
     const status = ADMIN_STATUSES.includes(String(req.body?.status)) ? String(req.body.status) : "Qabul qilindi";
     const nowIso = new Date().toISOString();
+    // Order workflow status is independent from payment decision.
+    // Payment verification/rejection is handled only by /payment-decision RPC.
+    // Do not write status_updated_at here: older production orders schemas do
+    // not require that column; updated_at is the canonical timestamp.
     const updatePayload = {
       status,
       updated_at: nowIso,
-      status_updated_at: nowIso,
     };
-    if (status === "Qabul qilindi") {
-      updatePayload.payment_status = "verified";
-      updatePayload.payment_verified_at = nowIso;
-    }
 
     let { data, error } = await supabase
       .from("orders")
