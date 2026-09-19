@@ -64,7 +64,7 @@ begin
   total := greatest(0, subtotal + delivery - discount);
   if order_no is null then order_no := 'GULI-' || lpad((floor(random()*900000)+100000)::int::text, 6, '0'); end if;
   insert into orders(order_number,telegram_id,username,first_name,phone,telegram_phone,items,subtotal,delivery,discount,total,address,payment,status,created_at,updated_at)
-  values(order_no,p_telegram_id,nullif(p_order->>'username',''),nullif(p_order->>'first_name',''),nullif(p_order->>'phone',''),telegram_phone,normalized,subtotal,delivery,discount,total,p_order->'address',coalesce(nullif(p_order->>'payment',''),'cash'),coalesce(nullif(p_order->>'status',''),'Qabul qilindi'),coalesce(nullif(p_order->>'created_at','')::timestamptz,now()),now())
+  values(order_no,p_telegram_id,nullif(p_order->>'username',''),nullif(p_order->>'first_name',''),nullif(p_order->>'phone',''),telegram_phone,normalized,subtotal,delivery,discount,total,p_order->'address',coalesce(nullif(p_order->>'payment',''),'cash'),case when lower(coalesce(p_order->>'payment','cash')) like '%card%' or lower(coalesce(p_order->>'payment','cash')) like '%karta%' then '⏳ To‘lovni tasdiqlash kutilmoqda' else 'Qabul qilindi' end,coalesce(nullif(p_order->>'created_at','')::timestamptz,now()),now())
   returning to_jsonb(orders.*) into existing;
   return existing;
 exception when unique_violation then
