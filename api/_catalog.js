@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 
 const DEFAULT_SUPABASE_URL = "https://qttwufydrvdwmhxcpgjb.supabase.co";
+// Publishable key is intentionally safe for public/client use; RLS remains the security boundary.
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_L0uxrZ6QTpHQUyWVDqfRdg_DTLXuqHX";
 let cachedClient = null;
 
 function getClient() {
