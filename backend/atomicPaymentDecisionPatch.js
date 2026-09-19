@@ -1,6 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAgentAdmin } = require("./agentCorePatch");
+const { notifyCustomerPayment } = require("./customerNotificationService");
 
 function getSupabaseClient() {
   const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/^['"]|['"]$/g, "");
@@ -49,6 +50,12 @@ install("post", "/api/admin/orders/:id/payment-decision", requireAgentAdmin, asy
       const status = /topilmadi/i.test(message) ? 404 : /talab qilinadi|manual karta|o‘zgartirib|yuklangan|qayta yuklanishi/i.test(message) ? 409 : 500;
       return res.status(status).json({ success: false, message });
     }
+
+    // Payment decision is persisted first; Telegram delivery is best-effort and deduplicated.
+    notifyCustomerPayment(data).catch((e) => {
+      console.warn("[Customer payment notification]", e?.message || e);
+    });
+
     return res.json({ success: true, message: paymentStatus === "verified" ? "Chek tasdiqlandi va buyurtma qabul qilindi" : "Chek rad etildi va buyurtma bekor qilindi", data });
   } catch (error) {
     console.error("Atomic payment decision error:", error);
