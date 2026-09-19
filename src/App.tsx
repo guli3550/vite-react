@@ -853,8 +853,22 @@ export default function App() {
       return [];
     }
   });
-  const orderStateRef = useRef<Record<string, string>>({});
-  const orderStateInitializedRef = useRef(false);
+  const initialOrderStateMap = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(orderStateStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") return parsed as Record<string, string>;
+      }
+    } catch {}
+    const map: Record<string, string> = {};
+    orders.forEach((order) => {
+      map[String(order.order_number || order.id)] = getOrderStateKey(order);
+    });
+    return map;
+  }, [orderStateStorageKey]);
+  const orderStateRef = useRef<Record<string, string>>(initialOrderStateMap);
+  const orderStateInitializedRef = useRef(Object.keys(initialOrderStateMap).length > 0);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<
@@ -2074,10 +2088,8 @@ export default function App() {
                 statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
               }));
               setOrders(mapped);
-              try {
-                localStorage.setItem("orders", JSON.stringify(mapped));
-                localStorage.setItem("guli_orders", JSON.stringify(mapped));
-              } catch {}
+              persistOrdersSafely(mapped);
+              recordOrderStateChanges(mapped);
               return mapped;
             }
           }
@@ -2088,7 +2100,7 @@ export default function App() {
         if (!silent) setOrdersLoading(false);
       }
     },
-    [telegramUser?.id, authUser?.phone],
+    [telegramUser?.id, authUser?.phone, recordOrderStateChanges],
   );
 
   useEffect(() => {
