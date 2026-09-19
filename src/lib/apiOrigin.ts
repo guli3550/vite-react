@@ -22,7 +22,8 @@ export function getApiBaseUrl(): string {
     const isGuliProductionHost =
       host === "gulii.uz" ||
       host === "www.gulii.uz" ||
-      host === "vite-react-seven-inky-10.vercel.app";
+      host === "vite-react-seven-inky-10.vercel.app" ||
+      host.endsWith(".vercel.app");
     if (isGuliProductionHost) return "";
   }
 
