@@ -163,6 +163,23 @@ type Page =
 const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
+const persistOrdersSafely = (orders: Order[]) => {
+  // Receipts can be large data URLs. They must never be persisted in localStorage
+  // together with the complete order list; that can exhaust the Web Storage quota
+  // and crash the React app during checkout/realtime updates.
+  const compact = orders.map((order) => {
+    const { receipt_url: _receiptUrl, ...rest } = order;
+    return rest;
+  });
+  try {
+    localStorage.setItem("orders", JSON.stringify(compact));
+    localStorage.removeItem("guli_orders");
+  } catch (error) {
+    // Storage is only an offline cache. Never let quota exhaustion break the app.
+    console.warn("[Guli storage] orders cache skipped:", error);
+  }
+};
+
 const uzbekistanRegionsData: Record<string, string[]> = {
   "Toshkent sh.": [
     "Chilonzor tumani",
