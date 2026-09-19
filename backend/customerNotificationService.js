@@ -116,4 +116,32 @@ async function notifyCustomerPayment(order) {
   }
 }
 
-module.exports = { notifyCustomerOrderStatus, notifyCustomerPayment };
+async function notifyCustomerAdminChat(message) {
+  const telegramId = Number(message?.telegram_id || 0);
+  const textBody = String(message?.text || "").trim();
+  const messageId = String(message?.id || "").trim();
+  if (!telegramId || !textBody) return { sent: false, reason: "not_applicable" };
+
+  const key = `customer-admin-chat:${messageId || telegramId + ":" + textBody + ":" + String(message?.created_at || "")}`;
+  const c = await claim(key, "customer_admin_chat_notice", null);
+  if (!c.claimed) return { sent: false, reason: "duplicate" };
+
+  const text = [
+    "💬 GULI — ADMIN XABARI",
+    "",
+    textBody,
+    "",
+    "GULI Web App → Online chat bo‘limida suhbatni davom ettirishingiz mumkin.",
+  ].join("\n");
+
+  try {
+    const result = await sendTelegram(telegramId, text);
+    if (c.durable) await markSent(c.eventKey);
+    return result;
+  } catch (e) {
+    if (c.durable) await release(c.eventKey);
+    throw e;
+  }
+}
+
+module.exports = { notifyCustomerOrderStatus, notifyCustomerPayment, notifyCustomerAdminChat };
