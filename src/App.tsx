@@ -149,30 +149,6 @@ export type Order = {
   updatedAt?: string;
   statusUpdatedAt?: string;
 };
-export type OrderNotification = {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  previousStatus?: string;
-  status: string;
-  previousPaymentStatus?: string;
-  paymentStatus?: string;
-  timestamp: string;
-  read: boolean;
-};
-
-const getOrderStateKey = (order: Partial<Order>) =>
-  JSON.stringify({
-    status: String(order.status || ""),
-    payment_status: String(order.payment_status || "pending"),
-  });
-
-const getOrderNotificationStorageKey = (userId: string | number) =>
-  `guli_order_notifications_v2_${String(userId)}`;
-
-const getOrderStateStorageKey = (userId: string | number) =>
-  `guli_order_state_v2_${String(userId)}`;
-
 type Page =
   | "home"
   | "catalog"
@@ -842,35 +818,6 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>(() =>
     readStorage("orders", []),
   );
-  const orderNotificationStorageKey = getOrderNotificationStorageKey(currentUserId);
-  const orderStateStorageKey = getOrderStateStorageKey(currentUserId);
-  const [orderNotifications, setOrderNotifications] = useState<OrderNotification[]>(() => {
-    try {
-      const raw = localStorage.getItem(orderNotificationStorageKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
-  const orderStateRef = useRef<Record<string, string>>({});
-  const orderStateInitializedRef = useRef(false);
-
-  useEffect(() => {
-    if (orderStateInitializedRef.current) return;
-    try {
-      const raw = localStorage.getItem(orderStateStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          orderStateRef.current = parsed as Record<string, string>;
-          orderStateInitializedRef.current = true;
-          return;
-        }
-      }
-    } catch {}
-    // No prior snapshot: the first successful server load becomes the baseline.
-  }, [orderStateStorageKey]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<
@@ -1189,86 +1136,21 @@ export default function App() {
     getUnreadMessages(currentUserId),
   );
 
-  // Only actual state changes create order notifications.
-  const unreadOrderNotificationCount = orderNotifications.filter((n) => !n.read).length;
+  // Notification bell must include both unread admin chat messages and
+  // actionable order/payment notifications shown by NotificationModal.
+  const unreadOrderNotificationCount = useMemo(() => {
+    return orders.reduce((count, ord) => {
+      const receiptCheck = checkReceiptDelayed(ord.createdAt, ord.status, ord.receipt_url);
+      const activeStatus =
+        ord.status === "Qabul qilindi" ||
+        ord.status === "Tayyorlanmoqda" ||
+        ord.status === "Yo‘lda";
+      return count + (activeStatus || (receiptCheck.isPending && receiptCheck.isDelayed) ? 1 : 0);
+    }, 0);
+  }, [orders]);
+
   const totalUnreadNotificationCount =
     unreadMessages.length + unreadOrderNotificationCount;
-
-  const persistOrderNotifications = useCallback((items: OrderNotification[]) => {
-    try {
-      localStorage.setItem(orderNotificationStorageKey, JSON.stringify(items.slice(0, 100)));
-    } catch {
-      // Notifications are non-critical UI state.
-    }
-  }, [orderNotificationStorageKey]);
-
-  const recordOrderStateChanges = useCallback((nextOrders: Order[]) => {
-    const nextMap: Record<string, string> = {};
-    nextOrders.forEach((order) => {
-      const key = String(order.order_number || order.id);
-      nextMap[key] = getOrderStateKey(order);
-    });
-
-    const previousMap = orderStateRef.current;
-    const isBaseline = !orderStateInitializedRef.current;
-
-    if (!isBaseline) {
-      const changes: OrderNotification[] = [];
-      nextOrders.forEach((order) => {
-        const key = String(order.order_number || order.id);
-        const nextState = nextMap[key];
-        const previousState = previousMap[key];
-        if (previousState && previousState !== nextState) {
-          let prev: any = {};
-          let next: any = {};
-          try { prev = JSON.parse(previousState); } catch {}
-          try { next = JSON.parse(nextState); } catch {}
-          const notificationId =
-            `order-state-${key}-${next.status}-${next.payment_status}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-          changes.push({
-            id: notificationId,
-            orderId: String(order.id),
-            orderNumber: String(order.order_number || order.id),
-            previousStatus: prev.status || undefined,
-            status: next.status || "",
-            previousPaymentStatus: prev.payment_status || undefined,
-            paymentStatus: next.payment_status || undefined,
-            timestamp: order.updatedAt || order.statusUpdatedAt || new Date().toISOString(),
-            read: false,
-          });
-        }
-      });
-      if (changes.length) {
-        setOrderNotifications((current) => {
-          const next = [...changes, ...current].slice(0, 100);
-          persistOrderNotifications(next);
-          return next;
-        });
-      }
-    }
-
-    orderStateRef.current = nextMap;
-    orderStateInitializedRef.current = true;
-    try {
-      localStorage.setItem(orderStateStorageKey, JSON.stringify(nextMap));
-    } catch {}
-  }, [orderStateStorageKey, persistOrderNotifications]);
-
-  const markOrderNotificationRead = useCallback((id: string) => {
-    setOrderNotifications((current) => {
-      const next = current.map((n) => n.id === id ? { ...n, read: true } : n);
-      persistOrderNotifications(next);
-      return next;
-    });
-  }, [persistOrderNotifications]);
-
-  const markAllOrderNotificationsRead = useCallback(() => {
-    setOrderNotifications((current) => {
-      const next = current.map((n) => ({ ...n, read: true }));
-      persistOrderNotifications(next);
-      return next;
-    });
-  }, [persistOrderNotifications]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -1500,6 +1382,14 @@ export default function App() {
         const chatMsgs = getStoredChatMessages(currentUserId);
         const chatIds = chatMsgs.map((m) => `chat-${m.id}`);
         const next = Array.from(new Set([...dismissed, ...chatIds]));
+        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
+      } catch {}
+    } else if (page === "orders") {
+      try {
+        const raw = localStorage.getItem("guli_dismissed_notifs");
+        const dismissed: string[] = raw ? JSON.parse(raw) : [];
+        const orderIds = (orders || []).map((o) => `order-${o.id}`);
+        const next = Array.from(new Set([...dismissed, ...orderIds]));
         localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
       } catch {}
     }
@@ -2027,8 +1917,10 @@ export default function App() {
             const tb = new Date(b.createdAt || 0).getTime();
             return tb - ta;
           });
-          persistOrdersSafely(merged);
-          recordOrderStateChanges(merged);
+          try {
+            localStorage.setItem("orders", JSON.stringify(merged));
+            localStorage.setItem("guli_orders", JSON.stringify(merged));
+          } catch {}
           return merged;
         });
         return list;
@@ -2090,8 +1982,10 @@ export default function App() {
                 statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
               }));
               setOrders(mapped);
-              persistOrdersSafely(mapped);
-              recordOrderStateChanges(mapped);
+              try {
+                localStorage.setItem("orders", JSON.stringify(mapped));
+                localStorage.setItem("guli_orders", JSON.stringify(mapped));
+              } catch {}
               return mapped;
             }
           }
@@ -2102,7 +1996,7 @@ export default function App() {
         if (!silent) setOrdersLoading(false);
       }
     },
-    [telegramUser?.id, authUser?.phone, recordOrderStateChanges],
+    [telegramUser?.id, authUser?.phone],
   );
 
   useEffect(() => {
@@ -2223,8 +2117,10 @@ export default function App() {
                 });
 
                 if (matched) {
-                  persistOrdersSafely(updated);
-                  recordOrderStateChanges(updated);
+                  try {
+                    localStorage.setItem("orders", JSON.stringify(updated));
+                    localStorage.setItem("guli_orders", JSON.stringify(updated));
+                  } catch {}
                 }
                 return updated;
               });
@@ -5227,10 +5123,8 @@ export default function App() {
         <NotificationModal
           language={language}
           unreadMessages={unreadMessages}
-          orderNotifications={orderNotifications}
+          orders={orders}
           userId={currentUserId}
-          onMarkOrderNotificationRead={markOrderNotificationRead}
-          onMarkAllOrderNotificationsRead={markAllOrderNotificationsRead}
           onClose={() => setIsNotificationsOpen(false)}
           onOpenChat={() => {
             setIsNotificationsOpen(false);
