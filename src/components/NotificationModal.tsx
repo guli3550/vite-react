@@ -146,8 +146,14 @@ export function NotificationModal({
         ord.status === "Tayyorlanmoqda" ||
         ord.status === "Yo‘lda";
 
+      const orderStatusKey = String(ord.status || "Jarayonda").trim().replace(/\s+/g, "_");
+      const paymentStatusKey = String(ord.payment_status || "pending").trim().replace(/\s+/g, "_");
+
+      // The notification identity must change when the order/payment state changes.
+      // Otherwise dismissing one old notification permanently hides all later
+      // status updates for the same order.
       list.push({
-        id: `order-${ord.id}`,
+        id: `order-${ord.id}-${orderStatusKey}-${paymentStatusKey}`,
         rawId: ord.id,
         category: "orders",
         title: `Buyurtma #${ord.id} • ${ord.status || "Jarayonda"}`,
