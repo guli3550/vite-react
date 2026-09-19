@@ -192,7 +192,7 @@ export function NotificationModal({
       const tB = new Date(b.timestamp).getTime();
       return tB - tA;
     });
-  }, [chatMessages, orders, language, dismissedIds, t]);
+  }, [chatMessages, orderNotifications, language, dismissedIds, t]);
 
   // Counts per category
   const counts = useMemo(() => {
