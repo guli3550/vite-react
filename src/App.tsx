@@ -4302,7 +4302,7 @@ export default function App() {
               className="brandIcon guli-brand-circle-logo"
               style={{
                 width: "52px",
-                height: "42px",
+                height: "52px",
                 minWidth: "42px",
                 minHeight: "42px",
                 maxWidth: "42px",
