@@ -1212,6 +1212,7 @@ export default function App() {
         setOrderNotifications((existing) => {
           const updated = [...changes, ...existing].slice(0, 100);
           try { localStorage.setItem(orderNotificationsKey, JSON.stringify(updated)); } catch {}
+          window.dispatchEvent(new Event("guli_order_notifications_updated"));
           return updated;
         });
       }
@@ -1238,6 +1239,18 @@ export default function App() {
       }
     } catch {}
   }, [orderStatesKey]);
+
+  useEffect(() => {
+    const syncOrderNotificationState = () => {
+      try {
+        const raw = localStorage.getItem(orderNotificationsKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        setOrderNotifications(Array.isArray(parsed) ? parsed : []);
+      } catch {}
+    };
+    window.addEventListener("guli_order_notifications_updated", syncOrderNotificationState);
+    return () => window.removeEventListener("guli_order_notifications_updated", syncOrderNotificationState);
+  }, [orderNotificationsKey]);
 
   // Initialize platform responsive environment
   useEffect(() => {
