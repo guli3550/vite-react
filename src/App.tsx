@@ -1465,7 +1465,7 @@ export default function App() {
     localStorage.setItem("wishlist", JSON.stringify(wishlist));
   }, [wishlist]);
   useEffect(() => {
-    localStorage.setItem("orders", JSON.stringify(orders));
+    persistOrdersSafely(orders);
   }, [orders]);
   useEffect(() => {
     localStorage.setItem("guli_phone", phone);
@@ -1650,10 +1650,7 @@ export default function App() {
               }
             : o
         );
-        try {
-          localStorage.setItem("orders", JSON.stringify(updated));
-          localStorage.setItem("guli_orders", JSON.stringify(updated));
-        } catch {}
+        persistOrdersSafely(updated);
         return updated;
       });
 
