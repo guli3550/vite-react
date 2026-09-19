@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       .filter(Boolean)
       .filter((v, i, a) => a.indexOf(v) === i)
       .slice(0, 10);
-    const mainImage = images[0] || `${SITE}/guli_logo.png`;
+    const mainImage = images[0] || `${SITE}/guli-logo.webp`;
     const productUrl = `${SITE}/product/${encodeURIComponent(ref)}/`;
     const appUrl = `${SITE}/?product=${encodeURIComponent(ref)}`;
     const price = Number(p.price || 0);
@@ -63,10 +63,7 @@ export default async function handler(req, res) {
     };
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader(
-      "Cache-Control",
-      "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
-    );
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
 
     return res.status(200).send(`<!doctype html>
 <html lang="uz"><head>
@@ -75,6 +72,7 @@ export default async function handler(req, res) {
 <meta name="description" content="${esc(description.slice(0, 300))}">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <link rel="canonical" href="${esc(productUrl)}">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
 <meta property="og:site_name" content="Guli Market"><meta property="og:title" content="${esc(name)} | Guli Market">
 <meta property="og:description" content="${esc(description.slice(0, 300))}"><meta property="og:type" content="product">
 <meta property="og:url" content="${esc(productUrl)}"><meta property="og:image" content="${esc(mainImage)}">
