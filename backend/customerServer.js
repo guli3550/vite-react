@@ -65,7 +65,7 @@ app.use("/api/telegram/webhook", guliRateLimit("telegram-webhook", 120, 60 * 100
 
 // The allowlist is declared once, before the generated source registers CORS.
 const corsPrelude = `
-const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [process.env.VERCEL_APP_URL, process.env.MINI_APP_URL, "https://vite-react-seven-inky-10.vercel.app", "https://vite-react-guli3550.vercel.app"].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
+const GULI_CORS_ORIGINS = String(process.env.CORS_ORIGINS || [process.env.VERCEL_APP_URL, process.env.MINI_APP_URL, "https://gulii.uz", "https://www.gulii.uz", "https://vite-react-seven-inky-10.vercel.app", "https://vite-react-guli3550.vercel.app"].filter(Boolean).join(",")).split(",").map((v) => String(v).trim().replace(/\\/$/, "")).filter(Boolean);
 const GULI_CORS_SET = new Set(GULI_CORS_ORIGINS);
 `;
 source = source.replace(
