@@ -1119,6 +1119,22 @@ export default function App() {
     getUnreadMessages(currentUserId),
   );
 
+  // Notification bell must include both unread admin chat messages and
+  // actionable order/payment notifications shown by NotificationModal.
+  const unreadOrderNotificationCount = useMemo(() => {
+    return orders.reduce((count, ord) => {
+      const receiptCheck = checkReceiptDelayed(ord.createdAt, ord.status, ord.receipt_url);
+      const activeStatus =
+        ord.status === "Qabul qilindi" ||
+        ord.status === "Tayyorlanmoqda" ||
+        ord.status === "Yo‘lda";
+      return count + (activeStatus || (receiptCheck.isPending && receiptCheck.isDelayed) ? 1 : 0);
+    }, 0);
+  }, [orders]);
+
+  const totalUnreadNotificationCount =
+    unreadMessages.length + unreadOrderNotificationCount;
+
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
@@ -2001,11 +2017,41 @@ export default function App() {
 
   useEffect(() => {
     loadOrders(false).catch(() => {});
-    
-    // Fallback polling mechanism (every 20s as resilient backup)
+
+    const handleServerOrderSync = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const incoming = Array.isArray(detail?.orders) ? detail.orders : [];
+      if (!incoming.length) return;
+      setOrders((prev) => {
+        const map = new Map(prev.map((o) => [String(o.order_number || o.id), o]));
+        for (const row of incoming) {
+          const key = String(row.order_number || row.id || "");
+          if (!key) continue;
+          const old = map.get(key);
+          map.set(key, {
+            ...(old || {}),
+            ...row,
+            id: key,
+            order_number: row.order_number || key,
+            payment_status: row.payment_status || old?.payment_status || "pending",
+            status: row.status || old?.status || "⏳ Buyurtma kutilmoqda",
+          } as Order);
+        }
+        const next = Array.from(map.values());
+        try {
+          localStorage.setItem("orders", JSON.stringify(next));
+          localStorage.setItem("guli_orders", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    };
+
+    window.addEventListener("guli_orders_server_sync", handleServerOrderSync);
+
+    // Fallback polling mechanism (every 5s as a resilient backup).
     const fallbackInterval = setInterval(() => {
       loadOrders(true).catch(() => {});
-    }, 20000);
+    }, 5000);
     
     // Supabase Realtime synchronization
     let activeChannel: any = null;
@@ -2079,6 +2125,7 @@ export default function App() {
     return () => {
       isSubscribed = false;
       clearInterval(fallbackInterval);
+      window.removeEventListener("guli_orders_server_sync", handleServerOrderSync);
       if (activeChannel) {
         const sb = getSupabase();
         if (sb) {
@@ -4214,9 +4261,9 @@ export default function App() {
             title={t("notifications")}
           >
             <span className="bellIconSpan">🔔</span>
-            {unreadMessages.length > 0 ? (
+            {totalUnreadNotificationCount > 0 ? (
               <>
-                <span className="notifBadge">{unreadMessages.length}</span>
+                <span className="notifBadge">{totalUnreadNotificationCount}</span>
                 <span className="bellPulse" />
               </>
             ) : null}
