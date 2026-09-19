@@ -127,7 +127,7 @@ async function notifyCustomerAdminChat(message) {
   if (!c.claimed) return { sent: false, reason: "duplicate" };
 
   const text = [
-    "💬 GULI — ADMIN XABARI",
+    "💬 Guli Market — ADMIN XABARI",
     "",
     textBody,
     "",
