@@ -6,13 +6,26 @@ import {
   markSingleMessageAsRead,
   getStoredChatMessages,
 } from "../utils/chatSync";
-import { checkReceiptDelayed } from "../utils/delivery";
+
+export type OrderNotificationItem = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  previousStatus?: string;
+  status: string;
+  previousPaymentStatus?: string;
+  paymentStatus?: string;
+  timestamp: string;
+  read: boolean;
+};
 
 type NotificationModalProps = {
   language: Language;
   unreadMessages: ChatMessage[];
-  orders?: any[];
+  orderNotifications?: OrderNotificationItem[];
   userId?: string | number;
+  onMarkOrderNotificationRead?: (id: string) => void;
+  onMarkAllOrderNotificationsRead?: () => void;
   onClose: () => void;
   onOpenChat: () => void;
   onOpenOrders: () => void;
@@ -23,8 +36,10 @@ type NotifCategory = "all" | "messages" | "orders";
 export function NotificationModal({
   language,
   unreadMessages,
-  orders = [],
+  orderNotifications = [],
   userId,
+  onMarkOrderNotificationRead,
+  onMarkAllOrderNotificationsRead,
   onClose,
   onOpenChat,
   onOpenOrders,
@@ -121,50 +136,47 @@ export function NotificationModal({
       });
     });
 
-    // 2. Orders updates
-    orders.forEach((ord) => {
-      const receiptCheck = checkReceiptDelayed(ord.createdAt, ord.status, ord.receipt_url);
-      if (receiptCheck.isPending && receiptCheck.isDelayed) {
-        list.push({
-          id: `order-delay-${ord.id}`,
-          rawId: `delay-${ord.id}`,
-          category: "orders",
-          title: `Buyurtma #${ord.id} • To‘lov kutilmoqda`,
-          text: "To‘lovingiz admin tomonidan tasdiqlash kutilmoqda, tez orada tasdiqlanadi kuting yoki qo‘llab quvvatlash markazi bilan bog‘laning.",
-          timestamp: ord.createdAt || new Date().toISOString(),
-          read: false,
-          icon: "⏳",
-          badgeBg: "#fef3c7",
-          badgeColor: "#b45309",
-          actionText: "Bog‘lanish →",
-          type: "order",
-        });
+    // 2. Real order state-change notifications.
+    // These are created only when status/payment_status actually changes.
+    orderNotifications.forEach((notification) => {
+      const paymentLabel =
+        notification.paymentStatus === "verified"
+          ? "To‘lov tasdiqlandi"
+          : notification.paymentStatus === "rejected"
+          ? "To‘lov rad etildi"
+          : notification.paymentStatus === "receipt_uploaded"
+          ? "Chek yuklandi — tekshirilmoqda"
+          : "To‘lov kutilmoqda";
+
+      const statusChanged =
+        notification.previousStatus &&
+        notification.previousStatus !== notification.status;
+      const paymentChanged =
+        notification.previousPaymentStatus &&
+        notification.previousPaymentStatus !== notification.paymentStatus;
+
+      let text = `Buyurtma №${notification.orderNumber}`;
+      if (statusChanged) {
+        text += ` • Holat: ${notification.status}`;
+      }
+      if (paymentChanged) {
+        text += ` • ${paymentLabel}`;
+      }
+      if (!statusChanged && !paymentChanged) {
+        text += ` • ${notification.status || "Yangilandi"}`;
       }
 
-      const isNewOrActive =
-        ord.status === "Qabul qilindi" ||
-        ord.status === "Tayyorlanmoqda" ||
-        ord.status === "Yo‘lda";
-
-      const orderStatusKey = String(ord.status || "Jarayonda").trim().replace(/\s+/g, "_");
-      const paymentStatusKey = String(ord.payment_status || "pending").trim().replace(/\s+/g, "_");
-
-      // The notification identity must change when the order/payment state changes.
-      // Otherwise dismissing one old notification permanently hides all later
-      // status updates for the same order.
       list.push({
-        id: `order-${ord.id}-${orderStatusKey}-${paymentStatusKey}`,
-        rawId: ord.id,
+        id: notification.id,
+        rawId: notification.orderId,
         category: "orders",
-        title: `Buyurtma #${ord.id} • ${ord.status || "Jarayonda"}`,
-        text: `${ord.items?.length || 1} ta tovar • Jami: ${Number(
-          ord.total || 0
-        ).toLocaleString()} so‘m`,
-        timestamp: ord.createdAt || new Date().toISOString(),
-        read: !isNewOrActive,
-        icon: "📦",
-        badgeBg: "#e0f2fe",
-        badgeColor: "#0284c7",
+        title: `Guli Market — Buyurtma №${notification.orderNumber}`,
+        text,
+        timestamp: notification.timestamp,
+        read: notification.read,
+        icon: notification.paymentStatus === "rejected" ? "❌" : "📦",
+        badgeBg: notification.paymentStatus === "rejected" ? "#fee2e2" : "#e0f2fe",
+        badgeColor: notification.paymentStatus === "rejected" ? "#dc2626" : "#0284c7",
         actionText: `${t("my_orders")} →`,
         type: "order",
       });
@@ -239,11 +251,7 @@ export function NotificationModal({
     if (item.type === "msg" && item.rawId) {
       markSingleMessageAsRead(item.rawId, userId);
     } else if (item.category === "orders") {
-      unreadMessages.forEach((m) => {
-        if (m.id && isOrderStatusText(m.text)) {
-          markSingleMessageAsRead(m.id, userId);
-        }
-      });
+      onMarkOrderNotificationRead?.(item.id);
     }
 
     onClose();
@@ -261,6 +269,7 @@ export function NotificationModal({
     } catch {}
     allFeedItems.forEach((item) => dismissItem(item.id));
     markMessagesAsRead(userId, "user");
+    onMarkAllOrderNotificationsRead?.();
     onClose();
   };
 
@@ -427,6 +436,8 @@ export function NotificationModal({
                             dismissItem(item.id);
                             if (item.type === "msg" && item.rawId) {
                               markSingleMessageAsRead(item.rawId, userId);
+                            } else if (item.category === "orders") {
+                              onMarkOrderNotificationRead?.(item.id);
                             }
                           }}
                           title="O‘chirish"
