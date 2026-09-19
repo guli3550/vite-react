@@ -13,6 +13,19 @@ export const CANONICAL_GATEWAY_URL = "https://guli-gateway.parizodabaxtiyorov.wo
 export const LEGACY_RENDER_ORIGIN = "https://guli-lingerie-api.onrender.com";
 
 export function getApiBaseUrl(): string {
+  // Customer-facing production traffic uses the same-origin /api proxy.
+  // This avoids browser CORS/network failures when the canonical Worker is
+  // healthy but unreachable from a particular browser/network path.
+  // Vercel rewrites /api/* to the canonical Cloudflare gateway.
+  if (typeof window !== "undefined") {
+    const host = String(window.location.hostname || "").toLowerCase();
+    const isGuliProductionHost =
+      host === "gulii.uz" ||
+      host === "www.gulii.uz" ||
+      host === "vite-react-seven-inky-10.vercel.app";
+    if (isGuliProductionHost) return "";
+  }
+
   const envUrl = typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL;
   if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
     const normalized = envUrl.trim().replace(/\/+$/, "");
