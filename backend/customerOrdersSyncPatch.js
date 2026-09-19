@@ -72,7 +72,7 @@ function mapOrder(row) {
     order_number: row.order_number || undefined,
     first_name: row.first_name || undefined,
     last_name: row.last_name || undefined,
-    customer_name: row.customer_name || undefined,
+    customer_name: row.customer_name || row.first_name || undefined,
     phone: row.phone || '',
     items: normalizeItems(row.items),
     subtotal: Number(row.subtotal || 0),
@@ -99,7 +99,7 @@ async function listOrders(req, res) {
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
     let query = supabase.from('orders')
-      .select('id,order_number,first_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
+      .select('id,order_number,first_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
       .order('created_at', { ascending: false }).limit(100);
     if (user.type === 'auth') {
       let linkedTelegramId = user.telegram_id;
