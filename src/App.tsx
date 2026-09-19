@@ -2048,10 +2048,13 @@ export default function App() {
 
     window.addEventListener("guli_orders_server_sync", handleServerOrderSync);
 
-    // Fallback polling mechanism (every 5s as a resilient backup).
+    // Realtime is the primary status transport. Poll only as a low-frequency
+    // recovery fallback so a large order list cannot trigger request/render storms.
     const fallbackInterval = setInterval(() => {
-      loadOrders(true).catch(() => {});
-    }, 5000);
+      if (document.visibilityState === "visible") {
+        loadOrders(true).catch(() => {});
+      }
+    }, 30000);
     
     // Supabase Realtime synchronization
     let activeChannel: any = null;
@@ -2108,8 +2111,9 @@ export default function App() {
                 return updated;
               });
 
-              // Canonical server refresh
-              loadOrders(true).catch(() => {});
+              // Do not immediately refetch the entire order list. The realtime
+              // payload already contains the canonical status/payment fields.
+              // A low-frequency fallback refresh handles missed realtime events.
             }
           )
           .subscribe((status: string, err?: any) => {
