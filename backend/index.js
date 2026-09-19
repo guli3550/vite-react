@@ -102,7 +102,7 @@ const supabase = new Proxy({}, {
   },
 });
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const { notifyCustomerOrderStatus } = require("./customerNotificationService");
+const { notifyCustomerAdminChat } = require("./customerNotificationService");
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com";
 const ADMIN_USERNAME = cleanEnv(process.env.ADMIN_USERNAME);
 const ADMIN_PASSWORD = cleanEnv(process.env.ADMIN_PASSWORD);
@@ -531,9 +531,6 @@ app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => {
 
     // Customer Telegram notification is a side effect of the canonical admin status update.
     // It must never make the admin request fail; durable dedupe lives in customerNotificationService.
-    notifyCustomerOrderStatus(data).catch((e) => {
-      console.warn("[Customer status notification]", e?.message || e);
-    });
 
     res.json({ success: true, data });
   } catch (error) {
@@ -985,10 +982,11 @@ app.post("/api/chat/messages", async (req, res) => {
     if (error) throw error;
 
     // Admin Web App -> customer Telegram bot.
-    // Only admin-originated chat messages are forwarded; customer messages are
-    // already handled by the Telegram webhook bridge and must not echo back.
+    // Keep order-status delivery separate: the customer order message is the
+    // single persistent message and is updated in-place by the order bot.
+    // Only actual admin chat messages get a Telegram notification.
     if (String(sender).toLowerCase() === "admin") {
-      await sendCustomerBotMessage(telegram_id, text);
+      await notifyCustomerAdminChat(data);
     }
 
     res.status(201).json({ success: true, data });
