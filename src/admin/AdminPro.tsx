@@ -962,7 +962,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         <div className="loginAura" />
         <form className="proLoginCard" onSubmit={doLogin}>
           <div className="proLogo" style={{ overflow: "hidden", padding: 0 }}>
-            <img src="/guli_logo.jpg" alt="Guli Premium" style={{ width: "100%", height: "100%", borderRadius: "16px", objectFit: "cover" }} />
+            <img src="/guli-logo.webp" alt="Guli Premium" style={{ width: "100%", height: "100%", borderRadius: "16px", objectFit: "cover" }} />
           </div>
           <span className="proEyebrow">GULI PREMIUM</span>
           <h1>Control Center</h1>
