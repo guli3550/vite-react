@@ -27,7 +27,7 @@
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
     { "source": "/product/:ref/", "destination": "/api/product/:ref" },
     { "source": "/product/:ref", "destination": "/api/product/:ref" },
-    { "source": "/api/:path*", "destination": "https://guli-gateway.parizodabaxtiyorov.workers.dev/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://guli-lingerie-api.onrender.com/api/:path*" },
     { "source": "/admin", "destination": "/index.html" },
     { "source": "/admin/(.*)", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
