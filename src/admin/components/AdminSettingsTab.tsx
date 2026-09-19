@@ -37,7 +37,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const [notifSoundEnabled, setNotifSoundEnabled] = useState(localStorage.getItem("guli_notif_sound_enabled") !== "false");
 
   // Web App Custom Logo
-  const [appLogo, setAppLogo] = useState<string>(localStorage.getItem("guli_custom_logo") || "/guli-logo-compact.svg");
+  const [appLogo, setAppLogo] = useState<string>(localStorage.getItem("guli_custom_logo") || "/guli-logo.webp");
   const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Social Links
@@ -180,7 +180,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   };
 
   const handleResetLogo = () => {
-    setAppLogo("/guli-logo-compact.svg");
+    setAppLogo("/guli-logo.webp");
     notify("🔄 Standart logotip tiklandi");
   };
 
@@ -206,7 +206,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       localStorage.setItem("guli_admin_settings", JSON.stringify(settingsObj));
       
       // Save Logo & Social Links
-      localStorage.setItem("guli_custom_logo", appLogo.trim() || "/guli-logo-compact.svg");
+      localStorage.setItem("guli_custom_logo", appLogo.trim() || "/guli-logo.webp");
       localStorage.setItem("guli_store_name", storeName.trim() || "Guli premium");
       localStorage.setItem("guli_custom_brand_name", storeName.trim() || "Guli premium");
       saveSocialLinks({
@@ -216,7 +216,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       });
 
       if (telegramChannelId.trim()) await saveTelegramChat();
-      window.dispatchEvent(new CustomEvent("guli_logo_updated", { detail: appLogo.trim() || "/guli-logo-compact.svg" }));
+      window.dispatchEvent(new CustomEvent("guli_logo_updated", { detail: appLogo.trim() || "/guli-logo.webp" }));
       window.dispatchEvent(new CustomEvent("guli_brand_name_updated", { detail: storeName.trim() || "Guli premium" }));
       window.dispatchEvent(new Event("guli_settings_updated"));
       notify("✅ Barcha sozlamalar, logotip va ijtimoiy tarmoqlar saqlandi!");
@@ -281,7 +281,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
 
   const resetSettings = () => {
     setThemeMode("light"); setLanguage("uz"); setNotifSoundEnabled(true);
-    setAppLogo("/guli-logo-compact.svg");
+    setAppLogo("/guli-logo.webp");
     setInstagramUrl(DEFAULT_SOCIAL_LINKS.instagram);
     setTelegramUrl(DEFAULT_SOCIAL_LINKS.telegram);
     setTiktokUrl(DEFAULT_SOCIAL_LINKS.tiktok);
@@ -345,14 +345,14 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
               <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", border: "3px solid #be123c", boxShadow: "0 4px 14px rgba(190,18,60,0.2)", background: "#fff", display: "grid", placeItems: "center" }}>
-                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo-compact.svg"; }} />
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp"; }} />
                   </div>
                   <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Aylana ko'rinish</small>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 72, height: 72, borderRadius: 16, overflow: "hidden", border: "2px solid #cbd5e1", background: "#fff", display: "grid", placeItems: "center" }}>
-                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo-compact.svg"; }} />
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp"; }} />
                   </div>
                   <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Kvadrat ko'rinish</small>
                 </div>
@@ -364,7 +364,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
                       style={inputStyle}
                       value={appLogo}
                       onChange={(e) => setAppLogo(e.target.value)}
-                      placeholder="https://example.com/logo.png yoki /guli-logo-compact.svg"
+                      placeholder="https://example.com/logo.png yoki /guli-logo.webp"
                     />
                   </label>
 
