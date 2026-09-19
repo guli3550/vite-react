@@ -926,6 +926,14 @@ export default function App() {
   const heroTouchStartY = useRef<number>(0);
   const heroTouchStartTime = useRef<number>(0);
   const isHorizontalHeroSwipe = useRef<boolean | null>(null);
+  // Prevent the browser's synthetic click after a swipe from activating a banner link.
+  const heroSuppressClickRef = useRef(false);
+  const suppressHeroClick = () => {
+    heroSuppressClickRef.current = true;
+    window.setTimeout(() => {
+      heroSuppressClickRef.current = false;
+    }, 400);
+  };
 
   const handleHeroTouchStart = (e: React.TouchEvent) => {
     e.stopPropagation();
@@ -966,14 +974,12 @@ export default function App() {
     const isQuickFlick = duration < 280 && Math.abs(heroDragOffset) > 20;
 
     if (isHorizontalHeroSwipe.current && heroBanners.length > 1) {
+      suppressHeroClick();
       if (heroDragOffset < -35 || (isQuickFlick && heroDragOffset < 0)) {
         setActiveBannerIdx((prev) => (prev + 1) % heroBanners.length);
       } else if (heroDragOffset > 35 || (isQuickFlick && heroDragOffset > 0)) {
         setActiveBannerIdx((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
       }
-    } else if (Math.abs(heroDragOffset) < 8 && duration < 300) {
-      // Tap on banner -> navigate to catalog
-      go("catalog");
     }
     setHeroDragOffset(0);
     isHorizontalHeroSwipe.current = null;
@@ -1002,13 +1008,12 @@ export default function App() {
     const isQuickFlick = duration < 280 && Math.abs(heroDragOffset) > 20;
 
     if (heroBanners.length > 1) {
+      suppressHeroClick();
       if (heroDragOffset < -35 || (isQuickFlick && heroDragOffset < 0)) {
         setActiveBannerIdx((prev) => (prev + 1) % heroBanners.length);
       } else if (heroDragOffset > 35 || (isQuickFlick && heroDragOffset > 0)) {
         setActiveBannerIdx((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
       }
-    } else if (Math.abs(heroDragOffset) < 8 && duration < 300) {
-      go("catalog");
     }
     setHeroDragOffset(0);
   };
@@ -4236,7 +4241,12 @@ export default function App() {
                   const cta = banner.ctaText || "Xarid qilish";
                   const bannerTarget = String(banner.actionTarget || "").trim();
                   const handleBannerClick = () => {
-                    if (bannerTarget && /^https?:\/\//i.test(bannerTarget)) {
+                    if (heroSuppressClickRef.current) {
+                      heroSuppressClickRef.current = false;
+                      return;
+                    }
+                    // Admin-configured banner URLs take precedence over the catalog fallback.
+                    if (bannerTarget && (/^https?:\/\//i.test(bannerTarget) || bannerTarget.startsWith("/"))) {
                       window.location.assign(bannerTarget);
                       return;
                     }
@@ -4273,10 +4283,7 @@ export default function App() {
                             className="hero3dBtn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedCategory("Barchasi");
-                              setSearch("");
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                              go("catalog");
+                              handleBannerClick();
                             }}
                           >
                             <span>{cta || "Xarid qilish"}</span>
