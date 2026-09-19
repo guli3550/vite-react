@@ -149,6 +149,29 @@ export type Order = {
   updatedAt?: string;
   statusUpdatedAt?: string;
 };
+export type OrderNotification = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  previousStatus?: string;
+  previousPaymentStatus?: string;
+  timestamp: string;
+  read: boolean;
+};
+
+const orderStateKey = (order: Pick<Order, "status" | "payment_status">) =>
+  JSON.stringify({
+    status: String(order.status || ""),
+    paymentStatus: String(order.payment_status || "pending"),
+  });
+
+const orderNotificationKey = (userId: string | number) =>
+  `guli_order_notifications_v2_${String(userId)}`;
+const orderStateKeyStorage = (userId: string | number) =>
+  `guli_order_state_v2_${String(userId)}`;
+
+
 type Page =
   | "home"
   | "catalog"
@@ -818,6 +841,19 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>(() =>
     readStorage("orders", []),
   );
+  const orderNotificationsKey = orderNotificationKey(currentUserId);
+  const orderStatesKey = orderStateKeyStorage(currentUserId);
+  const [orderNotifications, setOrderNotifications] = useState<OrderNotification[]>(() => {
+    try {
+      const raw = localStorage.getItem(orderNotificationsKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const orderStatesRef = useRef<Record<string, string>>({});
+  const orderStatesReadyRef = useRef(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<
@@ -1136,26 +1172,72 @@ export default function App() {
     getUnreadMessages(currentUserId),
   );
 
-  // Notification bell must include both unread admin chat messages and
-  // actionable order/payment notifications shown by NotificationModal.
-  const unreadOrderNotificationCount = useMemo(() => {
-    return orders.reduce((count, ord) => {
-      const receiptCheck = checkReceiptDelayed(ord.createdAt, ord.status, ord.receipt_url);
-      const activeStatus =
-        ord.status === "Qabul qilindi" ||
-        ord.status === "Tayyorlanmoqda" ||
-        ord.status === "Yo‘lda";
-      return count + (activeStatus || (receiptCheck.isPending && receiptCheck.isDelayed) ? 1 : 0);
-    }, 0);
-  }, [orders]);
-
+  const unreadOrderNotificationCount = orderNotifications.filter((item) => !item.read).length;
   const totalUnreadNotificationCount =
     unreadMessages.length + unreadOrderNotificationCount;
+
+  const registerOrderStateChanges = useCallback((nextOrders: Order[]) => {
+    const nextStates: Record<string, string> = {};
+    nextOrders.forEach((order) => {
+      nextStates[String(order.order_number || order.id)] = orderStateKey(order);
+    });
+
+    const previousStates = orderStatesRef.current;
+    if (orderStatesReadyRef.current) {
+      const changes: OrderNotification[] = [];
+      nextOrders.forEach((order) => {
+        const key = String(order.order_number || order.id);
+        const before = previousStates[key];
+        const after = nextStates[key];
+        if (!before || before === after) return;
+
+        let previous: { status?: string; paymentStatus?: string } = {};
+        let current: { status?: string; paymentStatus?: string } = {};
+        try { previous = JSON.parse(before); } catch {}
+        try { current = JSON.parse(after); } catch {}
+
+        changes.push({
+          id: `order-state-${key}-${Date.now()}-${changes.length}`,
+          orderNumber: String(order.order_number || order.id),
+          status: String(current.status || order.status || ""),
+          paymentStatus: String(current.paymentStatus || order.payment_status || "pending"),
+          previousStatus: previous.status,
+          previousPaymentStatus: previous.paymentStatus,
+          timestamp: order.updatedAt || order.statusUpdatedAt || new Date().toISOString(),
+          read: false,
+        });
+      });
+
+      if (changes.length) {
+        setOrderNotifications((existing) => {
+          const updated = [...changes, ...existing].slice(0, 100);
+          try { localStorage.setItem(orderNotificationsKey, JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      }
+    }
+
+    orderStatesRef.current = nextStates;
+    orderStatesReadyRef.current = true;
+    try { localStorage.setItem(orderStatesKey, JSON.stringify(nextStates)); } catch {}
+  }, [orderNotificationsKey, orderStatesKey]);
 
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
+
+  useEffect(() => {
+    if (orderStatesReadyRef.current) return;
+    try {
+      const raw = localStorage.getItem(orderStatesKey);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object") {
+        orderStatesRef.current = parsed as Record<string, string>;
+        orderStatesReadyRef.current = true;
+      }
+    } catch {}
+  }, [orderStatesKey]);
 
   // Initialize platform responsive environment
   useEffect(() => {
@@ -1917,10 +1999,8 @@ export default function App() {
             const tb = new Date(b.createdAt || 0).getTime();
             return tb - ta;
           });
-          try {
-            localStorage.setItem("orders", JSON.stringify(merged));
-            localStorage.setItem("guli_orders", JSON.stringify(merged));
-          } catch {}
+          persistOrdersSafely(merged);
+          registerOrderStateChanges(merged);
           return merged;
         });
         return list;
@@ -1996,7 +2076,7 @@ export default function App() {
         if (!silent) setOrdersLoading(false);
       }
     },
-    [telegramUser?.id, authUser?.phone],
+    [telegramUser?.id, authUser?.phone, registerOrderStateChanges],
   );
 
   useEffect(() => {
@@ -2117,10 +2197,8 @@ export default function App() {
                 });
 
                 if (matched) {
-                  try {
-                    localStorage.setItem("orders", JSON.stringify(updated));
-                    localStorage.setItem("guli_orders", JSON.stringify(updated));
-                  } catch {}
+                  persistOrdersSafely(updated);
+                  registerOrderStateChanges(updated);
                 }
                 return updated;
               });
