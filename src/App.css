@@ -5185,3 +5185,32 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
   animation: guliCenterModalIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+
+
+/* GULI FIX: keep customer notification bell perfectly circular */
+#topbar-notifications-btn.notifBellBtn.iconButton {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  max-width: 44px !important;
+  max-height: 44px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+@media (max-width: 430px) {
+  #topbar-notifications-btn.notifBellBtn.iconButton {
+    width: 43px !important;
+    height: 43px !important;
+    min-width: 43px !important;
+    min-height: 43px !important;
+    max-width: 43px !important;
+    max-height: 43px !important;
+    border-radius: 50% !important;
+  }
+}
