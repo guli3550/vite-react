@@ -76,7 +76,7 @@
       const { phone, items, address, promo_code } = req.body || {};
       if (!String(phone || "").trim()) return res.status(400).json({ success: false, message: "Telefon raqami kiritilmagan" });
       if (!Array.isArray(items) || !items.length || items.length > 100) return res.status(400).json({ success: false, message: "Buyurtma mahsulotlari noto‘g‘ri" });
-      const orderInput = { order_number: null, username: null, first_name: null, phone: String(phone).trim(), items, address: address || null, payment: "card_manual", status: "Qabul qilindi", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
+      const orderInput = { order_number: null, username: null, first_name: null, phone: String(phone).trim(), items, address: address || null, payment: "card_manual", status: "⏳ To‘lovni tasdiqlash kutilmoqda", promo_code: promo_code ? String(promo_code).trim().toUpperCase() : "" };
       const { data, error } = await supabase.rpc("create_secure_order", { p_order: orderInput, p_telegram_id: req.customerUser.id });
       if (error) throw error;
       res.status(201).json({ success: true, message: "Buyurtma muvaffaqiyatli saqlandi", data });
