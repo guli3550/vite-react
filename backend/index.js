@@ -102,6 +102,7 @@ const supabase = new Proxy({}, {
   },
 });
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const { notifyCustomerOrderStatus } = require("./customerNotificationService");
 const BASE_URL = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com";
 const ADMIN_USERNAME = cleanEnv(process.env.ADMIN_USERNAME);
 const ADMIN_PASSWORD = cleanEnv(process.env.ADMIN_PASSWORD);
@@ -527,6 +528,13 @@ app.put("/api/admin/orders/:id", requireAdmin, async (req, res) => {
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
     data.items = normalizeAdminItems(data.items);
+
+    // Customer Telegram notification is a side effect of the canonical admin status update.
+    // It must never make the admin request fail; durable dedupe lives in customerNotificationService.
+    notifyCustomerOrderStatus(data).catch((e) => {
+      console.warn("[Customer status notification]", e?.message || e);
+    });
+
     res.json({ success: true, data });
   } catch (error) {
     console.error("Update admin order error:", error);
