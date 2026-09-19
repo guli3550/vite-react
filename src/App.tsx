@@ -1862,8 +1862,14 @@ export default function App() {
           address: row.address || undefined,
           phone: row.phone || "",
           payment: row.payment || "cash",
-          status: row.status || "Qabul qilindi",
+          payment_status: row.payment_status || "pending",
+          status:
+            row.status ||
+            (String(row.payment_status || "").toLowerCase() === "verified"
+              ? "Qabul qilindi"
+              : "⏳ To'lovni tasdiqlash kutilmoqda"),
           receipt_url: row.receipt_url || undefined,
+          payment_receipt_path: row.payment_receipt_path || undefined,
           createdAt: row.created_at || new Date().toISOString(),
           updatedAt: row.updated_at || undefined,
           statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
@@ -1933,8 +1939,14 @@ export default function App() {
                 address: row.address || undefined,
                 phone: row.phone || "",
                 payment: row.payment || "cash",
-                status: row.status || "Qabul qilindi",
+                payment_status: row.payment_status || "pending",
+                status:
+                  row.status ||
+                  (String(row.payment_status || "").toLowerCase() === "verified"
+                    ? "Qabul qilindi"
+                    : "⏳ To'lovni tasdiqlash kutilmoqda"),
                 receipt_url: row.receipt_url || undefined,
+                payment_receipt_path: row.payment_receipt_path || undefined,
                 createdAt: row.created_at || new Date().toISOString(),
                 updatedAt: row.updated_at || undefined,
                 statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
