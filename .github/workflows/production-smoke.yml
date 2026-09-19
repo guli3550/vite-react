@@ -24,6 +24,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify frontend production build
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: bun install --frozen-lockfile
+
+      - name: Run frontend production build
+        shell: bash
+        run: bun run build
+
       - name: Audit canonical server boundary
         shell: bash
         run: |
