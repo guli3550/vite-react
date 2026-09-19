@@ -5214,7 +5214,6 @@ export default function App() {
         <NotificationModal
           language={language}
           unreadMessages={unreadMessages}
-          orders={orders}
           userId={currentUserId}
           onClose={() => setIsNotificationsOpen(false)}
           onOpenChat={() => {
