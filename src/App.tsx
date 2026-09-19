@@ -23,7 +23,7 @@ import {
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
-import { getApiBaseUrl } from "./lib/apiOrigin";
+import { getApiBaseUrl, LEGACY_RENDER_ORIGIN } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
