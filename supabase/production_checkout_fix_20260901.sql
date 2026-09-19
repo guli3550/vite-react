@@ -238,7 +238,7 @@ begin
     payment_key,
     case when payment_key = 'card_manual' then 'pending' else 'pending' end,
     nullif(p_order->>'promo_code',''),
-    coalesce(nullif(p_order->>'status',''),'Qabul qilindi'),
+    case when payment_key='card_manual' then '⏳ To‘lovni tasdiqlash kutilmoqda' else 'Qabul qilindi' end,
     coalesce(nullif(p_order->>'created_at','')::timestamptz,now()),
     now()
   ) returning to_jsonb(public.orders.*) into existing;
