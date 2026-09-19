@@ -4301,7 +4301,7 @@ export default function App() {
             <span
               className="brandIcon guli-brand-circle-logo"
               style={{
-                width: "42px",
+                width: "52px",
                 height: "42px",
                 minWidth: "42px",
                 minHeight: "42px",
