@@ -128,7 +128,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           />
         ) : (
           <div className="catCardFallback">
-            <span className="catFallbackIcon guli-brand-circle-logo" style={{ width: 44, height: 44, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
+            <span className="catFallbackIcon guli-brand-circle-logo" style={{ width: 50, height: 50, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
               <img src={GULI_LOGO_BASE64} alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
             </span>
           </div>
