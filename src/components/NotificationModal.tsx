@@ -9,7 +9,6 @@ import {
 
 type NotificationModalProps = {
   language: Language;
-  unreadMessages: ChatMessage[];
   userId?: string | number;
   onClose: () => void;
   onOpenChat: () => void;
@@ -20,7 +19,6 @@ type NotifCategory = "all" | "messages" | "orders";
 
 export function NotificationModal({
   language,
-  unreadMessages,
   userId,
   onClose,
   onOpenChat,
