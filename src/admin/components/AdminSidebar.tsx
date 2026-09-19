@@ -34,7 +34,7 @@ export function AdminSidebar({
         {/* Brand Header */}
         <div className="proBrand">
           <span style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", display: "inline-flex", verticalAlign: "middle", flexShrink: 0 }}>
-            <img src="/guli-logo.webp" alt="Guli" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src="/guli-logo-compact.svg" alt="Guli" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </span>
           <div>
             <b>GULI</b>
@@ -83,7 +83,7 @@ export function AdminSidebar({
         <div className="sideBottom">
           <div className="adminProfileMiniCard">
             <div className="adminAvatarCircle" style={{ overflow: "hidden", padding: 0 }}>
-              <img src="/guli-logo.webp" alt="Guli Admin" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <img src="/guli-logo-compact.svg" alt="Guli Admin" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             </div>
             <div className="adminProfileDetails">
               <b>Guli Admin</b>
