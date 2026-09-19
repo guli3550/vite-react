@@ -778,6 +778,9 @@ export default function App() {
   const productsHasMoreRef = useRef(true);
   const productsLoadingMoreRef = useRef(false);
   const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  // Keeps the storefront self-healing when the Render service is cold-starting.
+  // A customer must never need to refresh the entire page to recover the catalog.
+  const productsRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
@@ -1654,7 +1657,10 @@ export default function App() {
         API_URL !== LEGACY_RENDER_ORIGIN ? `${LEGACY_RENDER_ORIGIN}/api/products?${query}` : "",
       ].filter(Boolean);
 
-      for (let attempt = 0; attempt < 3 && !r; attempt += 1) {
+      // Render may need several seconds to wake from an idle state. Keep the
+      // customer request alive long enough to recover automatically instead of
+      // surfacing "Failed to fetch" and requiring a manual refresh.
+      for (let attempt = 0; attempt < 8 && !r; attempt += 1) {
         const target = targets[Math.min(attempt, targets.length - 1)];
         try {
           const candidate = await fetch(target, {
@@ -1673,7 +1679,9 @@ export default function App() {
         } catch (error) {
           lastError = error;
         }
-        if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        if (attempt < 7) {
+          await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+        }
       }
 
       if (!r) throw (lastError instanceof Error ? lastError : new Error("Katalog serveri vaqtincha javob bermadi"));
@@ -1692,6 +1700,10 @@ export default function App() {
       productsHasMoreRef.current = hasMore;
       setProductsHasMore(hasMore);
       setProductsError("");
+      if (productsRecoveryTimerRef.current) {
+        clearTimeout(productsRecoveryTimerRef.current);
+        productsRecoveryTimerRef.current = null;
+      }
 
       setProducts((prev) => {
         if (!append) return rows;
@@ -1710,6 +1722,16 @@ export default function App() {
         productsHasMoreRef.current = false;
         setProductsHasMore(false);
         setProductsError(message);
+
+        // Continue recovering in the background. This is deliberately silent:
+        // the page stays usable and the next retry replaces the error as soon
+        // as the backend becomes available. No browser refresh is required.
+        if (!productsRecoveryTimerRef.current) {
+          productsRecoveryTimerRef.current = setTimeout(() => {
+            productsRecoveryTimerRef.current = null;
+            loadProducts(true).catch(() => {});
+          }, 2500);
+        }
       }
       return [];
     } finally {
@@ -1918,6 +1940,12 @@ export default function App() {
 
   useEffect(() => {
     loadProducts(false).catch(() => {});
+    return () => {
+      if (productsRecoveryTimerRef.current) {
+        clearTimeout(productsRecoveryTimerRef.current);
+        productsRecoveryTimerRef.current = null;
+      }
+    };
   }, [loadProducts]);
 
   useEffect(() => {
