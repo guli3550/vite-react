@@ -93,7 +93,7 @@ async function notifyCustomerPayment(order) {
 
   const text = paymentStatus === "verified"
     ? [
-        "✅ GULI — TO‘LOV TASDIQLANDI",
+        "✅ Guli Market — TO‘LOV TASDIQLANDI",
         "",
         `Buyurtma № ${orderNo}`,
         `💰 Summa: ${money(order?.total)}`,
