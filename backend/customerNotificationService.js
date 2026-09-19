@@ -61,7 +61,7 @@ async function notifyCustomerOrderStatus(order) {
   if (!c.claimed) return { sent: false, reason: "duplicate" };
 
   const text = [
-    "📦 GULI — BUYURTMA HOLATI",
+    "📦 Guli Market — BUYURTMA HOLATI",
     "",
     `№ ${orderNo}`,
     `Hozirgi holat: ${status}`,
