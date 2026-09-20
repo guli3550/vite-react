@@ -85,6 +85,9 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
           const mediaUrl = meta.mediaUrl || m.media_url || meta.media_url || m.mediaUrl;
           const msgType = meta.type || m.type || (mediaUrl ? (mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i) ? "image" : "file") : "text");
           const fileName = meta.fileName || meta.file_name || m.fileName || m.file_name;
+          const rawPhoto = m.userPhoto || m.user_photo || meta.userPhoto || meta.user_photo || meta.customer?.photoUrl || meta.customer?.photo_url;
+          const userPhoto = rawPhoto ? (String(rawPhoto).startsWith("http") ? String(rawPhoto) : `${API_URL}${String(rawPhoto).startsWith("/") ? "" : "/"}${String(rawPhoto)}`) : undefined;
+          const userName = m.userName || meta.userName || meta.user_name || [meta.customer?.first_name, meta.customer?.last_name].filter(Boolean).join(" ").trim() || meta.customer?.username || undefined;
           return {
             id: String(m.id),
             sender: m.sender === "customer" ? "user" : "admin",
@@ -92,6 +95,8 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
             timestamp: m.created_at,
             read: true,
             userId: m.telegram_id,
+            userName,
+            userPhoto,
             type: msgType,
             mediaUrl: mediaUrl ? (mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`) : undefined,
             fileName,
