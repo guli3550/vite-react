@@ -28,7 +28,69 @@ function sseSend(client, event, data) { try { client.res.write(`event: ${event}\
 function deliverToClients(message) { for (const c of clients) { if (c.admin || Number(c.chatId) === Number(message?.telegram_id)) sseSend(c, "message", message); } }
 function telegramMiniAppOnline(telegramId) { const id = Number(telegramId); return Number.isFinite(id) && [...clients].some(c => c.telegramMiniApp && Number(c.chatId) === id); }
 globalThis.__GULI_TELEGRAM_MINIAPP_ONLINE = telegramMiniAppOnline;
-async function publishRealtime(message) { if (!message) return; deliverToClients(message); if (!realtimeChannel) return; try { await realtimeChannel.send({ type: "broadcast", event: "chat_message", payload: message }); } catch (error) { console.warn("[Chat realtime] broadcast failed:", error.message); } }
+async function enrichCustomerMessage(message) {
+  if (!message || message.sender !== "customer") return message;
+  const telegramId = Number(message.telegram_id);
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return message;
+  const customer = {};
+  try {
+    const [{ data: user }, { data: latestOrder }] = await Promise.all([
+      supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone").eq("telegram_id", telegramId).maybeSingle(),
+      supabase?.from("orders").select("order_number,username,first_name,phone,telegram_phone,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    ]);
+    if (user) Object.assign(customer, user);
+    if (latestOrder) {
+      if (!customer.phone) customer.phone = latestOrder.phone || latestOrder.telegram_phone || null;
+      if (!customer.telegram_phone) customer.telegram_phone = latestOrder.telegram_phone || null;
+      if (!customer.username) customer.username = latestOrder.username || null;
+      if (!customer.first_name) customer.first_name = latestOrder.first_name || null;
+    }
+    const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("telegram_id", telegramId);
+    customer.orderCount = Number(count || 0);
+    if (latestOrder) {
+      customer.lastOrderNumber = latestOrder.order_number || null;
+      customer.lastOrderStatus = latestOrder.status || null;
+      customer.lastOrderTotal = latestOrder.total ?? null;
+    }
+  } catch (error) {
+    console.warn("[Chat realtime] customer CRM enrichment failed:", error.message);
+  }
+  if (BOT_TOKEN) {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${telegramId}`);
+      const result = await response.json().catch(() => null);
+      const chat = result?.ok ? result.result : null;
+      if (chat) {
+        customer.username = customer.username || chat.username || null;
+        customer.first_name = customer.first_name || chat.first_name || null;
+        customer.last_name = customer.last_name || chat.last_name || null;
+        const fileId = chat.photo?.big_file_id || chat.photo?.small_file_id || "";
+        if (fileId && ADMIN_SECRET) {
+          const expires = Math.floor(Date.now() / 1000) + 3600;
+          const signature = crypto.createHmac("sha256", ADMIN_SECRET).update(`${telegramId}.${fileId}.${expires}`).digest("base64url");
+          customer.photoUrl = `/api/admin/users/${telegramId}/photo/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+        }
+      }
+    } catch (error) {
+      console.warn("[Chat realtime] Telegram profile enrichment failed:", error.message);
+    }
+  }
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
+  return {
+    ...message,
+    userName: fullName || customer.username || `Telegram #${telegramId}`,
+    userPhoto: customer.photoUrl || null,
+    metadata: { ...(message.metadata || {}), source: "telegram", customer }
+  };
+}
+async function publishRealtime(message) {
+  if (!message) return;
+  const enriched = await enrichCustomerMessage(message);
+  deliverToClients(enriched);
+  if (!realtimeChannel) return;
+  try { await realtimeChannel.send({ type: "broadcast", event: "chat_message", payload: enriched }); }
+  catch (error) { console.warn("[Chat realtime] broadcast failed:", error.message); }
+}
 // Canonical publisher exposed to Telegram webhook adapters. This keeps every
 // persisted chat message on the same SSE/broadcast fanout path.
 globalThis.__GULI_CHAT_PUBLISH__ = publishRealtime;
