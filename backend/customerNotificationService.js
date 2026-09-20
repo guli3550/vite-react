@@ -152,26 +152,44 @@ async function notifyCustomerPayment(order) {
   return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
-async function notifyCustomerAdminChat(message) {
+async function notifyCustomerAdminChat(message, req) {
   const telegramId = Number(message?.telegram_id || 0);
   const textBody = String(message?.text || "").trim();
   const messageId = String(message?.id || "").trim();
-  if (!telegramId || !textBody) return { sent: false, reason: "not_applicable" };
+  const meta = message?.metadata && typeof message.metadata === "object" ? message.metadata : {};
+  const mediaUrlRaw = String(message?.mediaUrl || message?.media_url || meta.mediaUrl || meta.media_url || "").trim();
+  const mediaType = String(message?.type || meta.type || "").toLowerCase();
+  if (!telegramId || (!textBody && !mediaUrlRaw)) return { sent: false, reason: "not_applicable" };
 
-  const key = `customer-admin-chat:${messageId || telegramId + ":" + textBody + ":" + String(message?.created_at || "")}`;
+  const key = `customer-admin-chat:${messageId || telegramId + ":" + textBody + ":" + mediaUrlRaw + ":" + String(message?.created_at || "")}`;
   const c = await claim(key, "customer_admin_chat_notice", null);
   if (!c.claimed) return { sent: false, reason: "duplicate" };
 
   const text = [
     "💬 Guli Market — ADMIN XABARI",
     "",
-    textBody,
+    textBody || (mediaType === "image" ? "📷 Rasm" : mediaType === "video" ? "🎬 Video" : mediaType === "audio" || mediaType === "voice" ? "🎙️ Ovozli xabar" : "📎 Fayl"),
     "",
     "GULI Web App → Online chat bo‘limida suhbatni davom ettirishingiz mumkin.",
   ].join("\n");
 
   try {
-    const result = await sendTelegram(telegramId, text);
+    let result;
+    if (mediaUrlRaw) {
+      const base = String(process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || "").replace(/\/$/, "");
+      const host = String(req?.get?.("host") || "").trim();
+      const protocol = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "https").split(",")[0].trim();
+      const absolute = /^https?:\\/\\//i.test(mediaUrlRaw) ? mediaUrlRaw : `${base || `${protocol}://${host}`}${mediaUrlRaw.startsWith("/") ? "" : "/"}${mediaUrlRaw}`;
+      const method = mediaType === "image" ? "sendPhoto" : mediaType === "video" ? "sendVideo" : mediaType === "audio" || mediaType === "voice" ? "sendAudio" : "sendDocument";
+      const field = method === "sendPhoto" ? "photo" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "document";
+      const payload = { chat_id: telegramId, [field]: absolute, caption: text.slice(0, 1024) };
+      const rr = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const jj = await rr.json().catch(() => null);
+      if (!rr.ok || !jj?.ok) throw new Error(jj?.description || `Telegram ${rr.status}`);
+      result = { sent: true, media: true, message_id: jj?.result?.message_id || null };
+    } else {
+      result = await sendTelegram(telegramId, text);
+    }
     if (c.durable) await markSent(c.eventKey);
     return result;
   } catch (e) {
