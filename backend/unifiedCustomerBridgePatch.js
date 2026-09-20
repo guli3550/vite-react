@@ -126,7 +126,7 @@ async function orders(req,res){
         try {
           const { data: signed } = await db.storage
             .from('payment-receipts')
-            .createSignedUrl(String(row.payment_receipt_path).replace(/^\\/+/, ''), 86400);
+            .createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400);
           receipt_url = signed?.signedUrl || '';
         } catch {}
       }
