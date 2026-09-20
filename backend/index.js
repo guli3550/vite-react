@@ -970,6 +970,11 @@ app.get("/api/chat/messages/:telegram_id", async (req, res) => {
 
 app.post("/api/chat/messages", async (req, res) => {
   try {
+    // Telegram webhook adapter already persisted and published this customer message.
+    // Do not create a second row with missing CRM metadata.
+    if (req.__guliTelegramChatPersisted && req.__guliTelegramChatMessage) {
+      return res.status(201).json({ success: true, data: req.__guliTelegramChatMessage });
+    }
     const { telegram_id, sender, text } = req.body;
     if (!telegram_id || !sender || !text) {
       return res.status(400).json({ success: false, message: "Ma'lumotlar to'liq emas" });
