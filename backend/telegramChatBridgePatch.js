@@ -84,7 +84,27 @@ async function persistTelegramMessage(message) {
     msgType = "audio";
   }
 
-  const mediaProxyUrl = fileId ? `/api/chat/media/${encodeURIComponent(fileId)}?name=${encodeURIComponent(fileName)}` : null;
+  let mediaProxyUrl = fileId ? `/api/chat/media/${encodeURIComponent(fileId)}?name=${encodeURIComponent(fileName)}` : null;
+  let mediaPath = null;
+  let mimeType = null;
+  if (fileId && typeof globalThis.__GULI_CHAT_PERSIST_TELEGRAM_MEDIA__ === "function") {
+    try {
+      const stored = await globalThis.__GULI_CHAT_PERSIST_TELEGRAM_MEDIA__({
+        telegramId: chatId,
+        fileId,
+        fileName,
+        type: msgType
+      });
+      if (stored?.mediaUrl) {
+        mediaProxyUrl = stored.mediaUrl;
+        mediaPath = stored.mediaPath || null;
+        mimeType = stored.mimeType || null;
+        fileName = stored.fileName || fileName;
+      }
+    } catch (error) {
+      console.warn("[Telegram chat bridge] canonical media storage failed; using Telegram proxy:", error.message);
+    }
+  }
 
   const text = String(message?.text || message?.caption || "").trim()
     || (msgType === "image" ? "📷 Rasm" : msgType === "audio" ? "🎙️ Ovozli xabar" : msgType === "file" ? `📁 ${fileName || "Fayl"}` : "");
@@ -98,6 +118,8 @@ async function persistTelegramMessage(message) {
     last_name: from.last_name || null,
     type: msgType,
     mediaUrl: mediaProxyUrl,
+    mediaPath,
+    mimeType,
     fileName: fileName || null,
     file_id: fileId || null
   };
