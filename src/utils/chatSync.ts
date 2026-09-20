@@ -260,7 +260,8 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
   const userName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Mijoz";
-  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const clientMessageId = `cmsg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender, metadata: { clientMessageId } };
   saveChatMessages([...allMessages, newMsg]);
 
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
@@ -285,7 +286,9 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
           sender: "customer",
           text: cleanText,
           media_url: media?.mediaUrl,
+          client_message_id: clientMessageId,
           metadata: {
+            clientMessageId,
             userName,
             userPhoto: user?.photo_url,
             type: media?.type || "text",
