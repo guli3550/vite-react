@@ -11,9 +11,11 @@
 
   const customerHeaders = () => {
     const h = {};
+    const token = String(localStorage.getItem('guli_access_token') || '').trim();
     const tg = window.Telegram?.WebApp;
+    if (token) h['Authorization'] = `Bearer ${token}`;
     if (tg?.initData) h['X-Telegram-Init-Data'] = tg.initData;
-    else {
+    else if (!token) {
       const guest = localStorage.getItem('guli_guest_token') || '';
       if (guest) h['X-Guli-Guest-Token'] = guest;
     }
