@@ -618,6 +618,20 @@ const readStorage = <T,>(key: string, fallback: T): T => {
 };
 const placeholder = (name = "GULI") =>
   `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0, 18)}</text></svg>`)}`;
+const bannerImageVariants = (url: string) => {
+  const value = String(url || "").trim();
+  if (!value) return { src: "", srcSet: undefined as string | undefined };
+  // Admin uploads create 400/800/1600 WebP derivatives with the same basename.
+  // Prefer responsive variants so mobile devices do not download the 1600px file.
+  const match = value.match(/^(.*)-1600[.]webp(?:([?#].*))?$/i);
+  if (!match) return { src: value, srcSet: undefined as string | undefined };
+  const base = match[1];
+  const suffix = match[2] || "";
+  return {
+    src: value,
+    srcSet: `${base}-400.webp${suffix} 400w, ${base}-800.webp${suffix} 800w, ${base}-1600.webp${suffix} 1600w`,
+  };
+};
 const imageUrl = (p: Product, index = 0) => {
   const list = [p.image, ...(p.images || [])].filter(Boolean);
   const url = list[index] || list[0] || "";
@@ -4466,9 +4480,14 @@ export default function App() {
                     <div key={banner.id || idx} className="heroSlideItem" onClick={handleBannerClick}>
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
-                        src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
+                        src={bannerImageVariants(banner.imageUrl || promoBannerUrl || placeholder("GULI")).src}
+                        srcSet={bannerImageVariants(banner.imageUrl || "").srcSet}
+                        sizes="(max-width: 768px) 92vw, 100vw"
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
+                        loading={idx === activeBannerIdx ? "eager" : "lazy"}
+                        fetchPriority={idx === activeBannerIdx ? "high" : "auto"}
+                        decoding="async"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = promoBannerUrl;
                         }}
