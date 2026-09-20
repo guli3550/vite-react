@@ -128,6 +128,34 @@ function patchGet() { const original = express.application.get; express.applicat
   return original.call(this, routePath, ...handlers);
 }; }
 const { install } = require('./routeRegistry.js');
+install("get", "/api/admin/chat/presence", async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
+  const onlineIds = [...clients]
+    .filter(c => !c.admin && Number.isFinite(Number(c.chatId)))
+    .map(c => String(c.chatId));
+  res.json({ success: true, data: { onlineTelegramIds: [...new Set(onlineIds)] } });
+});
+install("post", "/api/chat/admin-reply", async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
+  if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
+  const telegramId = String(req.body?.telegram_id || "").trim();
+  const text = String(req.body?.text || "").trim();
+  if (!/^\\d+$/.test(telegramId) || !text) return res.status(400).json({ success: false, message: "Mijoz va xabar majburiy" });
+  const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
+  const { data, error } = await supabase.from("chat_messages")
+    .insert([{ telegram_id: Number(telegramId), sender: "admin", text, metadata }])
+    .select("*").single();
+  if (error) return res.status(500).json({ success: false, message: "Xabar saqlanmadi" });
+  await publishRealtime(data);
+  try {
+    const { notifyCustomerAdminChat } = require("./customerNotificationService");
+    await notifyCustomerAdminChat(data);
+  } catch (e) {
+    console.warn("[Chat admin reply] Telegram notification failed:", e.message);
+  }
+  return res.status(201).json({ success: true, data });
+});
+
 install("get", "/api/chat/stream/:telegram_id", (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.(); const client = { res, chatId: isAdmin ? null : Number(rawId), admin: isAdmin, telegramMiniApp: !isAdmin && Boolean(req.headers["x-telegram-init-data"]) }; clients.add(client); sseSend(client, "ready", { ok: true }); const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000); req.on("close", () => { clearInterval(heartbeat); clients.delete(client); }); });
 install("post", "/api/chat/browser-login", async (req, res) => { const user = verifyLoginUrlPayload(req.body || {}); if (!user) return res.status(401).json({ success: false, message: "Telegram browser avtorizatsiyasi yaroqsiz yoki muddati tugagan" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, data: { telegram_id: user.id, username: user.username, first_name: user.first_name, last_name: user.last_name, photo_url: user.photo_url, token: createLinkedToken(user.id), expires_in: 2592000 } }); });
 function patchChatPost() { const original = express.application.post; express.application.post = function patchedPost(routePath, ...handlers) { if (routePath === "/api/chat/messages" && handlers.length) { const index = handlers.length - 1; const handler = handlers[index]; handlers[index] = async function secureChatPost(req, res, next) { const sender = String(req.body?.sender || "").toLowerCase(); const id = Number(req.body?.telegram_id || 0); if (sender === "customer" || sender === "user") { const u = customer(req); const linked = verifyLinked(req, id); const guest = id < 0 && verifyGuest(req, id); if ((!u || !id || Number(u.id) !== id) && !linked && !guest) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" }); req.body.sender = "customer"; req.body.telegram_id = id; } else if (sender === "admin") { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); } else return res.status(400).json({ success: false, message: "Noto‘g‘ri chat jo‘natuvchisi" }); let payload = null; const originalJson = res.json.bind(res); res.json = body => { payload = body; return originalJson(body); }; const result = await handler(req, res, next); if (payload?.success && payload?.data) { await publishRealtime(payload.data); await notifyAdmins(payload.data); await notifyTelegramCustomerIfOffline(payload.data); } return result; }; } return original.call(this, routePath, ...handlers); }; }
