@@ -1,28 +1,6 @@
--- GULI: reconcile canonical customers during order writes.
--- Fixes the production race where auth_user_id and telegram_id exist on
--- different customer rows and the order trigger violates customers_telegram_id_uidx.
-
-DO $$
-DECLARE
-  auth_customer uuid;
-  tg_customer uuid;
-  tg_id bigint := 5061637303;
-  auth_id uuid := 'd8034f73-303f-4b08-8bdf-4f422b8e8576';
-BEGIN
-  SELECT id INTO auth_customer FROM public.customers WHERE auth_user_id=auth_id LIMIT 1;
-  SELECT id INTO tg_customer FROM public.customers WHERE telegram_id=tg_id LIMIT 1;
-
-  IF auth_customer IS NOT NULL AND tg_customer IS NOT NULL AND auth_customer <> tg_customer THEN
-    DELETE FROM public.customers WHERE id=tg_customer;
-    UPDATE public.customers
-      SET telegram_id=tg_id, updated_at=now()
-      WHERE id=auth_customer;
-  ELSIF auth_customer IS NULL AND tg_customer IS NOT NULL THEN
-    UPDATE public.customers
-      SET auth_user_id=auth_id, updated_at=now()
-      WHERE id=tg_customer;
-  END IF;
-END $$;
+-- GULI: make order/customer identity reconciliation idempotent.
+-- The live production database is repaired separately; this migration keeps
+-- the trigger fix in source control for future database provisioning.
 
 CREATE OR REPLACE FUNCTION public.guli_link_order_customer()
 RETURNS trigger
