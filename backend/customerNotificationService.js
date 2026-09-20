@@ -6,6 +6,61 @@ const KEY = String(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVI
 const BOT = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const db = URL && KEY ? createClient(URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 
+async function sendTelegramMediaGroup(chatId, media) {
+  if (!BOT || !chatId || !Array.isArray(media) || !media.length) return { sent: false, reason: "not_configured" };
+  const r = await fetch(`https://api.telegram.org/bot${BOT}/sendMediaGroup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: Number(chatId), media }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`);
+  return { sent: true, message_ids: (j.result || []).map(x => x.message_id).filter(Boolean) };
+}
+
+async function signedReceiptUrl(order) {
+  const path = String(order?.payment_receipt_path || "").replace(/^\\/+/, "");
+  if (!path || !db || /\\.pdf$/i.test(path)) return "";
+  try {
+    const { data, error } = await db.storage.from("payment-receipts").createSignedUrl(path, 3600);
+    if (error) return "";
+    return data?.signedUrl || "";
+  } catch { return ""; }
+}
+
+function productImageUrls(order) {
+  const out = [];
+  for (const item of Array.isArray(order?.items) ? order.items : []) {
+    const p = item?.product || item?.product_data || item?.productDetails || {};
+    const candidates = [
+      item?.image, item?.image_url, item?.photo,
+      p?.image, p?.image_url,
+      ...(Array.isArray(p?.images) ? p.images : []),
+      ...(Array.isArray(item?.images) ? item.images : []),
+    ];
+    const url = candidates.map(x => String(x || "").trim()).find(x => /^https?:\\/\\//i.test(x));
+    if (url && !out.includes(url)) out.push(url);
+  }
+  return out.slice(0, 9);
+}
+
+async function sendCustomerOrderMedia(chatId, order, includeReceipt = true) {
+  const urls = productImageUrls(order);
+  if (includeReceipt) {
+    const receipt = await signedReceiptUrl(order);
+    if (receipt) urls.push(receipt);
+  }
+  const unique = urls.filter((u, i, a) => u && a.indexOf(u) === i).slice(0, 10);
+  if (!unique.length) return { sent: false, reason: "no_media" };
+
+  const media = unique.map((url, index) => ({
+    type: "photo",
+    media: url,
+    ...(index === 0 ? { caption: `📦 Guli Market — Buyurtma № ${String(order?.order_number || order?.id || "—")}`.slice(0, 1024) } : {}),
+  }));
+  return sendTelegramMediaGroup(chatId, media);
+}
+
 async function sendTelegram(chatId, text) {
   if (!BOT || !chatId || !text) return { sent: false, reason: "not_configured" };
   const r = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
@@ -144,4 +199,23 @@ async function notifyCustomerAdminChat(message) {
   }
 }
 
-module.exports = { notifyCustomerOrderStatus, notifyCustomerPayment, notifyCustomerAdminChat };
+async function notifyCustomerReceiptUploaded(order) {
+  const telegramId = Number(order?.telegram_id || 0);
+  if (!telegramId || !order?.payment_receipt_path) return { sent: false, reason: "not_applicable" };
+
+  const version = String(order?.payment_receipt_uploaded_at || order?.updated_at || order?.payment_receipt_path);
+  const key = `customer-receipt-media:${order?.id}:${version}`;
+  const c = await claim(key, "customer_receipt_media", order?.id);
+  if (!c.claimed) return { sent: false, reason: "duplicate" };
+
+  try {
+    const result = await sendCustomerOrderMedia(telegramId, order, true);
+    if (c.durable) await markSent(c.eventKey);
+    return result;
+  } catch (e) {
+    if (c.durable) await release(c.eventKey);
+    throw e;
+  }
+}
+
+module.exports = { notifyCustomerOrderStatus, notifyCustomerPayment, notifyCustomerAdminChat, notifyCustomerReceiptUploaded };
