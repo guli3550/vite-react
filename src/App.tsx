@@ -1995,7 +1995,7 @@ export default function App() {
               : "⏳ To'lovni tasdiqlash kutilmoqda"),
           receipt_url: row.receipt_url || undefined,
           payment_receipt_path: row.payment_receipt_path || undefined,
-          createdAt: row.created_at || new Date().toISOString(),
+          createdAt: row.created_at || row.createdAt || "",
           updatedAt: row.updated_at || undefined,
           statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
         }));
