@@ -46,12 +46,17 @@ async function handleReceiptUpload(req, res) {
     if (oe) throw oe;
 
     if (!order) {
-      // Try by ID fallback
-      const byId = await supabase.from('orders')
-        .select('id,order_number,total,telegram_id,auth_user_id,payment,payment_status,payment_receipt_path')
-        .eq('id', identifier).maybeSingle();
-      if (byId.error) throw byId.error;
-      order = byId.data;
+      // Try by ID fallback ONLY when the identifier is a UUID.
+      // Never send a numeric order number to orders.id (UUID), otherwise
+      // PostgreSQL/PostgREST can raise: "operator does not exist: uuid = bigint".
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (UUID_RE.test(identifier)) {
+        const byId = await supabase.from('orders')
+          .select('id,order_number,total,telegram_id,auth_user_id,payment,payment_status,payment_receipt_path')
+          .eq('id', identifier).maybeSingle();
+        if (byId.error) throw byId.error;
+        order = byId.data;
+      }
     }
 
     if (!order) return res.status(404).json({ success: false, message: 'Buyurtma topilmadi' });
