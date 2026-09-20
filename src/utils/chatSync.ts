@@ -285,9 +285,18 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         const match = persistedMediaUrl.match(/^data:([^;]+);base64,(.+)$/i);
         if (!match) throw new Error("Rasm formati noto‘g‘ri");
         const mimeType = String(match[1] || "").toLowerCase();
+        const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
+        const tgInitForUpload = typeof window !== "undefined" ? String((window as any).Telegram?.WebApp?.initData || "") : "";
+        const accessTokenForUpload = typeof window !== "undefined" ? String(localStorage.getItem("guli_access_token") || "") : "";
+        const linkedTokenForUpload = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_linked_token") || "") : "";
+        const guestTokenForUpload = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
+        if (tgInitForUpload) uploadHeaders["X-Telegram-Init-Data"] = tgInitForUpload;
+        else if (accessTokenForUpload) uploadHeaders.Authorization = "Bearer " + accessTokenForUpload;
+        else if (linkedTokenForUpload) uploadHeaders["X-Guli-Linked-Token"] = linkedTokenForUpload;
+        else if (guestTokenForUpload) uploadHeaders["X-Guli-Guest-Token"] = guestTokenForUpload;
         const uploadRes = await fetch(API_URL + "/api/chat/media-upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: uploadHeaders,
           body: JSON.stringify({ telegram_id: backendId, type: media?.type || "file", data: match[0], mimeType, fileName: media?.fileName || "guli-chat-media" })
         });
         const uploadJson = await uploadRes.json().catch(() => null);
@@ -303,10 +312,12 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       const tgInit = typeof window !== "undefined" ? String((window as any).Telegram?.WebApp?.initData || "") : "";
       if (tgInit) headers["X-Telegram-Init-Data"] = tgInit;
+      const accessToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_access_token") || "") : "";
       const linkedToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_linked_token") || "") : "";
-      if (!tgInit && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
+      if (!tgInit && accessToken) headers.Authorization = "Bearer " + accessToken;
+      if (!tgInit && !accessToken && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
       const guestToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
-      if (!tgInit && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
+      if (!tgInit && !accessToken && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
 
       const response = await fetch(API_URL + "/api/chat/messages", {
         method: "POST",
@@ -329,6 +340,10 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
       }
     } catch (error) {
       console.error("[GULI chat] customer media/message send failed:", error);
+      try {
+        const current = getStoredChatMessages();
+        saveChatMessages(current.filter(m => String(m.id) !== String(newMsg.id)));
+      } catch {}
       window.dispatchEvent(new CustomEvent("guli_chat_send_error", { detail: { message: error instanceof Error ? error.message : "Xabar yuborilmadi" } }));
       return null;
     }
