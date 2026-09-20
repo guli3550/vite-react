@@ -182,7 +182,7 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
   await publishRealtime(data);
   try {
     const { notifyCustomerAdminChat } = require("./customerNotificationService");
-    await notifyCustomerAdminChat(data);
+    await notifyCustomerAdminChat(data, req);
   } catch (e) {
     console.warn("[Chat admin reply] Telegram notification failed:", e.message);
   }
