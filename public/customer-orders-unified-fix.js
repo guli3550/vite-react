@@ -38,7 +38,7 @@
     const n = { ...row };
     n.order_number = String(n.order_number || n.id || '');
     n.id = n.order_number;
-    n.createdAt = n.createdAt || n.created_at || new Date().toISOString();
+    n.createdAt = n.createdAt || n.created_at || null;
     n.updatedAt = n.updatedAt || n.updated_at || n.createdAt;
     n.statusUpdatedAt = n.statusUpdatedAt || n.status_updated_at || n.updatedAt;
     return n;
