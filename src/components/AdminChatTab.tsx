@@ -301,6 +301,12 @@ export default function AdminChatTab({
     setSelectedUserId(userId);
     setMobileView("chat");
     markMessagesAsRead(userId, "admin");
+    const adminToken = token || sessionStorage.getItem("guli_admin_token") || "";
+    void fetch(`${getApiBaseUrl()}/api/chat/read`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}) },
+      body: JSON.stringify({ telegram_id: userId }),
+    }).catch(() => {});
     setAllMessages(getStoredChatMessages());
     setConversations(getAllConversations());
   };
