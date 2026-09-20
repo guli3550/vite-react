@@ -141,70 +141,15 @@ function money(v) {
 }
 
 async function notifyCustomerOrderStatus(order) {
-  const telegramId = Number(order?.telegram_id || 0);
-  const status = String(order?.status || "").trim();
-  if (!telegramId || !status || status === "⏳ Buyurtma kutilmoqda") return { sent: false, reason: "not_applicable" };
-
-  const orderNo = String(order?.order_number || order?.id || "—");
-  const version = String(order?.updated_at || order?.status_updated_at || status);
-  const key = `customer-order-status:${order?.id}:${status}:${version}`;
-  const c = await claim(key, "customer_order_status_notice", order?.id);
-  if (!c.claimed) return { sent: false, reason: "duplicate" };
-
-  const text = [
-    "📦 Guli Market — BUYURTMA HOLATI",
-    "",
-    `№ ${orderNo}`,
-    `Hozirgi holat: ${status}`,
-    `💰 Jami: ${money(order?.total)}`,
-    "",
-    "Buyurtmalarim bo‘limida batafsil ko‘rishingiz mumkin.",
-  ].join("\n");
-
-  try {
-    const result = await sendTelegram(telegramId, text);
-    if (c.durable) await markSent(c.eventKey);
-    return result;
-  } catch (e) {
-    if (c.durable) await release(c.eventKey);
-    throw e;
-  }
+  // Canonical customer order notification is maintained by telegramAdminBotProduction.
+  // Do not send a second standalone Telegram message.
+  return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
 async function notifyCustomerPayment(order) {
-  const telegramId = Number(order?.telegram_id || 0);
-  const paymentStatus = String(order?.payment_status || "").trim().toLowerCase();
-  if (!telegramId || !["verified", "rejected"].includes(paymentStatus)) return { sent: false, reason: "not_applicable" };
-
-  const orderNo = String(order?.order_number || order?.id || "—");
-  const version = String(order?.updated_at || Date.now());
-  const key = `customer-payment:${order?.id}:${paymentStatus}:${version}`;
-  const c = await claim(key, "customer_payment_notice", order?.id);
-  if (!c.claimed) return { sent: false, reason: "duplicate" };
-
-  const text = paymentStatus === "verified"
-    ? [
-        "✅ Guli Market — TO‘LOV TASDIQLANDI",
-        "",
-        `Buyurtma № ${orderNo}`,
-        `💰 Summa: ${money(order?.total)}`,
-        `📦 Buyurtma holati: ${String(order?.status || "Qabul qilindi")}`,
-      ].join("\n")
-    : [
-        "⚠️ GULI — TO‘LOV CHEKI RAD ETILDI",
-        "",
-        `Buyurtma № ${orderNo}`,
-        "Iltimos, to‘lov chekini qayta yuboring.",
-      ].join("\n");
-
-  try {
-    const result = await sendTelegram(telegramId, text);
-    if (c.durable) await markSent(c.eventKey);
-    return result;
-  } catch (e) {
-    if (c.durable) await release(c.eventKey);
-    throw e;
-  }
+  // Canonical customer order notification is maintained by telegramAdminBotProduction.
+  // Do not send a second standalone Telegram message.
+  return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
 async function notifyCustomerAdminChat(message) {
@@ -253,23 +198,9 @@ async function hydrateCustomerOrderMedia(order) {
 }
 
 async function notifyCustomerReceiptUploaded(order) {
-  const telegramId = Number(order?.telegram_id || 0);
-  if (!telegramId || !order?.payment_receipt_path) return { sent: false, reason: "not_applicable" };
-
-  const version = String(order?.payment_receipt_uploaded_at || order?.updated_at || order?.payment_receipt_path);
-  const key = `customer-receipt-media:${order?.id}:${version}`;
-  const c = await claim(key, "customer_receipt_media", order?.id);
-  if (!c.claimed) return { sent: false, reason: "duplicate" };
-
-  try {
-    const fullOrder = await hydrateCustomerOrderMedia(order);
-    const result = await sendCustomerOrderMedia(telegramId, fullOrder, true);
-    if (c.durable) await markSent(c.eventKey);
-    return result;
-  } catch (e) {
-    if (c.durable) await release(c.eventKey);
-    throw e;
-  }
+  // Receipt/status media is handled by telegramAdminBotProduction so one order
+  // produces exactly one customer-facing Telegram message/album.
+  return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
 module.exports = { notifyCustomerOrderStatus, notifyCustomerPayment, notifyCustomerAdminChat, notifyCustomerReceiptUploaded };
