@@ -112,15 +112,28 @@ function installRoutes(app) {
     } catch(error){ console.error("Get banner error:",error); res.status(500).json({success:false,message:"Banner rasmini yuklashda xatolik"}); }
   });
 
+  // Short-lived server cache keeps the banner manifest off the DB hot path.
+  // Banner image URLs are immutable (timestamped uploads), so the browser can safely
+  // cache the manifest briefly and refresh it in the background.
+  let publicBannerCache = { expiresAt: 0, data: null };
+
   app.get("/api/banners", async (_req,res)=>{
     try {
+      const now = Date.now();
+      if (publicBannerCache.data && publicBannerCache.expiresAt > now) {
+        res.setHeader("Cache-Control","public, max-age=30, stale-while-revalidate=300");
+        return res.json({success:true,data:publicBannerCache.data});
+      }
+
       const {data,error}=await db().from("category_settings").select("slug,name,image_url,sort_order,active,updated_at").like("slug","banner_%").order("sort_order",{ascending:true});
       if(error) throw error;
       const banners=(data||[]).map((item,idx)=>{
         let meta={}; try{meta=JSON.parse(item.name||"{}")}catch{meta={title:item.name}};
         return {id:item.slug.replace(/^banner_/,"")||`banner-${idx+1}`,imageUrl:item.image_url,title:meta.title||"Maxsus Taklif",subtitle:meta.subtitle||"",badgeText:meta.badgeText||"TOP SOTILGAN",ctaText:meta.ctaText||"Xarid qilish",actionType:meta.actionType||"catalog",actionTarget:meta.actionTarget||"",active:item.active!==false,createdAt:item.updated_at};
       });
-      res.setHeader("Cache-Control","no-store, max-age=0"); res.json({success:true,data:banners});
+      publicBannerCache = { expiresAt: now + 30_000, data: banners };
+      res.setHeader("Cache-Control","public, max-age=30, stale-while-revalidate=300");
+      res.json({success:true,data:banners});
     } catch(error){ console.error("Get banners error:",error); res.status(500).json({success:false,message:"Bannerlarni yuklashda xatolik",data:[]}); }
   });
 
