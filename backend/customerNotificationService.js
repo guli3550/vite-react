@@ -44,6 +44,41 @@ function productImageUrls(order) {
   return out.slice(0, 9);
 }
 
+function customerOrderCaption(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const lines = items.slice(0, 10).map((item, index) => {
+    const p = item?.product || item?.product_data || item?.productDetails || item || {};
+    const name = p?.name || p?.title || item?.name || item?.title || "Mahsulot";
+    const code = p?.product_code || item?.product_code || "";
+    const qty = Number(item?.quantity || item?.qty || 1);
+    return `${index + 1}. ${name}${code ? ` #${code}` : ""} × ${qty} dona`;
+  });
+  const paymentStatus = String(order?.payment_status || "pending").toLowerCase();
+  const paymentText = paymentStatus === "verified" ? "✅ To‘lov tasdiqlangan" : paymentStatus === "rejected" ? "❌ To‘lov rad etilgan" : paymentStatus === "receipt_uploaded" ? "🧾 Chek yuklangan — tekshirilmoqda" : "⏳ To‘lov kutilmoqda";
+  return [
+    `🛍️ Guli Market — BUYURTMA № ${String(order?.order_number || order?.id || "—")}`,
+    "",
+    `💰 Jami: ${Math.round(Number(order?.total || 0)).toLocaleString("uz-UZ")} so‘m`,
+    `💳 To‘lov: ${String(order?.payment || "—")}`,
+    `🔎 Holat: ${paymentText}`,
+    `📦 Buyurtma: ${String(order?.status || "Qabul qilindi")}`,
+    "",
+    `👗 Mahsulotlar (${items.length} ta):`,
+    lines.join("\n") || "• Mahsulot ma’lumoti mavjud emas",
+  ].join("\n").slice(0, 1024);
+}
+
+async function deleteTelegramMessage(chatId, messageId) {
+  if (!BOT || !chatId || !messageId) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT}/deleteMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: Number(chatId), message_id: Number(messageId) }),
+    });
+  } catch {}
+}
+
 async function sendCustomerOrderMedia(chatId, order, includeReceipt = true) {
   const urls = productImageUrls(order);
   if (includeReceipt) {
@@ -52,13 +87,14 @@ async function sendCustomerOrderMedia(chatId, order, includeReceipt = true) {
   }
   const unique = urls.filter((u, i, a) => u && a.indexOf(u) === i).slice(0, 10);
   if (!unique.length) return { sent: false, reason: "no_media" };
-
   const media = unique.map((url, index) => ({
     type: "photo",
     media: url,
-    ...(index === 0 ? { caption: `📦 Guli Market — Buyurtma № ${String(order?.order_number || order?.id || "—")}`.slice(0, 1024) } : {}),
+    ...(index === 0 ? { caption: customerOrderCaption(order) } : {}),
   }));
-  return sendTelegramMediaGroup(chatId, media);
+  const result = await sendTelegramMediaGroup(chatId, media);
+  if (order?.telegram_status_message_id) await deleteTelegramMessage(chatId, order.telegram_status_message_id);
+  return result;
 }
 
 async function sendTelegram(chatId, text) {
