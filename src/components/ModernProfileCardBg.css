@@ -129,7 +129,7 @@
 }
 
 .guli-brand-circle-logo {
-  background-image: var(--guli-logo-base64);
+  background-image: none;
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
