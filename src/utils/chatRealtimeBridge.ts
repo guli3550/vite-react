@@ -1,5 +1,5 @@
 // Unified realtime auth bridge for Telegram Mini App, browser-linked users, browser guests and admin.
-import { getApiBaseUrl } from "../lib/apiOrigin";
+import { getApiBaseUrl, CANONICAL_GATEWAY_URL } from "../lib/apiOrigin";
 const API_URL = getApiBaseUrl();
 const CHANNEL_NAME = "guli_chat_channel_v1";
 const STORAGE_KEY = "guli_chat_messages";
