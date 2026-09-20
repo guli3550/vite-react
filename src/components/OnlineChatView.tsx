@@ -399,7 +399,7 @@ export function OnlineChatView({
     const textToSend = overrideText !== undefined ? overrideText : inputText.trim();
     if (!textToSend && !selectedImage) return;
 
-    sendUserMessage(
+    void sendUserMessage(
       textToSend,
       user,
       selectedImage
@@ -416,12 +416,17 @@ export function OnlineChatView({
             text: replyingToMsg.text || "Biriktirilgan fayl",
           }
         : undefined
-    );
-
-    setInputText("");
-    setSelectedImage(null);
-    setReplyingToMsg(null);
-    setShowAttachMenu(false);
+    ).then((sent) => {
+      if (!sent) {
+        triggerToast("❌ Xabar yuborilmadi. Internet yoki chat sessiyasini tekshiring.");
+        return;
+      }
+      setInputText("");
+      setSelectedImage(null);
+      setReplyingToMsg(null);
+      setShowAttachMenu(false);
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    });
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
