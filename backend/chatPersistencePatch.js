@@ -17,9 +17,10 @@ function isAdmin(req) {
 }
 
 function metadataFromBody(body) {
-  const keys = ["conversationId","type","mediaUrl","fileName","audioDuration","replyToId","replyToText","replyToSender","reactions","pollQuestion","pollOptions","userVotedOption","location","userName","userPhoto"];
+  const keys = ["conversationId","clientMessageId","client_message_id","type","mediaUrl","fileName","audioDuration","replyToId","replyToText","replyToSender","reactions","pollQuestion","pollOptions","userVotedOption","location","userName","userPhoto"];
   const metadata = {};
   for (const key of keys) if (body?.[key] !== undefined) metadata[key] = body[key];
+  if (body?.metadata && typeof body.metadata === "object") Object.assign(metadata, body.metadata);
   return metadata;
 }
 
