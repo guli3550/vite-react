@@ -99,6 +99,28 @@ async function notifyAdmins(message) { if (!ADMIN_CHAT_IDS.length || message?.se
 async function notifyTelegramCustomerIfOffline(message) { if (!message || message.sender !== "admin") return; const id = Number(message.telegram_id); if (!Number.isSafeInteger(id) || id <= 0 || telegramMiniAppOnline(id)) return; const text = "💬 <b>Qo'llab quvvatlash markazidan yangi habar keldi</b>\n\n🔔 Ko'rish uchun Guli Premium bildirishnomalar oynasini oching."; await telegramSend(id, text); }
 function startRealtime() { if (realtimeStarted || !supabase) return; realtimeStarted = true; realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } }); realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload)); realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`)); }
 function patchGet() { const original = express.application.get; express.application.get = function patchedGet(routePath, ...handlers) {
+  if (routePath === "/api/admin/users/:telegramId/photo/:fileId") return original.call(this, routePath, async (req, res) => {
+    try {
+      const telegramId = Number(req.params.telegramId);
+      const fileId = String(req.params.fileId || "");
+      const expires = Number(req.query.expires);
+      const signature = String(req.query.signature || "");
+      if (!ADMIN_SECRET || !Number.isSafeInteger(telegramId) || !fileId || !Number.isFinite(expires) || expires < Math.floor(Date.now()/1000)) return res.status(403).end();
+      const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(`${telegramId}.${fileId}.${expires}`).digest("base64url");
+      if (!safeEqual(signature, expected)) return res.status(403).end();
+      const fileResult = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
+      const fileJson = await fileResult.json().catch(() => null);
+      if (!fileResult.ok || !fileJson?.ok || !fileJson.result?.file_path) return res.status(404).end();
+      const image = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fileJson.result.file_path}`);
+      if (!image.ok) return res.status(502).end();
+      res.set("Content-Type", image.headers.get("content-type") || "image/jpeg");
+      res.set("Cache-Control", "private, max-age=3600");
+      return res.send(Buffer.from(await image.arrayBuffer()));
+    } catch (error) {
+      console.warn("[Chat realtime] profile photo proxy failed:", error.message);
+      return res.status(502).end();
+    }
+  });
   if (routePath === "/api/chat/guest-session/:guest_id") return original.call(this, routePath, (req, res) => { const id = Number(req.params.guest_id); if (!Number.isSafeInteger(id) || id >= 0 || id < -9007199254740991) return res.status(400).json({ success: false, message: "Noto‘g‘ri guest ID" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, guest_id: id, token: createGuestToken(id), expires_in: 2592000 }); });
   if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, (req, res) => { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" }); return supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
   if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); return supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
