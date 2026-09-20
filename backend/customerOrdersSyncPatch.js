@@ -85,9 +85,9 @@ function mapOrder(row) {
     payment_receipt_path: row.payment_receipt_path || undefined,
     receipt_url: row.receipt_url || undefined,
     status: row.status || '⏳ Buyurtma kutilmoqda',
-    createdAt: row.created_at || new Date().toISOString(),
+    createdAt: row.created_at || row.createdAt || undefined,
     updatedAt: row.updated_at || undefined,
-    statusUpdatedAt: row.updated_at || undefined,
+    statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
   };
 }
 
@@ -99,7 +99,7 @@ async function listOrders(req, res) {
   if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
   try {
     let query = supabase.from('orders')
-      .select('id,order_number,first_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at')
+      .select('id,order_number,first_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at,status_updated_at')
       .order('created_at', { ascending: false }).limit(100);
     if (user.type === 'auth') {
       let linkedTelegramId = user.telegram_id;
