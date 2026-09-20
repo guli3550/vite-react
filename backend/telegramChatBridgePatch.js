@@ -25,6 +25,16 @@ async function telegramSend(chatId, text) {
 }
 
 async function broadcastRealtime(data) {
+  // Use the canonical backend fanout when chatRealtimePatch is loaded.
+  // This directly reaches connected admin SSE clients and the shared
+  // Supabase broadcast channel without creating a second parallel bus.
+  if (typeof globalThis.__GULI_CHAT_PUBLISH__ === "function") {
+    await globalThis.__GULI_CHAT_PUBLISH__(data);
+    return;
+  }
+
+  // Safe fallback for isolated startup/testing.
+  if (!supabase) return;
   const channel = supabase.channel("guli-chat-realtime", { config: { broadcast: { self: true } } });
   try {
     await new Promise((resolve, reject) => {
