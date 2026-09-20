@@ -618,20 +618,6 @@ const readStorage = <T,>(key: string, fallback: T): T => {
 };
 const placeholder = (name = "GULI") =>
   `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0, 18)}</text></svg>`)}`;
-const bannerImageVariants = (url: string) => {
-  const value = String(url || "").trim();
-  if (!value) return { src: "", srcSet: undefined as string | undefined };
-  // Admin uploads create 400/800/1600 WebP derivatives with the same basename.
-  // Prefer responsive variants so mobile devices do not download the 1600px file.
-  const match = value.match(/^(.*)-1600[.]webp(?:([?#].*))?$/i);
-  if (!match) return { src: value, srcSet: undefined as string | undefined };
-  const base = match[1];
-  const suffix = match[2] || "";
-  return {
-    src: value,
-    srcSet: `${base}-400.webp${suffix} 400w, ${base}-800.webp${suffix} 800w, ${base}-1600.webp${suffix} 1600w`,
-  };
-};
 const imageUrl = (p: Product, index = 0) => {
   const list = [p.image, ...(p.images || [])].filter(Boolean);
   const url = list[index] || list[0] || "";
@@ -1139,6 +1125,23 @@ export default function App() {
   };
 
   useEffect(() => {
+    const BANNER_CACHE_KEY = "guli_customer_banners_v1";
+
+    // Show the last known banners immediately, then refresh silently from production.
+    // This makes repeat visits in Telegram Mini App and browser feel instant without
+    // changing the actual banner image quality.
+    try {
+      const cached = localStorage.getItem(BANNER_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          const active = parsed.filter((b: Banner) => b.active !== false);
+          setHeroBanners(active);
+          setActiveBannerIdx(0);
+        }
+      }
+    } catch {}
+
     const syncBanners = async () => {
       try {
         const res = await fetch(`${API_URL}/api/banners`, {
@@ -1153,10 +1156,12 @@ export default function App() {
         const active = json.data.filter((b: Banner) => b.active !== false);
         setHeroBanners(active);
         setActiveBannerIdx(0);
+        try {
+          localStorage.setItem(BANNER_CACHE_KEY, JSON.stringify(active));
+        } catch {}
       } catch (error) {
         console.warn("[GULI] Production banner load failed", error);
-        setHeroBanners([]);
-        setActiveBannerIdx(0);
+        // Keep cached banners visible if production API is temporarily slow.
       }
     };
 
@@ -4480,9 +4485,7 @@ export default function App() {
                     <div key={banner.id || idx} className="heroSlideItem" onClick={handleBannerClick}>
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
-                        src={bannerImageVariants(banner.imageUrl || promoBannerUrl || placeholder("GULI")).src}
-                        srcSet={bannerImageVariants(banner.imageUrl || "").srcSet}
-                        sizes="(max-width: 768px) 92vw, 100vw"
+                        src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
                         loading={idx === activeBannerIdx ? "eager" : "lazy"}
