@@ -71,8 +71,24 @@ async function orders(req,res){
   try{
     let q=db.from('orders').select('id,order_number,first_name,last_name,customer_name,phone,items,subtotal,delivery,discount,total,address,payment,payment_status,payment_receipt_path,status,created_at,updated_at').order('created_at',{ascending:false}).limit(100);
     const orConditions = [];
-    if (u?.telegram_id) orConditions.push(`telegram_id.eq.${u.telegram_id}`);
-    else if (u?.auth_user_id) orConditions.push(`auth_user_id.eq.${u.auth_user_id}`);
+    if (u?.telegram_id) {
+      orConditions.push(`telegram_id.eq.${u.telegram_id}`);
+    } else if (u?.auth_user_id) {
+      // Browser JWT and Telegram-created orders are the same customer.
+      // Resolve the linked Telegram bigint from public.users, then include
+      // BOTH identities so browser history contains Telegram-created orders.
+      orConditions.push(`auth_user_id.eq.${u.auth_user_id}`);
+      try {
+        const { data: linkedUser } = await db
+          .from('users')
+          .select('telegram_id')
+          .eq('id', u.auth_user_id)
+          .maybeSingle();
+        if (linkedUser?.telegram_id != null) {
+          orConditions.push(`telegram_id.eq.${Number(linkedUser.telegram_id)}`);
+        }
+      } catch {}
+    }
 
     if (tgQuery && /^\d+$/.test(tgQuery)) {
       orConditions.push(`telegram_id.eq.${tgQuery}`);
