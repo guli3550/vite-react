@@ -166,6 +166,30 @@ const orderStateKey = (order: Pick<Order, "status" | "payment_status">) =>
     paymentStatus: String(order.payment_status || "pending"),
   });
 
+const canShowReceiptUpload = (order: Pick<Order, "status" | "payment_status">) => {
+  const paymentStatus = String(order.payment_status || "").trim().toLowerCase();
+  if (paymentStatus === "verified") return false;
+
+  const status = String(order.status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[‘’]/g, "'");
+
+  // Receipt upload/re-upload is only needed before the order is accepted.
+  // Once the order reaches Qabul qilindi or any later lifecycle status,
+  // the customer must no longer see this action.
+  const acceptedOrLaterStatuses = [
+    "qabul qilindi",
+    "tayyorlanmoqda",
+    "yo'lda",
+    "yetkazildi",
+    "bekor qilindi",
+    "tasdiqlandi",
+  ];
+
+  return !acceptedOrLaterStatuses.some((value) => status.includes(value));
+};
+
 const orderNotificationKey = (userId: string | number) =>
   `guli_order_notifications_v2_${String(userId)}`;
 const orderStateKeyStorage = (userId: string | number) =>
@@ -3739,8 +3763,8 @@ export default function App() {
                         ) : null}
                       </span>
                       <div className="orderActions" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                        {/* Tezkor Chek yuklash / qayta yuklash tugmasi (Mijozga doim ochiq ko'rinadi) */}
-                        {o.payment === "card" || o.receipt_url ? (
+                        {/* Chek yuklash / qayta yuklash faqat tasdiqlashgacha ko‘rinadi */}
+                        {(o.payment === "card" || o.receipt_url) && canShowReceiptUpload(o) ? (
                           <label
                             htmlFor={`quick-receipt-upload-${o.id}`}
                             className="orderReceiptQuickBtn"
