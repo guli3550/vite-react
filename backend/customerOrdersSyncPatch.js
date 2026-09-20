@@ -104,11 +104,11 @@ async function listOrders(req, res) {
     if (user.type === 'auth') {
       let linkedTelegramId = user.telegram_id;
       let linkedUserId = user.id;
-      if (!linkedTelegramId || !linkedUserId) {
+      if (!linkedTelegramId) {
         try {
           const filters = [`id.eq.${user.id}`];
           if (user.phone_number) {
-            const digits = String(user.phone_number).replace(/\\D/g, '');
+            const digits = String(user.phone_number).trim();
             if (digits.length >= 7) filters.push(`phone_number.eq.${digits}`);
           }
           const { data: uData } = await supabase
