@@ -455,15 +455,31 @@ export function OnlineChatView({
       <input
         type="file"
         ref={fileInputRef}
-        accept="image/*"
-        style={{ display: "none" }}
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        style={{
+          position: "fixed",
+          left: "-10000px",
+          top: "0",
+          width: "1px",
+          height: "1px",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
         onChange={handleImageSelect}
       />
       <input
         type="file"
         ref={docInputRef}
         accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
-        style={{ display: "none" }}
+        style={{
+          position: "fixed",
+          left: "-10000px",
+          top: "0",
+          width: "1px",
+          height: "1px",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
         onChange={handleDocSelect}
       />
 
@@ -919,8 +935,10 @@ export function OnlineChatView({
                       type="button"
                       className="chatgpt-attach-item"
                       onClick={() => {
-                        setShowAttachMenu(false);
+                        // Keep the native file input mounted and only visually hidden.
+                        // Android Telegram WebView can ignore programmatic clicks on display:none inputs.
                         fileInputRef.current?.click();
+                        setShowAttachMenu(false);
                       }}
                     >
                       <ImageIcon size={16} className="chatgpt-attach-icon" />
@@ -930,8 +948,8 @@ export function OnlineChatView({
                       type="button"
                       className="chatgpt-attach-item"
                       onClick={() => {
-                        setShowAttachMenu(false);
                         docInputRef.current?.click();
+                        setShowAttachMenu(false);
                       }}
                     >
                       <FileText size={16} className="chatgpt-attach-icon" />
