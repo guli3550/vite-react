@@ -30,7 +30,7 @@ function normalize(raw: any): ChatMessage {
     ...raw,
     id: String(raw?.id ?? `rt-${Date.now()}`),
     sender: raw?.sender === "customer" || raw?.sender === "user" ? "user" : "admin",
-    read: Boolean(raw?.metadata?.read_at || raw?.read_at) || raw?.sender === "admin" ? false : false,
+    read: raw?.sender === "customer" ? Boolean(raw?.metadata?.read_at || raw?.read_at) : false,
     text: String(raw?.text || "").trim(),
     timestamp: raw?.created_at || raw?.timestamp || new Date().toISOString(),
     read: raw?.sender === "customer" ? Boolean(raw?.metadata?.read_at || raw?.read_at) : false,
@@ -101,22 +101,25 @@ async function connect(id: string) { if (id === "all") { if (!authHeaders().Auth
         // buffer/close long-lived streams; the canonical gateway keeps the
         // connection open to Render and preserves SSE chunks.
         const streamBase = CANONICAL_GATEWAY_URL;
-        const response = await fetch(`${streamBase}/api/chat/stream/${encodeURIComponent(id)}`, { headers: authHeaders(), cache: "no-store" }); if (!response.ok || !response.body) throw new Error(`stream ${response.status}`); const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; for (;;) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const chunks = buffer.split("\n\n"); buffer = chunks.pop() || ""; for (const chunk of chunks) { const dataLine = chunk.split("\n").find(line => line.startsWith("data:")); if (!dataLine) {
+        const response = await fetch(`${streamBase}/api/chat/stream/${encodeURIComponent(id)}`, { headers: authHeaders(), cache: "no-store" }); if (!response.ok || !response.body) throw new Error(`stream ${response.status}`); const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; for (;;) { const { value, done } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const chunks = buffer.split("\n\n"); buffer = chunks.pop() || ""; for (const chunk of chunks) {
           const eventLine = chunk.split("\n").find(line => line.startsWith("event:"));
+          const dataLine = chunk.split("\n").find(line => line.startsWith("data:"));
+          if (!dataLine) continue;
           if (eventLine?.trim() === "event: read_receipt") {
             try {
-              const receipt = JSON.parse(chunk.split("\n").find(line => line.startsWith("data:"))?.slice(5).trim() || "{}");
+              const receipt = JSON.parse(dataLine.slice(5).trim() || "{}");
               const ids = new Set((receipt.message_ids || []).map(String));
               const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
               if (Array.isArray(current)) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(current.map((m:any) => ids.has(String(m.id)) ? { ...m, read: true } : m)));
-                window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: current }));
+                const updated = current.map((m:any) => ids.has(String(m.id)) ? { ...m, read: true } : m);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: updated }));
               }
             } catch {}
+            continue;
           }
-          continue;
-        }
-        try { mergeAndBroadcast([JSON.parse(dataLine.slice(5).trim())]); } catch {} } } } catch (e) { console.warn("[Chat realtime] stream reconnect", e); } await new Promise(r => setTimeout(r, 1500)); } }
+          try { mergeAndBroadcast([JSON.parse(dataLine.slice(5).trim())]); } catch {}
+        } } } catch (e) { console.warn("[Chat realtime] stream reconnect", e); } await new Promise(r => setTimeout(r, 1500)); } }
 async function syncGuestMessages() { if (isAdmin() || telegramInitData() || linkedTelegramId()) return; const guestId = getGuestId(); const token = localStorage.getItem(GUEST_TOKEN_KEY) || ""; if (!token) return; let messages: any[] = []; try { const raw = localStorage.getItem(STORAGE_KEY); const parsed = raw ? JSON.parse(raw) : []; messages = Array.isArray(parsed) ? parsed : []; } catch { return; } let synced = new Set<string>(); try { const raw = localStorage.getItem(GUEST_SYNCED_KEY); const parsed = raw ? JSON.parse(raw) : []; if (Array.isArray(parsed)) synced = new Set(parsed.map(String)); } catch {} for (const m of messages) { if (m?.sender !== "user" || String(m?.userId || "") !== "guest-user" || !m?.text || synced.has(String(m.id))) continue; try { const res = await nativeFetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ telegram_id: guestId, sender: "customer", text: String(m.text).trim() }) }); if (res.ok) synced.add(String(m.id)); } catch {} } try { localStorage.setItem(GUEST_SYNCED_KEY, JSON.stringify(Array.from(synced).slice(-500))); } catch {} }
 async function startForCurrentContext() { let id = ""; let key = ""; if (isAdmin()) { const token = sessionStorage.getItem("guli_admin_token") || ""; if (!token) return; id = "all"; key = `admin:${token.slice(0, 16)}`; } else if (telegramInitData()) { id = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ""); if (!id) return; key = `telegram:${id}`; } else if (linkedTelegramId() && linkedTelegramToken()) { id = linkedTelegramId(); key = `linked:${id}`; } else { await ensureGuestSession(); await syncGuestMessages(); id = getGuestId(); key = `guest:${id}`; } if (!id || activeConnectionKey === key) return; activeConnectionKey = key; await connect(id); }
 const OriginalBroadcastChannel = window.BroadcastChannel;
