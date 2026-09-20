@@ -43,7 +43,7 @@ function browserUser(req) {
   if (!header.startsWith('Bearer ')) return null;
   try {
     const claims = verifyAccessToken(header.slice(7).trim());
-    return claims?.sub ? { type: 'auth', id: String(claims.sub), telegram_id: claims.telegram_id } : null;
+    return claims?.sub ? { type: 'auth', id: String(claims.sub), telegram_id: claims.telegram_id, phone_number: claims.phone || null } : null;
   } catch {
     return null;
   }
@@ -103,16 +103,30 @@ async function listOrders(req, res) {
       .order('created_at', { ascending: false }).limit(100);
     if (user.type === 'auth') {
       let linkedTelegramId = user.telegram_id;
-      if (!linkedTelegramId) {
+      let linkedUserId = user.id;
+      if (!linkedTelegramId || !linkedUserId) {
         try {
-          const { data: uData } = await supabase.from('users').select('telegram_id').eq('id', user.id).maybeSingle();
-          if (uData?.telegram_id) linkedTelegramId = uData.telegram_id;
+          const filters = [`id.eq.${user.id}`];
+          if (user.phone_number) {
+            const digits = String(user.phone_number).replace(/\\D/g, '');
+            if (digits.length >= 7) filters.push(`phone_number.eq.${digits}`);
+          }
+          const { data: uData } = await supabase
+            .from('users')
+            .select('id,telegram_id,phone_number')
+            .or(filters.join(','))
+            .limit(5);
+          const match = Array.isArray(uData) ? uData.find(Boolean) : null;
+          if (match) {
+            linkedUserId = match.id || linkedUserId;
+            linkedTelegramId = match.telegram_id || linkedTelegramId;
+          }
         } catch {}
       }
       if (linkedTelegramId) {
-        query = query.or(`auth_user_id.eq.${user.id},telegram_id.eq.${linkedTelegramId}`);
+        query = query.or(`auth_user_id.eq.${linkedUserId},telegram_id.eq.${Number(linkedTelegramId)}`);
       } else {
-        query = query.eq('auth_user_id', user.id);
+        query = query.eq('auth_user_id', linkedUserId);
       }
     } else {
       query = query.eq('telegram_id', user.id);
