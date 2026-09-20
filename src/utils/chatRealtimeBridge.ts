@@ -33,7 +33,6 @@ function normalize(raw: any): ChatMessage {
     read: raw?.sender === "customer" ? Boolean(raw?.metadata?.read_at || raw?.read_at) : false,
     text: String(raw?.text || "").trim(),
     timestamp: raw?.created_at || raw?.timestamp || new Date().toISOString(),
-    read: raw?.sender === "customer" ? Boolean(raw?.metadata?.read_at || raw?.read_at) : false,
     userId: raw?.telegram_id || raw?.userId,
     mediaUrl: mediaUrl ? String(mediaUrl) : undefined,
     userPhoto,
