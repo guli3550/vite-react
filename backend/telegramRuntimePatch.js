@@ -15,6 +15,33 @@ const AUTH_KEY = SUPABASE_SECRET_KEY || "guli-auth";
 const authHash = (value) => crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex");
 const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
 const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
+async function sendOrderMedia(telegramId, order) {
+  const urls = [];
+  for (const item of Array.isArray(order?.items) ? order.items : []) {
+    const p = item?.product || item?.product_data || item?.productDetails || {};
+    const candidates = [
+      item?.image, item?.image_url, item?.photo,
+      p?.image, p?.image_url,
+      ...(Array.isArray(p?.images) ? p.images : []),
+      ...(Array.isArray(item?.images) ? item.images : []),
+    ];
+    const url = candidates.map(x => String(x || "").trim()).find(x => /^https?:\\/\\//i.test(x));
+    if (url && !urls.includes(url)) urls.push(url);
+  }
+  const media = urls.slice(0, 10).map((url, i) => ({
+    type: "photo",
+    media: url,
+    ...(i === 0 ? { caption: `📦 <b>Guli Market — Buyurtma № ${String(order?.order_number || "—")}</b>` } : {}),
+  }));
+  if (!media.length) return null;
+  try {
+    return await telegramApi("sendMediaGroup", { chat_id: telegramId, media });
+  } catch (e) {
+    console.warn("[Telegram customer media] product images failed:", e?.message || e);
+    return null;
+  }
+}
+
 async function telegramApi(method, body) { if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan"); const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const result = await response.json(); if (!result.ok) throw new Error(result.description || `Telegram ${method} xatosi`); return result.result; }
 function storeMenuKeyboard() { return { remove_keyboard: true }; }
 function authContactKeyboard() { return { keyboard: [[{ text: "📱 Telefon raqamimni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true }; }
@@ -31,7 +58,14 @@ async function sendOrEditOrder(order) {
     try { await telegramApi("editMessageText", { chat_id: telegramId, message_id: existingId, text, parse_mode: "HTML", disable_web_page_preview: true }); return; }
     catch (err) { if (/message is not modified/i.test(err.message)) return; console.warn("[Telegram customer bot] In-place edit failed, keeping single message:", err.message); return; }
   }
-  try { const sent = await telegramApi("sendMessage", { chat_id: telegramId, text, parse_mode: "HTML", disable_web_page_preview: true }); const messageId = Number(sent?.message_id || 0); if (messageId && supabase) await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(fullOrder.order_number)); }
+  try {
+    // Product media is sent separately; the persistent status message below
+    // remains the single message that is edited when status changes.
+    await sendOrderMedia(telegramId, fullOrder);
+    const sent = await telegramApi("sendMessage", { chat_id: telegramId, text, parse_mode: "HTML", disable_web_page_preview: true });
+    const messageId = Number(sent?.message_id || 0);
+    if (messageId && supabase) await supabase.from("orders").update({ telegram_status_message_id: messageId }).eq("order_number", String(fullOrder.order_number));
+  }
   catch (error) { console.warn("Telegram order notification failed:", error.message); }
 }
 async function configureTelegram() { if (!TELEGRAM_BOT_TOKEN) return console.warn("[Telegram] TELEGRAM_BOT_TOKEN sozlanmagan"); try { await telegramApi("setMyCommands", { commands: [{ command: "start", description: "Guli Market do‘konini ochish" }, { command: "shop", description: "Onlayn do‘konni ochish" }] }); await telegramApi("setChatMenuButton", { menu_button: { type: "web_app", text: STORE_TEXT, web_app: { url: WEB_APP_URL } } }); const webhookBase = process.env.RENDER_EXTERNAL_URL || "https://guli-lingerie-api.onrender.com"; await telegramApi("setWebhook", { url: `${webhookBase}/api/telegram/webhook`, allowed_updates: ["message", "edited_message", "channel_post", "edited_channel_post", "callback_query", "my_chat_member", "chat_member"] }); console.log(`[Telegram] menu + commands + webhook configured: ${WEB_APP_URL}`); } catch (error) { console.error("[Telegram] configuration failed:", error.message); } }
