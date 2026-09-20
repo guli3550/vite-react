@@ -152,21 +152,15 @@ async function notifyCustomerPayment(order) {
   return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
-async function sendTelegramChatMediaDirect(chatId, method, field, absoluteUrl, caption, fileName) {
-  if (!BOT || !chatId || !absoluteUrl) return { sent: false, reason: "not_configured" };
-  const mediaResponse = await fetch(absoluteUrl, { redirect: "follow" });
-  if (!mediaResponse.ok) {
-    const body = await mediaResponse.text().catch(() => "");
-    throw new Error(`Chat media fetch failed: HTTP ${mediaResponse.status} ${body.slice(0,180)}`);
-  }
-  const bytes = await mediaResponse.arrayBuffer();
-  if (!bytes.byteLength) throw new Error("Chat media fayli bo‘sh");
-  const mime = mediaResponse.headers.get("content-type") || "application/octet-stream";
-  const form = new FormData();
-  form.append("chat_id", String(Number(chatId)));
-  form.append(field, new Blob([bytes], { type: mime }), String(fileName || "guli-chat-media"));
-  if (caption) form.append("caption", String(caption).slice(0, 1024));
-  const response = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, { method: "POST", body: form });
+async function sendTelegramChatMediaByUrl(chatId, method, field, mediaUrl, caption) {
+  if (!BOT || !chatId || !mediaUrl) return { sent: false, reason: "not_configured" };
+  const body = { chat_id: Number(chatId), [field]: mediaUrl };
+  if (caption) body.caption = String(caption).slice(0, 1024);
+  const response = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Connection": "keep-alive" },
+    body: JSON.stringify(body),
+  });
   const json = await response.json().catch(() => null);
   if (!response.ok || !json?.ok) throw new Error(json?.description || `Telegram ${response.status}`);
   return { sent: true, media: true, message_id: json?.result?.message_id || null };
@@ -196,13 +190,12 @@ async function notifyCustomerAdminChat(message, req) {
   try {
     let result;
     if (mediaUrlRaw) {
-      const base = String(process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || "").replace(/\/$/, "");
-      const host = String(req?.get?.("host") || "").trim();
-      const protocol = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "https").split(",")[0].trim();
-      const absolute = /^https?:\/\//i.test(mediaUrlRaw) ? mediaUrlRaw : `${base || `${protocol}://${host}`}${mediaUrlRaw.startsWith("/") ? "" : "/"}${mediaUrlRaw}`;
       const method = mediaType === "image" ? "sendPhoto" : mediaType === "video" ? "sendVideo" : mediaType === "audio" || mediaType === "voice" ? "sendAudio" : "sendDocument";
       const field = method === "sendPhoto" ? "photo" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "document";
-      result = await sendTelegramChatMediaDirect(telegramId, method, field, absolute, text, meta.fileName || message?.fileName || "guli-chat-media");
+      const targetUrl = telegramMediaUrl || mediaUrlRaw;
+      const absolute = /^https?:\/\//i.test(targetUrl) ? targetUrl : "";
+      if (!absolute) throw new Error("Telegram uchun to‘g‘ridan-to‘g‘ri media URL mavjud emas");
+      result = await sendTelegramChatMediaByUrl(telegramId, method, field, absolute, text);
     } else {
       result = await sendTelegram(telegramId, text);
     }
