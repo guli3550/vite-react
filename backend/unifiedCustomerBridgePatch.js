@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
+const { notifyCustomerReceiptUploaded } = require('./customerNotificationService.js');
 const URL_ = String(process.env.SUPABASE_URL || '').trim();
 const KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const BOT = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
@@ -151,6 +152,17 @@ async function receipt(req,res){
       const { data: signed } = await db.storage.from('payment-receipts').createSignedUrl(path, 86400);
       receipt_url = signed?.signedUrl || '';
     } catch {}
+    try {
+      await notifyCustomerReceiptUploaded({
+        ...o,
+        ...r.data,
+        telegram_id: o.telegram_id || u.telegram_id,
+        payment_receipt_path: path,
+        payment_receipt_uploaded_at: r.data?.payment_receipt_uploaded_at || new Date().toISOString(),
+      });
+    } catch (notifyError) {
+      console.warn('[Customer Telegram receipt media]', notifyError?.message || notifyError);
+    }
     return res.json({success:true,message:'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.',data:{...r.data,receipt_url:receipt_url||undefined}});
   }catch(e){console.error('[Unified receipt]',e);return fail(res,500,'Chekni yuborishda xatolik.')}
 }
