@@ -64,7 +64,9 @@ express.application.post = function telegramFanoutPost(routePath, ...handlers) {
       const isContact = Boolean(message?.contact?.phone_number);
       if (message?.from?.id && !isCommand && !isContact) {
         const row = await findPersistedMessage(message);
-        if (row) pushToAdmins(row);
+        // The canonical Telegram bridge now publishes through the shared
+        // backend chat bus. Keep this legacy fanout only as a fallback.
+        if (row && typeof globalThis.__GULI_CHAT_PUBLISH__ !== "function") pushToAdmins(row);
       }
       return result;
     };
