@@ -278,30 +278,43 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
   const backendId = user?.id ? String(user.id) : guestId;
   if (backendId) {
     try {
-      await fetch(`${API_URL}/api/chat/messages`, {
+      // Upload data URLs separately; never put large base64 media into chat_messages.
+      let persistedMediaUrl = media?.mediaUrl || "";
+      let telegramMediaUrl = "";
+      if (persistedMediaUrl.startsWith("data:")) {
+        const match = persistedMediaUrl.match(/^data:([^;]+);base64,(.+)$/i);
+        if (!match) throw new Error("Rasm formati noto‘g‘ri");
+        const mimeType = String(match[1] || "").toLowerCase();
+        const uploadRes = await fetch(API_URL + "/api/chat/media-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ telegram_id: backendId, type: media?.type || "file", data: match[0], mimeType, fileName: media?.fileName || "guli-chat-media" })
+        });
+        const uploadJson = await uploadRes.json().catch(() => null);
+        if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.mediaUrl) {
+          throw new Error(uploadJson?.message || "Rasmni yuklashda xatolik");
+        }
+        persistedMediaUrl = String(uploadJson.data.mediaUrl);
+        telegramMediaUrl = String(uploadJson.data.telegramMediaUrl || "");
+        newMsg.mediaUrl = persistedMediaUrl;
+        newMsg.metadata = { ...(newMsg.metadata || {}), mediaUrl: persistedMediaUrl, telegramMediaUrl, mediaPath: uploadJson.data.mediaPath, mimeType: uploadJson.data.mimeType || mimeType, type: media?.type || "file" };
+        saveChatMessages(getStoredChatMessages().map(m => m.id === newMsg.id ? newMsg : m));
+      }
+      const response = await fetch(API_URL + "/api/chat/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          telegram_id: backendId,
-          sender: "customer",
-          text: cleanText,
-          media_url: media?.mediaUrl,
-          client_message_id: clientMessageId,
-          metadata: {
-            clientMessageId,
-            userName,
-            userPhoto: user?.photo_url,
-            type: media?.type || "text",
-            mediaUrl: media?.mediaUrl,
-            fileName: media?.fileName,
-            replyToId: replyTo?.id,
-            replyToText: replyTo?.text,
-            replyToSender: replyTo?.sender,
-          }
+          telegram_id: backendId, sender: "customer", text: cleanText, media_url: persistedMediaUrl, client_message_id: clientMessageId,
+          metadata: { clientMessageId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: persistedMediaUrl, telegramMediaUrl, fileName: media?.fileName, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender }
         })
       });
-    } catch {
-      // Backend sync fallback
+      if (!response.ok) {
+        const failed = await response.json().catch(() => null);
+        throw new Error(failed?.message || "Chat xabari yuborilmadi: " + response.status);
+      }
+    } catch (error) {
+      console.error("[GULI chat] customer media/message send failed:", error);
+      window.dispatchEvent(new CustomEvent("guli_chat_send_error", { detail: { message: error instanceof Error ? error.message : "Xabar yuborilmadi" } }));
     }
   }
   return newMsg;
