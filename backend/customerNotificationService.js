@@ -179,7 +179,7 @@ async function notifyCustomerAdminChat(message, req) {
       const base = String(process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || "").replace(/\/$/, "");
       const host = String(req?.get?.("host") || "").trim();
       const protocol = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "https").split(",")[0].trim();
-      const absolute = /^https?:\\/\\//i.test(mediaUrlRaw) ? mediaUrlRaw : `${base || `${protocol}://${host}`}${mediaUrlRaw.startsWith("/") ? "" : "/"}${mediaUrlRaw}`;
+      const absolute = /^https?:\/\//i.test(mediaUrlRaw) ? mediaUrlRaw : `${base || `${protocol}://${host}`}${mediaUrlRaw.startsWith("/") ? "" : "/"}${mediaUrlRaw}`;
       const method = mediaType === "image" ? "sendPhoto" : mediaType === "video" ? "sendVideo" : mediaType === "audio" || mediaType === "voice" ? "sendAudio" : "sendDocument";
       const field = method === "sendPhoto" ? "photo" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "document";
       const payload = { chat_id: telegramId, [field]: absolute, caption: text.slice(0, 1024) };
