@@ -23,7 +23,12 @@ function isMessageValid(raw: any): boolean {
 
 function normalize(raw: any): ChatMessage {
   const meta = raw?.metadata || {};
-  const mediaUrl = raw?.mediaUrl || raw?.media_url || meta.mediaUrl || meta.media_url;
+  const rawMediaUrl = raw?.mediaUrl || raw?.media_url || meta.mediaUrl || meta.media_url;
+  const mediaUrl = rawMediaUrl
+    ? (String(rawMediaUrl).startsWith("http://") || String(rawMediaUrl).startsWith("https://") || String(rawMediaUrl).startsWith("data:") || String(rawMediaUrl).startsWith("blob:")
+        ? String(rawMediaUrl)
+        : `${API_URL}${String(rawMediaUrl).startsWith("/") ? "" : "/"}${String(rawMediaUrl)}`)
+    : undefined;
   const rawPhoto = raw?.userPhoto || raw?.user_photo || meta.userPhoto || meta.user_photo || meta.customer?.photoUrl || meta.customer?.photo_url;
   const userPhoto = rawPhoto ? String(rawPhoto).startsWith("http") ? String(rawPhoto) : `${API_URL}${String(rawPhoto).startsWith("/") ? "" : "/"}${String(rawPhoto)}` : undefined;
   return {
