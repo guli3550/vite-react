@@ -19,8 +19,8 @@ async function sendTelegramMediaGroup(chatId, media) {
 }
 
 async function signedReceiptUrl(order) {
-  const path = String(order?.payment_receipt_path || "").replace(/^\\/+/, "");
-  if (!path || !db || /\\.pdf$/i.test(path)) return "";
+  const path = String(order?.payment_receipt_path || "").replace(/^\/+/, "");
+  if (!path || !db || /\.pdf$/i.test(path)) return "";
   try {
     const { data, error } = await db.storage.from("payment-receipts").createSignedUrl(path, 3600);
     if (error) return "";
