@@ -113,7 +113,27 @@ async function orders(req,res){
       return res.json({success:true,data:[]});
     }
 
-    const {data,error}=await q; if(error) throw error; res.setHeader('Cache-Control','private,no-store'); return res.json({success:true,data:data||[]});
+    const {data,error}=await q;
+    if(error) throw error;
+
+    // Telegram Mini App and browser must receive the same canonical receipt URL.
+    // The bucket is private, so expose only short-lived signed URLs — never the
+    // raw Storage path.
+    const formatted = await Promise.all((data || []).map(async (row) => {
+      let receipt_url = '';
+      if (row.payment_receipt_path) {
+        try {
+          const { data: signed } = await db.storage
+            .from('payment-receipts')
+            .createSignedUrl(String(row.payment_receipt_path).replace(/^\\/+/, ''), 86400);
+          receipt_url = signed?.signedUrl || '';
+        } catch {}
+      }
+      return { ...row, receipt_url: receipt_url || undefined };
+    }));
+
+    res.setHeader('Cache-Control','private,no-store');
+    return res.json({success:true,data:formatted});
   }catch(e){console.error('[Unified orders fetch error]', e); return fail(res,500,'Buyurtmalarni yuklashda xatolik.')}
 }
 async function receipt(req,res){
@@ -125,7 +145,13 @@ async function receipt(req,res){
     const raw=String(req.body?.data||''),mime=String(req.body?.mimeType||''); if(!raw) return fail(res,400,'Chek topilmadi'); const b=Buffer.from(raw,'base64'); if(!b.length||b.length>6*1024*1024)return fail(res,400,'Chek hajmi 6 MB dan oshmasligi kerak');
     const h=b.subarray(0,12),ok=(mime==='image/jpeg'&&h[0]===255&&h[1]===216&&h[2]===255)||(mime==='image/png'&&h.toString('hex',0,8)==='89504e470d0a1a0a')||(mime==='image/webp'&&h.toString('ascii',0,4)==='RIFF'&&h.toString('ascii',8,12)==='WEBP')||(mime==='application/pdf'&&h.toString('ascii',0,5)==='%PDF-'); if(!ok)return fail(res,400,'Chek formati noto‘g‘ri');
     const ext=mime==='application/pdf'?'pdf':mime==='image/png'?'png':mime==='image/webp'?'webp':'jpg'; const path=`receipts/${o.id}/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`; const up=await db.storage.from('payment-receipts').upload(path,b,{contentType:mime,upsert:false}); if(up.error)throw up;
-    const owner=u.telegram_id?{telegram_id:u.telegram_id}:{auth_user_id:u.auth_user_id}; const r=await db.from('orders').update({payment_receipt_path:path,payment_status:'receipt_uploaded',payment_receipt_uploaded_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',o.id).match(owner).select('id,order_number,total,payment_status,payment_receipt_path').single(); if(r.error){await db.storage.from('payment-receipts').remove([path]);throw r.error;} return res.json({success:true,message:'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.',data:r.data});
+    const owner=u.telegram_id?{telegram_id:u.telegram_id}:{auth_user_id:u.auth_user_id}; const r=await db.from('orders').update({payment_receipt_path:path,payment_status:'receipt_uploaded',payment_receipt_uploaded_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',o.id).match(owner).select('id,order_number,total,payment_status,payment_receipt_path').single(); if(r.error){await db.storage.from('payment-receipts').remove([path]);throw r.error;}
+    let receipt_url = '';
+    try {
+      const { data: signed } = await db.storage.from('payment-receipts').createSignedUrl(path, 86400);
+      receipt_url = signed?.signedUrl || '';
+    } catch {}
+    return res.json({success:true,message:'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.',data:{...r.data,receipt_url:receipt_url||undefined}});
   }catch(e){console.error('[Unified receipt]',e);return fail(res,500,'Chekni yuborishda xatolik.')}
 }
 install('post','/api/customer/sync',sync);
