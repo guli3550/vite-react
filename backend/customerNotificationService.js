@@ -38,7 +38,7 @@ function productImageUrls(order) {
       ...(Array.isArray(p?.images) ? p.images : []),
       ...(Array.isArray(item?.images) ? item.images : []),
     ];
-    const url = candidates.map(x => String(x || "").trim()).find(x => /^https?:\\/\\//i.test(x));
+    const url = candidates.map(x => String(x || "").trim()).find(x => /^https?:\/\//i.test(x));
     if (url && !out.includes(url)) out.push(url);
   }
   return out.slice(0, 9);
