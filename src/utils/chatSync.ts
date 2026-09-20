@@ -314,12 +314,11 @@ export async function sendAdminReply(userId: string, text: string, media?: { typ
   const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: cleanText, timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
   saveChatMessages([...allMessages, reply]);
   try {
-    await fetch(`${API_URL}/api/chat/messages`, {
+    await fetch(`${API_URL}/api/chat/admin-reply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         telegram_id: userId,
-        sender: "admin",
         text: cleanText,
         media_url: media?.mediaUrl,
         metadata: {
