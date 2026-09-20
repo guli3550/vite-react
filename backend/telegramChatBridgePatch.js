@@ -173,8 +173,13 @@ express.application.post = function telegramChatBridgePost(routePath, ...handler
       const isCommand = /^\/(start|shop|store)(?:@\w+)?$/i.test(text);
       const isContact = Boolean(message?.contact?.phone_number);
       if (message?.from?.id && !isCommand && !isContact) {
-        try { await persistTelegramMessage(message); }
-        catch (error) { console.error("[Telegram chat bridge] message persistence failed:", error.message); }
+        try {
+          const persisted = await persistTelegramMessage(message);
+          if (persisted) {
+            req.__guliTelegramChatPersisted = true;
+            req.__guliTelegramChatMessage = persisted;
+          }
+        } catch (error) { console.error("[Telegram chat bridge] message persistence failed:", error.message); }
       }
       return handler(req, res, next);
     };
