@@ -827,9 +827,6 @@ export default function AdminChatTab({
                     <div className="chat2-conv-bottom">
                       <span className={`chat2-conv-snippet ${isUnread ? "unread-snippet" : ""}`}>{c.lastMessage}</span>
                       <div className="chat2-conv-badges">
-                        <span className={`chat2-platform-badge ${c.source}`}>
-                          {c.source === "telegram" ? "Telegram" : c.source === "webapp" ? "Web App" : "Call Center"}
-                        </span>
                         {isUnread && (
                           <span className="chat2-unread-badge" title={`${c.unreadCount} ta yangi xabar`}>
                             {c.unreadCount}
