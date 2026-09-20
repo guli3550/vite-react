@@ -1187,6 +1187,26 @@ export default function App() {
     };
   }, []);
 
+  // Preload the first banner as soon as its URL is known.
+  // The image itself remains the original 1600px WebP, so visual quality is unchanged.
+  useEffect(() => {
+    const url = String(heroBanners[0]?.imageUrl || promoBannerUrl || "").trim();
+    if (!url || url.startsWith("data:")) return;
+    const existing = document.head.querySelector('link[data-guli-banner-preload="1"]');
+    if (existing && (existing as HTMLLinkElement).href === url) return;
+    existing?.remove();
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = url;
+    link.fetchPriority = "high";
+    link.setAttribute("data-guli-banner-preload", "1");
+    document.head.appendChild(link);
+    return () => {
+      if (link.parentNode) link.parentNode.removeChild(link);
+    };
+  }, [heroBanners, promoBannerUrl]);
+
   // Automatic banner rotation every 5s if multiple active banners
   useEffect(() => {
     if (heroBanners.length <= 1 || isHeroDragging) return;
