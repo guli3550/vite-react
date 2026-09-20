@@ -1,5 +1,6 @@
 const express=require('express');const crypto=require('crypto');const {createClient}=require('@supabase/supabase-js');
 const { verifyAccessToken } = require('./guliCustomAuth.js');
+const { notifyCustomerReceiptUploaded } = require('./customerNotificationService.js');
 const originalJson=express.json;express.json=function(options={}){return originalJson({...options,limit:'12mb'})};
 const URL_=process.env.SUPABASE_URL||'',KEY=process.env.SUPABASE_SECRET_KEY||'',BOT=process.env.TELEGRAM_BOT_TOKEN||'',SECRET=process.env.ADMIN_SECRET||'';const supabase=URL_&&KEY?createClient(URL_,KEY,{auth:{persistSession:false,autoRefreshToken:false}}):null;const BUCKET='payment-receipts';const MAX=6*1024*1024;
 const eq=(a,b)=>{const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length===y.length&&crypto.timingSafeEqual(x,y)};
@@ -134,6 +135,18 @@ async function handleReceiptUpload(req, res) {
       const { data: sData } = await supabase.storage.from(BUCKET).createSignedUrl(path, 86400);
       signedReceiptUrl = sData?.signedUrl || '';
     } catch {}
+
+    try {
+      await notifyCustomerReceiptUploaded({
+        ...order,
+        ...updated,
+        telegram_id: order.telegram_id,
+        payment_receipt_path: path,
+        payment_receipt_uploaded_at: updated.payment_receipt_uploaded_at,
+      });
+    } catch (notifyError) {
+      console.warn('[Customer Telegram receipt media]', notifyError?.message || notifyError);
+    }
 
     return res.json({ success: true, message: 'Chek muvaffaqiyatli saqlandi. Admin tekshiradi.', data: { ...updated, receipt_url: signedReceiptUrl } });
   } catch (e) {
