@@ -29,6 +29,7 @@ export type ChatMessage = {
   location?: { lat: number; lng: number; address: string; mapUrl?: string };
   pinned?: boolean;
   isBookmarked?: boolean;
+  metadata?: Record<string, any>;
 };
 
 export type ConversationSource = "telegram" | "webapp" | "callcenter";
@@ -337,7 +338,37 @@ export function getAllConversations(): ConversationSummary[] {
   const messages = getStoredChatMessages(); const metaMap = getStoredMetadataMap(); const map = new Map<string, { messages: ChatMessage[]; last: ChatMessage; unread: number; name: string; photo?: string }>();
   for (const m of messages) { const uId = String(m.userId || "guest-user"); if (m.id === "welcome-msg-1") continue; if (!map.has(uId)) map.set(uId, { messages: [], last: m, unread: 0, name: m.userName || (uId === "guest-user" ? "Mijoz" : `Foydalanuvchi #${uId}`), photo: m.userPhoto }); const item = map.get(uId)!; item.messages.push(m); item.last = m; if (m.userName) item.name = m.userName; if (m.userPhoto) item.photo = m.userPhoto; if (m.sender === "user" && !m.read) item.unread++; }
   if (map.size === 0) { const meta = metaMap["guest-user"] || {}; return [{ userId: "guest-user", userName: "GULI mijozi", lastMessage: DEFAULT_WELCOME_MESSAGE.text, lastTimestamp: DEFAULT_WELCOME_MESSAGE.timestamp, unreadCount: 0, source: meta.source || "webapp", phone: meta.phone || "+998 90 123 45 67", telegramUsername: meta.telegramUsername || "guli_user", assignedOperator: meta.assignedOperator || "Operator (Dilnoza)", status: meta.status || "open", notes: meta.notes || "Xaridga qiziqish bildirgan", orderCount: meta.orderCount || 1, lastOrderNumber: meta.lastOrderNumber || "104291", lastOrderStatus: meta.lastOrderStatus || "Tayyorlanmoqda", lastOrderTotal: meta.lastOrderTotal || 185000 }]; }
-  return Array.from(map.entries()).map(([userId, data]) => { let lastText = data.last.text || ""; if (data.last.type === "image") lastText = "📷 Rasm"; else if (data.last.type === "audio") lastText = "🎙️ Ovozli xabar"; else if (data.last.type === "file") lastText = `📁 ${data.last.fileName || "Fayl"}`; const meta = metaMap[userId] || {}; let source: ConversationSource = meta.source || "webapp"; if (!meta.source) { if (userId.includes("telegram") || data.name.toLowerCase().includes("telegram")) source = "telegram"; else if (userId.includes("call") || data.name.toLowerCase().includes("call")) source = "callcenter"; } return { userId, userName: data.name, userPhoto: data.photo, lastMessage: lastText, lastTimestamp: data.last.timestamp, unreadCount: data.unread, source, phone: meta.phone || (userId.startsWith("998") ? `+${userId}` : "+998 90 123 45 67"), telegramUsername: meta.telegramUsername || (source === "telegram" ? `@${data.name.split(" ")[0].toLowerCase()}` : undefined), assignedOperator: meta.assignedOperator || "Navbatchi Operator", status: meta.status || "open", notes: meta.notes || "", orderCount: meta.orderCount ?? (userId === "guest-user" ? 1 : 2), lastOrderNumber: meta.lastOrderNumber || "104291", lastOrderStatus: meta.lastOrderStatus || "Tayyorlanmoqda", lastOrderTotal: meta.lastOrderTotal || 185000 }; }).sort((a,b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
+  return Array.from(map.entries()).map(([userId, data]) => {
+    let lastText = data.last.text || "";
+    if (data.last.type === "image") lastText = "📷 Rasm"; else if (data.last.type === "audio") lastText = "🎙️ Ovozli xabar"; else if (data.last.type === "file") lastText = `📁 ${data.last.fileName || "Fayl"}`;
+    const meta = metaMap[userId] || {};
+    const crm = data.last.metadata?.customer || {};
+    let source: ConversationSource = meta.source || crm.source || "webapp";
+    if (!meta.source && source === "webapp") {
+      if (userId.includes("telegram") || crm.telegram_id || data.name.toLowerCase().includes("telegram")) source = "telegram";
+      else if (userId.includes("call") || data.name.toLowerCase().includes("call")) source = "callcenter";
+    }
+    const phone = meta.phone || crm.phone || crm.telegram_phone || undefined;
+    const telegramUsername = meta.telegramUsername || crm.username || (source === "telegram" && crm.username ? `@${crm.username}` : undefined);
+    return {
+      userId,
+      userName: data.name,
+      userPhoto: data.photo || crm.photoUrl,
+      lastMessage: lastText,
+      lastTimestamp: data.last.timestamp,
+      unreadCount: data.unread,
+      source,
+      phone,
+      telegramUsername,
+      assignedOperator: meta.assignedOperator || "Navbatchi Operator",
+      status: meta.status || "open",
+      notes: meta.notes || "",
+      orderCount: meta.orderCount ?? (crm.orderCount !== undefined ? Number(crm.orderCount) : undefined),
+      lastOrderNumber: meta.lastOrderNumber || crm.lastOrderNumber || undefined,
+      lastOrderStatus: meta.lastOrderStatus || crm.lastOrderStatus || undefined,
+      lastOrderTotal: meta.lastOrderTotal ?? crm.lastOrderTotal ?? undefined
+    };
+  }).sort((a,b) => new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime());
 }
 
 export function subscribeToChat(callback: (messages: ChatMessage[]) => void): () => void {
