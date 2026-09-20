@@ -89,6 +89,31 @@ async function persistInlineChatMedia({telegramId,type,mediaUrl,fileName}) {
   return {mediaUrl:`/api/chat/media-file/${token}`,telegramMediaUrl,mediaPath:path,fileName:safeName,mimeType,type:String(type||"file")};
 }
 globalThis.__GULI_CHAT_PERSIST_MEDIA__ = persistInlineChatMedia;
+async function persistTelegramChatMedia({ telegramId, fileId, fileName, type }) {
+  if (!BOT_TOKEN || !supabase || !fileId) return null;
+  await ensureBucket();
+  const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
+  const fileJson = await fileRes.json().catch(() => null);
+  if (!fileRes.ok || !fileJson?.ok || !fileJson?.result?.file_path) {
+    throw new Error(fileJson?.description || "Telegram fayl yo'li olinmadi");
+  }
+  const mediaResp = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fileJson.result.file_path}`);
+  if (!mediaResp.ok) throw new Error("Telegramdan media yuklab olinmadi");
+  const buffer = Buffer.from(await mediaResp.arrayBuffer());
+  if (!buffer.length || buffer.length > MAX_BYTES) throw new Error("Telegram media hajmi 8 MB dan oshdi");
+  const mimeType = String(mediaResp.headers.get("content-type") || "").toLowerCase().split(";")[0] ||
+    (String(fileJson.result.file_path).toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
+  if (!validMime(mimeType)) throw new Error("Telegram media turi qo'llab-quvvatlanmaydi");
+  if (!validMagic(buffer, mimeType)) throw new Error("Telegram media formati noto'g'ri");
+  const safeName = String(fileName || "telegram-media").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+  const id = Number.isSafeInteger(Number(telegramId)) ? Number(telegramId) : 0;
+  const path = `messages/${id}/telegram-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType, safeName)}`;
+  const uploaded = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
+  if (uploaded.error) throw uploaded.error;
+  const token = signPath(path);
+  return { mediaUrl: `/api/chat/media-file/${token}`, mediaPath: path, fileName: safeName, mimeType, type: String(type || "file") };
+}
+globalThis.__GULI_CHAT_PERSIST_TELEGRAM_MEDIA__ = persistTelegramChatMedia;
 const {install}=require('./routeRegistry.js');
 install("post","/api/chat/media-upload",async(req,res)=>{try{let id=Number(req.body?.telegram_id);const isAdmin=admin(req);if(!Number.isSafeInteger(id)){const guest=String(req.headers["x-guli-guest-token"]||"");const gp=guest.split(".");if(gp.length===2){try{const p=JSON.parse(Buffer.from(gp[0],"base64url").toString("utf8"));if(Number.isSafeInteger(Number(p.guestId)))id=Number(p.guestId);}catch{}}else if(gp.length===3&&Number.isSafeInteger(Number(gp[0])))id=Number(gp[0]);if(!Number.isSafeInteger(id)){const tg=telegramUser(String(req.headers["x-telegram-init-data"]||""));if(tg)id=tg;}const jwt=customCustomer(req);if(!Number.isSafeInteger(id)&&jwt&&Number.isSafeInteger(Number(jwt.telegram_id)))id=Number(jwt.telegram_id);if(!Number.isSafeInteger(id)&&isAdmin)id=0;}if((!Number.isSafeInteger(id)||!authorized(req,id))&&!isAdmin)return res.status(401).json({success:false,message:"Chat sessiyasi tasdiqlanmadi"});const mimeType=String(req.body?.mimeType||req.body?.mime_type||"").toLowerCase();if(!validMime(mimeType))return res.status(400).json({success:false,message:"Bu fayl turi qo‘llab-quvvatlanmaydi"});const buffer=decodeData(req.body?.data);if(!validMagic(buffer,mimeType))return res.status(400).json({success:false,message:"Fayl formati noto‘g‘ri"});await ensureBucket();const safeName=String(req.body?.fileName||"file").replace(/[^a-zA-Z0-9._-]/g,"_").slice(-80);const path=`messages/${id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType,safeName)}`;const uploaded=await supabase.storage.from(BUCKET).upload(path,buffer,{contentType:mimeType,cacheControl:"31536000",upsert:false});if(uploaded.error)throw uploaded.error;const token=signPath(path);let telegramMediaUrl = "";
 const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
