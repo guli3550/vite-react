@@ -69,13 +69,22 @@ async function handleReceiptUpload(req, res) {
       // Resolve the linked Telegram ID through the canonical customer bridge,
       // whose auth_user_id column is UUID-compatible.
       try {
-        const { data: customerLink, error: customerLinkError } = await supabase
-          .from('customers')
+        const { data: canonicalUser, error: canonicalUserError } = await supabase
+          .from('users')
           .select('telegram_id')
-          .eq('auth_user_id', String(u.auth_user_id))
+          .eq('id', String(u.auth_user_id))
           .maybeSingle();
-        if (!customerLinkError && customerLink?.telegram_id != null) {
-          userTelegramId = customerLink.telegram_id;
+        if (!canonicalUserError && canonicalUser?.telegram_id != null) {
+          userTelegramId = canonicalUser.telegram_id;
+        } else {
+          const { data: customerLink, error: customerLinkError } = await supabase
+            .from('customers')
+            .select('telegram_id')
+            .eq('auth_user_id', String(u.auth_user_id))
+            .maybeSingle();
+          if (!customerLinkError && customerLink?.telegram_id != null) {
+            userTelegramId = customerLink.telegram_id;
+          }
         }
       } catch {}
     }
