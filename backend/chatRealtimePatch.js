@@ -97,7 +97,13 @@ globalThis.__GULI_CHAT_PUBLISH__ = publishRealtime;
 async function telegramSend(chatId, text) { if (!BOT_TOKEN || !chatId) return; try { const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }) }); const j = await r.json().catch(() => null); if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`); } catch (e) { console.warn("[Chat] Telegram notification failed:", e.message); } }
 async function notifyAdmins(message) { if (!ADMIN_CHAT_IDS.length || message?.sender !== "customer") return; const id = Number(message.telegram_id); const who = id < 0 ? `Browser guest ${Math.abs(id)}` : `Telegram ${id}`; const text = `💬 <b>Yangi mijoz xabari</b>\n\n👤 ${who}\n📝 ${String(message.text || "").slice(0, 300)}`; await Promise.all(ADMIN_CHAT_IDS.map(cid => telegramSend(cid, text))); }
 async function notifyTelegramCustomerIfOffline(message) { if (!message || message.sender !== "admin") return; const id = Number(message.telegram_id); if (!Number.isSafeInteger(id) || id <= 0 || telegramMiniAppOnline(id)) return; const text = "💬 <b>Qo'llab quvvatlash markazidan yangi habar keldi</b>\n\n🔔 Ko'rish uchun Guli Premium bildirishnomalar oynasini oching."; await telegramSend(id, text); }
-function startRealtime() { if (realtimeStarted || !supabase) return; realtimeStarted = true; realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } }); realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload)); realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`)); }
+function startRealtime() { if (realtimeStarted || !supabase) return; realtimeStarted = true; realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } }); realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload));
+  realtimeChannel.on("broadcast", { event: "chat_read" }, payload => {
+    const data = payload?.payload || {};
+    for (const client of clients) {
+      if (Number(client.chatId) === Number(data.telegram_id)) sseSend(client, "read_receipt", data);
+    }
+  }); realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`)); }
 function patchGet() { const original = express.application.get; express.application.get = function patchedGet(routePath, ...handlers) {
   if (routePath === "/api/admin/users/:telegramId/photo/:fileId") return original.call(this, routePath, async (req, res) => {
     try {
@@ -135,12 +141,39 @@ install("get", "/api/admin/chat/presence", async (req, res) => {
     .map(c => String(c.chatId));
   res.json({ success: true, data: { onlineTelegramIds: [...new Set(onlineIds)] } });
 });
+install("post", "/api/chat/read", async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
+  if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
+  const telegramId = String(req.body?.telegram_id || "").trim();
+  if (!/^\d+$/.test(telegramId)) return res.status(400).json({ success: false, message: "Mijoz ID noto'g'ri" });
+  const { data: rows, error: readError } = await supabase.from("chat_messages")
+    .select("id,metadata")
+    .eq("telegram_id", Number(telegramId))
+    .eq("sender", "customer");
+  if (readError) return res.status(500).json({ success: false, message: "O'qilgan holat saqlanmadi" });
+  const readAt = new Date().toISOString();
+  const ids = [];
+  for (const row of rows || []) {
+    const metadata = { ...(row.metadata || {}), read_at: readAt, read_by: "admin" };
+    const { error } = await supabase.from("chat_messages").update({ metadata }).eq("id", row.id);
+    if (!error) ids.push(String(row.id));
+  }
+  if (ids.length) {
+    for (const client of clients) {
+      if (Number(client.chatId) === Number(telegramId)) sseSend(client, "read_receipt", { telegram_id: Number(telegramId), message_ids: ids, read_at: readAt });
+    }
+    if (realtimeChannel) {
+      try { await realtimeChannel.send({ type: "broadcast", event: "chat_read", payload: { telegram_id: Number(telegramId), message_ids: ids, read_at: readAt } }); } catch {}
+    }
+  }
+  return res.json({ success: true, data: { message_ids: ids, read_at: readAt } });
+});
 install("post", "/api/chat/admin-reply", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
   const telegramId = String(req.body?.telegram_id || "").trim();
   const text = String(req.body?.text || "").trim();
-  if (!/^\\d+$/.test(telegramId) || !text) return res.status(400).json({ success: false, message: "Mijoz va xabar majburiy" });
+  if (!/^\d+$/.test(telegramId) || !text) return res.status(400).json({ success: false, message: "Mijoz va xabar majburiy" });
   const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
   const { data, error } = await supabase.from("chat_messages")
     .insert([{ telegram_id: Number(telegramId), sender: "admin", text, metadata }])
