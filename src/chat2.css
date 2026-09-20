@@ -83,6 +83,10 @@
   border: 2px solid #ffffff;
 }
 
+.chat2-online-dot.offline {
+  background: #cbd5e1;
+}
+
 .chat2-unread-dot {
   position: absolute;
   top: 0px;
