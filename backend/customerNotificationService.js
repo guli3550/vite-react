@@ -152,6 +152,26 @@ async function notifyCustomerPayment(order) {
   return { sent: false, reason: "handled_by_canonical_customer_order_message" };
 }
 
+async function sendTelegramChatMediaDirect(chatId, method, field, absoluteUrl, caption, fileName) {
+  if (!BOT || !chatId || !absoluteUrl) return { sent: false, reason: "not_configured" };
+  const mediaResponse = await fetch(absoluteUrl, { redirect: "follow" });
+  if (!mediaResponse.ok) {
+    const body = await mediaResponse.text().catch(() => "");
+    throw new Error(`Chat media fetch failed: HTTP ${mediaResponse.status} ${body.slice(0,180)}`);
+  }
+  const bytes = await mediaResponse.arrayBuffer();
+  if (!bytes.byteLength) throw new Error("Chat media fayli bo‘sh");
+  const mime = mediaResponse.headers.get("content-type") || "application/octet-stream";
+  const form = new FormData();
+  form.append("chat_id", String(Number(chatId)));
+  form.append(field, new Blob([bytes], { type: mime }), String(fileName || "guli-chat-media"));
+  if (caption) form.append("caption", String(caption).slice(0, 1024));
+  const response = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, { method: "POST", body: form });
+  const json = await response.json().catch(() => null);
+  if (!response.ok || !json?.ok) throw new Error(json?.description || `Telegram ${response.status}`);
+  return { sent: true, media: true, message_id: json?.result?.message_id || null };
+}
+
 async function notifyCustomerAdminChat(message, req) {
   const telegramId = Number(message?.telegram_id || 0);
   const textBody = String(message?.text || "").trim();
@@ -182,11 +202,7 @@ async function notifyCustomerAdminChat(message, req) {
       const absolute = /^https?:\/\//i.test(mediaUrlRaw) ? mediaUrlRaw : `${base || `${protocol}://${host}`}${mediaUrlRaw.startsWith("/") ? "" : "/"}${mediaUrlRaw}`;
       const method = mediaType === "image" ? "sendPhoto" : mediaType === "video" ? "sendVideo" : mediaType === "audio" || mediaType === "voice" ? "sendAudio" : "sendDocument";
       const field = method === "sendPhoto" ? "photo" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "document";
-      const payload = { chat_id: telegramId, [field]: absolute, caption: text.slice(0, 1024) };
-      const rr = await fetch(`https://api.telegram.org/bot${BOT}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const jj = await rr.json().catch(() => null);
-      if (!rr.ok || !jj?.ok) throw new Error(jj?.description || `Telegram ${rr.status}`);
-      result = { sent: true, media: true, message_id: jj?.result?.message_id || null };
+      result = await sendTelegramChatMediaDirect(telegramId, method, field, absolute, text, meta.fileName || message?.fileName || "guli-chat-media");
     } else {
       result = await sendTelegram(telegramId, text);
     }
