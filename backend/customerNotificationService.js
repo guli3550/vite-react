@@ -172,6 +172,7 @@ async function notifyCustomerAdminChat(message, req) {
   const messageId = String(message?.id || "").trim();
   const meta = message?.metadata && typeof message.metadata === "object" ? message.metadata : {};
   const mediaUrlRaw = String(message?.mediaUrl || message?.media_url || meta.mediaUrl || meta.media_url || "").trim();
+  const telegramMediaUrl = String(message?.telegramMediaUrl || meta.telegramMediaUrl || meta.telegram_media_url || "").trim();
   const mediaType = String(message?.type || meta.type || "").toLowerCase();
   if (!telegramId || (!textBody && !mediaUrlRaw)) return { sent: false, reason: "not_applicable" };
 
