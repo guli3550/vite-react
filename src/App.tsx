@@ -210,6 +210,41 @@ type Page =
 const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
+const BANNER_CACHE_KEY = "guli_customer_banners_v1";
+
+// Start the banner manifest request immediately when the JS bundle executes.
+// This removes the React-render/effect delay that was leaving the hero area blank.
+const initialBannerManifestPromise = fetch(`${API_URL}/api/banners`, {
+  cache: "default",
+  headers: { Accept: "application/json" },
+})
+  .then(async (res) => {
+    if (!res.ok) throw new Error(`Banner API status: ${res.status}`);
+    const json = await res.json();
+    if (json?.success !== true || !Array.isArray(json?.data)) {
+      throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
+    }
+    return json.data.filter((b: Banner) => b.active !== false) as Banner[];
+  })
+  .catch(() => null);
+
+try {
+  // On repeat visits this starts the image request before React finishes mounting.
+  const cached = localStorage.getItem(BANNER_CACHE_KEY);
+  const parsed = cached ? JSON.parse(cached) : null;
+  const firstUrl = Array.isArray(parsed) ? String(parsed[0]?.imageUrl || "").trim() : "";
+  if (firstUrl && !firstUrl.startsWith("data:")) {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = firstUrl;
+    link.fetchPriority = "high";
+    link.setAttribute("data-guli-banner-preload", "1");
+    document.head.appendChild(link);
+  }
+} catch {}
+
+
 const persistOrdersSafely = (orders: Order[]) => {
   // Receipts can be large data URLs. They must never be persisted in localStorage
   // together with the complete order list; that can exhaust the Web Storage quota
@@ -1125,11 +1160,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const BANNER_CACHE_KEY = "guli_customer_banners_v1";
-
-    // Show the last known banners immediately, then refresh silently from production.
-    // This makes repeat visits in Telegram Mini App and browser feel instant without
-    // changing the actual banner image quality.
+    // Cached banner metadata is rendered immediately; network refresh runs in parallel.
     try {
       const cached = localStorage.getItem(BANNER_CACHE_KEY);
       if (cached) {
@@ -1144,16 +1175,8 @@ export default function App() {
 
     const syncBanners = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/banners`, {
-          cache: "no-store",
-          headers: { Accept: "application/json", "Cache-Control": "no-cache" },
-        });
-        if (!res.ok) throw new Error(`Banner API status: ${res.status}`);
-        const json = await res.json();
-        if (json.success !== true || !Array.isArray(json.data)) {
-          throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
-        }
-        const active = json.data.filter((b: Banner) => b.active !== false);
+        const active = await initialBannerManifestPromise;
+        if (!active) throw new Error("Banner manifest unavailable");
         setHeroBanners(active);
         setActiveBannerIdx(0);
         try {
