@@ -52,7 +52,7 @@
   }
 
   function isCustomerApi(url) {
-    return /\/api\/(orders|customer\/|reviews|save-address)(?:[/?]|$)/i.test(url);
+    return /\/api\/(orders|customer\/|auth\/orders(?:\/|$)|auth\/payment(?:\/|$)|reviews|save-address)(?:[/?]|$)/i.test(url);
   }
 
   function withAccess(input, init, token) {
