@@ -300,9 +300,17 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         newMsg.metadata = { ...(newMsg.metadata || {}), mediaUrl: persistedMediaUrl, telegramMediaUrl, mediaPath: uploadJson.data.mediaPath, mimeType: uploadJson.data.mimeType || mimeType, type: media?.type || "file" };
         saveChatMessages(getStoredChatMessages().map(m => m.id === newMsg.id ? newMsg : m));
       }
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const tgInit = typeof window !== "undefined" ? String((window as any).Telegram?.WebApp?.initData || "") : "";
+      if (tgInit) headers["X-Telegram-Init-Data"] = tgInit;
+      const linkedToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_linked_token") || "") : "";
+      if (!tgInit && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
+      const guestToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
+      if (!tgInit && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
+
       const response = await fetch(API_URL + "/api/chat/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           telegram_id: backendId, sender: "customer", text: cleanText, media_url: persistedMediaUrl, client_message_id: clientMessageId,
           metadata: { clientMessageId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: persistedMediaUrl, telegramMediaUrl, fileName: media?.fileName, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender }
@@ -312,9 +320,17 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         const failed = await response.json().catch(() => null);
         throw new Error(failed?.message || "Chat xabari yuborilmadi: " + response.status);
       }
+      const saved = await response.json().catch(() => null);
+      if (!saved?.success) throw new Error(saved?.message || "Chat xabari saqlanmadi");
+      if (saved?.data?.id) {
+        newMsg.id = String(saved.data.id);
+        newMsg.timestamp = saved.data.created_at || newMsg.timestamp;
+        if (saved.data.metadata?.mediaUrl) newMsg.mediaUrl = saved.data.metadata.mediaUrl;
+      }
     } catch (error) {
       console.error("[GULI chat] customer media/message send failed:", error);
       window.dispatchEvent(new CustomEvent("guli_chat_send_error", { detail: { message: error instanceof Error ? error.message : "Xabar yuborilmadi" } }));
+      return null;
     }
   }
   return newMsg;
