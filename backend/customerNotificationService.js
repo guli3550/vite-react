@@ -199,6 +199,23 @@ async function notifyCustomerAdminChat(message) {
   }
 }
 
+async function hydrateCustomerOrderMedia(order) {
+  if (!db || !order?.id) return order;
+  try {
+    // Receipt upload handlers intentionally select only payment/ownership fields.
+    // Before sending customer media, re-read the canonical order so product
+    // images stored inside items/product_data are available to this service.
+    const { data, error } = await db.from("orders")
+      .select("*")
+      .eq("id", String(order.id))
+      .maybeSingle();
+    if (error || !data) return order;
+    return { ...order, ...data };
+  } catch {
+    return order;
+  }
+}
+
 async function notifyCustomerReceiptUploaded(order) {
   const telegramId = Number(order?.telegram_id || 0);
   if (!telegramId || !order?.payment_receipt_path) return { sent: false, reason: "not_applicable" };
@@ -209,7 +226,8 @@ async function notifyCustomerReceiptUploaded(order) {
   if (!c.claimed) return { sent: false, reason: "duplicate" };
 
   try {
-    const result = await sendCustomerOrderMedia(telegramId, order, true);
+    const fullOrder = await hydrateCustomerOrderMedia(order);
+    const result = await sendCustomerOrderMedia(telegramId, fullOrder, true);
     if (c.durable) await markSent(c.eventKey);
     return result;
   } catch (e) {
