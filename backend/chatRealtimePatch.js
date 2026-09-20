@@ -174,7 +174,31 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
   const telegramId = String(req.body?.telegram_id || "").trim();
   const text = String(req.body?.text || "").trim();
   if (!/^\d+$/.test(telegramId) || !text) return res.status(400).json({ success: false, message: "Mijoz va xabar majburiy" });
-  const metadata = req.body?.metadata && typeof req.body.metadata === "object" ? req.body.metadata : {};
+  let metadata = req.body?.metadata && typeof req.body.metadata === "object" ? { ...req.body.metadata } : {};
+  let mediaUrl = String(req.body?.media_url || req.body?.mediaUrl || metadata.mediaUrl || metadata.media_url || "").trim();
+  const mediaType = String(req.body?.type || metadata.type || "").toLowerCase();
+  if (mediaUrl && mediaUrl.startsWith("data:") && typeof globalThis.__GULI_CHAT_PERSIST_MEDIA__ === "function") {
+    try {
+      const stored = await globalThis.__GULI_CHAT_PERSIST_MEDIA__({
+        telegramId: Number(telegramId),
+        type: mediaType || "file",
+        mediaUrl,
+        fileName: metadata.fileName || metadata.file_name || req.body?.fileName || "file"
+      });
+      mediaUrl = stored.mediaUrl || mediaUrl;
+      metadata = {
+        ...metadata,
+        mediaUrl,
+        mediaPath: stored.mediaPath || metadata.mediaPath,
+        fileName: stored.fileName || metadata.fileName,
+        mimeType: stored.mimeType || metadata.mimeType,
+        type: stored.type || mediaType || "file"
+      };
+    } catch (e) {
+      console.warn("[Chat admin reply] media persistence failed:", e.message);
+      return res.status(400).json({ success: false, message: e?.message || "Media faylini saqlab bo‘lmadi" });
+    }
+  }
   const { data, error } = await supabase.from("chat_messages")
     .insert([{ telegram_id: Number(telegramId), sender: "admin", text, metadata }])
     .select("*").single();
