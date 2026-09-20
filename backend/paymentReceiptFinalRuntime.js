@@ -59,9 +59,19 @@ async function handleReceiptUpload(req, res) {
     // Check ownership
     let userTelegramId = u.id;
     if (u.auth_user_id && !userTelegramId) {
+      // Browser JWTs contain the canonical users UUID in sub. Never query
+      // public.users.id with a Telegram bigint or guess an integer identity.
+      // Resolve the linked Telegram ID through the canonical customer bridge,
+      // whose auth_user_id column is UUID-compatible.
       try {
-        const { data: uData } = await supabase.from('users').select('telegram_id').eq('id', u.auth_user_id).maybeSingle();
-        if (uData?.telegram_id) userTelegramId = uData.telegram_id;
+        const { data: customerLink, error: customerLinkError } = await supabase
+          .from('customers')
+          .select('telegram_id')
+          .eq('auth_user_id', String(u.auth_user_id))
+          .maybeSingle();
+        if (!customerLinkError && customerLink?.telegram_id != null) {
+          userTelegramId = customerLink.telegram_id;
+        }
       } catch {}
     }
 
