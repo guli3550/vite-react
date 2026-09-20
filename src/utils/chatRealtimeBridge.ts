@@ -93,7 +93,20 @@ async function ensureGuestSession() {
     }
   } catch (e) { console.warn("[Chat realtime] guest session failed", e); }
 }
-function authHeaders(): Record<string, string> { const headers: Record<string, string> = {}; const tg = telegramInitData(); if (tg) headers["X-Telegram-Init-Data"] = tg; const adminToken = sessionStorage.getItem("guli_admin_token") || ""; if (isAdmin() && adminToken) headers.Authorization = `Bearer ${adminToken}`; const linkedToken = linkedTelegramToken(); if (!isAdmin() && !tg && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken; const guestToken = localStorage.getItem(GUEST_TOKEN_KEY) || ""; if (!isAdmin() && !tg && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken; return headers; }
+function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const tg = telegramInitData();
+  if (tg) headers["X-Telegram-Init-Data"] = tg;
+  const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+  if (isAdmin() && adminToken) headers.Authorization = "Bearer " + adminToken;
+  const accessToken = localStorage.getItem("guli_access_token") || "";
+  const linkedToken = linkedTelegramToken();
+  if (!isAdmin() && !tg && accessToken) headers.Authorization = "Bearer " + accessToken;
+  if (!isAdmin() && !tg && !accessToken && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
+  const guestToken = localStorage.getItem(GUEST_TOKEN_KEY) || "";
+  if (!isAdmin() && !tg && !accessToken && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
+  return headers;
+}
 async function fetchHistory(id: string) { try { const path = id === "all" ? "/api/admin/chat/messages" : `/api/chat/messages/${encodeURIComponent(id)}`; const res = await fetch(`${API_URL}${path}`, { headers: authHeaders() }); if (!res.ok) return; const json = await res.json(); if (json?.success && Array.isArray(json.data)) mergeAndBroadcast(json.data); } catch (e) { console.warn("[Chat realtime] history failed", e); } }
 async function connect(id: string) { if (id === "all") { if (!authHeaders().Authorization) return; } else if (!telegramInitData() && !linkedTelegramToken() && !localStorage.getItem(GUEST_TOKEN_KEY)) return; await fetchHistory(id); for (;;) { if (document.visibilityState === "hidden") { await new Promise(r => setTimeout(r, 1500)); continue; } try {
         // SSE must bypass the same-origin Vercel rewrite. That proxy path can
@@ -120,7 +133,7 @@ async function connect(id: string) { if (id === "all") { if (!authHeaders().Auth
           try { mergeAndBroadcast([JSON.parse(dataLine.slice(5).trim())]); } catch {}
         } } } catch (e) { console.warn("[Chat realtime] stream reconnect", e); } await new Promise(r => setTimeout(r, 1500)); } }
 async function syncGuestMessages() { if (isAdmin() || telegramInitData() || linkedTelegramId()) return; const guestId = getGuestId(); const token = localStorage.getItem(GUEST_TOKEN_KEY) || ""; if (!token) return; let messages: any[] = []; try { const raw = localStorage.getItem(STORAGE_KEY); const parsed = raw ? JSON.parse(raw) : []; messages = Array.isArray(parsed) ? parsed : []; } catch { return; } let synced = new Set<string>(); try { const raw = localStorage.getItem(GUEST_SYNCED_KEY); const parsed = raw ? JSON.parse(raw) : []; if (Array.isArray(parsed)) synced = new Set(parsed.map(String)); } catch {} for (const m of messages) { if (m?.sender !== "user" || String(m?.userId || "") !== "guest-user" || !m?.text || synced.has(String(m.id))) continue; try { const res = await nativeFetch(`${API_URL}/api/chat/messages`, { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify({ telegram_id: guestId, sender: "customer", text: String(m.text).trim() }) }); if (res.ok) synced.add(String(m.id)); } catch {} } try { localStorage.setItem(GUEST_SYNCED_KEY, JSON.stringify(Array.from(synced).slice(-500))); } catch {} }
-async function startForCurrentContext() { let id = ""; let key = ""; if (isAdmin()) { const token = sessionStorage.getItem("guli_admin_token") || ""; if (!token) return; id = "all"; key = `admin:${token.slice(0, 16)}`; } else if (telegramInitData()) { id = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ""); if (!id) return; key = `telegram:${id}`; } else if (linkedTelegramId() && linkedTelegramToken()) { id = linkedTelegramId(); key = `linked:${id}`; } else { await ensureGuestSession(); await syncGuestMessages(); id = getGuestId(); key = `guest:${id}`; } if (!id || activeConnectionKey === key) return; activeConnectionKey = key; await connect(id); }
+async function startForCurrentContext() { let id = ""; let key = ""; if (isAdmin()) { const token = sessionStorage.getItem("guli_admin_token") || ""; if (!token) return; id = "all"; key = `admin:${token.slice(0, 16)}`; } else if (telegramInitData() || localStorage.getItem("guli_access_token")) { id = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ""); if (!id) return; key = `telegram:${id}`; } else if (linkedTelegramId() && linkedTelegramToken()) { id = linkedTelegramId(); key = `linked:${id}`; } else { await ensureGuestSession(); await syncGuestMessages(); id = getGuestId(); key = `guest:${id}`; } if (!id || activeConnectionKey === key) return; activeConnectionKey = key; await connect(id); }
 const OriginalBroadcastChannel = window.BroadcastChannel;
 const nativeFetch = window.fetch.bind(window);
 void ensureGuestSession();
