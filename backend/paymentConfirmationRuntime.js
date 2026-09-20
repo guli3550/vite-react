@@ -15,13 +15,36 @@ const PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
 function verifyInitData(initData){if(!BOT_TOKEN||!initData)return null;try{const p=new URLSearchParams(initData),hash=p.get('hash'),authDate=Number(p.get('auth_date'));if(!hash||!Number.isFinite(authDate)||Math.abs(Math.floor(Date.now()/1000)-authDate)>86400)return null;const pairs=[];p.forEach((v,k)=>{if(k!=='hash')pairs.push(`${k}=${v}`)});pairs.sort();const secret=crypto.createHmac('sha256','WebAppData').update(BOT_TOKEN).digest();const calculated=crypto.createHmac('sha256',secret).update(pairs.join('\n')).digest('hex');if(!safeEqual(calculated,hash))return null;const user=JSON.parse(p.get('user')||'null');return user?.id?{id:Number(user.id),username:user.username||null,first_name:user.first_name||null}:null}catch{return null}}
 function verifyGuest(token){try{if(!ADMIN_SECRET)return null;const [body,sig]=String(token||'').split('.');if(!body||!sig)return null;const expected=crypto.createHmac('sha256',ADMIN_SECRET).update(body).digest('base64url');if(!safeEqual(sig,expected))return null;const d=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));const id=Number(d.guestId);if(!Number.isSafeInteger(id)||id>=0||Number(d.exp)<Date.now())return null;return{id,username:null,first_name:null}}catch{return null}}
-function customer(req){return verifyInitData(req.headers['x-telegram-init-data']||'')||verifyGuest(req.headers['x-guli-guest-token']||'')}
+function customer(req){
+  const tg = verifyInitData(req.headers['x-telegram-init-data']||'');
+  if (tg) return { ...tg, type: 'telegram' };
+  const auth = String(req.headers.authorization||'');
+  if (auth.startsWith('Bearer ')) {
+    try {
+      const { verifyAccessToken } = require('./guliCustomAuth.js');
+      const claims = verifyAccessToken(auth.slice(7).trim());
+      if (claims?.sub) return { auth_user_id: String(claims.sub), telegram_id: claims.telegram_id != null ? Number(claims.telegram_id) : null, type: 'auth' };
+    } catch {}
+  }
+  const guest = verifyGuest(req.headers['x-guli-guest-token']||'');
+  return guest ? { ...guest, type: 'guest' } : null;
+}
 function admin(req){try{if(!ADMIN_SECRET)return false;const h=String(req.headers.authorization||'');if(!h.startsWith('Bearer '))return false;const [body,sig]=h.slice(7).split('.');if(!body||!sig)return false;const expected=crypto.createHmac('sha256',ADMIN_SECRET).update(body).digest('base64url');if(!safeEqual(sig,expected))return false;const d=JSON.parse(Buffer.from(body,'base64url').toString('utf8'));return d.role==='admin'&&Number(d.exp)>Date.now()}catch{return false}}
 const { install } = require('./routeRegistry.js');
 function fail(res,code,message){return res.status(code).json({success:false,message})}
 async function telegramApi(method,body){if(!BOT_TOKEN)return null;const r=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(!j.ok)throw new Error(j.description||'Telegram API xatosi');return j.result}
 async function notify(userId,text){if(!userId||!BOT_TOKEN)return;try{await telegramApi('sendMessage',{chat_id:Number(userId),text,disable_web_page_preview:true})}catch(e){console.warn('Payment Telegram notification failed:',e.message)}}
-async function getOrder(orderNumber,userId){if(!supabase)throw new Error('Supabase sozlanmagan');const {data,error}=await supabase.from('orders').select('*').eq('order_number',orderNumber).eq('telegram_id',userId).maybeSingle();if(error)throw error;return data}
+async function getOrder(orderNumber,identity){
+  if(!supabase)throw new Error('Supabase sozlanmagan');
+  let q=supabase.from('orders').select('*').eq('order_number',String(orderNumber));
+  if(identity?.auth_user_id) {
+    if(identity.telegram_id) q=q.or(`auth_user_id.eq.${identity.auth_user_id},telegram_id.eq.${Number(identity.telegram_id)}`);
+    else q=q.eq('auth_user_id',identity.auth_user_id);
+  } else if(identity?.telegram_id) q=q.eq('telegram_id',Number(identity.telegram_id));
+  else if(identity?.id) q=q.eq('telegram_id',Number(identity.id));
+  else return null;
+  const {data,error}=await q.maybeSingle();if(error)throw error;return data;
+}
 async function expireIfNeeded(order){if(!order||String(order.payment||'')!=='card_manual'||String(order.payment_status||'')==='verified'||String(order.status||'')==='To‘lov qilinmadi')return order;const created=new Date(order.created_at).getTime();if(!Number.isFinite(created)||Date.now()-created<PAYMENT_WINDOW_MS)return order;const {data,error}=await supabase.from('orders').update({status:'To‘lov qilinmadi',payment_status:'rejected',updated_at:new Date().toISOString()}).eq('id',order.id).eq('telegram_id',order.telegram_id).select('*').single();if(error)throw error;return data}
 
 install('get','/api/orders/:orderNumber/payment-state',async(req,res)=>{const user=customer(req);if(!user)return fail(res,401,'Mijoz sessiyasi topilmadi.');try{let order=await getOrder(String(req.params.orderNumber||'').trim(),user.id);if(!order)return fail(res,404,'Buyurtma topilmadi');order=await expireIfNeeded(order);const created=new Date(order.created_at).getTime();const remaining=Math.max(0,PAYMENT_WINDOW_MS-(Date.now()-created));return res.json({success:true,data:{order_number:order.order_number,status:order.status,payment_status:order.payment_status||'pending',payment:order.payment,created_at:order.created_at,remaining_seconds:Math.ceil(remaining/1000),receipt_path:order.payment_receipt_path||null}})}catch(e){console.error('Payment state error:',e);return res.status(500).json({success:false,message:'To‘lov holatini olishda xatolik'})}});
