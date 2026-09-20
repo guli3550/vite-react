@@ -40,6 +40,7 @@ import {
   MapPin,
   BarChart2,
 } from "lucide-react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import "../chat2.css";
 import "../admin/components/AdminGuliChat.css";
 
@@ -194,6 +195,24 @@ export default function AdminChatTab({
   void token;
 
   useEffect(() => {
+    let alive = true;
+    const loadPresence = async () => {
+      try {
+        const api = getApiBaseUrl();
+        const adminToken = token || sessionStorage.getItem("guli_admin_token") || "";
+        const res = await fetch(`${api}/api/admin/chat/presence`, { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
+        const json = await res.json().catch(() => null);
+        if (alive && json?.success && Array.isArray(json.data?.onlineTelegramIds)) {
+          setOnlineCustomerIds(new Set(json.data.onlineTelegramIds.map(String)));
+        }
+      } catch {}
+    };
+    void loadPresence();
+    const timer = window.setInterval(loadPresence, 5000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [token]);
+
+  useEffect(() => {
     seedSampleChatsIfEmpty();
   }, []);
 
@@ -204,6 +223,7 @@ export default function AdminChatTab({
 
   const [replyText, setReplyText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [onlineCustomerIds, setOnlineCustomerIds] = useState<Set<string>>(new Set());
   const [filterType, setFilterType] = useState<
     "all" | "unread" | "telegram" | "webapp" | "callcenter" | "orders"
   >("all");
@@ -794,6 +814,7 @@ export default function AdminChatTab({
             sortedConversations.map((c) => {
               const isSelected = c.userId === selectedUserId;
               const isUnread = (c.unreadCount || 0) > 0;
+              const isCustomerOnline = onlineCustomerIds.has(String(c.userId));
               return (
                 <button
                   type="button"
@@ -807,7 +828,7 @@ export default function AdminChatTab({
                     ) : (
                       <div className="chat2-avatar">{c.userName.slice(0, 1).toUpperCase()}</div>
                     )}
-                    <span className="chat2-online-dot" />
+                    <span className={`chat2-online-dot ${isCustomerOnline ? "" : "offline"}`} />
                     {isUnread && <span className="chat2-unread-dot" />}
                   </div>
                   <div className="chat2-conv-content">
@@ -934,8 +955,8 @@ export default function AdminChatTab({
                   </span>
                 </div>
                 <div className="chatgpt-header-online-indicator">
-                  <span className="chatgpt-indicator-dot" />
-                  <span>Online · GULI Admin Web App mijoz aloqasi</span>
+                  <span className={`chatgpt-indicator-dot ${onlineCustomerIds.has(String(currentConversation?.userId)) ? "" : "offline"}`} />
+                  <span>{onlineCustomerIds.has(String(currentConversation?.userId)) ? "Online" : "Offline"} · Mijoz holati</span>
                 </div>
               </div>
             </div>
