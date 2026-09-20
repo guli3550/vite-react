@@ -53,8 +53,12 @@ function mergeAndBroadcast(items: any[]) {
   for (const raw of items) {
     if (!isMessageValid(raw)) continue;
     const m = normalize(raw);
-    if (!messages.some(x => String(x.id) === String(m.id))) {
+    const clientKey = String((m as any)?.metadata?.clientMessageId || (m as any)?.metadata?.client_message_id || "").trim();
+    const existingIndex = messages.findIndex(x => String(x.id) === String(m.id) || (clientKey && String((x as any)?.metadata?.clientMessageId || (x as any)?.metadata?.client_message_id || "").trim() === clientKey));
+    if (existingIndex === -1) {
       messages.push(m);
+    } else {
+      messages[existingIndex] = { ...messages[existingIndex], ...m, read: messages[existingIndex].read };
     }
   }
 
