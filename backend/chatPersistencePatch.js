@@ -30,16 +30,48 @@ express.application.post = function patchedPost(path, ...handlers) {
     const i = handlers.length - 1;
     const handler = handlers[i];
     handlers[i] = async (req, res, next) => {
-      let payload = null;
+      // Capture the base handler's response body WITHOUT sending it yet.
+      // This lets us finish the metadata write (and merge it into the
+      // body) before anything downstream (including chatRealtimePatch's
+      // own res.json interception, which drives the realtime/SSE
+      // publish) ever sees the response. See commit message for why the
+      // previous "update after res.json()" ordering was Root Cause A of
+      // browser image realtime failures.
+      let captured;
+      let captureCalled = false;
       const originalJson = res.json.bind(res);
-      res.json = body => { payload = body; return originalJson(body); };
+      res.json = (body) => { captured = body; captureCalled = true; return res; };
+
       const result = await handler(req, res, next);
+
+      if (!captureCalled) return result;
+      let body = captured;
       const metadata = metadataFromBody(req.body || {});
-      const id = payload?.data?.id;
+      const id = body?.data?.id;
       if (id && Object.keys(metadata).length && supabase) {
-        const { error } = await supabase.from("chat_messages").update({ metadata }).eq("id", id);
-        if (error) console.warn("[Chat persistence] metadata update skipped:", error.message);
+        try {
+          const { data: updated, error } = await supabase
+            .from("chat_messages")
+            .update({ metadata })
+            .eq("id", id)
+            .select("*")
+            .single();
+          if (error) {
+            console.warn("[Chat persistence] metadata update skipped:", error.message);
+          } else if (updated) {
+            body = { ...body, data: { ...updated } };
+            // Canonical flattened fields for frontend consumers that read
+            // top-level type/mediaUrl instead of message.metadata.*.
+            if (metadata.type !== undefined) body.data.type = metadata.type;
+            if (metadata.mediaUrl !== undefined) body.data.mediaUrl = metadata.mediaUrl;
+            if (metadata.fileName !== undefined) body.data.fileName = metadata.fileName;
+            if (metadata.mimeType !== undefined) body.data.mimeType = metadata.mimeType;
+          }
+        } catch (e) {
+          console.warn("[Chat persistence] metadata update failed:", e.message);
+        }
       }
+      originalJson(body);
       return result;
     };
   }
