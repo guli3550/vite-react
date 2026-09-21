@@ -80,6 +80,10 @@ async function main() {
       `${name} — GULI MARKET onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
     const mainImage = images[0] || `${SITE}/guli-logo.png`;
     const price = Number(p.price || 0);
+    const rating = Number(p.rating || 0);
+    const reviewCount = Number(p.reviews || 0);
+    const hasRating = Number.isFinite(rating) && rating > 0 && rating <= 5 && Number.isFinite(reviewCount) && reviewCount > 0;
+
     const schema = {
       "@context": "https://schema.org",
       "@type": "Product",
@@ -88,12 +92,26 @@ async function main() {
       image: images,
       sku: p.product_code || p.id,
       category,
+      url: productUrl,
       brand: { "@type": "Brand", name: "GULI MARKET" },
+      mainEntityOfPage: productUrl,
+      audience: { "@type": "PeopleAudience", suggestedGender: "female" },
+      ...(hasRating ? {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: Number(rating.toFixed(2)),
+          reviewCount: Math.floor(reviewCount),
+          bestRating: 5,
+          worstRating: 1
+        }
+      } : {}),
       offers: {
         "@type": "Offer",
         url: productUrl,
         priceCurrency: "UZS",
         price: price > 0 ? price : undefined,
+        itemCondition: "https://schema.org/NewCondition",
+        seller: { "@type": "Organization", name: "GULI MARKET", url: SITE },
         availability: Number(p.stock || 0) > 0
           ? "https://schema.org/InStock"
           : "https://schema.org/OutOfStock",
