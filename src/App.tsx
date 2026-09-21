@@ -303,7 +303,9 @@ try {
 } catch {}
 
 
-const persistOrdersSafely = (orders: Order[]) => {
+const orderCacheKey = (userId: string | number) => `guli_orders_v3_${String(userId || "guest-user")}`;
+
+const persistOrdersSafely = (orders: Order[], userId = "guest-user") => {
   // Receipts can be large data URLs. They must never be persisted in localStorage
   // together with the complete order list; that can exhaust the Web Storage quota
   // and crash the React app during checkout/realtime updates.
@@ -312,8 +314,7 @@ const persistOrdersSafely = (orders: Order[]) => {
     return rest;
   });
   try {
-    localStorage.setItem("orders", JSON.stringify(compact));
-    localStorage.removeItem("guli_orders");
+    localStorage.setItem(orderCacheKey(userId), JSON.stringify(compact));
   } catch (error) {
     // Storage is only an offline cache. Never let quota exhaustion break the app.
     console.warn("[Guli storage] orders cache skipped:", error);
@@ -956,7 +957,7 @@ export default function App() {
     readStorage("wishlist", []),
   );
   const [orders, setOrders] = useState<Order[]>(() =>
-    readStorage("orders", []),
+    readStorage(orderCacheKey(currentUserId), []),
   );
   const orderNotificationsKey = orderNotificationKey(currentUserId);
   const orderStatesKey = orderStateKeyStorage(currentUserId);
@@ -1721,8 +1722,14 @@ export default function App() {
     localStorage.setItem("wishlist", JSON.stringify(wishlist));
   }, [wishlist]);
   useEffect(() => {
-    persistOrdersSafely(orders);
-  }, [orders]);
+    persistOrdersSafely(orders, currentUserId);
+  }, [orders, currentUserId]);
+
+  useEffect(() => {
+    // Never show another customer's locally cached orders after authentication
+    // changes. Server data for the new canonical identity will replace this cache.
+    setOrders(readStorage(orderCacheKey(currentUserId), []));
+  }, [currentUserId]);
   useEffect(() => {
     localStorage.setItem("guli_phone", phone);
   }, [phone]);
@@ -2259,8 +2266,7 @@ export default function App() {
               }));
               setOrders(mapped);
               try {
-                localStorage.setItem("orders", JSON.stringify(mapped));
-                localStorage.setItem("guli_orders", JSON.stringify(mapped));
+                persistOrdersSafely(mapped, currentUserId);
               } catch {}
               return mapped;
             }
@@ -2329,8 +2335,7 @@ export default function App() {
         }
         const next = Array.from(map.values());
         try {
-          localStorage.setItem("orders", JSON.stringify(next));
-          localStorage.setItem("guli_orders", JSON.stringify(next));
+          persistOrdersSafely(next, currentUserId);
         } catch {}
         return next;
       });
