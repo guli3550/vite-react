@@ -2405,3 +2405,147 @@
   }
   .chatgpt-attach-popover, .telegram-emoji-drawer { z-index:15000 !important; }
 }
+
+
+/* ==========================================================================
+   ANDROID ADMIN CHAT OVERLAY FIX — profile persistence + floating panels
+   UI-only; no chat/realtime behavior changes.
+   ========================================================================== */
+@media (max-width: 768px) {
+  .chatgpt-clean-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1200 !important;
+    overflow: visible !important;
+    isolation: isolate !important;
+  }
+
+  .chatgpt-header-left {
+    max-width: calc(100% - 205px) !important;
+    min-width: 0 !important;
+  }
+
+  .chatgpt-header-right {
+    position: absolute !important;
+    right: 6px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    width: max-content !important;
+    min-width: 0 !important;
+    height: 38px !important;
+    gap: 1px !important;
+    z-index: 1300 !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn,
+  .chatgpt-header-right a.chatgpt-header-icon-btn {
+    display: inline-flex !important;
+    flex: 0 0 30px !important;
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    height: 30px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+
+  /* Operator menu must float above the message surface. */
+  .chatgpt-operator-menu {
+    position: fixed !important;
+    top: 118px !important;
+    right: 8px !important;
+    width: min(280px, calc(100vw - 16px)) !important;
+    max-height: min(60vh, 420px) !important;
+    overflow-y: auto !important;
+    z-index: 10050 !important;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, .20) !important;
+  }
+
+  /* CRM profile is a modal-like overlay on Android, not a second column
+     hidden underneath the main chat panel. */
+  .chat2-crm-panel:not(.chat2-mobile-hide) {
+    display: flex !important;
+    position: fixed !important;
+    top: 108px !important;
+    left: 8px !important;
+    right: 8px !important;
+    bottom: 74px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 16px !important;
+    padding: 12px !important;
+    overflow-y: auto !important;
+    background: #fff !important;
+    box-shadow: 0 22px 55px rgba(15, 23, 42, .24) !important;
+    z-index: 10000 !important;
+  }
+
+  .chat2-crm-head {
+    position: sticky !important;
+    top: -12px !important;
+    z-index: 5 !important;
+    background: #fff !important;
+    padding: 8px 0 10px !important;
+  }
+
+  /* Search/pinned panels stay above the message list but below modal overlays. */
+  .chatgpt-inline-search,
+  .chatgpt-pinned-banner {
+    position: relative !important;
+    z-index: 800 !important;
+  }
+
+  .chat2-fullscreen-overlay,
+  .chat2-modal-overlay {
+    z-index: 20000 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .chatgpt-header-left {
+    max-width: calc(100% - 188px) !important;
+  }
+
+  .chatgpt-header-right {
+    right: 3px !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn,
+  .chatgpt-header-right a.chatgpt-header-icon-btn {
+    flex-basis: 28px !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
+    height: 28px !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+
+  .chat2-crm-panel:not(.chat2-mobile-hide) {
+    top: 104px !important;
+    left: 5px !important;
+    right: 5px !important;
+    bottom: 68px !important;
+    border-radius: 14px !important;
+  }
+}
