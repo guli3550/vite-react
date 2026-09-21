@@ -13,6 +13,15 @@ export const CANONICAL_GATEWAY_URL = "https://guli-gateway.parizodabaxtiyorov.wo
 export const LEGACY_RENDER_ORIGIN = "https://guli-lingerie-api.onrender.com";
 
 export function getApiBaseUrl(): string {
+  // Native Capacitor Android should use the public GULI origin instead of the
+  // Cloudflare Worker. Some Android WebViews can receive an HTML challenge
+  // page from workers.dev, which then breaks JSON catalog parsing.
+  if (typeof window !== "undefined") {
+    const host = String(window.location.hostname || "").toLowerCase();
+    const isNativeCapacitorHost = host === "localhost" || host === "127.0.0.1";
+    if (isNativeCapacitorHost) return "https://gulii.uz";
+  }
+
   // Customer-facing production traffic uses the same-origin /api proxy.
   // This avoids browser CORS/network failures when the canonical Worker is
   // healthy but unreachable from a particular browser/network path.
