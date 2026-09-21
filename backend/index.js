@@ -975,13 +975,34 @@ app.post("/api/chat/messages", async (req, res) => {
     if (req.__guliTelegramChatPersisted && req.__guliTelegramChatMessage) {
       return res.status(201).json({ success: true, data: req.__guliTelegramChatMessage });
     }
-    const { telegram_id, sender, text } = req.body;
-    if (!telegram_id || !sender || !text) {
+    const { telegram_id, sender, text, media_url, metadata } = req.body;
+    const cleanText = String(text || "").trim();
+    const mediaUrl = String(media_url || "").trim();
+    const bodyMetadata = metadata && typeof metadata === "object" ? metadata : {};
+    const hasMedia = Boolean(mediaUrl || bodyMetadata.mediaUrl);
+    if (!telegram_id || !sender || (!cleanText && !hasMedia)) {
       return res.status(400).json({ success: false, message: "Ma'lumotlar to'liq emas" });
     }
+
+    // Customer attachments may be sent without a caption. The legacy route
+    // previously required text and rejected photo-only messages.
+    const displayText = cleanText || (
+      bodyMetadata.type === "image" || mediaUrl
+        ? "📷 Rasm"
+        : bodyMetadata.type === "audio"
+          ? "🎙️ Ovozli xabar"
+          : "📎 Fayl"
+    );
+    const insertRow = {
+      telegram_id,
+      sender,
+      text: displayText,
+      ...(mediaUrl ? { media_url: mediaUrl } : {}),
+      ...(Object.keys(bodyMetadata).length ? { metadata: bodyMetadata } : {}),
+    };
     const { data, error } = await supabase
       .from("chat_messages")
-      .insert([{ telegram_id, sender, text }])
+      .insert([insertRow])
       .select("*")
       .single();
     if (error) throw error;
