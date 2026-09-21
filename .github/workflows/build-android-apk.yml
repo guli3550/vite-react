@@ -39,6 +39,21 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Apply GULI MARKET app icon
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/app/src/main/res/drawable-nodpi
+          cp public/guli-logo.webp android/app/src/main/res/drawable-nodpi/guli_logo.webp
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          s = s.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/guli_logo"')
+          s = s.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/guli_logo"')
+          p.write_text(s)
+          PY
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
