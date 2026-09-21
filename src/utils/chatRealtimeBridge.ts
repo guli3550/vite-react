@@ -163,7 +163,11 @@ setTimeout(() => void startForCurrentContext(), 250);
 setTimeout(() => void startForCurrentContext(), 1500);
 setInterval(() => {
   if (isAdmin()) {
-    void startForCurrentContext();
+    // Admin SSE is realtime-first, but history polling is the recovery path
+    // for media events that can be missed during an SSE reconnect. Calling
+    // startForCurrentContext() alone is insufficient because it returns early
+    // once the admin connection key is already active.
+    void fetchHistory("all");
   } else if (telegramInitData()) {
     const id = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "").trim();
     if (id) void fetchHistory(id);
