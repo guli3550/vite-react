@@ -1,3 +1,4 @@
+const express = require("express");
 // Security boundary for the legacy /api/chat/messages route in index.js.
 // The route historically trusted client-supplied telegram_id and sender.
 // This preload wraps only that route so customer identity is server-verified.
