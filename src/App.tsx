@@ -1543,12 +1543,29 @@ export default function App() {
     };
 
     refreshUnread();
+
+    // The chat store now emits a dedicated notification-count event whenever
+    // the canonical message state changes. Listen to it directly so the bell
+    // badge updates immediately for Telegram/admin media and text messages,
+    // without waiting for another render, tab change, or manual refresh.
+    const handleNotificationCountUpdate = () => {
+      refreshUnread();
+    };
+
     const unsubscribe = subscribeToChat(refreshUnread);
     window.addEventListener("guli_new_admin_message", handleNewAdminMsg);
+    window.addEventListener(
+      "guli_notifications_updated",
+      handleNotificationCountUpdate,
+    );
 
     return () => {
       unsubscribe();
       window.removeEventListener("guli_new_admin_message", handleNewAdminMsg);
+      window.removeEventListener(
+        "guli_notifications_updated",
+        handleNotificationCountUpdate,
+      );
     };
   }, [currentUserId, page]);
 
