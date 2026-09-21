@@ -44,7 +44,19 @@
   }
 
   function isCanonical(url) {
-    return url === API || url.startsWith(API + '/');
+    if (url === API || url.startsWith(API + '/')) return true;
+    // Production gulii.uz uses same-origin /api/* requests through Vercel.
+    // Those requests must receive the same canonical JWT + refresh handling
+    // as absolute gateway requests.
+    if (typeof window !== 'undefined') {
+      const raw = String(url || '');
+      if (raw.startsWith('/api/')) return true;
+      try {
+        const parsed = new URL(raw, window.location.href);
+        return parsed.origin === window.location.origin && parsed.pathname.startsWith('/api/');
+      } catch {}
+    }
+    return false;
   }
 
   function isAuthEndpoint(url) {
