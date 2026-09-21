@@ -123,10 +123,18 @@ async function listOrders(req, res) {
           }
         } catch {}
       }
+      const verifiedPhone = String(user.phone_number || '').trim();
       if (linkedTelegramId) {
-        query = query.or(`auth_user_id.eq.${linkedUserId},telegram_id.eq.${Number(linkedTelegramId)}`);
+        // Include the canonical auth_user_id and verified Telegram identity.
+        // The phone fallback is only derived from the server-verified JWT and
+        // is used for legacy orders created before auth_user_id was populated.
+        const clauses = [`auth_user_id.eq.${linkedUserId}`, `telegram_id.eq.${Number(linkedTelegramId)}`];
+        if (verifiedPhone.length >= 7) clauses.push(`phone.eq.${verifiedPhone}`);
+        query = query.or(clauses.join(','));
       } else {
-        query = query.eq('auth_user_id', linkedUserId);
+        const clauses = [`auth_user_id.eq.${linkedUserId}`];
+        if (verifiedPhone.length >= 7) clauses.push(`phone.eq.${verifiedPhone}`);
+        query = query.or(clauses.join(','));
       }
     } else {
       query = query.eq('telegram_id', user.id);
