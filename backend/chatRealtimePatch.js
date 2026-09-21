@@ -194,6 +194,13 @@ async function enrichCustomerMessage(message) {
   if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return message;
 
   const customer = await getCachedCustomerProfile(telegramId);
+  // Preserve profile data already supplied by browser/guest clients while
+  // allowing durable Telegram/CRM data to fill or override missing fields.
+  const messageMeta = message?.metadata && typeof message.metadata === "object" ? message.metadata : {};
+  if (!customer.username && messageMeta.telegramUsername) customer.username = String(messageMeta.telegramUsername).replace(/^@+/, "");
+  if (!customer.phone && messageMeta.phone) customer.phone = String(messageMeta.phone);
+  if (!customer.telegram_phone && messageMeta.phone) customer.telegram_phone = String(messageMeta.phone);
+  if (!customer.photoUrl && messageMeta.userPhoto) customer.photoUrl = String(messageMeta.userPhoto);
   const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
   const phone = customer.phone || customer.telegram_phone || null;
   const telegramUsername = customer.username || null;
