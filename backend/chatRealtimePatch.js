@@ -160,6 +160,16 @@ function patchGet() { const original = express.application.get; express.applicat
   return original.call(this, routePath, ...handlers);
 }; }
 const { install } = require('./routeRegistry.js');
+install("get", "/api/admin/chat/messages", async (req, res) => {
+  if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
+  if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
+  const { data, error } = await supabase.from("chat_messages").select("*").order("created_at", { ascending: true });
+  if (error) {
+    console.warn("[Chat realtime] admin history failed:", error.message);
+    return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
+  }
+  return res.json({ success: true, data: data || [] });
+});
 install("get", "/api/admin/chat/presence", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   const onlineIds = [...clients]
