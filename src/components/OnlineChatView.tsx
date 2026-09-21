@@ -209,8 +209,20 @@ export function OnlineChatView({
     scrollToBottom(false);
   }, []);
 
+  // Realtime/history updates must never yank the user away from a message
+  // they are reading. Auto-scroll only when the viewport is already near the
+  // bottom (or the user has just reached the bottom).
   useEffect(() => {
-    scrollToBottom(true);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceFromBottom < 160;
+
+    if (isNearBottom) {
+      scrollToBottom(true);
+    }
   }, [messages.length]);
 
   const handleScroll = () => {
