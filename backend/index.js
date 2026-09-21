@@ -1000,6 +1000,7 @@ app.post("/api/chat/messages", async (req, res) => {
       telegram_id,
       sender,
       text: displayText,
+      metadata: bodyMetadata,
     };
     const { data, error } = await supabase
       .from("chat_messages")
