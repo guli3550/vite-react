@@ -66,7 +66,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setStatus("idle"); setError(null); setSuccess(null); setLoading(false); exchangeInFlightRef.current = false;
   }, [isOpen, initialTab]);
 
-  const completeLogin = async (data: any) => {
+  const completeLogin = (data: any) => {
     const rawUsername = String(data?.user?.telegram_username || data?.user?.username || "").trim().replace(/^@+/, "");
     const user: AuthUser = {
       id: String(data?.user?.id || ""),
@@ -87,7 +87,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setSuccess("✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...");
     setStatus("idle");
     try { popupRef.current?.close(); } catch {}
-    if (Capacitor.isNativePlatform()) { try { await Browser.close(); } catch {} }
+    if (Capacitor.isNativePlatform()) { try { void Browser.close(); } catch {} }
     onSuccess(user, data.access_token);
     window.setTimeout(() => window.location.reload(), 450);
   };
@@ -103,7 +103,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         const exchanged = await api("/api/v1/auth/exchange", { method: "POST", body: JSON.stringify({ session_id: sessionId, exchange_ticket: ticket }) });
-        await completeLogin(exchanged);
+        completeLogin(exchanged);
         exchangeInFlightRef.current = false;
         return;
       } catch (e) {
