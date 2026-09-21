@@ -23,6 +23,9 @@ const ALLOWED_STATIC_ORIGINS = new Set([
   "https://www.gulii.uz",
   "https://guli-lingerie.pages.dev",
   "https://guli3550.github.io",
+  "https://localhost",
+  "http://localhost",
+  "capacitor://localhost",
   "https://web.telegram.org",
   "https://t.me",
 ]);
@@ -58,6 +61,7 @@ const corsOptions = {
     "X-Telegram-Init-Data",
     "X-GULI-Client",
     "X-Guli-Guest-Token",
+    "X-Guli-Linked-Token",
   ],
   maxAge: 86400,
 };
