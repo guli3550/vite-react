@@ -195,15 +195,25 @@ async function enrichCustomerMessage(message) {
 
   const customer = await getCachedCustomerProfile(telegramId);
   const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
+  const phone = customer.phone || customer.telegram_phone || null;
+  const telegramUsername = customer.username || null;
   return {
     ...message,
-    userName: fullName || customer.full_name || customer.username || `Telegram #${telegramId}`,
+    userName: fullName || customer.full_name || telegramUsername || `Telegram #${telegramId}`,
     userPhoto: customer.photoUrl || null,
+    phone,
+    telegramUsername,
     metadata: {
       ...(message.metadata || {}),
       source: "telegram",
+      userName: fullName || customer.full_name || telegramUsername || `Telegram #${telegramId}`,
+      userPhoto: customer.photoUrl || null,
+      phone,
+      telegramUsername,
       customer: {
         ...customer,
+        phone,
+        telegramUsername,
         photoUrl: customer.photoUrl || null
       }
     }
