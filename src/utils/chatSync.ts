@@ -364,33 +364,148 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
 export async function sendAdminReply(userId: string, text: string, media?: { type?: "image" | "file" | "audio" | "video" | "video_note"; mediaUrl?: string; fileName?: string; audioDuration?: number; videoDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
   const cleanText = text.trim();
   if (!cleanText && !media?.mediaUrl) return null;
+
+  const optimisticId = `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const allMessages = getStoredChatMessages();
-  const reply: ChatMessage = { id: `admin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "admin", text: cleanText, timestamp: new Date().toISOString(), read: false, userId: String(userId), userName: "GULI Admin", type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender };
+  const reply: ChatMessage = {
+    id: optimisticId,
+    sender: "admin",
+    text: cleanText,
+    timestamp: new Date().toISOString(),
+    read: false,
+    userId: String(userId),
+    userName: "GULI Admin",
+    type: media?.type || "text",
+    mediaUrl: media?.mediaUrl,
+    fileName: media?.fileName,
+    audioDuration: media?.audioDuration,
+    videoDuration: media?.videoDuration,
+    replyToId: replyTo?.id,
+    replyToText: replyTo?.text,
+    replyToSender: replyTo?.sender,
+  };
   saveChatMessages([...allMessages, reply]);
+
   try {
-    await fetch(`${API_URL}/api/chat/admin-reply`, {
+    // Admin media must be persisted before the chat row is created.
+    // Keeping a base64/data URL in localStorage caused the first image to
+    // appear locally while later images could disappear after storage
+    // pressure. The canonical /api/chat/media-upload path returns a small,
+    // durable signed proxy URL for the UI plus a Telegram-reachable signed
+    // URL for customer delivery.
+    let persistedMediaUrl = String(media?.mediaUrl || "");
+    let telegramMediaUrl = "";
+
+    if (persistedMediaUrl.startsWith("data:")) {
+      const match = persistedMediaUrl.match(/^data:([^;]+);base64,(.+)$/i);
+      if (!match) throw new Error("Rasm formati noto‘g‘ri");
+
+      const mimeType = String(match[1] || "").toLowerCase();
+      const adminToken = typeof window !== "undefined"
+        ? String(sessionStorage.getItem("guli_admin_token") || "")
+        : "";
+      const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      if (adminToken) uploadHeaders.Authorization = "Bearer " + adminToken;
+
+      const uploadRes = await fetch(API_URL + "/api/chat/media-upload", {
+        method: "POST",
+        headers: uploadHeaders,
+        body: JSON.stringify({
+          telegram_id: userId,
+          type: media?.type || "file",
+          data: match[0],
+          mimeType,
+          fileName: media?.fileName || "guli-chat-media",
+        }),
+      });
+      const uploadJson = await uploadRes.json().catch(() => null);
+      if (!uploadRes.ok || !uploadJson?.success || !uploadJson?.data?.mediaUrl) {
+        throw new Error(uploadJson?.message || "Rasmni saqlashda xatolik");
+      }
+
+      persistedMediaUrl = String(uploadJson.data.mediaUrl);
+      telegramMediaUrl = String(uploadJson.data.telegramMediaUrl || "");
+      reply.mediaUrl = persistedMediaUrl;
+      reply.fileName = uploadJson.data.fileName || reply.fileName;
+      reply.type = uploadJson.data.type || reply.type;
+      reply.metadata = {
+        mediaUrl: persistedMediaUrl,
+        telegramMediaUrl,
+        mediaPath: uploadJson.data.mediaPath,
+        mimeType: uploadJson.data.mimeType || mimeType,
+        type: reply.type,
+      };
+      saveChatMessages(getStoredChatMessages().map(m => m.id === optimisticId ? reply : m));
+    }
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const adminToken = typeof window !== "undefined"
+      ? String(sessionStorage.getItem("guli_admin_token") || "")
+      : "";
+    if (adminToken) headers.Authorization = "Bearer " + adminToken;
+
+    const response = await fetch(API_URL + "/api/chat/admin-reply", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         telegram_id: userId,
         text: cleanText,
-        media_url: media?.mediaUrl,
+        media_url: persistedMediaUrl,
         metadata: {
           userName: "GULI Admin",
-          type: media?.type || "text",
-          mediaUrl: media?.mediaUrl,
-          fileName: media?.fileName,
+          type: media?.type || reply.type || "text",
+          mediaUrl: persistedMediaUrl,
+          telegramMediaUrl,
+          fileName: reply.fileName || media?.fileName,
           replyToId: replyTo?.id,
           replyToText: replyTo?.text,
           replyToSender: replyTo?.sender,
-        }
-      })
+        },
+      }),
     });
-  } catch {
-    // Admin chat sync fallback
+
+    if (!response.ok) {
+      const failed = await response.json().catch(() => null);
+      throw new Error(failed?.message || `Admin chat xabari yuborilmadi: ${response.status}`);
+    }
+
+    const saved = await response.json().catch(() => null);
+    if (!saved?.success || !saved?.data?.id) {
+      throw new Error(saved?.message || "Admin chat xabari saqlanmadi");
+    }
+
+    const savedData = saved.data;
+    const savedMeta = savedData.metadata || {};
+    const canonicalMedia = savedData.mediaUrl || savedMeta.mediaUrl || persistedMediaUrl || undefined;
+    const updatedReply: ChatMessage = {
+      ...reply,
+      id: String(savedData.id),
+      timestamp: savedData.created_at || reply.timestamp,
+      mediaUrl: canonicalMedia,
+      type: savedData.type || savedMeta.type || reply.type,
+      fileName: savedData.fileName || savedMeta.fileName || reply.fileName,
+      metadata: savedMeta,
+    };
+
+    const current = getStoredChatMessages();
+    const replaced = current.map(m => String(m.id) === optimisticId ? updatedReply : m);
+    saveChatMessages(replaced.some(m => String(m.id) === String(updatedReply.id)) ? replaced : [...replaced, updatedReply]);
+    notifyNewAdminMessage(updatedReply);
+    return updatedReply;
+  } catch (error) {
+    console.error("[GULI chat] admin media/message send failed:", error);
+    try {
+      const current = getStoredChatMessages();
+      saveChatMessages(current.filter(m => String(m.id) !== optimisticId));
+    } catch {}
+    window.dispatchEvent(new CustomEvent("guli_chat_send_error", {
+      detail: {
+        message: error instanceof Error ? error.message : "Xabar yuborilmadi",
+        code: "CHAT_ADMIN_SEND_ERROR",
+      },
+    }));
+    return null;
   }
-  notifyNewAdminMessage(reply);
-  return reply;
 }
 
 function notifyNewAdminMessage(msg: ChatMessage): void { const currentCount = getUnreadAdminMessagesCount(msg.userId); localStorage.setItem(NOTIFICATIONS_KEY, String(currentCount)); window.dispatchEvent(new CustomEvent("guli_notifications_updated", { detail: currentCount })); window.dispatchEvent(new CustomEvent("guli_new_admin_message", { detail: msg })); }
