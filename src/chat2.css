@@ -2513,3 +2513,59 @@
     height: 100% !important;
   }
 }
+
+/* ==========================================================================
+   ADMIN CHAT MOBILE PANELS ABOVE MAIN CHAT
+   ========================================================================== */
+@media (max-width: 768px) {
+  .chat2-container {
+    position: relative !important;
+    overflow: hidden !important;
+  }
+
+  .chat2-main {
+    position: relative !important;
+    z-index: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .chat2-crm-panel {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    z-index: 300 !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    box-shadow: -12px 0 30px rgba(15, 23, 42, 0.12) !important;
+    border-left: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .chat2-crm-panel:not(.chat2-mobile-hide) {
+    display: flex !important;
+  }
+
+  .chat2-crm-head {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 310 !important;
+    background: rgba(255,255,255,.98) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+
+  .chat2-modal-overlay,
+  .chat2-fullscreen-overlay {
+    z-index: 99999 !important;
+  }
+
+  /* Inline operator chooser sits above the message canvas. */
+  .chatgpt-clean-header ~ .chat2-crm-panel {
+    z-index: 300 !important;
+  }
+}
