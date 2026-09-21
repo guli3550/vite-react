@@ -328,30 +328,6 @@ export default function AdminChatTab({
     return () => unsubscribe();
   }, [selectedUserId, mobileView]);
 
-  // Keep the chat stable: only auto-scroll when the user is already near
-  // the bottom, or when switching to a different conversation. Realtime
-  // updates/history recovery can replace allMessages without changing the
-  // user's intended scroll position.
-  const previousActiveLastIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const lastId = activeChatMessages[activeChatMessages.length - 1]?.id ?? null;
-    const isConversationSwitch = previousActiveLastIdRef.current === null;
-    const lastMessageChanged = previousActiveLastIdRef.current !== lastId;
-    previousActiveLastIdRef.current = lastId;
-
-    const end = messagesEndRef.current;
-    const container = end?.parentElement;
-    if (!end || !container) return;
-
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isNearBottom = distanceFromBottom < 160;
-
-    if (isConversationSwitch || (lastMessageChanged && isNearBottom)) {
-      end.scrollIntoView({ behavior: isConversationSwitch ? "auto" : "smooth" });
-    }
-  }, [activeChatMessages, selectedUserId]);
-
   // Sync customer notes text on selectedUserId change
   const currentConversation = conversations.find((c) => c.userId === selectedUserId);
   useEffect(() => {
@@ -416,6 +392,30 @@ export default function AdminChatTab({
       m.userName?.toLowerCase().includes(q)
     );
   });
+
+  // Keep the chat stable: only auto-scroll when the user is already near
+  // the bottom, or when switching to a different conversation. Realtime
+  // updates/history recovery can replace allMessages without changing the
+  // user's intended scroll position.
+  const previousActiveLastIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const lastId = activeChatMessages[activeChatMessages.length - 1]?.id ?? null;
+    const isConversationSwitch = previousActiveLastIdRef.current === null;
+    const lastMessageChanged = previousActiveLastIdRef.current !== lastId;
+    previousActiveLastIdRef.current = lastId;
+
+    const end = messagesEndRef.current;
+    const container = end?.parentElement;
+    if (!end || !container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isNearBottom = distanceFromBottom < 160;
+
+    if (isConversationSwitch || (lastMessageChanged && isNearBottom)) {
+      end.scrollIntoView({ behavior: isConversationSwitch ? "auto" : "smooth" });
+    }
+  }, [activeChatMessages, selectedUserId]);
 
   const pinnedMessage = rawActiveChatMessages.find((m) => m.pinned);
 
