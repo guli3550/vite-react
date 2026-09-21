@@ -1992,9 +1992,6 @@ export default function App() {
         setProductsError(message);
         if (productsRecoveryTimerRef.current) clearTimeout(productsRecoveryTimerRef.current);
         productsRecoveryTimerRef.current = null;
-        if (!append) {
-        }
-
         // Continue recovering in the background. This is deliberately silent:
         // the page stays usable and the next retry replaces the error as soon
         // as the backend becomes available. No browser refresh is required.
