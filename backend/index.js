@@ -993,12 +993,13 @@ app.post("/api/chat/messages", async (req, res) => {
           ? "🎙️ Ovozli xabar"
           : "📎 Fayl"
     );
+    // chat_messages uses metadata as the canonical attachment envelope.
+    // Do not write media_url as a top-level DB column because the production
+    // schema intentionally keeps attachment fields inside metadata.
     const insertRow = {
       telegram_id,
       sender,
       text: displayText,
-      ...(mediaUrl ? { media_url: mediaUrl } : {}),
-      ...(Object.keys(bodyMetadata).length ? { metadata: bodyMetadata } : {}),
     };
     const { data, error } = await supabase
       .from("chat_messages")
