@@ -5182,8 +5182,24 @@ export default function App() {
                     last_name: telegramUser.last_name,
                     username: telegramUser.username,
                     photo_url: telegramUser.photo_url,
+                    phone,
                   }
-                : undefined
+                : (() => {
+                    try {
+                      const raw = JSON.parse(localStorage.getItem("guli_auth_user") || "null");
+                      if (!raw?.id) return undefined;
+                      return {
+                        id: raw.id,
+                        first_name: raw.full_name?.split(" ")[0] || raw.first_name,
+                        last_name: raw.full_name?.split(" ").slice(1).join(" ") || raw.last_name,
+                        username: raw.telegram_username || raw.username,
+                        photo_url: raw.telegram_photo_url || raw.avatar_url,
+                        phone: raw.phone || phone,
+                      };
+                    } catch {
+                      return undefined;
+                    }
+                  })()
             }
             onShowToast={showToast}
           />
