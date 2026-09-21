@@ -295,14 +295,19 @@ export function markAllAdminChatRead(): void {
 
 export function getTotalUnreadChatCount(): number { return getAllConversations().reduce((sum, c) => sum + (c.unreadCount || 0), 0); }
 
-export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string }, media?: { type?: "image" | "file" | "audio" | "video" | "video_note"; mediaUrl?: string; fileName?: string; audioDuration?: number; videoDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
+export async function sendUserMessage(text: string, user?: { id?: number | string; first_name?: string; last_name?: string; username?: string; photo_url?: string; phone?: string }, media?: { type?: "image" | "file" | "audio" | "video" | "video_note"; mediaUrl?: string; fileName?: string; audioDuration?: number; videoDuration?: number }, replyTo?: { id: string; text: string; sender: string }): Promise<ChatMessage | null> {
   const cleanText = text.trim();
   if (!cleanText && !media?.mediaUrl) return null;
   const allMessages = getStoredChatMessages();
   const userId = user?.id ? String(user.id) : "guest-user";
   const userName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username || "Mijoz";
+  let persistedPhone = user?.phone || "";
+  try {
+    if (!persistedPhone) persistedPhone = String(JSON.parse(localStorage.getItem("guli_auth_user") || "{}")?.phone || "").trim();
+  } catch {}
+  const persistedTelegramUsername = String(user?.username || "").trim().replace(/^@+/, "");
   const clientMessageId = `cmsg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender, metadata: { clientMessageId } };
+  const newMsg: ChatMessage = { id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, sender: "user", text: cleanText, timestamp: new Date().toISOString(), read: false, userId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: media?.mediaUrl, fileName: media?.fileName, audioDuration: media?.audioDuration, videoDuration: media?.videoDuration, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender, metadata: { clientMessageId, userName, userPhoto: user?.photo_url, phone: persistedPhone || undefined, telegramUsername: persistedTelegramUsername || undefined } };
   saveChatMessages([...allMessages, newMsg]);
 
   // Persist both Telegram users and browser guests immediately. The realtime bridge adds the guest auth header.
@@ -368,7 +373,7 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         headers,
         body: JSON.stringify({
           telegram_id: backendId, sender: "customer", text: cleanText, media_url: persistedMediaUrl, client_message_id: clientMessageId,
-          metadata: { clientMessageId, userName, userPhoto: user?.photo_url, type: media?.type || "text", mediaUrl: persistedMediaUrl, telegramMediaUrl, fileName: media?.fileName, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender }
+          metadata: { clientMessageId, userName, userPhoto: user?.photo_url, phone: persistedPhone || undefined, telegramUsername: persistedTelegramUsername || undefined, type: media?.type || "text", mediaUrl: persistedMediaUrl, telegramMediaUrl, fileName: media?.fileName, replyToId: replyTo?.id, replyToText: replyTo?.text, replyToSender: replyTo?.sender }
         })
       });
       if (!response.ok) {
