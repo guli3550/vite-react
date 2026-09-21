@@ -6,6 +6,10 @@ const express = require("express");
 const { verifyAccessToken } = require("./guliCustomAuth.js");
 
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim();
+// Same signing secret chatRealtimePatch.js / chatGuestSessionHardeningPatch.js /
+// chatMediaStorageRuntime.js use for guest + linked chat tokens.
+const SIGNING_SECRET = ADMIN_SECRET || BOT_TOKEN;
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a || ""));
@@ -39,6 +43,55 @@ function verifyTelegramInitData(raw) {
   }
 }
 
+// Browser guest sessions. Two token shapes exist in production and both must
+// be accepted: the legacy `${id}.${exp}.${sig}` format still verified by
+// chatRealtimePatch.js's own verifyGuest(), and the current
+// `${base64url(JSON{guestId,exp})}.${sig}` format issued by
+// chatGuestSessionHardeningPatch.js's GET /api/chat/guest-session (the only
+// guest-session endpoint the frontend actually calls today).
+function verifyGuestToken(raw) {
+  if (!SIGNING_SECRET) return null;
+  const token = String(raw || "");
+  const parts = token.split(".");
+  if (parts.length === 3) {
+    const [id, exp, sig] = parts;
+    if (!id || !exp || !sig || Number(exp) <= Date.now()) return null;
+    const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(`${id}.${exp}`).digest("base64url");
+    if (!safeEqual(sig, expected)) return null;
+    const n = Number(id);
+    return Number.isSafeInteger(n) && n < 0 ? n : null;
+  }
+  if (parts.length === 2) {
+    const [body, sig] = parts;
+    if (!body || !sig) return null;
+    const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(body).digest("base64url");
+    if (!safeEqual(sig, expected)) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+      const n = Number(payload.guestId);
+      if (!Number.isSafeInteger(n) || n >= 0) return null;
+      if (!(Number(payload.exp) > Date.now())) return null;
+      return n;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Browser customers linked via the Telegram Login Widget
+// (chatRealtimePatch.js's POST /api/chat/browser-login).
+function verifyLinkedToken(raw) {
+  if (!SIGNING_SECRET) return null;
+  const token = String(raw || "");
+  const [prefix, id, exp, sig] = token.split(".");
+  if (prefix !== "linked" || !id || !exp || !sig || !(Number(exp) > Date.now())) return null;
+  const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(`linked.${id}.${exp}`).digest("base64url");
+  if (!safeEqual(sig, expected)) return null;
+  const n = Number(id);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 function resolveCustomerTelegramId(req) {
   const tgId = verifyTelegramInitData(req.headers?.["x-telegram-init-data"] || "");
   if (tgId) return tgId;
@@ -51,6 +104,12 @@ function resolveCustomerTelegramId(req) {
       if (Number.isSafeInteger(id) && id > 0) return id;
     } catch {}
   }
+
+  const linkedId = verifyLinkedToken(req.headers?.["x-guli-linked-token"] || "");
+  if (linkedId) return linkedId;
+
+  const guestId = verifyGuestToken(req.headers?.["x-guli-guest-token"] || "");
+  if (guestId) return guestId;
 
   return null;
 }
