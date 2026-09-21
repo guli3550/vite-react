@@ -52,7 +52,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
-  const popupRef = useRef<Window | null>(null);
   const exchangeInFlightRef = useRef(false);
   const warmSessionRef = useRef<Promise<any> | null>(null);
 
@@ -91,7 +90,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     localStorage.setItem("guli_auth_user", JSON.stringify(user));
     setSuccess("✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...");
     setStatus("idle");
-    try { popupRef.current?.close(); } catch {}
     if (Capacitor.isNativePlatform()) { try { void Browser.close(); } catch {} }
     onSuccess(user, data.access_token);
     window.setTimeout(() => window.location.reload(), 450);
@@ -124,8 +122,6 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const start = async () => {
     if (loading || status === "waiting" || status === "ready" || exchangeInFlightRef.current) return;
     setLoading(true); setError(null); setSuccess(null); clearPolling(); exchangeInFlightRef.current = false;
-    let popup: Window | null = null;
-    popupRef.current = null;
     try {
       const r = (warmSessionRef.current ? await warmSessionRef.current : await api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }));
       const id = r?.session_id; const ticket = r?.exchange_ticket; const url = r?.telegram_url || r?.deep_link;
