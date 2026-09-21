@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Language } from "../utils/translations";
 import { getApiBaseUrl } from "../lib/apiOrigin";
+import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 
 export interface AuthUser {
   id: string;
@@ -85,6 +87,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setSuccess("✅ Muvaffaqiyatli kirdingiz! GULI hisobingiz ochilmoqda...");
     setStatus("idle");
     try { popupRef.current?.close(); } catch {}
+    if (Capacitor.isNativePlatform()) { try { await Browser.close(); } catch {} }
     onSuccess(user, data.access_token);
     window.setTimeout(() => window.location.reload(), 450);
   };
@@ -123,7 +126,15 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
       const r = await api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) });
       const id = r?.session_id; const ticket = r?.exchange_ticket; const url = r?.telegram_url || r?.deep_link;
       if (!id || !ticket || !url) throw new Error("Telegram ulanish sessiyasi to‘liq yaratilmadi.");
-      if (popup && !popup.closed) { try { popup.location.href = url; } catch { window.location.href = url; } } else window.location.href = url;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await Browser.open({ url, presentationStyle: "popover" });
+        } catch {
+          window.location.href = url;
+        }
+      } else if (popup && !popup.closed) {
+        try { popup.location.href = url; } catch { window.location.href = url; }
+      } else window.location.href = url;
       setLoading(false); setStatus("waiting"); setSuccess(null); setError(null);
       let elapsed = 0;
       pollRef.current = window.setInterval(async () => {
