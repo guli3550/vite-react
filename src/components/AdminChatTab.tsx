@@ -1108,6 +1108,7 @@ export default function AdminChatTab({
           {/* Operator Assignment Dropdown Modal */}
           {assignOperatorOpen && (
             <div
+              className="chatgpt-operator-menu"
               style={{
                 position: "absolute",
                 top: 64,
