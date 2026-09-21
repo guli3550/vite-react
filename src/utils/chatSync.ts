@@ -303,8 +303,8 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         const linkedTokenForUpload = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_linked_token") || "") : "";
         const guestTokenForUpload = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
         if (tgInitForUpload) uploadHeaders["X-Telegram-Init-Data"] = tgInitForUpload;
-        else if (accessTokenForUpload) uploadHeaders.Authorization = "Bearer " + accessTokenForUpload;
         else if (linkedTokenForUpload) uploadHeaders["X-Guli-Linked-Token"] = linkedTokenForUpload;
+        else if (accessTokenForUpload) uploadHeaders.Authorization = "Bearer " + accessTokenForUpload;
         else if (guestTokenForUpload) uploadHeaders["X-Guli-Guest-Token"] = guestTokenForUpload;
         const uploadRes = await fetch(API_URL + "/api/chat/media-upload", {
           method: "POST",
@@ -326,8 +326,11 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
       if (tgInit) headers["X-Telegram-Init-Data"] = tgInit;
       const accessToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_access_token") || "") : "";
       const linkedToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_linked_token") || "") : "";
-      if (!tgInit && accessToken) headers.Authorization = "Bearer " + accessToken;
-      if (!tgInit && !accessToken && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
+      // A browser linked through Telegram has a dedicated signed identity.
+      // Prefer it over a stale product JWT so chat remains bound to the same
+      // Telegram conversation even when the general web session is expired.
+      if (!tgInit && linkedToken) headers["X-Guli-Linked-Token"] = linkedToken;
+      else if (!tgInit && accessToken) headers.Authorization = "Bearer " + accessToken;
       const guestToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
       if (!tgInit && !accessToken && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
 
