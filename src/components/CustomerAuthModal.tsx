@@ -60,7 +60,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     pollRef.current = null;
   };
 
-  useEffect(() => () => { clearPolling(); try { popupRef.current?.close(); } catch {} }, []);
+  useEffect(() => () => { clearPolling(); }, []);
   useEffect(() => {
     if (!isOpen) { clearPolling(); exchangeInFlightRef.current = false; return; }
     setStatus("idle"); setError(null); setSuccess(null); setLoading(false); exchangeInFlightRef.current = false;
@@ -153,8 +153,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         }
       }, 1200);
     } catch (e) {
-      try { popup?.close(); } catch {}
-      popupRef.current = null; setLoading(false); setStatus("idle"); setError(e instanceof Error ? e.message : "Telegram orqali ulanishda xatolik.");
+      setLoading(false); setStatus("idle"); setError(e instanceof Error ? e.message : "Telegram orqali ulanishda xatolik.");
     }
   };
 
