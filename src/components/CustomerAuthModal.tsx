@@ -56,19 +56,6 @@ async function authApi(path: string, options: RequestInit = {}) {
   throw (lastError instanceof Error ? lastError : new Error("Autentifikatsiya serveriga ulanib bo‘lmadi."));
 }
 
-async function api(path: string, options: RequestInit = {}) {
-  const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", Accept: "application/json", ...(options.headers || {}) },
-    cache: "no-store",
-  });
-  const text = await response.text();
-  let json: any = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { throw new Error("Serverdan noto‘g‘ri javob keldi."); }
-  if (!response.ok || json?.success === false) throw new Error(json?.message || `So‘rov bajarilmadi (${response.status}).`);
-  return json?.data ?? json;
-}
-
 export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   isOpen, onClose, onSuccess, language = "uz", initialTab = "signin", forceGate = false, customTitle, customSubtitle,
 }) => {
@@ -170,7 +157,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         if (elapsed > 300000) { clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return; }
         try {
           const s = await authApi(`/api/v1/auth/check-status/${encodeURIComponent(id)}`, { method: "GET" });
-          const state = String(s?.data?.status || s?.status || "").toUpperCase();
+          const state = String(s?.data?.status || "").toUpperCase();
           if (state === "EXPIRED") { clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return; }
           if (state === "READY") await exchangeSession(id, ticket);
           else if (state === "VERIFIED") { clearPolling(); setStatus("idle"); setSuccess(null); setError("Auth sessiyasi allaqachon ishlatilgan. Xavfsizlik sababli yangi Telegram login sessiyasini boshlang."); }
