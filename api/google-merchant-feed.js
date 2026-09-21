@@ -1,5 +1,3 @@
-import { getProducts } from "../_catalog.js";
-
 const SITE = "https://gulii.uz";
 const API = "https://guli-gateway.parizodabaxtiyorov.workers.dev";
 
