@@ -66,6 +66,22 @@ express.application.post = function patchedPost(path, ...handlers) {
             if (metadata.mediaUrl !== undefined) body.data.mediaUrl = metadata.mediaUrl;
             if (metadata.fileName !== undefined) body.data.fileName = metadata.fileName;
             if (metadata.mimeType !== undefined) body.data.mimeType = metadata.mimeType;
+
+            // The realtime wrapper publishes the base row before this outer
+            // persistence layer finishes merging attachment metadata. For
+            // media messages that first event can therefore arrive without
+            // mediaUrl/type and the admin UI misses the actual attachment.
+            // Re-publish the fully enriched row after the metadata update.
+            if (
+              (metadata.mediaUrl || metadata.type === "image" || metadata.type === "file" || metadata.type === "audio") &&
+              typeof globalThis.__GULI_CHAT_PUBLISH__ === "function"
+            ) {
+              try {
+                await globalThis.__GULI_CHAT_PUBLISH__(body.data);
+              } catch (e) {
+                console.warn("[Chat persistence] enriched media realtime publish failed:", e.message);
+              }
+            }
           }
         } catch (e) {
           console.warn("[Chat persistence] metadata update failed:", e.message);
