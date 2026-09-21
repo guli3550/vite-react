@@ -25,6 +25,7 @@
   ],
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/google-merchant-feed.xml", "destination": "/api/google-merchant-feed" },
     { "source": "/product/:ref/", "destination": "/api/product/:ref" },
     { "source": "/product/:ref", "destination": "/api/product/:ref" },
     { "source": "/api/:path*", "destination": "https://guli-lingerie-api.onrender.com/api/:path*" },
