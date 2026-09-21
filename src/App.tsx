@@ -211,6 +211,64 @@ const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
 const BANNER_CACHE_KEY = "guli_customer_banners_v1";
+const PRODUCT_CACHE_KEY = "guli_customer_products_v5";
+const VIEWED_PRODUCT_CACHE_KEY = "guli_viewed_products_v1";
+
+function readCatalogCache(): { products: Product[]; updatedAt: number; hasMore: boolean } {
+  try {
+    const raw = localStorage.getItem(PRODUCT_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return { products: parsed as Product[], updatedAt: 0, hasMore: false };
+    return {
+      products: Array.isArray(parsed?.products) ? parsed.products : [],
+      updatedAt: Number(parsed?.updatedAt || 0),
+      hasMore: Boolean(parsed?.hasMore),
+    };
+  } catch {
+    return { products: [], updatedAt: 0, hasMore: false };
+  }
+}
+
+function writeCatalogCache(products: Product[], hasMore: boolean) {
+  try {
+    const map = new Map<string, Product>();
+    for (const p of products) {
+      const key = String(p?.id ?? p?.product_code ?? p?.name ?? "");
+      if (key) map.set(key, p);
+    }
+    const compact = Array.from(map.values()).slice(0, 500);
+    localStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({
+      products: compact,
+      hasMore,
+      updatedAt: Date.now(),
+    }));
+  } catch {}
+}
+
+function cacheViewedProduct(product: Product | null) {
+  if (!product) return;
+  try {
+    const raw = localStorage.getItem(VIEWED_PRODUCT_CACHE_KEY);
+    const current = raw ? JSON.parse(raw) : {};
+    const key = String(product.product_code || product.id || "");
+    if (!key) return;
+    current[key] = product;
+    const entries = Object.entries(current).slice(-100);
+    localStorage.setItem(VIEWED_PRODUCT_CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch {}
+}
+
+function readCachedCatalogForQuery(category: string, search: string): Product[] {
+  const cached = readCatalogCache().products;
+  if (!cached.length) return [];
+  const normalizedCategory = String(category || "Barchasi").trim().toLowerCase();
+  const normalizedSearch = String(search || "").trim().toLowerCase();
+  return cached.filter((p) => {
+    const categoryOk = normalizedCategory === "barchasi" || String(p.category || "").trim().toLowerCase() === normalizedCategory;
+    const haystack = [p.name, p.product_code, p.category, p.description].map((v) => String(v || "").toLowerCase()).join(" ");
+    return categoryOk && (!normalizedSearch || haystack.includes(normalizedSearch));
+  });
+}
 
 // Start the banner manifest request immediately when the JS bundle executes.
 // This removes the React-render/effect delay that was leaving the hero area blank.
@@ -870,7 +928,7 @@ export default function App() {
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
   const PRODUCTS_PAGE_SIZE = 40;
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => readCachedCatalogForQuery("Barchasi", ""));
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
@@ -1873,6 +1931,14 @@ export default function App() {
     }
   };
   const loadProducts = useCallback(async (silent = false, append = false) => {
+    if (!append) {
+      const cached = readCachedCatalogForQuery(selectedCategory, debouncedSearch);
+      if (cached.length) {
+        setProducts(cached);
+        setProductsError("");
+        setProductsLoading(false);
+      }
+    }
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -1947,6 +2013,7 @@ export default function App() {
       productsHasMoreRef.current = hasMore;
       setProductsHasMore(hasMore);
       setProductsError("");
+      writeCatalogCache([...readCatalogCache().products, ...rows], hasMore);
       if (productsRecoveryTimerRef.current) {
         clearTimeout(productsRecoveryTimerRef.current);
         productsRecoveryTimerRef.current = null;
@@ -1964,11 +2031,20 @@ export default function App() {
       if (!append) {
         const message =
           error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
-        setProducts([]);
-        productsOffsetRef.current = 0;
-        productsHasMoreRef.current = false;
-        setProductsHasMore(false);
-        setProductsError(message);
+        const cached = readCachedCatalogForQuery(selectedCategory, debouncedSearch);
+        if (cached.length) {
+          setProducts(cached);
+          setProductsError("");
+          productsOffsetRef.current = cached.length;
+          productsHasMoreRef.current = true;
+          setProductsHasMore(true);
+        } else {
+          setProducts([]);
+          productsOffsetRef.current = 0;
+          productsHasMoreRef.current = false;
+          setProductsHasMore(false);
+          setProductsError(message);
+        }
 
         // Continue recovering in the background. This is deliberately silent:
         // the page stays usable and the next retry replaces the error as soon
@@ -1990,6 +2066,10 @@ export default function App() {
       }
     }
   }, [selectedCategory, debouncedSearch]);
+
+  useEffect(() => {
+    cacheViewedProduct(selectedProduct);
+  }, [selectedProduct]);
 
   const [phoneLookupInput, setPhoneLookupInput] = useState(() => {
     return localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || "";
