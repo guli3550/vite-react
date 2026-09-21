@@ -161,7 +161,18 @@ window.addEventListener("guli_chat_updated", () => { void syncGuestMessages(); }
 installAuthFetch();
 setTimeout(() => void startForCurrentContext(), 250);
 setTimeout(() => void startForCurrentContext(), 1500);
-setInterval(() => { if (isAdmin()) { void startForCurrentContext(); } else if (!telegramInitData() && !linkedTelegramId()) void syncGuestMessages(); }, 10000);
+setInterval(() => {
+  if (isAdmin()) {
+    void startForCurrentContext();
+  } else if (telegramInitData()) {
+    const id = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || "").trim();
+    if (id) void fetchHistory(id);
+  } else if (linkedTelegramId() && linkedTelegramToken()) {
+    void fetchHistory(linkedTelegramId());
+  } else {
+    void syncGuestMessages();
+  }
+}, 10000);
 function installAuthFetch() {
   if (typeof window === "undefined" || typeof window.fetch !== "function") return;
   const currentFetch = window.fetch.bind(window);
