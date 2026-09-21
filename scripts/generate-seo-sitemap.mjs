@@ -77,8 +77,8 @@ async function main() {
     const name = String(p.name || "Mahsulot").trim();
     const category = String(p.category || "").trim();
     const description = String(p.description || "").trim() ||
-      `${name} — Guli Market onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
-    const mainImage = images[0] || `${SITE}/guli-logo.webp`;
+      `${name} — GULI MARKET onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
+    const mainImage = images[0] || `${SITE}/guli-logo.png`;
     const price = Number(p.price || 0);
     const schema = {
       "@context": "https://schema.org",
@@ -88,7 +88,7 @@ async function main() {
       image: images,
       sku: p.product_code || p.id,
       category,
-      brand: { "@type": "Brand", name: "Guli Market" },
+      brand: { "@type": "Brand", name: "GULI MARKET" },
       offers: {
         "@type": "Offer",
         url: productUrl,
@@ -105,12 +105,12 @@ async function main() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(name)} | Guli Market</title>
+<title>${escapeHtml(name)} | GULI MARKET</title>
 <meta name="description" content="${escapeHtml(description.slice(0, 300))}">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <link rel="canonical" href="${escapeHtml(productUrl)}">
-<meta property="og:site_name" content="Guli Market">
-<meta property="og:title" content="${escapeHtml(name)} | Guli Market">
+<meta property="og:site_name" content="GULI MARKET">
+<meta property="og:title" content="${escapeHtml(name)} | GULI MARKET">
 <meta property="og:description" content="${escapeHtml(description.slice(0, 300))}">
 <meta property="og:type" content="product">
 <meta property="og:url" content="${escapeHtml(productUrl)}">
@@ -125,8 +125,8 @@ ${css ? `<link rel="stylesheet" href="/assets/${escapeHtml(css)}">` : ""}
 ${category ? `<p>Kategoriya: ${escapeHtml(category)}</p>` : ""}
 ${priceText(price) ? `<p>${escapeHtml(priceText(price))}</p>` : ""}
 <p>${escapeHtml(description)}</p>
-<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(name)} — Guli Market" width="800" height="800" loading="eager">
-<p><a href="${escapeHtml(appUrl)}">Mahsulotni Guli Market ilovasida ochish</a></p>
+<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(name)} — GULI MARKET" width="800" height="800" loading="eager">
+<p><a href="${escapeHtml(appUrl)}">Mahsulotni GULI MARKET ilovasida ochish</a></p>
 </article>
 </main>
 ${appJs ? `<!-- Product SEO landing page is intentionally crawlable; the main SPA remains available via the link above. -->` : ""}
