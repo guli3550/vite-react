@@ -568,8 +568,8 @@ export function getAllConversations(): ConversationSummary[] {
       if (userId.includes("telegram") || crm.telegram_id || data.name.toLowerCase().includes("telegram")) source = "telegram";
       else if (userId.includes("call") || data.name.toLowerCase().includes("call")) source = "callcenter";
     }
-    const phone = meta.phone || crm.phone || crm.telegram_phone || undefined;
-    const telegramUsername = meta.telegramUsername || crm.username || (source === "telegram" && crm.username ? `@${crm.username}` : undefined);
+    const phone = meta.phone || crm.phone || crm.telegram_phone || (data.last as any).phone || (data.last as any).telegram_phone || undefined;
+    const telegramUsername = meta.telegramUsername || crm.telegramUsername || crm.username || (data.last as any).telegramUsername || (source === "telegram" && crm.username ? `@${crm.username}` : undefined);
     return {
       userId,
       userName: data.name,
