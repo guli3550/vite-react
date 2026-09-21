@@ -278,7 +278,8 @@ install("get", "/api/admin/chat/messages", async (req, res) => {
     console.warn("[Chat realtime] admin history failed:", error.message);
     return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
   }
-  return res.json({ success: true, data: data || [] });
+  const enriched = await Promise.all((data || []).map(enrichCustomerMessage));
+  return res.json({ success: true, data: enriched });
 });
 install("get", "/api/admin/chat/presence", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
