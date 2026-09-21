@@ -34,14 +34,22 @@ const priceText = (value) => {
 async function main() {
   let products = [];
   try {
-    const response = await fetch(`${API}/api/products?limit=1000`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = await response.json();
-    products = Array.isArray(json?.data)
-      ? json.data.filter((p) => p?.active !== false)
-      : [];
+    const limit = 100;
+    let offset = 0;
+    for (;;) {
+      const response = await fetch(`${API}/api/products?limit=${limit}&offset=${offset}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json = await response.json();
+      const batch = Array.isArray(json?.data)
+        ? json.data.filter((p) => p?.active !== false)
+        : [];
+      products.push(...batch);
+      const hasMore = Boolean(json?.pagination?.hasMore);
+      if (!hasMore || batch.length === 0) break;
+      offset += batch.length;
+    }
   } catch (error) {
     console.warn("[SEO sitemap] Product API unavailable:", error?.message || error);
   }
