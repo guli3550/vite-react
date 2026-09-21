@@ -113,6 +113,9 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
           const rawPhoto = m.userPhoto || m.user_photo || meta.userPhoto || meta.user_photo || meta.customer?.photoUrl || meta.customer?.photo_url;
           const userPhoto = rawPhoto ? (String(rawPhoto).startsWith("http") ? String(rawPhoto) : `${API_URL}${String(rawPhoto).startsWith("/") ? "" : "/"}${String(rawPhoto)}`) : undefined;
           const userName = m.userName || meta.userName || meta.user_name || [meta.customer?.first_name, meta.customer?.last_name].filter(Boolean).join(" ").trim() || meta.customer?.username || undefined;
+          const customer = meta.customer || m.customer || {};
+          const resolvedUserName = userName || customer.full_name || customer.username || undefined;
+          const resolvedUserPhoto = userPhoto || customer.photoUrl || customer.photo_url || undefined;
           return {
             id: String(m.id),
             sender: m.sender === "customer" ? "user" : "admin",
@@ -120,11 +123,12 @@ export async function syncChatWithBackend(telegramId: string | number): Promise<
             timestamp: m.created_at,
             read: true,
             userId: m.telegram_id,
-            userName,
-            userPhoto,
+            userName: resolvedUserName,
+            userPhoto: resolvedUserPhoto,
             type: msgType,
             mediaUrl: mediaUrl ? (mediaUrl.startsWith("http") ? mediaUrl : `${API_URL}${mediaUrl.startsWith("/") ? "" : "/"}${mediaUrl}`) : undefined,
             fileName,
+            metadata: { ...meta, customer },
           } as ChatMessage;
         })
         .filter(isChatMessageValid);
