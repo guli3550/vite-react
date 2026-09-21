@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Language } from "../utils/translations";
-import { getApiBaseUrl } from "../lib/apiOrigin";
+import { getApiBaseUrl, CANONICAL_GATEWAY_URL, LEGACY_RENDER_ORIGIN } from "../lib/apiOrigin";
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 
@@ -30,6 +30,31 @@ interface CustomerAuthModalProps {
 
 type Status = "idle" | "waiting" | "ready";
 const API = getApiBaseUrl();
+const AUTH_API_BASES = Array.from(new Set([
+  API,
+  ...(Capacitor.isNativePlatform() ? ["https://gulii.uz", LEGACY_RENDER_ORIGIN, CANONICAL_GATEWAY_URL] : []),
+])).map((base) => String(base || "").replace(/\/+$/, ""));
+
+async function authApi(path: string, options: RequestInit = {}) {
+  let lastError: unknown = null;
+  for (const base of AUTH_API_BASES) {
+    try {
+      const response = await fetch(`${base}${path}`, {
+        ...options,
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...(options.headers || {}) },
+        cache: "no-store",
+      });
+      const text = await response.text();
+      let json: any = {};
+      try { json = text ? JSON.parse(text) : {}; } catch { throw new Error("Serverdan noto‘g‘ri javob keldi."); }
+      if (!response.ok || json?.success === false) throw new Error(json?.message || `So‘rov bajarilmadi (${response.status}).`);
+      return { data: json?.data ?? json, base };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw (lastError instanceof Error ? lastError : new Error("Autentifikatsiya serveriga ulanib bo‘lmadi."));
+}
 
 async function api(path: string, options: RequestInit = {}) {
   const response = await fetch(`${API}${path}`, {
@@ -66,7 +91,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     setStatus("idle"); setError(null); setSuccess(null); setLoading(false); exchangeInFlightRef.current = false;
     // Warm the auth session as soon as the modal opens so the Telegram handoff
     // does not wait for a cold backend request after the user taps the button.
-    warmSessionRef.current = api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }).catch(() => null);
+    warmSessionRef.current = authApi("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }).catch(() => null);
     return () => { warmSessionRef.current = null; };
   }, [isOpen, initialTab]);
 
@@ -105,8 +130,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        const exchanged = await api("/api/v1/auth/exchange", { method: "POST", body: JSON.stringify({ session_id: sessionId, exchange_ticket: ticket }) });
-        completeLogin(exchanged);
+        const exchanged = await authApi("/api/v1/auth/exchange", { method: "POST", body: JSON.stringify({ session_id: sessionId, exchange_ticket: ticket }) });
+        completeLogin(exchanged.data);
         exchangeInFlightRef.current = false;
         return;
       } catch (e) {
@@ -123,9 +148,11 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     if (loading || status === "waiting" || status === "ready" || exchangeInFlightRef.current) return;
     setLoading(true); setError(null); setSuccess(null); clearPolling(); exchangeInFlightRef.current = false;
     try {
-      const r = (warmSessionRef.current ? await warmSessionRef.current : await api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }));
+      const warmed = warmSessionRef.current ? await warmSessionRef.current : await authApi("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) });
+      if (!warmed) throw new Error("Telegram ulanish serveri javob bermadi.");
+      const r = warmed.data;
       const id = r?.session_id; const ticket = r?.exchange_ticket; const url = r?.telegram_url || r?.deep_link;
-      if (!id || !ticket || !url) throw new Error("Telegram ulanish sessiyasi to‘liq yaratilmadi.");
+      if (!id || !ticket || !url) throw new Error("Telegram ulanish sessiyasi to‘liq yaratilmadi. Server javobi noto‘g‘ri.");
       if (Capacitor.isNativePlatform()) {
         try {
           await Browser.open({ url, presentationStyle: "popover" });
@@ -142,8 +169,8 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         elapsed += 1200;
         if (elapsed > 300000) { clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return; }
         try {
-          const s = await api(`/api/v1/auth/check-status/${encodeURIComponent(id)}`, { method: "GET" });
-          const state = String(s?.status || "").toUpperCase();
+          const s = await authApi(`/api/v1/auth/check-status/${encodeURIComponent(id)}`, { method: "GET" });
+          const state = String(s?.data?.status || s?.status || "").toUpperCase();
           if (state === "EXPIRED") { clearPolling(); setStatus("idle"); setError("Sessiya muddati tugadi. Qaytadan boshlang."); return; }
           if (state === "READY") await exchangeSession(id, ticket);
           else if (state === "VERIFIED") { clearPolling(); setStatus("idle"); setSuccess(null); setError("Auth sessiyasi allaqachon ishlatilgan. Xavfsizlik sababli yangi Telegram login sessiyasini boshlang."); }
