@@ -2268,3 +2268,97 @@
     display: none !important;
   }
 }
+
+/* ==========================================================================
+   ADMIN CHAT MOBILE OVERLAY LAYER — UI ONLY
+   ========================================================================== */
+@media (max-width: 768px) {
+  .chatgpt-clean-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 500 !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+    padding: 6px 6px !important;
+  }
+
+  .chatgpt-header-left {
+    min-width: 0 !important;
+    max-width: calc(100% - 172px) !important;
+    padding-right: 2px !important;
+  }
+
+  .chatgpt-header-right {
+    position: absolute !important;
+    right: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    width: auto !important;
+    height: 40px !important;
+    min-width: max-content !important;
+    gap: 0 !important;
+    z-index: 700 !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn,
+  .chatgpt-header-right a.chatgpt-header-icon-btn {
+    display: inline-flex !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    flex: 0 0 32px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    position: relative !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn svg {
+    width: 17px !important;
+    height: 17px !important;
+    flex: 0 0 auto !important;
+  }
+
+  .chatgpt-header-right .chatgpt-dropdown-menu {
+    z-index: 900 !important;
+  }
+
+  /* Search / operator panels must float above messages, not consume message flow. */
+  .chatgpt-inline-search,
+  .chatgpt-pinned-banner {
+    position: relative !important;
+    z-index: 450 !important;
+  }
+
+  .chatgpt-header-title {
+    max-width: 78px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .chatgpt-header-left {
+    max-width: calc(100% - 160px) !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn,
+  .chatgpt-header-right a.chatgpt-header-icon-btn {
+    width: 29px !important;
+    height: 29px !important;
+    min-width: 29px !important;
+    max-width: 29px !important;
+    flex-basis: 29px !important;
+  }
+
+  .chatgpt-header-right .chatgpt-header-icon-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+}
