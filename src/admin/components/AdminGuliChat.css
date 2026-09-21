@@ -2362,3 +2362,46 @@
     height: 15px !important;
   }
 }
+
+
+/* FINAL MOBILE OVERLAY SAFETY */
+.chatgpt-clean-header { position: relative !important; z-index: 500 !important; }
+.chatgpt-header-right {
+  display:flex !important; flex-direction:row !important; align-items:center !important;
+  justify-content:flex-end !important; flex-wrap:nowrap !important; gap:2px !important;
+  min-width:0 !important; flex:0 0 auto !important; height:42px !important;
+}
+.chatgpt-header-right .chatgpt-header-icon-btn,
+.chatgpt-header-right a.chatgpt-header-icon-btn {
+  display:inline-flex !important; flex:0 0 32px !important; width:32px !important;
+  min-width:32px !important; max-width:32px !important; height:32px !important;
+  min-height:32px !important; max-height:32px !important; padding:0 !important; margin:0 !important;
+}
+@media (max-width:768px) {
+  .chatgpt-clean-header {
+    display:flex !important; align-items:center !important; justify-content:space-between !important;
+    width:100% !important; height:62px !important; min-height:62px !important; max-height:62px !important;
+    padding:6px 6px !important; box-sizing:border-box !important; overflow:visible !important;
+  }
+  .chatgpt-header-left { min-width:0 !important; flex:1 1 auto !important; max-width:calc(100% - 172px) !important; height:100% !important; }
+  .chatgpt-header-right {
+    position:absolute !important; right:4px !important; top:50% !important; transform:translateY(-50%) !important;
+    width:auto !important; max-width:58vw !important; height:40px !important; z-index:700 !important;
+  }
+  .chatgpt-header-right .chatgpt-header-icon-btn,
+  .chatgpt-header-right a.chatgpt-header-icon-btn {
+    flex:0 0 31px !important; width:31px !important; min-width:31px !important;
+    max-width:31px !important; height:31px !important; min-height:31px !important; max-height:31px !important;
+  }
+  .chatgpt-header-right .chatgpt-header-icon-btn svg { width:16px !important; height:16px !important; }
+  .chatgpt-clean-header ~ .chat2-crm-panel:not(.chat2-mobile-hide) {
+    position:fixed !important; inset:0 !important; z-index:12000 !important;
+    width:100vw !important; height:100dvh !important; max-height:100dvh !important;
+    margin:0 !important; border-radius:0 !important; background:#fff !important;
+    overflow-y:auto !important; box-shadow:0 0 40px rgba(0,0,0,.18) !important;
+  }
+  .chat2-modal-overlay, .chat2-fullscreen-overlay, .chatgpt-modal-overlay {
+    position:fixed !important; inset:0 !important; z-index:20000 !important;
+  }
+  .chatgpt-attach-popover, .telegram-emoji-drawer { z-index:15000 !important; }
+}
