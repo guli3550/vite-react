@@ -329,7 +329,10 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
       });
       if (!response.ok) {
         const failed = await response.json().catch(() => null);
-        throw new Error(failed?.message || "Chat xabari yuborilmadi: " + response.status);
+        const err = new Error(failed?.message || "Chat xabari yuborilmadi: " + response.status) as Error & { status?: number; code?: string };
+        err.status = response.status;
+        err.code = String(failed?.code || (response.status === 401 ? "CHAT_AUTH_ERROR" : response.status >= 500 ? "CHAT_SERVER_ERROR" : "CHAT_REQUEST_ERROR"));
+        throw err;
       }
       const saved = await response.json().catch(() => null);
       if (!saved?.success) throw new Error(saved?.message || "Chat xabari saqlanmadi");
@@ -344,7 +347,14 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         const current = getStoredChatMessages();
         saveChatMessages(current.filter(m => String(m.id) !== String(newMsg.id)));
       } catch {}
-      window.dispatchEvent(new CustomEvent("guli_chat_send_error", { detail: { message: error instanceof Error ? error.message : "Xabar yuborilmadi" } }));
+      const sendError = error as Error & { status?: number; code?: string };
+      window.dispatchEvent(new CustomEvent("guli_chat_send_error", {
+        detail: {
+          message: sendError instanceof Error ? sendError.message : "Xabar yuborilmadi",
+          status: Number(sendError?.status || 0) || undefined,
+          code: sendError?.code || "CHAT_SEND_ERROR"
+        }
+      }));
       return null;
     }
   }
