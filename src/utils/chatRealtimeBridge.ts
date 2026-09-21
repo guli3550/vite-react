@@ -9,7 +9,7 @@ const GUEST_SYNCED_KEY = "guli_chat_guest_synced_ids";
 const LINKED_ID_KEY = "guli_chat_linked_telegram_id";
 const LINKED_TOKEN_KEY = "guli_chat_linked_token";
 let activeConnectionKey = "";
-type ChatMessage = { id: string; sender: "user" | "admin"; text: string; timestamp: string; read: boolean; userId?: string | number; userName?: string; type?: string; mediaUrl?: string; fileName?: string };
+type ChatMessage = { id: string; sender: "user" | "admin"; text: string; timestamp: string; read: boolean; userId?: string | number; userName?: string; type?: string; mediaUrl?: string; fileName?: string; mimeType?: string };
 function isMessageValid(raw: any): boolean {
   if (!raw || typeof raw !== "object") return false;
   if (raw.type === "ping" || raw.type === "heartbeat" || raw.ping || raw.event === "ping") return false;
@@ -31,6 +31,17 @@ function normalize(raw: any): ChatMessage {
     : undefined;
   const rawPhoto = raw?.userPhoto || raw?.user_photo || meta.userPhoto || meta.user_photo || meta.customer?.photoUrl || meta.customer?.photo_url;
   const userPhoto = rawPhoto ? String(rawPhoto).startsWith("http") ? String(rawPhoto) : `${API_URL}${String(rawPhoto).startsWith("/") ? "" : "/"}${String(rawPhoto)}` : undefined;
+  // Canonical media fields: the DB only ever stores these inside the
+  // `metadata` JSON column. Realtime pushes from some server paths also set
+  // them at the top level (back-compat), so prefer top level when present,
+  // otherwise fall back to metadata. Without this, ChatGPTMessageRow (which
+  // gates image rendering on top-level msg.type === "image") never renders
+  // media loaded from chat history / page refresh, even though mediaUrl is
+  // present (Root Cause B).
+  const type = raw?.type || meta.type || meta.messageType
+    || (mediaUrl && /\.(jpe?g|png|webp|gif)(\?|$)/i.test(mediaUrl) ? "image" : undefined);
+  const fileName = raw?.fileName || meta.fileName || meta.file_name;
+  const mimeType = raw?.mimeType || meta.mimeType || meta.mime_type;
   return {
     ...raw,
     id: String(raw?.id ?? `rt-${Date.now()}`),
@@ -40,6 +51,9 @@ function normalize(raw: any): ChatMessage {
     timestamp: raw?.created_at || raw?.timestamp || new Date().toISOString(),
     userId: raw?.telegram_id || raw?.userId,
     mediaUrl: mediaUrl ? String(mediaUrl) : undefined,
+    type,
+    fileName,
+    mimeType,
     userPhoto,
   };
 }
