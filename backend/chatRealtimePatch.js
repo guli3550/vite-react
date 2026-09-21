@@ -55,33 +55,85 @@ function sseSend(client, event, data) { try { client.res.write(`event: ${event}\
 function deliverToClients(message) { for (const c of clients) { if (c.admin || Number(c.chatId) === Number(message?.telegram_id)) sseSend(c, "message", message); } }
 function telegramMiniAppOnline(telegramId) { const id = Number(telegramId); return Number.isFinite(id) && [...clients].some(c => c.telegramMiniApp && Number(c.chatId) === id); }
 globalThis.__GULI_TELEGRAM_MINIAPP_ONLINE = telegramMiniAppOnline;
-async function enrichCustomerMessage(message) {
-  if (!message || message.sender !== "customer") return message;
-  const telegramId = Number(message.telegram_id);
-  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return message;
+const customerProfileCache = new Map();
+
+function extractTelegramPhotoFileId(value) {
+  try {
+    const raw = String(value || "");
+    const match = raw.match(/\/telegram-avatar\/\\d+\/([^?/#]+)/i);
+    return match ? decodeURIComponent(match[1]) : "";
+  } catch { return ""; }
+}
+
+function signedAdminPhotoUrl(telegramId, fileId) {
+  if (!ADMIN_SECRET || !telegramId || !fileId) return null;
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  const signature = crypto.createHmac("sha256", ADMIN_SECRET)
+    .update(`${telegramId}.${fileId}.${expires}`)
+    .digest("base64url");
+  return `/api/admin/users/${telegramId}/photo/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+}
+
+async function getCachedCustomerProfile(telegramId) {
+  const key = String(telegramId);
+  const cached = customerProfileCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.customer;
+
   const customer = {};
   try {
-    const [{ data: user }, { data: latestOrder }] = await Promise.all([
-      supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone").eq("telegram_id", telegramId).maybeSingle(),
+    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrder }] = await Promise.all([
+      supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle(),
+      supabase?.from("users").select("telegram_id,phone_number,full_name,telegram_username,telegram_photo_url").eq("telegram_id", telegramId).maybeSingle(),
+      supabase?.from("customers").select("telegram_id,phone,full_name,avatar_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("orders").select("order_number,username,first_name,phone,telegram_phone,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle()
     ]);
+
     if (user) Object.assign(customer, user);
+    if (canonicalUser) {
+      if (!customer.username) customer.username = canonicalUser.telegram_username;
+      if (!customer.first_name && canonicalUser.full_name) customer.first_name = canonicalUser.full_name;
+      if (!customer.phone) customer.phone = canonicalUser.phone_number || null;
+      if (!customer.telegram_photo_url) customer.telegram_photo_url = canonicalUser.telegram_photo_url || null;
+    }
+    if (customerRow) {
+      if (!customer.phone) customer.phone = customerRow.phone || null;
+      if (!customer.full_name) customer.full_name = customerRow.full_name || null;
+      if (!customer.avatar_url) customer.avatar_url = customerRow.avatar_url || null;
+    }
     if (latestOrder) {
       if (!customer.phone) customer.phone = latestOrder.phone || latestOrder.telegram_phone || null;
       if (!customer.telegram_phone) customer.telegram_phone = latestOrder.telegram_phone || null;
       if (!customer.username) customer.username = latestOrder.username || null;
       if (!customer.first_name) customer.first_name = latestOrder.first_name || null;
     }
-    const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("telegram_id", telegramId);
-    customer.orderCount = Number(count || 0);
-    if (latestOrder) {
-      customer.lastOrderNumber = latestOrder.order_number || null;
-      customer.lastOrderStatus = latestOrder.status || null;
-      customer.lastOrderTotal = latestOrder.total ?? null;
+
+    const storedPhotoId =
+      (Array.isArray(user?.profile_photos) && user.profile_photos.length ? String(user.profile_photos[0] || "") : "") ||
+      extractTelegramPhotoFileId(canonicalUser?.telegram_photo_url);
+
+    if (storedPhotoId) customer.photoFileId = storedPhotoId;
+
+    // Telegram profile data is already persisted in the canonical users tables.
+    // Keep the photo file id durable so leaving/blocking the bot does not erase
+    // the profile shown in the admin chat.
+    if (customer.photoFileId && supabase && (!Array.isArray(user?.profile_photos) || !user.profile_photos.includes(customer.photoFileId))) {
+      try {
+        await supabase.from("telegram_users").upsert({
+          telegram_id: telegramId,
+          username: customer.username || null,
+          first_name: customer.first_name || null,
+          last_name: customer.last_name || null,
+          telegram_phone: customer.telegram_phone || customer.phone || null,
+          profile_photos: [customer.photoFileId],
+          profile_photo_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: "telegram_id" });
+      } catch {}
     }
   } catch (error) {
-    console.warn("[Chat realtime] customer CRM enrichment failed:", error.message);
+    console.warn("[Chat realtime] customer CRM/profile enrichment failed:", error.message);
   }
+
   if (BOT_TOKEN) {
     try {
       const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${telegramId}`);
@@ -92,22 +144,69 @@ async function enrichCustomerMessage(message) {
         customer.first_name = customer.first_name || chat.first_name || null;
         customer.last_name = customer.last_name || chat.last_name || null;
         const fileId = chat.photo?.big_file_id || chat.photo?.small_file_id || "";
-        if (fileId && ADMIN_SECRET) {
-          const expires = Math.floor(Date.now() / 1000) + 3600;
-          const signature = crypto.createHmac("sha256", ADMIN_SECRET).update(`${telegramId}.${fileId}.${expires}`).digest("base64url");
-          customer.photoUrl = `/api/admin/users/${telegramId}/photo/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+        if (fileId) {
+          customer.photoFileId = fileId;
+          if (supabase) {
+            try {
+              await supabase.from("telegram_users").upsert({
+                telegram_id: telegramId,
+                username: customer.username || null,
+                first_name: customer.first_name || null,
+                last_name: customer.last_name || null,
+                telegram_phone: customer.telegram_phone || customer.phone || null,
+                profile_photos: [fileId],
+                profile_photo_synced_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }, { onConflict: "telegram_id" });
+            } catch {}
+          }
         }
       }
     } catch (error) {
-      console.warn("[Chat realtime] Telegram profile enrichment failed:", error.message);
+      console.warn("[Chat realtime] Telegram profile refresh skipped:", error.message);
     }
   }
+
+  customer.photoUrl =
+    signedAdminPhotoUrl(telegramId, customer.photoFileId) ||
+    customer.avatar_url ||
+    customer.telegram_photo_url ||
+    null;
+
+  try {
+    const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("telegram_id", telegramId);
+    customer.orderCount = Number(count || 0);
+    const { data: latestOrder } = await supabase.from("orders").select("order_number,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (latestOrder) {
+      customer.lastOrderNumber = latestOrder.order_number || null;
+      customer.lastOrderStatus = latestOrder.status || null;
+      customer.lastOrderTotal = latestOrder.total ?? null;
+    }
+  } catch {}
+
+  customerProfileCache.set(key, { customer, expiresAt: Date.now() + 5 * 60 * 1000 });
+  return customer;
+}
+
+async function enrichCustomerMessage(message) {
+  if (!message || message.sender !== "customer") return message;
+  const telegramId = Number(message.telegram_id);
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return message;
+
+  const customer = await getCachedCustomerProfile(telegramId);
   const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
   return {
     ...message,
-    userName: fullName || customer.username || `Telegram #${telegramId}`,
+    userName: fullName || customer.full_name || customer.username || `Telegram #${telegramId}`,
     userPhoto: customer.photoUrl || null,
-    metadata: { ...(message.metadata || {}), source: "telegram", customer }
+    metadata: {
+      ...(message.metadata || {}),
+      source: "telegram",
+      customer: {
+        ...customer,
+        photoUrl: customer.photoUrl || null
+      }
+    }
   };
 }
 async function publishRealtime(message) {
@@ -155,8 +254,8 @@ function patchGet() { const original = express.application.get; express.applicat
     }
   });
   if (routePath === "/api/chat/guest-session/:guest_id") return original.call(this, routePath, (req, res) => { const id = Number(req.params.guest_id); if (!Number.isSafeInteger(id) || id >= 0 || id < -9007199254740991) return res.status(400).json({ success: false, message: "Noto‘g‘ri guest ID" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, guest_id: id, token: createGuestToken(id), expires_in: 2592000 }); });
-  if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, (req, res) => { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" }); return supabase.from("chat_messages").select("*").order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
-  if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); return supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }).then(({ data, error }) => error ? res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }) : res.json({ success: true, data: data || [] })); });
+  if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, async (req, res) => { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" }); const { data, error } = await supabase.from("chat_messages").select("*").order("created_at", { ascending: true }); if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }); const enriched = await Promise.all((data || []).map(enrichCustomerMessage)); return res.json({ success: true, data: enriched }); });
+  if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, async (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); const { data, error } = await supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }); if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }); const enriched = await Promise.all((data || []).map(enrichCustomerMessage)); return res.json({ success: true, data: enriched }); });
   if (routePath === "/api/chat/stream/:telegram_id") return original.call(this, routePath, (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.(); const client = { res, chatId: isAdmin ? null : Number(rawId), admin: isAdmin, telegramMiniApp: !isAdmin && Boolean(req.headers["x-telegram-init-data"]) }; clients.add(client); sseSend(client, "ready", { ok: true }); const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000); req.on("close", () => { clearInterval(heartbeat); clients.delete(client); }); });
   return original.call(this, routePath, ...handlers);
 }; }
