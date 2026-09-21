@@ -188,8 +188,20 @@ export function saveChatMessages(messages: ChatMessage[]): void {
     const valid = messages.filter(isChatMessageValid);
     const toSave = valid.length === 0 ? [DEFAULT_WELCOME_MESSAGE] : valid;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+
+    // Keep the notification badge/count in sync with the same canonical
+    // chat state. Previously this was only recalculated in some read paths,
+    // which could leave the bell count stale until another UI action.
+    const unreadCount = toSave.filter(
+      (m) => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1",
+    ).length;
+    localStorage.setItem(NOTIFICATIONS_KEY, String(unreadCount));
+
     broadcastChannel?.postMessage({ type: "SYNC_MESSAGES", messages: toSave });
     window.dispatchEvent(new CustomEvent("guli_chat_updated", { detail: toSave }));
+    window.dispatchEvent(
+      new CustomEvent("guli_notifications_updated", { detail: unreadCount }),
+    );
   } catch (err) {
     console.error("Error saving chat messages:", err);
   }
