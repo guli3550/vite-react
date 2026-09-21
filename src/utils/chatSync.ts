@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "../lib/apiOrigin";
+import { getApiBaseUrl, CANONICAL_GATEWAY_URL } from "../lib/apiOrigin";
 
 export type ChatSender = "user" | "admin";
 
@@ -41,6 +41,31 @@ const METADATA_KEY = "guli_chat_conv_metadata";
 const NOTIFICATIONS_KEY = "guli_unread_notifications_count";
 const CHANNEL_NAME = "guli_chat_channel_v1";
 const API_URL = getApiBaseUrl();
+
+async function chatFetch(path: string, init: RequestInit): Promise<Response> {
+  const primary = API_URL + path;
+  try {
+    const response = await fetch(primary, init);
+    // Production browser chat normally uses the Vercel same-origin rewrite.
+    // If that proxy/network path fails transiently, retry the same authenticated
+    // request directly through the canonical gateway before surfacing an error.
+    if (
+      response.ok ||
+      response.status < 500 ||
+      API_URL === CANONICAL_GATEWAY_URL
+    ) {
+      return response;
+    }
+  } catch (error) {
+    try {
+      const fallback = await fetch(CANONICAL_GATEWAY_URL + path, init);
+      return fallback;
+    } catch {
+      throw error;
+    }
+  }
+  return fetch(CANONICAL_GATEWAY_URL + path, init);
+}
 
 export function getStoredMetadataMap(): Record<string, ConversationMetadata> { try { const raw = localStorage.getItem(METADATA_KEY); return raw ? JSON.parse(raw) : {}; } catch { return {}; } }
 export function saveMetadataMap(map: Record<string, ConversationMetadata>): void { try { localStorage.setItem(METADATA_KEY, JSON.stringify(map)); window.dispatchEvent(new CustomEvent("guli_chat_metadata_updated", { detail: map })); } catch (err) { console.error("Failed to save conversation metadata:", err); } }
@@ -306,7 +331,7 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
         else if (linkedTokenForUpload) uploadHeaders["X-Guli-Linked-Token"] = linkedTokenForUpload;
         else if (accessTokenForUpload) uploadHeaders.Authorization = "Bearer " + accessTokenForUpload;
         else if (guestTokenForUpload) uploadHeaders["X-Guli-Guest-Token"] = guestTokenForUpload;
-        const uploadRes = await fetch(API_URL + "/api/chat/media-upload", {
+        const uploadRes = await chatFetch("/api/chat/media-upload", {
           method: "POST",
           headers: uploadHeaders,
           body: JSON.stringify({ telegram_id: backendId, type: media?.type || "file", data: match[0], mimeType, fileName: media?.fileName || "guli-chat-media" })
@@ -334,7 +359,7 @@ export async function sendUserMessage(text: string, user?: { id?: number | strin
       const guestToken = typeof window !== "undefined" ? String(localStorage.getItem("guli_chat_guest_token") || "") : "";
       if (!tgInit && !accessToken && !linkedToken && guestToken) headers["X-Guli-Guest-Token"] = guestToken;
 
-      const response = await fetch(API_URL + "/api/chat/messages", {
+      const response = await chatFetch("/api/chat/messages", {
         method: "POST",
         headers,
         body: JSON.stringify({
