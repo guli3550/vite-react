@@ -1,13 +1,85 @@
 // Persist ordinary Telegram customer messages into the shared chat store.
 // Loaded before backend/index.js, after chatRealtimePatch in backend/package.json.
 const express = require("express");
+const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { verifyAccessToken } = require("./guliCustomAuth.js");
 
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
+const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim();
+const SIGNING_SECRET = ADMIN_SECRET || BOT_TOKEN;
 const ADMIN_CHAT_IDS = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a || ""));
+  const y = Buffer.from(String(b || ""));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+function isAdminRequest(req) {
+  if (!ADMIN_SECRET) return false;
+  const h = String(req.headers.authorization || "");
+  if (!h.startsWith("Bearer ")) return false;
+  try {
+    const [body, sig] = h.slice(7).split(".");
+    if (!body || !sig) return false;
+    const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(body).digest("base64url");
+    if (!safeEqual(sig, expected)) return false;
+    const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    return p.role === "admin" && Number(p.exp) > Date.now();
+  } catch { return false; }
+}
+function verifiedTelegramCustomerId(initData) {
+  if (!BOT_TOKEN || !initData) return null;
+  try {
+    const p = new URLSearchParams(String(initData));
+    const hash = p.get("hash"); const authDate = Number(p.get("auth_date"));
+    if (!hash || !Number.isFinite(authDate) || Math.abs(Math.floor(Date.now() / 1000) - authDate) > 86400) return null;
+    const pairs = []; p.forEach((v, k) => { if (k !== "hash") pairs.push(`${k}=${v}`); }); pairs.sort();
+    const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
+    const calc = crypto.createHmac("sha256", secret).update(pairs.join("\n")).digest("hex");
+    if (!safeEqual(calc, hash)) return null;
+    const u = JSON.parse(p.get("user") || "null");
+    return u?.id ? Number(u.id) : null;
+  } catch { return null; }
+}
+// Accepts both current and legacy browser guest-token shapes, and the
+// Telegram-Login-linked token shape - same schemes verified elsewhere in the
+// chat backend (chatRealtimePatch.js, chatMediaStorageRuntime.js).
+function hasValidGuestOrLinkedToken(req) {
+  if (!SIGNING_SECRET) return false;
+  const linked = String(req.headers["x-guli-linked-token"] || "");
+  const lp = linked.split(".");
+  if (lp.length === 4 && lp[0] === "linked" && Number(lp[2]) > Date.now()) {
+    const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(`linked.${lp[1]}.${lp[2]}`).digest("base64url");
+    if (safeEqual(lp[3], expected)) return true;
+  }
+  const guest = String(req.headers["x-guli-guest-token"] || "");
+  const gp = guest.split(".");
+  if (gp.length === 3 && Number(gp[1]) > Date.now()) {
+    const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(`${gp[0]}.${gp[1]}`).digest("base64url");
+    if (safeEqual(gp[2], expected)) return true;
+  }
+  if (gp.length === 2) {
+    try {
+      const expected = crypto.createHmac("sha256", SIGNING_SECRET).update(gp[0]).digest("base64url");
+      const payload = JSON.parse(Buffer.from(gp[0], "base64url").toString("utf8"));
+      if (safeEqual(gp[1], expected) && Number(payload.exp) > Date.now()) return true;
+    } catch {}
+  }
+  return false;
+}
+function hasAuthenticatedChatSession(req) {
+  if (isAdminRequest(req)) return true;
+  if (verifiedTelegramCustomerId(req.headers["x-telegram-init-data"] || "")) return true;
+  const auth = String(req.headers.authorization || "");
+  if (auth.startsWith("Bearer ")) {
+    try { if (verifyAccessToken(auth.slice(7).trim())?.telegram_id) return true; } catch {}
+  }
+  return hasValidGuestOrLinkedToken(req);
+}
 
 async function telegramSend(chatId, text) {
   if (!BOT_TOKEN || !chatId) return;
@@ -150,12 +222,19 @@ async function persistTelegramMessage(message) {
   return data;
 }
 
-// Media proxy for Telegram photos & files so admin and client can view without exposing BOT_TOKEN
+// Media proxy for Telegram photos & files so admin and client can view without exposing BOT_TOKEN.
+// Fallback path only (canonical storage uses the signed /api/chat/media-file/:token
+// route instead whenever it succeeds) - kept for older rows / storage failures, but
+// gated behind an authenticated Guli chat session so a bare Telegram file_id alone
+// can no longer be used to pull media from the public internet (Phase 4a).
 const originalGet = express.application.get;
 express.application.get = function telegramChatMediaGet(routePath, ...handlers) {
   if (routePath === "/api/chat/media/:fileId") {
     return originalGet.call(this, routePath, async (req, res) => {
       try {
+        if (!hasAuthenticatedChatSession(req)) {
+          return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
+        }
         const fileId = String(req.params.fileId || "").trim();
         if (!fileId || !BOT_TOKEN) return res.status(404).json({ success: false, message: "Fayl topilmadi" });
 
