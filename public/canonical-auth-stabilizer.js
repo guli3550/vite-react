@@ -10,9 +10,10 @@
   if (window.__GULI_CANONICAL_AUTH_STABILIZER__) return;
   window.__GULI_CANONICAL_AUTH_STABILIZER__ = true;
 
+  const nativeCapacitor = typeof window !== 'undefined' && /^(localhost|127\\.0\\.0\\.1)$/i.test(String(window.location.hostname || ''));
   const API = String(
     window.__GULI_API_URL ||
-    'https://guli-gateway.parizodabaxtiyorov.workers.dev'
+    (nativeCapacitor ? 'https://gulii.uz' : 'https://guli-gateway.parizodabaxtiyorov.workers.dev')
   ).replace(/\/$/, '');
 
   const ACCESS = 'guli_access_token';
