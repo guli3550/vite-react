@@ -72,6 +72,7 @@ type OnlineChatViewProps = {
     last_name?: string;
     username?: string;
     photo_url?: string;
+    phone?: string;
   };
   onShowToast?: (msg: string) => void;
 };
