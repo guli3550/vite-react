@@ -61,6 +61,8 @@ function authorized(req,id){if(admin(req))return true;const n=Number(id);const t
 function decodeData(raw){const s=String(raw||"").replace(/^data:[^;]+;base64,/i,"");if(!s||s.length>11500000||s.length%4===1||!/^[A-Za-z0-9+/]*={0,2}$/.test(s))throw new Error("Fayl noto‘g‘ri kodlangan");const b=Buffer.from(s,"base64");if(!b.length||b.length>MAX_BYTES)throw new Error("Fayl hajmi 8 MB dan oshmasligi kerak");return b;}
 function extFor(mime,name){const n=String(name||"").split(".").pop().toLowerCase().replace(/[^a-z0-9]/g,"");if(n&&n.length<=8)return n;const map={"image/jpeg":"jpg","image/png":"png","image/webp":"webp","image/gif":"gif","application/pdf":"pdf","text/plain":"txt","application/zip":"zip"};return map[mime]||"bin";}
 function validMime(mime){return /^image\/(jpeg|png|webp|gif)$/.test(mime)||["application/pdf","text/plain","application/zip","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/msword","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"].includes(mime);}
+function sniffMime(buffer){const h=buffer.subarray(0,12);if(h[0]===0xff&&h[1]===0xd8&&h[2]===0xff)return "image/jpeg";if(h.toString("hex",0,8)==="89504e470d0a1a0a")return "image/png";if(h.toString("ascii",0,4)==="RIFF"&&h.toString("ascii",8,12)==="WEBP")return "image/webp";if(h.toString("ascii",0,6)==="GIF87a"||h.toString("ascii",0,6)==="GIF89a")return "image/gif";if(h.toString("ascii",0,5)==="%PDF-")return "application/pdf";return "";}
+function normalizeMime(mime,buffer){const raw=String(mime||"").toLowerCase().split(";")[0].trim();const normalized=raw==="image/jpg"?"image/jpeg":raw;if(validMime(normalized))return normalized;const sniffed=sniffMime(buffer);return validMime(sniffed)?sniffed:"";}
 function validMagic(buffer,mime){const h=buffer.subarray(0,12);if(mime==="image/jpeg")return h[0]===0xff&&h[1]===0xd8&&h[2]===0xff;if(mime==="image/png")return h.toString("hex",0,8)==="89504e470d0a1a0a";if(mime==="image/webp")return h.toString("ascii",0,4)==="RIFF"&&h.toString("ascii",8,12)==="WEBP";if(mime==="image/gif")return h.toString("ascii",0,6)==="GIF87a"||h.toString("ascii",0,6)==="GIF89a";if(mime==="application/pdf")return h.toString("ascii",0,5)==="%PDF-";return true;}
 async function ensureBucket(){if(!supabase)throw new Error("Supabase sozlanmagan");const current=await supabase.storage.getBucket(BUCKET);if(!current.error)return;const created=await supabase.storage.createBucket(BUCKET,{public:false,fileSizeLimit:MAX_BYTES,allowedMimeTypes:["image/jpeg","image/png","image/webp","image/gif","application/pdf","text/plain","application/zip","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/msword","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]});if(created.error&&!/already exists|duplicate/i.test(created.error.message||""))throw created.error;}
 function signPath(path){const exp=Date.now()+TOKEN_TTL;const body=Buffer.from(JSON.stringify({path,exp})).toString("base64url");const sig=crypto.createHmac("sha256",ADMIN_SECRET||BOT_TOKEN).update(body).digest("base64url");return `${body}.${sig}`;}
@@ -70,9 +72,9 @@ async function persistInlineChatMedia({telegramId,type,mediaUrl,fileName}) {
   if(!raw.startsWith("data:")) return {mediaUrl:raw,mediaPath:null,fileName:fileName||null};
   const match=raw.match(/^data:([^;]+);base64,(.+)$/i);
   if(!match) throw new Error("Chat media data URL noto‘g‘ri");
-  const mimeType=String(match[1]||"").toLowerCase();
-  if(!validMime(mimeType)) throw new Error("Bu fayl turi qo‘llab-quvvatlanmaydi");
   const buffer=decodeData(raw);
+  const mimeType=normalizeMime(match[1],buffer);
+  if(!mimeType) throw new Error("Bu fayl turi qo‘llab-quvvatlanmaydi");
   if(!validMagic(buffer,mimeType)) throw new Error("Fayl formati noto‘g‘ri");
   await ensureBucket();
   const safeName=String(fileName||"file").replace(/[^a-zA-Z0-9._-]/g,"_").slice(-80);
@@ -101,9 +103,10 @@ async function persistTelegramChatMedia({ telegramId, fileId, fileName, type }) 
   if (!mediaResp.ok) throw new Error("Telegramdan media yuklab olinmadi");
   const buffer = Buffer.from(await mediaResp.arrayBuffer());
   if (!buffer.length || buffer.length > MAX_BYTES) throw new Error("Telegram media hajmi 8 MB dan oshdi");
-  const mimeType = String(mediaResp.headers.get("content-type") || "").toLowerCase().split(";")[0] ||
+  const reportedMime = String(mediaResp.headers.get("content-type") || "").toLowerCase().split(";")[0] ||
     (String(fileJson.result.file_path).toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg");
-  if (!validMime(mimeType)) throw new Error("Telegram media turi qo'llab-quvvatlanmaydi");
+  const mimeType = normalizeMime(reportedMime, buffer);
+  if (!mimeType) throw new Error("Telegram media turi qo'llab-quvvatlanmaydi");
   if (!validMagic(buffer, mimeType)) throw new Error("Telegram media formati noto'g'ri");
   const safeName = String(fileName || "telegram-media").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
   const id = Number.isSafeInteger(Number(telegramId)) ? Number(telegramId) : 0;
