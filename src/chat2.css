@@ -2407,3 +2407,109 @@
   background: #F4F4F5;
 }
 
+
+
+/* ==========================================================================
+   ANDROID CHAT SHELL — SAFE RESPONSIVE LAYOUT OVERRIDES
+   UI-only: no state, routing, messaging or realtime behavior changes.
+   ========================================================================== */
+@media (max-width: 768px) {
+  .chat2-container {
+    width: 100% !important;
+    height: calc(100dvh - 92px) !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    border-radius: 12px !important;
+    border-left: 1px solid #E5E7EB !important;
+    border-right: 1px solid #E5E7EB !important;
+    overflow: hidden !important;
+  }
+
+  .chat2-main {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .chat2-messages {
+    min-height: 0 !important;
+    padding: 12px 10px 12px !important;
+    gap: 12px !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+  }
+
+  .chat2-bubble-wrap {
+    max-width: 88% !important;
+  }
+
+  .chat2-bubble-wrap.user .chat2-bubble,
+  .chat2-bubble-wrap.admin .chat2-bubble {
+    padding: 9px 12px !important;
+    font-size: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .chat2-media-img {
+    max-width: min(260px, 78vw) !important;
+    max-height: 280px !important;
+    border-radius: 12px !important;
+  }
+
+  .chat2-bubble-actions {
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  .chat2-composer {
+    padding: 7px 8px max(8px, env(safe-area-inset-bottom)) !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .chat2-input-capsule {
+    min-width: 0 !important;
+    padding: 3px 6px !important;
+  }
+
+  .chat2-composer-input {
+    min-width: 0 !important;
+    font-size: 14px !important;
+    padding: 8px 7px !important;
+  }
+
+  .chat2-capsule-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+
+  .chat2-action-circle-btn {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .chat2-quick-replies {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .chat2-quick-chip {
+    padding: 5px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .chat2-sidebar {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+  }
+
+  .chat2-crm-panel {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+  }
+}
