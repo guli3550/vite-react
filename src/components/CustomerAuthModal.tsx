@@ -54,6 +54,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   const pollRef = useRef<number | null>(null);
   const popupRef = useRef<Window | null>(null);
   const exchangeInFlightRef = useRef(false);
+  const warmSessionRef = useRef<Promise<any> | null>(null);
 
   const clearPolling = () => {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -64,6 +65,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
   useEffect(() => {
     if (!isOpen) { clearPolling(); exchangeInFlightRef.current = false; return; }
     setStatus("idle"); setError(null); setSuccess(null); setLoading(false); exchangeInFlightRef.current = false;
+    // Warm the auth session as soon as the modal opens so the Telegram handoff
+    // does not wait for a cold backend request after the user taps the button.
+    warmSessionRef.current = api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }).catch(() => null);
+    return () => { warmSessionRef.current = null; };
   }, [isOpen, initialTab]);
 
   const completeLogin = (data: any) => {
@@ -120,10 +125,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     if (loading || status === "waiting" || status === "ready" || exchangeInFlightRef.current) return;
     setLoading(true); setError(null); setSuccess(null); clearPolling(); exchangeInFlightRef.current = false;
     let popup: Window | null = null;
-    try { popup = window.open("about:blank", "_blank"); } catch {}
-    popupRef.current = popup;
+    popupRef.current = null;
     try {
-      const r = await api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) });
+      const r = (warmSessionRef.current ? await warmSessionRef.current : await api("/api/v1/auth/init-session", { method: "POST", body: JSON.stringify({}) }));
       const id = r?.session_id; const ticket = r?.exchange_ticket; const url = r?.telegram_url || r?.deep_link;
       if (!id || !ticket || !url) throw new Error("Telegram ulanish sessiyasi to‘liq yaratilmadi.");
       if (Capacitor.isNativePlatform()) {
@@ -132,9 +136,9 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         } catch {
           window.location.href = url;
         }
-      } else if (popup && !popup.closed) {
-        try { popup.location.href = url; } catch { window.location.href = url; }
-      } else window.location.href = url;
+      } else {
+        window.location.href = url;
+      }
       setLoading(false); setStatus("waiting"); setSuccess(null); setError(null);
       let elapsed = 0;
       pollRef.current = window.setInterval(async () => {
