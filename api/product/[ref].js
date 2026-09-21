@@ -40,6 +40,10 @@ export default async function handler(req, res) {
     const productUrl = `${SITE}/product/${encodeURIComponent(ref)}/`;
     const appUrl = `${SITE}/?product=${encodeURIComponent(ref)}`;
     const price = Number(p.price || 0);
+    const rating = Number(p.rating || 0);
+    const reviewCount = Number(p.reviews || 0);
+    const hasRating = Number.isFinite(rating) && rating > 0 && rating <= 5 && Number.isFinite(reviewCount) && reviewCount > 0;
+
 
     const schema = {
       "@context": "https://schema.org",
@@ -49,12 +53,26 @@ export default async function handler(req, res) {
       image: images,
       sku: p.product_code || p.id,
       category,
+      url: productUrl,
       brand: { "@type": "Brand", name: "GULI MARKET" },
+      mainEntityOfPage: productUrl,
+      audience: { "@type": "PeopleAudience", suggestedGender: "female" },
+      ...(hasRating ? {
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: Number(rating.toFixed(2)),
+          reviewCount: Math.floor(reviewCount),
+          bestRating: 5,
+          worstRating: 1
+        }
+      } : {}),
       offers: {
         "@type": "Offer",
         url: productUrl,
         priceCurrency: "UZS",
         ...(price > 0 ? { price } : {}),
+        itemCondition: "https://schema.org/NewCondition",
+        seller: { "@type": "Organization", name: "GULI MARKET", url: SITE },
         availability:
           Number(p.stock || 0) > 0
             ? "https://schema.org/InStock"
@@ -72,7 +90,7 @@ export default async function handler(req, res) {
 <meta name="description" content="${esc(description.slice(0, 300))}">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <link rel="canonical" href="${esc(productUrl)}">
-<link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+<link rel="icon" type="image/png" sizes="48x48" href="/guli-logo.png">
 <meta property="og:site_name" content="GULI MARKET"><meta property="og:title" content="${esc(name)} | GULI MARKET">
 <meta property="og:description" content="${esc(description.slice(0, 300))}"><meta property="og:type" content="product">
 <meta property="og:url" content="${esc(productUrl)}"><meta property="og:image" content="${esc(mainImage)}">
