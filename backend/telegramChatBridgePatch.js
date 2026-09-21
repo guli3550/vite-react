@@ -128,6 +128,28 @@ async function broadcastRealtime(data) {
   }
 }
 
+async function persistTelegramProfile(message) {
+  if (!supabase) return;
+  const from = message?.from || {};
+  const telegramId = Number(message?.chat?.id || from.id || 0);
+  if (!telegramId) return;
+  const contact = message?.contact;
+  const phone = contact?.phone_number ? String(contact.phone_number).trim() : "";
+  const payload = {
+    telegram_id: telegramId,
+    username: from.username || null,
+    first_name: from.first_name || null,
+    last_name: from.last_name || null,
+    ...(phone ? { telegram_phone: phone } : {}),
+    updated_at: new Date().toISOString()
+  };
+  try {
+    await supabase.from("telegram_users").upsert(payload, { onConflict: "telegram_id" });
+  } catch (error) {
+    console.warn("[Telegram chat bridge] profile persistence failed:", error.message);
+  }
+}
+
 async function persistTelegramMessage(message) {
   if (!supabase) return null;
   const from = message?.from || {};
@@ -273,6 +295,9 @@ express.application.post = function telegramChatBridgePost(routePath, ...handler
       const text = String(message?.text || "").trim();
       const isCommand = /^\/(start|shop|store)(?:@\w+)?$/i.test(text);
       const isContact = Boolean(message?.contact?.phone_number);
+      if (message?.from?.id) {
+        await persistTelegramProfile(message);
+      }
       if (message?.from?.id && !isCommand && !isContact) {
         try {
           const persisted = await persistTelegramMessage(message);
