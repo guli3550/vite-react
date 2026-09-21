@@ -30,13 +30,13 @@ export default async function handler(req, res) {
     const category = String(p.category || "").trim();
     const description =
       String(p.description || "").trim() ||
-      `${name} — Guli Market onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
+      `${name} — GULI MARKET onlayn do‘konidagi mahsulot.${category ? ` Kategoriya: ${category}.` : ""}`;
     const images = [p.image, ...(Array.isArray(p.images) ? p.images : [])]
       .map(absolute)
       .filter(Boolean)
       .filter((v, i, a) => a.indexOf(v) === i)
       .slice(0, 10);
-    const mainImage = images[0] || `${SITE}/guli-logo.webp`;
+    const mainImage = images[0] || `${SITE}/guli-logo.png`;
     const productUrl = `${SITE}/product/${encodeURIComponent(ref)}/`;
     const appUrl = `${SITE}/?product=${encodeURIComponent(ref)}`;
     const price = Number(p.price || 0);
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       image: images,
       sku: p.product_code || p.id,
       category,
-      brand: { "@type": "Brand", name: "Guli Market" },
+      brand: { "@type": "Brand", name: "GULI MARKET" },
       offers: {
         "@type": "Offer",
         url: productUrl,
@@ -68,12 +68,12 @@ export default async function handler(req, res) {
     return res.status(200).send(`<!doctype html>
 <html lang="uz"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(name)} | Guli Market</title>
+<title>${esc(name)} | GULI MARKET</title>
 <meta name="description" content="${esc(description.slice(0, 300))}">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <link rel="canonical" href="${esc(productUrl)}">
 <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
-<meta property="og:site_name" content="Guli Market"><meta property="og:title" content="${esc(name)} | Guli Market">
+<meta property="og:site_name" content="GULI MARKET"><meta property="og:title" content="${esc(name)} | GULI MARKET">
 <meta property="og:description" content="${esc(description.slice(0, 300))}"><meta property="og:type" content="product">
 <meta property="og:url" content="${esc(productUrl)}"><meta property="og:image" content="${esc(mainImage)}">
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>
@@ -82,8 +82,8 @@ export default async function handler(req, res) {
 ${category ? `<p>Kategoriya: ${esc(category)}</p>` : ""}
 ${price > 0 ? `<p>${esc(new Intl.NumberFormat("uz-UZ").format(price))} so‘m</p>` : ""}
 <p>${esc(description)}</p>
-<img src="${esc(mainImage)}" alt="${esc(name)} — Guli Market" width="800" height="800" loading="eager">
-<p><a href="${esc(appUrl)}">Mahsulotni Guli Market ilovasida ochish</a></p>
+<img src="${esc(mainImage)}" alt="${esc(name)} — GULI MARKET" width="800" height="800" loading="eager">
+<p><a href="${esc(appUrl)}">Mahsulotni GULI MARKET ilovasida ochish</a></p>
 </article></main></body></html>`);
   } catch (error) {
     console.error("Dynamic product SEO error:", error);
