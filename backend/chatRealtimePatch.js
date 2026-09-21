@@ -15,7 +15,33 @@ let realtimeChannel = null;
 function safeEqual(a, b) { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); }
 function signGuest(id, exp) { return crypto.createHmac("sha256", ADMIN_SECRET || BOT_TOKEN).update(`${id}.${exp}`).digest("base64url"); }
 function createGuestToken(id) { const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; return `${id}.${exp}.${signGuest(id, exp)}`; }
-function verifyGuest(req, expectedId) { if (!ADMIN_SECRET && !BOT_TOKEN) return false; const token = String(req.headers["x-guli-guest-token"] || ""); const [id, exp, sig] = token.split("."); if (!id || !exp || !sig || Number(id) !== Number(expectedId) || Number(exp) <= Date.now()) return false; return safeEqual(sig, signGuest(id, Number(exp))); }
+// Accepts both guest-token shapes seen in production:
+//  - legacy 3-part `${id}.${exp}.${sig}` (still produced by createGuestToken above)
+//  - current 2-part `${base64url(JSON{guestId,exp})}.${sig}` issued by
+//    chatGuestSessionHardeningPatch.js's GET /api/chat/guest-session, which is
+//    the only guest-session endpoint the frontend calls today. Without this,
+//    every currently-issued guest token failed verification here (Root Cause C).
+function verifyGuest(req, expectedId) {
+  if (!ADMIN_SECRET && !BOT_TOKEN) return false;
+  const token = String(req.headers["x-guli-guest-token"] || "");
+  const parts = token.split(".");
+  if (parts.length === 3) {
+    const [id, exp, sig] = parts;
+    if (!id || !exp || !sig || Number(id) !== Number(expectedId) || Number(exp) <= Date.now()) return false;
+    return safeEqual(sig, signGuest(id, Number(exp)));
+  }
+  if (parts.length === 2) {
+    const [body, sig] = parts;
+    if (!body || !sig) return false;
+    const expected = crypto.createHmac("sha256", ADMIN_SECRET || BOT_TOKEN).update(body).digest("base64url");
+    if (!safeEqual(sig, expected)) return false;
+    try {
+      const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+      return Number(payload.guestId) === Number(expectedId) && Number(payload.exp) > Date.now();
+    } catch { return false; }
+  }
+  return false;
+}
 function signLinked(id, exp) { return crypto.createHmac("sha256", ADMIN_SECRET || BOT_TOKEN).update(`linked.${id}.${exp}`).digest("base64url"); }
 function createLinkedToken(id) { const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; return `linked.${id}.${exp}.${signLinked(id, exp)}`; }
 function verifyLinked(req, expectedId) { if (!ADMIN_SECRET && !BOT_TOKEN) return false; const token = String(req.headers["x-guli-linked-token"] || ""); const [prefix, id, exp, sig] = token.split("."); if (prefix !== "linked" || !id || !exp || !sig || Number(id) !== Number(expectedId) || Number(exp) <= Date.now()) return false; return safeEqual(sig, signLinked(id, Number(exp))); }
@@ -192,7 +218,14 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
         mediaPath: stored.mediaPath || metadata.mediaPath,
         fileName: stored.fileName || metadata.fileName,
         mimeType: stored.mimeType || metadata.mimeType,
-        type: stored.type || mediaType || "file"
+        type: stored.type || mediaType || "file",
+        // Absolute, Telegram-reachable signed URL. Required by
+        // customerNotificationService.notifyCustomerAdminChat to relay the
+        // image/file to the Telegram customer via sendPhoto/sendDocument -
+        // the app's own /api/chat/media-file/... path is not publicly
+        // reachable by Telegram's servers. Was previously dropped here
+        // (Root Cause / Phase 6).
+        telegramMediaUrl: stored.telegramMediaUrl || metadata.telegramMediaUrl
       };
     } catch (e) {
       console.warn("[Chat admin reply] media persistence failed:", e.message);
