@@ -1,4 +1,4 @@
-<parameter name="content">import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Truck, ShieldCheck, HeartHandshake } from "lucide-react";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "./GuliStartupSplash.css";
