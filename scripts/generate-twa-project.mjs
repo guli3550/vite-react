@@ -1,8 +1,10 @@
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import { TwaManifest, TwaGenerator, ConsoleLog } from "@bubblewrap/core";
 
 const projectDir = "twa-android";
-const raw = JSON.parse(await fs.readFile("twa-manifest.json", "utf8"));
+const manifestFile = "twa-manifest.json";
+const raw = JSON.parse(await fs.readFile(manifestFile, "utf8"));
 const manifest = new TwaManifest(raw);
 
 const error = manifest.validate();
@@ -18,4 +20,12 @@ await generator.createTwaProject(
   new ConsoleLog("GULI TWA")
 );
 
+// @bubblewrap/cli expects this checksum file before bubblewrap build.
+// The core TwaGenerator generates the Android project; the CLI init/update
+// commands generate the checksum separately.
+const manifestContents = await fs.readFile(manifestFile);
+const checksum = crypto.createHash("sha1").update(manifestContents).digest("hex");
+await fs.writeFile(`${projectDir}/manifest-checksum.txt`, checksum);
+
 console.log("GULI TWA Android project generated:", projectDir);
+console.log("GULI TWA manifest checksum generated:", checksum);
