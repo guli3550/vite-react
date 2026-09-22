@@ -66,6 +66,7 @@ import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
+import "./components/PwaInstallPrompt.css";
 
 declare global {
   interface Window {
@@ -4518,7 +4519,6 @@ export default function App() {
       </header>
       )}
       <PwaInstallPrompt />
-      )}
 
       <div
         className="tabSwipeArea pageAnimEnter"
