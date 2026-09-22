@@ -871,6 +871,11 @@ export default function App() {
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
   const PRODUCTS_PAGE_SIZE = 40;
   const [products, setProducts] = useState<Product[]>([]);
+  // Home category cards must keep their own unfiltered product pool.
+  // Catalog filtering is server-side, so selectedCategory can legitimately
+  // replace "products" with one category only. Without this separate cache,
+  // returning to Home makes the other category cards appear empty.
+  const [homeProducts, setHomeProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
@@ -1952,6 +1957,18 @@ export default function App() {
         productsRecoveryTimerRef.current = null;
       }
 
+      // Keep Home's rotating category cards independent from the catalog's
+      // server-side category/search result set. Only a clean "Barchasi"
+      // catalog response is allowed to refresh the Home cache.
+      if (selectedCategory === "Barchasi" && !normalizedSearch) {
+        setHomeProducts((prevHome) => {
+          if (!append) return rows;
+          const existingIds = new Set(prevHome.map((p) => String(p.id)));
+          const uniqueNew = rows.filter((p) => !existingIds.has(String(p.id)));
+          return [...prevHome, ...uniqueNew];
+        });
+      }
+
       setProducts((prev) => {
         if (!append) return rows;
         const existingIds = new Set(prev.map((p) => String(p.id)));
@@ -2692,8 +2709,8 @@ export default function App() {
   const appliedCashback = useCashback ? maxCashbackDeduction : 0;
   const total = Math.max(0, payableBeforeCashback - appliedCashback);
   const allCategories = useMemo(
-    () => getSynchronizedCategories(products),
-    [products],
+    () => getSynchronizedCategories(homeProducts),
+    [homeProducts],
   );
   const filtered = useMemo(
     () =>
@@ -4588,7 +4605,7 @@ export default function App() {
 
             <RotatingCategoriesSection
               categories={allCategories}
-              products={products}
+              products={homeProducts}
               onSelectCategory={(catName) => {
                 setSelectedCategory(catName);
                 go("catalog");
