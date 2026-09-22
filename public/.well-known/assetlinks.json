@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "uz.gulii.market",
+      "sha256_cert_fingerprints": [
+        "50:BA:87:93:94:01:05:28:01:DB:93:B7:9A:7D:E6:6C:D8:AC:AA:10:0F:06:84:F9:1C:7A:E6:EB:15:FE:2B:6D"
+      ]
+    }
+  }
+]
