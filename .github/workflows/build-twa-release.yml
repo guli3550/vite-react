@@ -98,6 +98,22 @@ jobs:
           }
           ls -la twa-android | sed -n '1,80p'
 
+      - name: Configure Bubblewrap CI toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.bubblewrap"
+          cat > "$HOME/.bubblewrap/config.json" <<EOF
+          {
+            "jdkPath": "${JAVA_HOME}",
+            "androidSdkPath": "${ANDROID_HOME}"
+          }
+          EOF
+          echo "Bubblewrap CI config:"
+          cat "$HOME/.bubblewrap/config.json"
+          java -version
+          test -x "$JAVA_HOME/bin/java"
+          test -x "$ANDROID_HOME/platform-tools/adb"
+
       - name: Build signed APK and AAB
         working-directory: twa-android
         env:
