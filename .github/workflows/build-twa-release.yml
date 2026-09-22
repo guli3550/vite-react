@@ -119,7 +119,7 @@ jobs:
           }
           cmdline_tools_root="$(dirname "$(dirname "$cmdline_tools_bin")")"
 
-          ln -s "$cmdline_tools_bin" "$bubblewrap_sdk/bin"
+          ln -s "$cmdline_tools_root/bin" "$bubblewrap_sdk/bin"
           ln -s "$cmdline_tools_root/lib" "$bubblewrap_sdk/lib"
 
           for sdk_dir in build-tools platform-tools platforms licenses; do
