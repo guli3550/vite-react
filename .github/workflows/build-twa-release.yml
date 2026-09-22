@@ -80,13 +80,13 @@ jobs:
       - name: Generate TWA Android project
         run: node scripts/generate-twa-project.mjs
 
-      - name: Prepare Bubblewrap project manifest
+      - name: Prepare signing key in generated TWA project
         run: |
           set -euo pipefail
-          cp twa-manifest.json twa-android/twa-manifest.json
           cp android.keystore twa-android/android.keystore
-          sha1sum twa-android/twa-manifest.json | awk '{print $1}' > twa-android/manifest-checksum.txt
           chmod 600 twa-android/android.keystore
+          test -f twa-android/twa-manifest.json
+          test -f twa-android/manifest-checksum.txt
 
       - name: Build signed APK and AAB
         working-directory: twa-android
