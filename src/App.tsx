@@ -4631,7 +4631,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="productGrid">
-                  {products
+                  {homeProducts
                     .filter((p) => p.featured && p.active !== false)
                     .slice(0, 8)
                     .map((p) => card(p))}
