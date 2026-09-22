@@ -92,7 +92,7 @@ export function PwaInstallPrompt() {
       </div>
       <div className="guliPwaInstallCopy">
         <strong>GULI MARKET'ni o‘rnating</strong>
-        <span>Tezroq ochiladi va brauzer panelisiz ishlaydi.</span>
+        <span>Sevimli do‘koningiz har doim yoningizda — tez, qulay va bir zumda!</span>
       </div>
       <button
         type="button"
