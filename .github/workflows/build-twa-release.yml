@@ -1,0 +1,132 @@
+name: Build GULI MARKET TWA Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_assetlinks:
+        description: "Generate assetlinks.json as a workflow artifact (does not deploy it)"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check release signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.GULI_TWA_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64" || { echo "::error::Missing GULI_TWA_KEYSTORE_B64"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing GULI_TWA_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing GULI_TWA_KEY_PASSWORD"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::Missing GULI_TWA_KEY_ALIAS"; exit 1; }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
+          packages: platform-tools platforms;android-35 build-tools;35.0.0
+
+      - name: Install Bubblewrap
+        run: npm install --no-save @bubblewrap/core@latest @bubblewrap/cli@latest
+
+      - name: Prepare release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.GULI_TWA_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > android.keystore
+          chmod 600 android.keystore
+          keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}" >/dev/null
+
+      - name: Read release certificate fingerprint
+        id: cert
+        env:
+          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          fingerprint="$(keytool -list -v -keystore android.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | awk -F': ' '/SHA256:/{print $2; exit}')"
+          test -n "$fingerprint" || { echo "::error::Unable to read SHA-256 certificate fingerprint"; exit 1; }
+          echo "sha256=$fingerprint" >> "$GITHUB_OUTPUT"
+          echo "Release certificate SHA-256: $fingerprint"
+
+      - name: Generate TWA Android project
+        run: node scripts/generate-twa-project.mjs
+
+      - name: Prepare Bubblewrap project manifest
+        run: |
+          set -euo pipefail
+          cp twa-manifest.json twa-android/twa-manifest.json
+          cp android.keystore twa-android/android.keystore
+          sha1sum twa-android/twa-manifest.json | awk '{print $1}' > twa-android/manifest-checksum.txt
+          chmod 600 twa-android/android.keystore
+
+      - name: Build signed APK and AAB
+        working-directory: twa-android
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
+        run: |
+          npx @bubblewrap/cli@latest build \
+            --skipPwaValidation \
+            --signingKeyPath=./android.keystore \
+            --signingKeyAlias="$KEY_ALIAS"
+
+      - name: Generate Digital Asset Links
+        if: ${{ inputs.publish_assetlinks }}
+        env:
+          GULI_ANDROID_PACKAGE: uz.gulii.market
+          GULI_RELEASE_SHA256: ${{ steps.cert.outputs.sha256 }}
+          GULI_PLAY_APP_SIGNING_SHA256: ${{ secrets.GULI_PLAY_APP_SIGNING_SHA256 }}
+          GULI_ASSETLINKS_OUTPUT: twa-assetlinks/assetlinks.json
+        run: node scripts/generate-assetlinks.mjs
+
+      - name: Verify signed artifacts
+        env:
+          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          test -f twa-android/app-release-signed.apk
+          test -f twa-android/app-release-bundle.aab
+          apksigner verify --verbose twa-android/app-release-signed.apk
+          keytool -printcert -jarfile twa-android/app-release-signed.apk | grep -F "SHA256:" || true
+
+      - name: Upload signed APK and AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: guli-market-twa-release
+          path: |
+            twa-android/app-release-signed.apk
+            twa-android/app-release-bundle.aab
+            twa-android/twa-manifest.json
+            twa-assetlinks/assetlinks.json
+          if-no-files-found: error
