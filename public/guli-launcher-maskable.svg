@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="rose" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8d2343"/>
+      <stop offset="0.48" stop-color="#d95d79"/>
+      <stop offset="1" stop-color="#f2a0ad"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="0.45" stop-color="#ffeef2"/>
+      <stop offset="1" stop-color="#fff"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#6d2039" flood-opacity=".18"/>
+    </filter>
+  </defs>
+
+  <!-- Solid mask-safe background. The visible logo stays comfortably inside Android's safe zone. -->
+  <rect width="1024" height="1024" fill="#fff9fa"/>
+  <circle cx="512" cy="512" r="420" fill="#fff" filter="url(#shadow)"/>
+
+  <!-- Stylized G ring matching the GULI visual language. -->
+  <path d="M760 302c-70-74-169-116-274-116-209 0-378 147-378 326s169 326 378 326c106 0 207-42 278-118l-76-67c-51 53-123 84-202 84-148 0-267-98-267-225s119-225 267-225c75 0 146 29 197 79z" fill="url(#rose)"/>
+  <path d="M518 384c-74 0-133 49-133 109s59 109 133 109c48 0 90-18 116-47v-46H520v-72h207v153c-48 64-119 101-209 101-132 0-238-87-238-198s106-198 238-198c83 0 156 29 207 82l-64 54c-35-31-83-47-143-47z" fill="url(#shine)" opacity=".96"/>
+
+  <text x="508" y="620" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="190" font-weight="700" letter-spacing="-10" fill="url(#rose)">ulii</text>
+  <circle cx="706" cy="456" r="20" fill="#c84868"/>
+  <circle cx="764" cy="456" r="20" fill="#c84868"/>
+  <path d="M516 666h270" stroke="#c84868" stroke-width="10" stroke-linecap="round" opacity=".75"/>
+</svg>
