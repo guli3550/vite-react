@@ -24,14 +24,14 @@ jobs:
       - name: Check release signing secrets
         env:
           KEYSTORE_B64: ${{ secrets.GULI_TWA_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
+          KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" || { echo "::error::Missing GULI_TWA_KEYSTORE_B64"; exit 1; }
-          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing GULI_TWA_KEYSTORE_PASSWORD"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "::error::Missing GULI_TWA_KEY_PASSWORD"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing GULI_TWA_KEYSTORE_PASSWD"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing GULI_TWA_KEY_PASSWD"; exit 1; }
           test -n "$KEY_ALIAS" || { echo "::error::Missing GULI_TWA_KEY_ALIAS"; exit 1; }
 
       - name: Setup Node
@@ -63,12 +63,12 @@ jobs:
           set -euo pipefail
           printf '%s' "$KEYSTORE_B64" | base64 --decode > android.keystore
           chmod 600 android.keystore
-          keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}" >/dev/null
+          keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}" >/dev/null
 
       - name: Read release certificate fingerprint
         id: cert
         env:
-          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           set -euo pipefail
@@ -91,8 +91,8 @@ jobs:
       - name: Build signed APK and AAB
         working-directory: twa-android
         env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWORD }}
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           npx @bubblewrap/cli@latest build \
@@ -111,7 +111,7 @@ jobs:
 
       - name: Verify signed artifacts
         env:
-          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           set -euo pipefail
