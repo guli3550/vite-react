@@ -25,13 +25,13 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.GULI_TWA_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
-          KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD }}
+          KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD || secrets.GULI_TWA_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_B64" || { echo "::error::Missing GULI_TWA_KEYSTORE_B64"; exit 1; }
           test -n "$KEYSTORE_PASSWORD" || { echo "::error::Missing GULI_TWA_KEYSTORE_PASSWD"; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "::error::Missing GULI_TWA_KEY_PASSWD"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::Missing GULI_TWA_KEY_PASSWD (or legacy GULI_TWA_KEY_PASSWORD)"; exit 1; }
           test -n "$KEY_ALIAS" || { echo "::error::Missing GULI_TWA_KEY_ALIAS"; exit 1; }
 
       - name: Setup Node
@@ -92,7 +92,7 @@ jobs:
         working-directory: twa-android
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}
-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.GULI_TWA_KEY_PASSWD || secrets.GULI_TWA_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.GULI_TWA_KEY_ALIAS }}
         run: |
           npx @bubblewrap/cli@latest build \
