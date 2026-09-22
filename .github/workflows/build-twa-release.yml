@@ -102,35 +102,51 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Bubblewrap validates the configured SDK by requiring a top-level
-          # tools/ or bin/ directory. GitHub's setup-android installs the
-          # command-line tools under cmdline-tools/<version>/bin instead.
-          # Keep ANDROID_HOME as the SDK root and expose sdkmanager through
-          # the top-level bin path Bubblewrap expects.
-          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager -print -quit)"
-          test -n "$sdkmanager_path" || {
+          # Bubblewrap expects its configured Android SDK root to contain
+          # bin/ (or the legacy tools/ tree). setup-android keeps the
+          # command-line tools under cmdline-tools/<version>/ and the rest
+          # of the SDK at ANDROID_HOME. Build a real SDK facade so both
+          # Bubblewrap validation and sdkmanager see a consistent root.
+          bubblewrap_sdk="$RUNNER_TEMP/bubblewrap-android-sdk"
+          rm -rf "$bubblewrap_sdk"
+          mkdir -p "$bubblewrap_sdk"
+
+          cmdline_tools_bin="$(find "$ANDROID_HOME/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager -print -quit)"
+          test -n "$cmdline_tools_bin" || {
             echo "::error::Could not locate sdkmanager under $ANDROID_HOME/cmdline-tools"
             find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f | sed -n '1,80p'
             exit 1
           }
-          cmdline_tools_bin="$(dirname "$sdkmanager_path")"
-          rm -rf "$ANDROID_HOME/bin"
-          ln -s "$cmdline_tools_bin" "$ANDROID_HOME/bin"
-          test -x "$ANDROID_HOME/bin/sdkmanager"
-          test -x "$ANDROID_HOME/platform-tools/adb"
+          cmdline_tools_root="$(dirname "$(dirname "$cmdline_tools_bin")")"
+
+          ln -s "$cmdline_tools_root/bin" "$bubblewrap_sdk/bin"
+          ln -s "$cmdline_tools_root/lib" "$bubblewrap_sdk/lib"
+
+          for sdk_dir in build-tools platform-tools platforms licenses; do
+            if [ -d "$ANDROID_HOME/$sdk_dir" ]; then
+              ln -s "$ANDROID_HOME/$sdk_dir" "$bubblewrap_sdk/$sdk_dir"
+            fi
+          done
+
+          test -x "$bubblewrap_sdk/bin/sdkmanager"
+          test -d "$bubblewrap_sdk/lib"
+          test -d "$bubblewrap_sdk/platform-tools"
+          test -d "$bubblewrap_sdk/build-tools"
 
           mkdir -p "$HOME/.bubblewrap"
           cat > "$HOME/.bubblewrap/config.json" <<EOF
           {
             "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${ANDROID_HOME}"
+            "androidSdkPath": "$bubblewrap_sdk"
           }
           EOF
+
           echo "Bubblewrap CI config:"
           cat "$HOME/.bubblewrap/config.json"
-          echo "Bubblewrap-compatible Android SDK bin: $ANDROID_HOME/bin"
+          echo "SDK facade:"
+          ls -la "$bubblewrap_sdk"
           java -version
-          "$ANDROID_HOME/bin/sdkmanager" --version
+          "$bubblewrap_sdk/bin/sdkmanager" --version
 
       - name: Build signed APK and AAB
         working-directory: twa-android
