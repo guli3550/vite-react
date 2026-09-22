@@ -91,8 +91,12 @@ jobs:
           set -euo pipefail
           cp android.keystore twa-android/android.keystore
           chmod 600 twa-android/android.keystore
-          test -f twa-android/twa-manifest.json
-          test -f twa-android/manifest-checksum.txt
+          test -f twa-android/manifest-checksum.txt || {
+            echo "::error::Generated TWA project is missing manifest-checksum.txt"
+            ls -la twa-android
+            exit 1
+          }
+          ls -la twa-android | sed -n '1,80p'
 
       - name: Build signed APK and AAB
         working-directory: twa-android
