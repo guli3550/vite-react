@@ -21,6 +21,7 @@
     <meta name="twitter:title" content="GULI MARKET" />
     <meta name="twitter:description" content="GULI MARKET — O‘zbekistonning premium ayollar ichki kiyimlari va uy kiyimlari onlayn do‘koni." />
     <meta name="twitter:image" content="https://gulii.uz/guli-logo.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/guli-logo.png" type="image/png" sizes="48x48" />
     <link rel="apple-touch-icon" href="/guli-logo.png" />
     <script type="application/ld+json">
@@ -87,6 +88,13 @@
     <script src="/chat-media-bridge.js?v=1"></script>
     <script src="/chat-media-download-runtime.js?v=1"></script>
     <script src="/chat-integrity-fix.js?v=1"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <script src="/card-payment-browser-fix.js?v=5" defer></script>
     <script src="/customer-auth-bridge.js?v=1"></script>

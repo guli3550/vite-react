@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "GULI MARKET",
+  "short_name": "GULI",
+  "description": "GULI MARKET — O‘zbekistonning premium ayollar ichki kiyimlari va uy kiyimlari onlayn do‘koni.",
+  "lang": "uz-UZ",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#fff9fa",
+  "theme_color": "#fff9fa",
+  "icons": [
+    {
+      "src": "/guli-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
