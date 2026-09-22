@@ -13,6 +13,11 @@ if (error) throw new Error("Invalid TWA manifest: " + error);
 await fs.rm(projectDir, { recursive: true, force: true });
 await fs.mkdir(projectDir, { recursive: true });
 
+// Bubblewrap CLI build resolves twa-manifest.json relative to the generated
+// Android project. Keep the exact source manifest alongside the generated
+// project so `bubblewrap build` can validate its checksum and metadata.
+await fs.copyFile(manifestFile, `${projectDir}/${manifestFile}`);
+
 const generator = new TwaGenerator();
 await generator.createTwaProject(
   projectDir,
