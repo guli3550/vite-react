@@ -1,0 +1,209 @@
+.guliSplash {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, var(--bg-main, #fff9fa) 0%, #fdeef1 55%, #fbe1e9 100%);
+  padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.38s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-theme="dark"] .guliSplash {
+  background:
+    radial-gradient(circle at 50% 15%, rgba(226, 107, 132, 0.14) 0%, rgba(226, 107, 132, 0) 55%),
+    linear-gradient(180deg, var(--bg-main, #140e11) 0%, #1c1014 60%, #140e11 100%);
+}
+
+.guliSplashLeaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guliSplashGlow {
+  position: absolute;
+  top: -20%;
+  left: 50%;
+  width: 340px;
+  height: 340px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(201, 82, 107, 0.14) 0%, rgba(201, 82, 107, 0) 70%);
+  pointer-events: none;
+}
+
+.guliSplashBody {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 340px;
+  width: 100%;
+}
+
+.guliSplashLogoWrap {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 14px 34px rgba(180, 60, 90, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+  display: grid;
+  place-items: center;
+  animation: guliSplashLogoIn 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guliSplashLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.guliSplashBrand {
+  margin-top: 18px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--text-main, #21191c);
+  animation: guliSplashFadeUp 0.5s 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guliSplashTagline {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-muted, #8b787e);
+  animation: guliSplashFadeUp 0.5s 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guliSplashBenefits {
+  margin-top: 26px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 18px;
+  width: 100%;
+  animation: guliSplashFadeUp 0.5s 0.44s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guliSplashBenefit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 92px;
+}
+
+.guliSplashBenefitIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-card, #ffffff);
+  color: var(--primary, #bd526a);
+  box-shadow: var(--shadow-sm, 0 4px 14px rgba(70, 35, 45, 0.08));
+  border: 1px solid var(--border-color, #f0dfe3);
+}
+
+.guliSplashBenefitLabel {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-muted, #8b787e);
+  font-weight: 600;
+}
+
+.guliSplashFooter {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: max(30px, calc(env(safe-area-inset-bottom) + 20px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  animation: guliSplashFadeUp 0.5s 0.58s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.guliSplashProgressTrack {
+  width: 120px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-color, #f0dfe3);
+  overflow: hidden;
+}
+
+.guliSplashProgressBar {
+  width: 40%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary-gradient, linear-gradient(135deg, #c9526b, #b84561));
+  animation: guliSplashProgress 1.1s ease-in-out infinite;
+}
+
+.guliSplashStatus {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #8b787e);
+}
+
+@keyframes guliSplashLogoIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes guliSplashFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes guliSplashProgress {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guliSplashLogoWrap,
+  .guliSplashBrand,
+  .guliSplashTagline,
+  .guliSplashBenefits,
+  .guliSplashFooter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .guliSplashProgressBar {
+    animation: none !important;
+    width: 100%;
+  }
+  .guliSplash {
+    transition: opacity 0.12s ease;
+  }
+}
