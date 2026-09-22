@@ -63,7 +63,13 @@ jobs:
           set -euo pipefail
           printf '%s' "$KEYSTORE_B64" | base64 --decode > android.keystore
           chmod 600 android.keystore
-          keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}" >/dev/null
+          echo "Keystore bytes: $(wc -c < android.keystore)"
+          file android.keystore || true
+          if ! keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}" >/dev/null 2>keytool-error.txt; then
+            echo "::error::The GULI_TWA_KEYSTORE_B64 value decoded, but the keystore could not be opened with GULI_TWA_KEYSTORE_PASSWD."
+            cat keytool-error.txt
+            exit 1
+          fi
 
       - name: Read release certificate fingerprint
         id: cert
