@@ -65,6 +65,7 @@ import { getSupabase, signOutEverywhere } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
+import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 
 declare global {
   interface Window {
@@ -4515,6 +4516,8 @@ export default function App() {
           </button>
         </div>
       </header>
+      )}
+      <PwaInstallPrompt />
       )}
 
       <div
