@@ -1,0 +1,84 @@
+/* PWA install prompt: appears only when Chrome exposes the install prompt. */
+.guliPwaInstallPrompt{
+  position:fixed;
+  left:12px;
+  right:12px;
+  bottom:calc(76px + env(safe-area-inset-bottom));
+  z-index:1200;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border:1px solid rgba(194,75,105,.18);
+  border-radius:18px;
+  background:rgba(255,250,251,.97);
+  box-shadow:0 12px 36px rgba(84,34,48,.16);
+  backdrop-filter:blur(16px);
+}
+.guliPwaInstallIcon{
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  border-radius:13px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 4px 12px rgba(84,34,48,.10);
+}
+.guliPwaInstallIcon img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+}
+.guliPwaInstallCopy{
+  min-width:0;
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.guliPwaInstallCopy strong{
+  color:#2b2024;
+  font-size:13px;
+  line-height:1.2;
+}
+.guliPwaInstallCopy span{
+  color:#75666b;
+  font-size:10px;
+  line-height:1.25;
+}
+.guliPwaInstallButton{
+  flex:0 0 auto;
+  border:0;
+  border-radius:12px;
+  padding:10px 13px;
+  background:#c24b69;
+  color:#fff;
+  font-weight:800;
+  font-size:11px;
+}
+.guliPwaInstallButton:disabled{opacity:.65}
+.guliPwaInstallClose{
+  align-self:flex-start;
+  width:22px;
+  height:22px;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:#9a7f88;
+  font-size:20px;
+  line-height:18px;
+}
+@media (min-width:700px){
+  .guliPwaInstallPrompt{
+    left:auto;
+    right:20px;
+    bottom:20px;
+    width:min(430px,calc(100vw - 40px));
+  }
+}
+@media (prefers-color-scheme:dark){
+  .guliPwaInstallPrompt{background:rgba(43,32,36,.96);border-color:rgba(255,255,255,.10)}
+  .guliPwaInstallCopy strong{color:#fff}
+  .guliPwaInstallCopy span{color:#d7c8ce}
+}
