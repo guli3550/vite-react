@@ -168,12 +168,24 @@ jobs:
           }
           EOF
 
+          # Gradle rejects builds when ANDROID_HOME and ANDROID_SDK_ROOT
+          # point at different SDK roots. Make the facade the single SDK root
+          # for every process after this step and persist it for later steps.
+          export ANDROID_HOME="$bubblewrap_sdk"
+          export ANDROID_SDK_ROOT="$bubblewrap_sdk"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+
           echo "Bubblewrap CI config:"
           cat "$HOME/.bubblewrap/config.json"
           echo "Bubblewrap SDK facade:"
           find "$bubblewrap_sdk" -maxdepth 3 -type l -o -maxdepth 3 -type d | sort
+          echo "Unified SDK environment:"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "sdkmanager:"
-          "$bubblewrap_sdk/cmdline-tools/latest/bin/sdkmanager" --version
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
       - name: Build signed APK and AAB
         working-directory: twa-android
         env:
