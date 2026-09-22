@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Language } from "../utils/translations";
 import { getApiBaseUrl } from "../lib/apiOrigin";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 
 export interface AuthUser {
   id: string;
@@ -173,40 +174,208 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     ? (isRu ? "🔐 Подтверждено…" : isEn ? "🔐 Verified…" : "🔐 Tasdiqlandi…")
     : status === "waiting"
     ? (isRu ? "📲 Ожидание подтверждения в Telegram…" : isEn ? "📲 Waiting for Telegram verification…" : "📲 Telegram tasdig‘i kutilmoqda…")
-    : defaultTitle;
+    : (isRu ? "Telegram orqali davom etish" : isEn ? "Continue with Telegram" : "Telegram orqali davom etish");
+
+  const closeLabel = isRu ? "Закрыть" : isEn ? "Close" : "Yopish";
+  const waitingHint = isRu ? (
+    <>В Telegram нажмите кнопку <b>Start</b>, затем <b>Отправить мой номер телефона</b>. Браузер автоматически завершит вход.</>
+  ) : isEn ? (
+    <>In Telegram, click <b>Start</b>, then click <b>Share Phone Number</b>. Browser will automatically complete sign-in.</>
+  ) : (
+    <>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</>
+  );
 
   return (
-    <div style={{position:"fixed",inset:0,zIndex:999999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,background:"rgba(15,23,42,.72)",backdropFilter:"blur(10px)",WebkitBackdropFilter:"blur(10px)"}} onClick={e=>{if(!forceGate&&e.target===e.currentTarget)onClose?.();}}>
-      <div style={{width:"100%",maxWidth:420,borderRadius:24,padding:24,background:"var(--bg-card,#fff)",color:"var(--text-main,#1e293b)",boxShadow:"0 24px 80px rgba(0,0,0,.35)",border:"1px solid var(--border-color,rgba(0,0,0,.08))"}}>
-        <div style={{textAlign:"center",marginBottom:22}}>
-          <div style={{width:64,height:64,margin:"0 auto 14px auto",display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",boxShadow:"0 8px 24px rgba(34,158,217,0.38)"}}>
-            <svg width="64" height="64" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="120" cy="120" r="120" fill="url(#tg_auth_modal_grad)"/><path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white"/><defs><linearGradient id="tg_auth_modal_grad" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse"><stop stopColor="#2AABEE"/><stop offset="1" stopColor="#229ED9"/></linearGradient></defs></svg>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 999999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        background: "linear-gradient(180deg, rgba(30,12,18,.72), rgba(20,8,13,.82))",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+      onClick={(e) => { if (!forceGate && e.target === e.currentTarget) onClose?.(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          maxHeight: "min(92vh, 720px)",
+          overflowY: "auto",
+          borderRadius: 28,
+          padding: "26px 22px max(22px, env(safe-area-inset-bottom))",
+          background: "var(--bg-card, #ffffff)",
+          backgroundImage: "linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,0) 40%)",
+          color: "var(--text-main, #21191c)",
+          boxShadow: "0 30px 80px rgba(90, 30, 45, .28), 0 0 0 1px rgba(255,255,255,.5) inset",
+          border: "1px solid var(--border-color, #f0dfe3)",
+          boxSizing: "border-box",
+        }}
+      >
+        {/* GULI brand header */}
+        <div style={{ textAlign: "center", marginBottom: 18 }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              margin: "0 auto 10px auto",
+              borderRadius: "50%",
+              overflow: "hidden",
+              background: "var(--bg-card-sub, #faf1f3)",
+              border: "1px solid var(--border-color, #f0dfe3)",
+              boxShadow: "0 8px 22px rgba(189,82,106,.18)",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <img
+              src={GULI_LOGO_BASE64}
+              alt="GULI"
+              draggable={false}
+              style={{ width: "100%", height: "100%", objectFit: "contain", padding: 5, boxSizing: "border-box" }}
+            />
           </div>
-          <h2 style={{margin:0,fontSize:22,fontWeight:800,color:"var(--text-main,#1e293b)"}}>{title}</h2>
-          <p style={{margin:"8px 0 0",color:"var(--text-muted,#64748b)",lineHeight:1.45,fontSize:13.5}}>{subtitle}</p>
+          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: "var(--text-main, #21191c)" }}>
+            GULI MARKET
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--text-muted, #8b787e)", marginTop: 2 }}>
+            {isRu ? "Красота всегда с вами" : isEn ? "Beauty is always with you" : "Go‘zallik har doim siz bilan"}
+          </div>
         </div>
-        {error && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(220,38,38,.10)",color:"#b91c1c",fontSize:14}}>{error}</div>}
-        {success && <div style={{padding:12,borderRadius:12,marginBottom:14,background:"rgba(34,197,94,.10)",color:"#15803d",fontSize:14}}>{success}</div>}
-        <button type="button" onClick={start} disabled={loading||waiting} style={{width:"100%",padding:"15px 18px",border:0,borderRadius:14,cursor:loading?"wait":"pointer",fontSize:15,fontWeight:800,background:"#229ED9",color:"white",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:"0 4px 14px rgba(34,158,217,0.35)",opacity:loading||waiting?.7:1}}>
-          <svg width="20" height="20" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
-            <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white"/>
-          </svg>
-          <span>{buttonText}</span>
-        </button>
-        {waiting && (
-          <div style={{marginTop:14,padding:12,borderRadius:12,background:"var(--bg-card-sub,rgba(100,116,139,.08))",color:"var(--text-main)",fontSize:13,lineHeight:1.5}}>
-            {isRu ? (
-              <>В Telegram нажмите кнопку <b>Start</b>, затем <b>Отправить мой номер телефона</b>. Браузер автоматически завершит вход.</>
-            ) : isEn ? (
-              <>In Telegram, click <b>Start</b>, then click <b>Share Phone Number</b>. Browser will automatically complete sign-in.</>
-            ) : (
-              <>Telegramda <b>Start</b> tugmasini bosing, keyin <b>Telefon raqamimni yuborish</b> tugmasini bosing. Brauzer tasdiqdan keyin avtomatik kiradi.</>
-            )}
+
+        {/* Auth card — real Telegram sign-in, restyled only */}
+        <div
+          style={{
+            borderRadius: 20,
+            padding: "20px 16px",
+            background: "var(--bg-card-sub, #faf1f3)",
+            border: "1px solid var(--border-color, #f0dfe3)",
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                margin: "0 auto 12px auto",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "50%",
+                background: "var(--bg-card, #ffffff)",
+                boxShadow: "0 6px 18px rgba(34,158,217,.28)",
+              }}
+            >
+              <svg width="26" height="26" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="120" cy="120" r="120" fill="url(#tg_auth_modal_grad)" />
+                <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white" />
+                <defs>
+                  <linearGradient id="tg_auth_modal_grad" x1="120" y1="0" x2="120" y2="240" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#2AABEE" />
+                    <stop offset="1" stopColor="#229ED9" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--text-main, #21191c)" }}>{title}</h2>
+            <p style={{ margin: "7px 0 0", color: "var(--text-muted, #8b787e)", lineHeight: 1.45, fontSize: 12.5 }}>
+              {subtitle}
+            </p>
           </div>
-        )}
+
+          {error && (
+            <div
+              role="alert"
+              style={{ padding: 12, borderRadius: 14, marginBottom: 12, background: "rgba(220,38,38,.10)", color: "#b91c1c", fontSize: 13 }}
+            >
+              {error}
+            </div>
+          )}
+          {success && (
+            <div
+              role="status"
+              style={{ padding: 12, borderRadius: 14, marginBottom: 12, background: "rgba(34,197,94,.10)", color: "#15803d", fontSize: 13 }}
+            >
+              {success}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={start}
+            disabled={loading || waiting}
+            style={{
+              width: "100%",
+              minHeight: 50,
+              padding: "14px 18px",
+              border: 0,
+              borderRadius: 16,
+              cursor: loading || waiting ? "wait" : "pointer",
+              fontSize: 14.5,
+              fontWeight: 800,
+              background: "#229ED9",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              boxShadow: "0 8px 20px rgba(34,158,217,.32)",
+              opacity: loading || waiting ? 0.75 : 1,
+              transition: "transform .15s ease, opacity .15s ease",
+            }}
+          >
+            <svg width="19" height="19" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+              <path d="M183.9 61.2L35.6 118.4C25.4 122.5 25.5 128.2 33.8 130.8L71.9 142.7L160.1 87C164.3 84.4 168.1 85.9 164.9 88.7L93.5 153.2L90.7 195.4C94.8 195.4 96.6 193.5 98.9 191.3L120.5 170.3L165.4 203.4C173.7 208 179.6 205.6 181.7 195.7L211.1 57.5C214.1 45.4 206.5 40 183.9 61.2Z" fill="white" />
+            </svg>
+            <span>{buttonText}</span>
+          </button>
+
+          {waiting && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 14,
+                background: "var(--bg-card, #ffffff)",
+                border: "1px solid var(--border-color, #f0dfe3)",
+                color: "var(--text-main, #21191c)",
+                fontSize: 12.5,
+                lineHeight: 1.5,
+              }}
+            >
+              {waitingHint}
+            </div>
+          )}
+        </div>
+
         {!forceGate && onClose && (
-          <button type="button" onClick={onClose} style={{width:"100%",marginTop:10,padding:11,border:0,background:"transparent",color:"var(--text-muted,#64748b)",cursor:"pointer",opacity:.8,fontSize:13.5,fontWeight:600}}>
-            {isRu ? "Закрыть" : isEn ? "Close" : "Yopish"}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={closeLabel}
+            style={{
+              width: "100%",
+              minHeight: 44,
+              marginTop: 12,
+              padding: 11,
+              border: 0,
+              background: "transparent",
+              color: "var(--text-muted, #8b787e)",
+              cursor: "pointer",
+              opacity: 0.85,
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {closeLabel}
           </button>
         )}
       </div>
