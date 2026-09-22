@@ -4,6 +4,7 @@ import { StrictMode, Component, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import Admin from './admin/AdminPro.tsx'
+import { GuliStartupSplash } from './components/GuliStartupSplash.tsx'
 import './index.css'
 import './admin/AdminNaming.css'
 import './admin/CustomerIdentity.css'
@@ -253,6 +254,14 @@ const isAdmin = typeof window !== 'undefined' && (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isAdmin ? <Admin /> : <StorefrontErrorBoundary><App /></StorefrontErrorBoundary>}
+    {isAdmin ? <Admin /> : (
+      <StorefrontErrorBoundary>
+        {/* Non-blocking branded startup overlay. App mounts and initializes
+            immediately underneath; this only controls how long the visual
+            splash stays on top before fading out (see component for timing). */}
+        <GuliStartupSplash />
+        <App />
+      </StorefrontErrorBoundary>
+    )}
   </StrictMode>,
 )
