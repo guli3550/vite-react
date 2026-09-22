@@ -176,6 +176,7 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/build-tools/35.0.0" >> "$GITHUB_PATH"
 
           echo "Bubblewrap CI config:"
           cat "$HOME/.bubblewrap/config.json"
@@ -215,7 +216,7 @@ jobs:
           set -euo pipefail
           test -f twa-android/app-release-signed.apk
           test -f twa-android/app-release-bundle.aab
-          apksigner verify --verbose twa-android/app-release-signed.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose twa-android/app-release-signed.apk
           keytool -printcert -jarfile twa-android/app-release-signed.apk | grep -F "SHA256:" || true
 
       - name: Upload signed APK and AAB
