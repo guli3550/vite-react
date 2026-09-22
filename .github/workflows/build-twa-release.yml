@@ -65,7 +65,7 @@ jobs:
           chmod 600 android.keystore
           echo "Keystore bytes: $(wc -c < android.keystore)"
           file android.keystore || true
-          if ! keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}" >/dev/null 2>keytool-error.txt; then
+          if ! keytool -list -keystore android.keystore -storepass "${{ secrets.GULI_TWA_KEYSTORE_PASSWD }}" >keytool-error.txt 2>&1; then
             echo "::error::The GULI_TWA_KEYSTORE_B64 value decoded, but the keystore could not be opened with GULI_TWA_KEYSTORE_PASSWD."
             cat keytool-error.txt
             exit 1
