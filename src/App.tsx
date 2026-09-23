@@ -22,7 +22,7 @@ import {
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
-import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
+import { getSynchronizedCategories, normalizeCategory, type CategoryInfo } from "./utils/categoryUtils";
 import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
@@ -878,6 +878,7 @@ export default function App() {
   // replace "products" with one category only. Without this separate cache,
   // returning to Home makes the other category cards appear empty.
   const [homeProducts, setHomeProducts] = useState<Product[]>([]);
+  const [serverCategories, setServerCategories] = useState<CategoryInfo[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
@@ -2214,6 +2215,50 @@ export default function App() {
     [telegramUser?.id, authUser?.phone, registerOrderStateChanges],
   );
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const response = await fetch(
+        API_URL + "/api/categories?_t=" + Date.now(),
+        { cache: "no-store", headers: { Accept: "application/json" } },
+      );
+      if (!response.ok) throw new Error("Categories status: " + response.status);
+      const json = await response.json();
+      if (json?.success !== true || !Array.isArray(json.data)) {
+        throw new Error(json?.message || "Kategoriyalar API noto‘g‘ri javob qaytardi");
+      }
+      const next = json.data
+        .filter((item: any) => item?.active !== false && item?.name)
+        .map((item: any): CategoryInfo => ({
+          name: normalizeCategory(item.name),
+          icon: item.icon || "🌸",
+          slug: item.slug || undefined,
+        }));
+      setServerCategories(next);
+      setSelectedCategory((current) =>
+        current !== "Barchasi" && !next.some((item) => item.name === current)
+          ? "Barchasi"
+          : current,
+      );
+    } catch {
+      // Keep the last known server categories during a temporary API failure.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCategories();
+    const interval = window.setInterval(() => {
+      void loadCategories();
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadCategories();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadCategories]);
+
   useEffect(() => {
     loadProducts(false).catch(() => {});
     return () => {
@@ -2710,10 +2755,12 @@ export default function App() {
   const maxCashbackDeduction = Math.min(availableCashback, payableBeforeCashback);
   const appliedCashback = useCashback ? maxCashbackDeduction : 0;
   const total = Math.max(0, payableBeforeCashback - appliedCashback);
-  const allCategories = useMemo(
-    () => getSynchronizedCategories(homeProducts),
-    [homeProducts],
-  );
+  const allCategories = useMemo(() => {
+    if (serverCategories.length) {
+      return [{ name: "Barchasi", icon: "✨" }, ...serverCategories];
+    }
+    return getSynchronizedCategories(homeProducts);
+  }, [serverCategories, homeProducts]);
   const filtered = useMemo(
     () =>
       [...products]
