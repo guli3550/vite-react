@@ -1,4 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { getApiBaseUrl } from "../lib/apiOrigin";
 import "./AdminPro.css";
 import "./ProductModalV2.css";
 
