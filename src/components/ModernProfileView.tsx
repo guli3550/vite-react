@@ -1147,7 +1147,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             <section
               className="vipGlowingCard"
               style={{
-                background: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 28%, #f43f5e 72%, #be123c 100%)",
+                background: "linear-gradient(180deg, rgba(20, 8, 12, 0.16) 0%, rgba(20, 8, 12, 0.56) 100%), url(\"/vip-card-bg.jpg\") center / cover no-repeat",
                 borderRadius: "28px",
                 padding: "26px 22px",
                 color: "#ffffff",
