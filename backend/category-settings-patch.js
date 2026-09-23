@@ -411,6 +411,72 @@ function installRoutes(app) {
     }
   });
 
+  route(app, "put", "/api/admin/banners", requireAdmin, async (req, res) => {
+    try {
+      const banners = Array.isArray(req.body?.banners) ? req.body.banners : [];
+      for (let i = 0; i < banners.length; i += 1) {
+        const b = banners[i] || {};
+        const slug = "banner_" + (b.id || i + 1);
+        const actionTarget = String(b.actionTarget || "").trim();
+        if (actionTarget && !/^https?:\\/\\//i.test(actionTarget)) {
+          return res.status(400).json({
+            success: false,
+            message: "Banner yo‘naltirish URL manzili http:// yoki https:// bilan boshlanishi kerak",
+          });
+        }
+        const meta = JSON.stringify({
+          title: b.title || "",
+          subtitle: b.subtitle || "",
+          badgeText: b.badgeText || "",
+          ctaText: b.ctaText || "",
+          actionType: b.actionType || "catalog",
+          actionTarget,
+        });
+        const { error } = await supabase
+          .from("category_settings")
+          .upsert({
+            slug,
+            name: meta,
+            image_url: b.imageUrl || "",
+            sort_order: i + 1,
+            active: b.active !== false,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "slug" });
+        if (error) throw error;
+      }
+      res.json({ success: true, message: "Bannerlar muvaffaqiyatli saqlandi" });
+    } catch (error) {
+      console.error("Save banners error:", error);
+      res.status(500).json({ success: false, message: "Bannerlarni saqlashda xatolik" });
+    }
+  });
+
+  route(app, "put", "/api/admin/settings/banner", requireAdmin, async (req, res) => {
+    try {
+      const imageUrl = String(req.body?.image_url || "").trim();
+      if (!imageUrl || !/^https?:\\/\\//i.test(imageUrl)) {
+        return res.status(400).json({ success: false, message: "To‘g‘ri rasm URL manzili kerak" });
+      }
+      const { data, error } = await supabase
+        .from("category_settings")
+        .upsert({
+          slug: "promo_banner",
+          name: "Promo Banner",
+          image_url: imageUrl,
+          sort_order: 999,
+          active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "slug" })
+        .select("image_url")
+        .single();
+      if (error) throw error;
+      res.json({ success: true, url: data?.image_url || null });
+    } catch (error) {
+      console.error("Update banner error:", error);
+      res.status(500).json({ success: false, message: "Banner rasmini yangilashda xatolik" });
+    }
+  });
+
   if (!installed) return;
 }
 
