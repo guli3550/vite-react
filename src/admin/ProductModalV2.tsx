@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import "./AdminPro.css";
 import "./ProductModalV2.css";
 
@@ -72,6 +72,27 @@ export default function ProductModalV2({
   const set = (k: keyof Product, v: any) => onChange({ ...value, [k]: v });
   const [uploading, setUploading] = useState(false);
   const [extraUploading, setExtraUploading] = useState(false);
+  const [serverCategories, setServerCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(getApiBaseUrl() + "/api/categories?_t=" + Date.now(), {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    })
+      .then((res) => res.ok ? res.json() : null)
+      .then((json) => {
+        if (cancelled || !json?.success || !Array.isArray(json.data)) return;
+        const names = json.data
+          .filter((item: any) => item?.active !== false && item?.name)
+          .map((item: any) => String(item.name).trim())
+          .filter(Boolean);
+        setServerCategories(names);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const parseColor = (v: string) => {
     const [name, hex] = String(v || "").split("|");
     return { name: name || v, hex: hex || "#ddd" };
@@ -124,7 +145,10 @@ export default function ProductModalV2({
     set("images", (value.images || []).filter((_, n) => n !== i));
 
   const allCategories = Array.from(
-    new Set([...baseCategories, value.category].filter(Boolean))
+    new Set([
+      ...(serverCategories.length ? serverCategories : baseCategories),
+      value.category,
+    ].filter(Boolean))
   );
 
   return (
