@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { EmptyState } from "./AdminUIComponents";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
 
@@ -83,7 +83,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
     setModalOpen(true);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) return;
