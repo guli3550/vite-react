@@ -3,6 +3,7 @@ import type { Product } from "../components/ProductImageGallery";
 export interface CategoryInfo {
   name: string;
   icon?: string;
+  slug?: string;
 }
 
 export const FIXED_CATEGORIES = [
@@ -10,69 +11,43 @@ export const FIXED_CATEGORIES = [
   "Pijama",
   "Byusgalter",
   "Mayka",
-  "Tursik"
+  "Tursik",
 ] as const;
 
 export type FixedCategory = typeof FIXED_CATEGORIES[number];
 
 /**
- * Normalizes any legacy or typo'd category string to one of the 5 official categories.
+ * Normalizes only the legacy spellings that already exist in the catalog.
+ * Unknown names are preserved so admin-created categories never collapse into
+ * one of the five legacy categories.
  */
 export function normalizeCategory(catName?: string): string {
-  if (!catName) return "Byusgalter";
-  const trimmed = String(catName).trim();
+  const trimmed = String(catName || "").trim();
+  if (!trimmed) return "";
+
   const lower = trimmed.toLowerCase();
+  if (lower === "penyuar" || lower === "pinyuar") return "Penyuar";
+  if (lower === "pijama") return "Pijama";
+  if (lower === "byusgalter" || lower === "byustgalter") return "Byusgalter";
+  if (lower === "mayka") return "Mayka";
+  if (lower === "tursik" || lower === "trusik") return "Tursik";
 
-  if (lower === "penyuar" || lower.includes("penyuar") || lower.includes("pinyuar") || lower.includes("bodi") || lower.includes("sexy")) {
-    return "Penyuar";
-  }
-  if (lower === "pijama" || lower.includes("pijama") || lower.includes("sleepwear") || lower.includes("xalat")) {
-    return "Pijama";
-  }
-  if (lower === "byusgalter" || lower.includes("byus") || lower.includes("bezg") || lower.includes("bra") || lower.includes("push") || lower.includes("komplekt")) {
-    return "Byusgalter";
-  }
-  if (lower === "mayka" || lower.includes("mayka") || lower.includes("top")) {
-    return "Mayka";
-  }
-  if (lower === "tursik" || lower.includes("tursik") || lower.includes("trusik") || lower.includes("choksiz")) {
-    return "Tursik";
-  }
-
-  // Exact match from FIXED_CATEGORIES
-  const match = FIXED_CATEGORIES.find(c => c.toLowerCase() === lower);
-  if (match) return match;
-
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  return trimmed;
 }
 
 export function getSynchronizedCategories(products?: Product[]): CategoryInfo[] {
-  const map = new Map<string, string>();
-  FIXED_CATEGORIES.forEach((cat) => {
-    map.set(cat, "🌸");
-  });
+  const map = new Map<string, CategoryInfo>();
 
-  try {
-    const saved = localStorage.getItem("guli_admin_categories");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        parsed.forEach((c: any) => {
-          if (c?.name && c?.active !== false) {
-            const norm = normalizeCategory(c.name);
-            map.set(norm, c.icon || "🌸");
-          }
-        });
-      }
-    }
-  } catch {}
+  FIXED_CATEGORIES.forEach((name) => {
+    map.set(name, { name, icon: "🌸" });
+  });
 
   if (products && Array.isArray(products)) {
     products.forEach((p) => {
       if (p.category && typeof p.category === "string" && p.active !== false) {
-        const norm = normalizeCategory(p.category);
-        if (!map.has(norm)) {
-          map.set(norm, "🌸");
+        const name = normalizeCategory(p.category);
+        if (name && !map.has(name)) {
+          map.set(name, { name, icon: "🌸" });
         }
       }
     });
@@ -80,7 +55,6 @@ export function getSynchronizedCategories(products?: Product[]): CategoryInfo[] 
 
   return [
     { name: "Barchasi", icon: "✨" },
-    ...Array.from(map.entries()).map(([name, icon]) => ({ name, icon }))
+    ...Array.from(map.values()),
   ];
 }
-
