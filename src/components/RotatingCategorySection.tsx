@@ -43,7 +43,9 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
     categoryProducts.forEach((p, pIdx) => {
       const pImages = [p.image, ...(p.images || [])].filter(Boolean);
       if (pImages.length > 0) {
-        // Asosiy rasm
+        // Har bir mahsulot kategoriya kartasida faqat o'zining asosiy
+        // rasmini ko'rsatadi. Qo'shimcha galereya rasmlari keyingi mahsulot
+        // o'rnini egallamasligi kerak: aylanish tartibi = mahsulot → mahsulot.
         items.push({
           product: p,
           imageUrl: pImages[0],
@@ -53,18 +55,6 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
           discount: p.discount,
           isNew: pIdx < 2 || Boolean(p.featured)
         });
-        // Agar qo'shimcha rasmlar bo'lsa
-        if (pImages.length > 1) {
-          items.push({
-            product: p,
-            imageUrl: pImages[1],
-            title: p.name,
-            price: p.price,
-            oldPrice: p.oldPrice,
-            discount: p.discount,
-            isNew: Boolean(p.featured)
-          });
-        }
       }
     });
 
