@@ -113,7 +113,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
             src={currentItem.imageUrl}
             alt={currentItem.title}
             className={`catCardImg ${isFading ? "fading" : ""}`}
-            loading="lazy"
+            loading="eager"
             decoding="async"
           />
         ) : (
