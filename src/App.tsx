@@ -871,7 +871,8 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
-  const PRODUCTS_PAGE_SIZE = 40;
+  // Initial storefront load uses the API maximum page size.
+  const PRODUCTS_PAGE_SIZE = 100;
   const [products, setProducts] = useState<Product[]>([]);
   // Home category cards must keep their own unfiltered product pool.
   // Catalog filtering is server-side, so selectedCategory can legitimately
@@ -1880,7 +1881,7 @@ export default function App() {
       setReuploadingOrderId(null);
     }
   };
-  const loadProducts = useCallback(async (silent = false, append = false) => {
+  const loadProducts = useCallback(async (silent = false, append = false, keepInitialLoading = false) => {
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -2005,7 +2006,7 @@ export default function App() {
       if (append) {
         productsLoadingMoreRef.current = false;
         setProductsLoadingMore(false);
-      } else if (!silent) {
+      } else if (!silent && !keepInitialLoading) {
         setProductsLoading(false);
       }
     }
@@ -2260,8 +2261,61 @@ export default function App() {
   }, [loadCategories]);
 
   useEffect(() => {
-    loadProducts(false).catch(() => {});
+    let cancelled = false;
+
+    const preloadImages = async (rows: Product[]) => {
+      const urls = Array.from(
+        new Set(
+          rows
+            .flatMap((p) => [p.image, ...(p.images || [])])
+            .filter((url): url is string => Boolean(url)),
+        ),
+      );
+      if (!urls.length) return;
+
+      await Promise.all(
+        urls.map(
+          (url) =>
+            new Promise<void>((resolve) => {
+              const img = new Image();
+              let settled = false;
+              const done = () => {
+                if (settled) return;
+                settled = true;
+                resolve();
+              };
+              img.onload = done;
+              img.onerror = done;
+              img.decoding = "async";
+              img.src = url;
+            }),
+        ),
+      );
+    };
+
+    const loadHomeCompletely = async () => {
+      // Keep the skeleton visible while every catalog page is fetched.
+      let rows = await loadProducts(false, false, true);
+      if (cancelled) return;
+
+      while (productsHasMoreRef.current) {
+        const next = await loadProducts(true, true);
+        if (cancelled) return;
+        if (!next.length) break;
+        rows = [...rows, ...next];
+      }
+
+      // Reveal the storefront only after all product image resources are ready.
+      await preloadImages(rows);
+      if (!cancelled) setProductsLoading(false);
+    };
+
+    loadHomeCompletely().catch(() => {
+      if (!cancelled) setProductsLoading(false);
+    });
+
     return () => {
+      cancelled = true;
       if (productsRecoveryTimerRef.current) {
         clearTimeout(productsRecoveryTimerRef.current);
         productsRecoveryTimerRef.current = null;
