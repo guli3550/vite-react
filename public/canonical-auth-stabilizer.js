@@ -157,7 +157,7 @@
     try {
       const user = JSON.parse(raw);
       const avatar = String(user?.telegram_photo_url || user?.avatar_url || '');
-      const match = avatar.match(/[?&]expires=(\\d+)/i);
+      const match = avatar.match(/[?&]expires=(\d+)/i);
       if (!match) return false;
       return Number(match[1]) <= Math.floor(Date.now() / 1000) + 24 * 60 * 60;
     } catch {
