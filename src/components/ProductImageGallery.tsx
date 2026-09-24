@@ -65,6 +65,8 @@ const getResponsiveSources = (url: string) => {
 export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false, onOpen }) => {
   const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
+  const [dragX, setDragX] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
   const preloadedImagesRef = useRef<Set<string>>(new Set());
 
   // Extract all available valid images
@@ -100,8 +102,9 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
 
   const prevImage = (e?: React.MouseEvent | React.TouchEvent) => {
     e?.stopPropagation();
-    if (imageList.length <= 1) return;
+    if (imageList.length <= 1 || isAnimating) return;
     setIndex((prev) => (prev - 1 + imageList.length) % imageList.length);
+    setDragX(0);
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
@@ -109,8 +112,9 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
 
   const nextImage = (e?: React.MouseEvent | React.TouchEvent) => {
     e?.stopPropagation();
-    if (imageList.length <= 1) return;
+    if (imageList.length <= 1 || isAnimating) return;
     setIndex((prev) => (prev + 1) % imageList.length);
+    setDragX(0);
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
@@ -124,15 +128,17 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
     touchStartTime.current = Date.now();
     isDragging.current = true;
     didSwipe.current = false;
+    setDragX(0);
   };
 
   const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
     if (!isDragging.current) return;
     const diffX = e.touches[0].clientX - touchStartX.current;
     const diffY = e.touches[0].clientY - touchStartY.current;
-    if (Math.abs(diffX) > 15 && Math.abs(diffX) > Math.abs(diffY)) {
+    if (Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY)) {
       e.stopPropagation();
       didSwipe.current = true;
+      setDragX(diffX);
     }
   };
 
@@ -148,17 +154,19 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
     const timeTaken = Date.now() - touchStartTime.current;
 
     // Minimum swipe displacement
-    if (Math.abs(diffX) >= 30 && Math.abs(diffX) > Math.abs(diffY) && timeTaken < 650) {
-      if (diffX < 0) {
-        // Swiped left -> next image
-        nextImage();
-      } else {
-        // Swiped right -> previous image
-        prevImage();
-      }
-    } else if (!didSwipe.current && Math.abs(diffX) < 10 && Math.abs(diffY) < 10 && onOpen && !detail) {
-      // Clean tap without drag: open product
-      onOpen();
+    const velocity = Math.abs(diffX) / Math.max(timeTaken, 1);
+    const shouldSwipe = Math.abs(diffX) >= 45 && Math.abs(diffX) > Math.abs(diffY) * 1.15 && (timeTaken < 800 || velocity > 0.35);
+    if (shouldSwipe && !isAnimating) {
+      setIsAnimating(true);
+      setDragX(diffX < 0 ? -window.innerWidth : window.innerWidth);
+      window.setTimeout(() => {
+        setIndex((prev) => diffX < 0 ? (prev + 1) % imageList.length : (prev - 1 + imageList.length) % imageList.length);
+        setDragX(0);
+        setIsAnimating(false);
+      }, 220);
+    } else {
+      setDragX(0);
+      if (!didSwipe.current && Math.abs(diffX) < 10 && Math.abs(diffY) < 10 && onOpen && !detail) onOpen();
     }
   };
 
@@ -173,16 +181,33 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
       onTouchEnd={handleTouchEnd}
     >
       <div className="galleryImageContainer">
-        <img
-          src={!imgError && currentUrl ? currentUrl : placeholder(product.name)}
-          srcSet={!imgError ? responsive?.srcSet : undefined}
-          sizes={!imgError ? responsive?.sizes : undefined}
-          alt={`${product.name} - rasm ${index + 1}`}
-          loading={detail ? "eager" : "lazy"}
-          decoding="async"
-          onError={() => setImgError(true)}
-          className="galleryMainImg"
-        />
+        <div
+          className="gallerySwipeTrack"
+          style={{
+            transform: `translateX(calc(-100% + ${dragX}px))`,
+            transition: isAnimating ? "transform 220ms cubic-bezier(.22,.61,.36,1)" : "none",
+          }}
+        >
+          {[
+            imageList.length > 1 ? imageList[(index - 1 + imageList.length) % imageList.length] : imageList[index],
+            imageList[index],
+            imageList.length > 1 ? imageList[(index + 1) % imageList.length] : imageList[index],
+          ].map((url, slot) => {
+            const normalized = formatImageUrl(url || "");
+            return (
+              <img
+                key={`${index}-${slot}-${url}`}
+                src={normalized || placeholder(product.name)}
+                alt={`${product.name} - rasm ${index + 1}`}
+                loading="eager"
+                decoding="async"
+                draggable={false}
+                onError={() => slot === 1 && setImgError(true)}
+                className="galleryMainImg gallerySwipeSlide"
+              />
+            );
+          })}
+        </div>
 
         {/* Multiple images indicator & dots */}
         {imageList.length > 1 && (
