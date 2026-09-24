@@ -23,7 +23,7 @@ function stars(value: number) { const n=Math.max(0,Math.min(5,Math.round(value))
 
 export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ productCode="", productName="", productId, onRatingUpdate, telegramUser, onShowToast }) => {
   const [reviews,setReviews]=useState<ReviewItem[]>([]); const [average,setAverage]=useState(0); const [count,setCount]=useState(0);
-  const [distribution,setDistribution]=useState<Array<{star:number;count:number}>>([]); const [rating,setRating]=useState(5);
+  const [rating,setRating]=useState(5);
   const [comment,setComment]=useState(""); const [photos,setPhotos]=useState<string[]>([]); const [isSubmitting,setIsSubmitting]=useState(false);
   const [selected,setSelected]=useState<ReviewItem|null>(null); const [lightbox,setLightbox]=useState<string|null>(null);
   const [userAvatarUrl,setUserAvatarUrl]=useState<string|null>(()=>telegramUser?.photo_url||null); const currentName=safeName(telegramUser?.first_name,telegramUser?.last_name);
@@ -32,7 +32,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
   const loadReviews = useCallback(async () => {
     const param = productCode || (productId ? String(productId) : "");
     if (!param) {
-      setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+      setReviews([]); setAverage(0); setCount(0);
       onRatingUpdate?.(0, 0);
       return;
     }
@@ -90,8 +90,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
               const c = list.length;
               const sum = list.reduce((n, r) => n + Number(r.rating || 0), 0);
               const avg = c ? Math.round(sum / c * 10) / 10 : 0;
-              const dist = [5, 4, 3, 2, 1].map(star => ({ star, count: list.filter(r => r.rating === star).length }));
-              setReviews(list); setAverage(avg); setCount(c); setDistribution(dist);
+              setReviews(list); setAverage(avg); setCount(c);
               onRatingUpdate?.(avg, c);
               return;
             }
@@ -99,7 +98,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
             // direct query fallback note
           }
         }
-        setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+        setReviews([]); setAverage(0); setCount(0);
         onRatingUpdate?.(0, 0);
         return;
       }
@@ -124,10 +123,9 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
       setReviews(next);
       setAverage(avg);
       setCount(c);
-      setDistribution(Array.isArray(json.data.distribution) ? json.data.distribution : []);
       onRatingUpdate?.(avg, c);
     } catch {
-      setReviews([]); setAverage(0); setCount(0); setDistribution([]);
+      setReviews([]); setAverage(0); setCount(0);
       onRatingUpdate?.(0, 0);
     }
   }, [productCode, productId, productName, onRatingUpdate]);
