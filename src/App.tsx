@@ -3160,11 +3160,26 @@ export default function App() {
       showToast(e instanceof Error ? e.message : "Buyurtma yuborilmadi");
     }
   };
+  // "O'xshash mahsulotlar" katalogning joriy pagination holatiga bog'lanmasin.
+  // Mahsulot bosh sahifa/kategoriya kartasidan ochilgan bo'lsa, u products emas,
+  // homeProducts ichida bo'lishi mumkin. Ikkala manbani birlashtirib, kategoriya
+  // nomini trim/lowercase bilan solishtiramiz — eski va yangi mahsulotlar bir-birini
+  // to'liq ko'rishi kerak.
+  const similarSource = useMemo(() => {
+    const merged = new Map<string, Product>();
+    [...products, ...homeProducts].forEach((p) => {
+      if (!p || p.active === false) return;
+      merged.set(String(p.id), p);
+    });
+    return Array.from(merged.values());
+  }, [products, homeProducts]);
+
   const similar = selectedProduct
-    ? products
+    ? similarSource
         .filter(
           (p) =>
-            p.category === selectedProduct.category &&
+            String(p.category || "").trim().toLowerCase() ===
+              String(selectedProduct.category || "").trim().toLowerCase() &&
             p.id !== selectedProduct.id,
         )
         .slice(0, 4)
