@@ -184,7 +184,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
         <div
           className="gallerySwipeTrack"
           style={{
-            transform: `translateX(calc(-100% + ${dragX}px))`,
+            transform: `translateX(calc(-33.333333% + ${dragX}px))`,
             transition: isAnimating ? "transform 220ms cubic-bezier(.22,.61,.36,1)" : "none",
           }}
         >
