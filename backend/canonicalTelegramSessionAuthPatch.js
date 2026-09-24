@@ -51,6 +51,67 @@ function safeEqualHex(a, b) {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 }
 
+const AVATAR_SIGN_KEY = String(process.env.AUTH_JWT_SECRET || SUPABASE_KEY || 'guli-auth').trim();
+
+function signTelegramAvatar(telegramId, fileId, expires) {
+  return crypto.createHmac('sha256', AVATAR_SIGN_KEY)
+    .update(`${Number(telegramId)}.${String(fileId)}.${Number(expires)}`)
+    .digest('base64url');
+}
+
+async function refreshTelegramPhotoUrl(telegramId) {
+  const id = Number(telegramId);
+  if (!Number.isSafeInteger(id) || id <= 0 || !supabase) return null;
+  try {
+    const { data: current } = await supabase
+      .from('users')
+      .select('telegram_photo_url')
+      .eq('telegram_id', id)
+      .maybeSingle();
+    const currentUrl = String(current?.telegram_photo_url || '').trim();
+    // Telegram's Mini App photo_url is already a browser-safe HTTPS URL.
+    if (/^https:\/\/t\.me\/i\/userpic\//i.test(currentUrl)) return currentUrl;
+
+    const { data: tg } = await supabase
+      .from('telegram_users')
+      .select('profile_photos')
+      .eq('telegram_id', id)
+      .maybeSingle();
+
+    let fileId = Array.isArray(tg?.profile_photos) && tg.profile_photos.length
+      ? String(tg.profile_photos[0] || '')
+      : '';
+
+    if (!fileId && TELEGRAM_BOT_TOKEN) {
+      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${id}`);
+      const result = await response.json().catch(() => null);
+      if (result?.ok) fileId = String(result.result?.photo?.big_file_id || result.result?.photo?.small_file_id || '');
+    }
+    if (!fileId) return currentUrl || null;
+
+    const expires = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
+    const url = `/api/v1/profile/telegram-avatar/${id}/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signTelegramAvatar(id, fileId, expires))}`;
+
+    await supabase.from('users')
+      .update({ telegram_photo_url: url, updated_at: new Date().toISOString() })
+      .eq('telegram_id', id);
+
+    try {
+      await supabase.from('telegram_users').upsert({
+        telegram_id: id,
+        profile_photos: [fileId],
+        profile_photo_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'telegram_id' });
+    } catch {}
+
+    return url;
+  } catch (error) {
+    console.warn('[auth] Telegram avatar refresh skipped:', error?.message || error);
+    return null;
+  }
+}
+
 let cachedBotUsername = null;
 async function getBotUsername() {
   if (cachedBotUsername) return cachedBotUsername;
@@ -281,6 +342,8 @@ async function exchange(req, res) {
     if (!consumed) return fail(res, 409, 'Sessiya allaqachon ishlatilgan.');
 
     const user = await resolveCanonicalUser({ telegramId: Number(session.telegram_id), phoneNumber: session.phone_number });
+    const telegramPhotoUrl = await refreshTelegramPhotoUrl(Number(user.telegram_id));
+    if (telegramPhotoUrl) user.telegram_photo_url = telegramPhotoUrl;
     const accessToken = issueAccessToken(user);
     const refreshToken = await issueRefreshToken(supabase, user.id);
 
@@ -333,6 +396,8 @@ async function refresh(req, res) {
       .maybeSingle();
     if (error) throw error;
     if (!user) return fail(res, 401, 'Foydalanuvchi topilmadi.');
+    const telegramPhotoUrl = await refreshTelegramPhotoUrl(Number(user.telegram_id));
+    if (telegramPhotoUrl) user.telegram_photo_url = telegramPhotoUrl;
 
     return res.json({
       success: true,
