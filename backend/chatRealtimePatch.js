@@ -60,7 +60,7 @@ const customerProfileCache = new Map();
 function extractTelegramPhotoFileId(value) {
   try {
     const raw = String(value || "");
-    const match = raw.match(/\/telegram-avatar\/\\d+\/([^?/#]+)/i);
+    const match = raw.match(/\/telegram-avatar\/\d+\/([^?/#]+)/i);
     return match ? decodeURIComponent(match[1]) : "";
   } catch { return ""; }
 }
