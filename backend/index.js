@@ -519,6 +519,24 @@ app.get("/api/admin/orders/:id", requireAdmin, async (req, res) => {
       data = byNum.data;
     }
     if (!data) return res.status(404).json({ success: false, message: "Buyurtma topilmadi" });
+
+    // Keep the single-order response consistent with /api/admin/orders so the
+    // detail drawer always has the canonical Telegram avatar as well.
+    try {
+      const tgId = Number(data.telegram_id);
+      if (Number.isFinite(tgId)) {
+        const [{ data: tgUser }, { data: customer }] = await Promise.all([
+          supabase.from("telegram_users").select("telegram_id,profile_photos").eq("telegram_id", tgId).maybeSingle(),
+          supabase.from("customers").select("telegram_id,avatar_url").eq("telegram_id", tgId).maybeSingle(),
+        ]);
+        const fileId = Array.isArray(tgUser?.profile_photos) ? tgUser.profile_photos[0] : null;
+        data.customer_photo_url = fileId
+          ? adminCustomerPhotoUrl(tgId, fileId)
+          : (customer?.avatar_url || null);
+      }
+    } catch (photoError) {
+      console.warn("Admin single-order avatar enrichment skipped:", photoError.message);
+    }
     data.items = normalizeAdminItems(data.items);
     res.json({ success: true, data });
   } catch (err) {
@@ -600,7 +618,10 @@ function adminCustomerPhotoUrl(telegramId, fileId) {
   const signature = crypto.createHmac("sha256", ADMIN_SECRET)
     .update(`${id}.${fid}.${expires}`)
     .digest("base64url");
-  return `/api/admin/users/${encodeURIComponent(id)}/photo/${encodeURIComponent(fid)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+  // Use the canonical Render API origin directly. A relative /api URL can be
+  // intercepted by the frontend/Cloudflare gateway and the browser then gets
+  // an HTML/JSON response instead of the image bytes.
+  return `${BASE_URL}/api/admin/users/${encodeURIComponent(id)}/photo/${encodeURIComponent(fid)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
 }
 
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
