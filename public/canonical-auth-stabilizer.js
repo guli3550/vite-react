@@ -151,6 +151,20 @@
     finally { refreshInFlight = null; }
   }
 
+  function avatarNeedsRefresh() {
+    const raw = read(USER);
+    if (!raw) return false;
+    try {
+      const user = JSON.parse(raw);
+      const avatar = String(user?.telegram_photo_url || user?.avatar_url || '');
+      const match = avatar.match(/[?&]expires=(\\d+)/i);
+      if (!match) return false;
+      return Number(match[1]) <= Math.floor(Date.now() / 1000) + 24 * 60 * 60;
+    } catch {
+      return false;
+    }
+  }
+
   async function authNetworkRetry(input, options, url) {
     let lastError;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -202,6 +216,11 @@
   } catch {
     try { window.fetch = stabilizedFetch; } catch {}
   }
+
+  // Refresh an expiring Telegram avatar once per page load. The avatar URL is
+  // intentionally short-lived, so an old localStorage copy must never leave the
+  // browser profile showing a broken image while the access token is still valid.
+  if (read(REFRESH) && avatarNeedsRefresh()) void refreshNow();
 
   // Another tab may rotate the session. All subsequent requests read the
   // current localStorage token, so no stale in-memory token is retained here.
