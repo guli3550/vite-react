@@ -140,6 +140,7 @@ function getResolvedCustomerPhoto(u: any, photosMap?: Record<string | number, st
   const tgId = u.telegram_id ? String(u.telegram_id) : "";
   const fromMap = tgId && photosMap ? (photosMap[tgId] || (photosMap as any)[u.telegram_id]) : "";
   const direct =
+    u.customer_photo_url ||
     u.avatar_url ||
     u.photo_url ||
     fromMap ||
@@ -1996,6 +1997,8 @@ function OrderDrawer({
 
   useEffect(() => {
     setCurrentOrder(order);
+    const resolved = getResolvedCustomerPhoto(order);
+    if (resolved) setCustomerPhoto(resolved);
   }, [order]);
 
   useEffect(() => {
