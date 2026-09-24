@@ -64,7 +64,6 @@ const getResponsiveSources = (url: string) => {
 
 export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false, onOpen }) => {
   const [index, setIndex] = useState(0);
-  const [imgError, setImgError] = useState(false);
   const [dragX, setDragX] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const preloadedImagesRef = useRef<Set<string>>(new Set());
@@ -89,10 +88,6 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
       image.src = normalized;
     });
   }, [detail, imageList]);
-
-  useEffect(() => {
-    setImgError(false);
-  }, [index]);
 
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
@@ -170,9 +165,6 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
     }
   };
 
-  const currentUrl = imageList[index] ? formatImageUrl(imageList[index]) : placeholder(product.name);
-  const responsive = currentUrl ? getResponsiveSources(currentUrl) : null;
-
   return (
     <div
       className={`productGallerySwipe ${detail ? "detailGallery" : "cardGallery"}`}
@@ -202,7 +194,9 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
                 loading="eager"
                 decoding="async"
                 draggable={false}
-                onError={() => slot === 1 && setImgError(true)}
+                onError={(event) => {
+                  event.currentTarget.src = placeholder(product.name);
+                }}
                 className="galleryMainImg gallerySwipeSlide"
               />
             );
