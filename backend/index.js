@@ -10,6 +10,7 @@ try {
 }
 const { listProducts, getProduct } = require("./catalog");
 const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
+const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
 
 const app = express();
 
@@ -68,6 +69,10 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "15mb" }));
+
+// Canonical dynamic category/admin-category routes. Registered after Express
+// middleware is initialized so they receive the real Express response object.
+installCategoryRoutes(app);
 
 function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");
