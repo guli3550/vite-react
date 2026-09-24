@@ -5,7 +5,6 @@ const REVIEW_MAX_PHOTO_BYTES = 220 * 1024;
 function reviewDisplayName(row) {
   const first = String(row?.first_name || "").trim();
   const username = String(row?.username || "").trim();
-  if (first && username) return `${first} (@${username})`;
   if (first) return first;
   if (username) return `@${username}`;
   return "GULI mijozi";
@@ -44,7 +43,7 @@ app.get("/api/reviews", async (req, res) => {
     const { data: product, error: productError } = await supabase.from("products").select("id,product_code,rating,reviews").eq("product_code", code).maybeSingle();
     if (productError) throw productError;
     if (!product) return res.status(404).json({ success: false, message: "Mahsulot topilmadi" });
-    const { data, error } = await supabase.from("product_reviews").select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").eq("product_id", product.id).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
+    const { data, error } = await supabase.from("product_reviews").select("id,rating,comment,photos,first_name,created_at,verified_purchase,order_number").eq("product_id", product.id).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
     const rows = (data || []).map(row => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
     const distribution = [5,4,3,2,1].map(star => ({ star, count: rows.filter(r => Number(r.rating) === star).length }));
@@ -108,7 +107,7 @@ app.post("/api/reviews", requireTelegramUser, async (req, res) => {
       }
     }
     const row = { product_id: product.id, product_code: code, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, rating, comment, photos: photoUrls, verified_purchase: true, order_number: order.order_number, status: "approved", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-    const { data, error } = await supabase.from("product_reviews").insert([row]).select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").single();
+    const { data, error } = await supabase.from("product_reviews").insert([row]).select("id,rating,comment,photos,first_name,created_at,verified_purchase,order_number").single();
     if (error) throw error;
     res.status(201).json({ success: true, message: "Sharhingiz e’lon qilindi ✓", data: { ...data, display_name: reviewDisplayName(data) } });
   } catch (error) {
