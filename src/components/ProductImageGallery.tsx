@@ -51,17 +51,6 @@ const formatImageUrl = (url: string) => {
   }
 };
 
-const getResponsiveSources = (url: string) => {
-  if (!url) return null;
-  const match = url.match(/^(.*)-(400|800|1600)\.webp(?:([?#].*))?$/i);
-  if (!match) return null;
-  const [, base, , suffix = ""] = match;
-  return {
-    srcSet: [400, 800, 1600].map((width) => `${base}-${width}.webp${suffix} ${width}w`).join(", "),
-    sizes: "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw",
-  };
-};
-
 export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false, onOpen }) => {
   const [index, setIndex] = useState(0);
   const [dragX, setDragX] = useState(0);
