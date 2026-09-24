@@ -94,7 +94,6 @@ function admin(req) {
 function display(row) {
   const first = String(row?.first_name || '').trim();
   const username = String(row?.username || '').trim().replace(/^@+/, '');
-  if (first && username) return `${first} (@${username})`;
   if (first) return first;
   if (username) return `@${username}`;
   return 'GULI mijozi';
@@ -148,7 +147,7 @@ install('get', '/api/reviews', async (req, res) => {
     if (!product) return res.status(404).json({ success: false, message: 'Mahsulot topilmadi' });
     const { data, error } = await supabase
       .from('product_reviews')
-      .select('id,rating,comment,photos,username,first_name,photo_url,created_at,verified_purchase,order_number')
+      .select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number')
       .eq('product_id', product.id).eq('status', 'approved').order('created_at', { ascending: false }).limit(100);
     if (error) throw error;
     const rows = (data || []).map(row => ({ ...row, display_name: display(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
@@ -233,7 +232,7 @@ install('post', '/api/reviews', requireCustomer, async (req, res) => {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    const { data, error } = await supabase.from('product_reviews').insert([row]).select('id,rating,comment,photos,username,first_name,photo_url,created_at,verified_purchase,order_number').single();
+    const { data, error } = await supabase.from('product_reviews').insert([row]).select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number').single();
     if (error) throw error;
     res.status(201).json({ success: true, message: 'Sharhingiz e’lon qilindi ✓', data: { ...data, display_name: display(data) } });
   } catch (error) {
