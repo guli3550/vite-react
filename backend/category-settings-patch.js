@@ -33,15 +33,10 @@ const supabase = new Proxy({}, {
   },
 });
 
-const originalGet = express.application.get;
 let installed = false;
 
 function route(app, method, path, ...handlers) {
-  const router = app._router;
-  if (!router || typeof router.route !== "function") {
-    throw new Error("Express router is not initialized");
-  }
-  return router.route(path)[method](...handlers);
+  return app.route(path)[method](...handlers);
 }
 
 const DEFAULT_CATEGORIES = [
@@ -481,14 +476,7 @@ function installRoutes(app) {
     }
   });
 
-  if (!installed) return;
+  return true;
 }
 
-if (!installed) {
-  express.application.get = function patchedGet(path, ...handlers) {
-    if (this && typeof path === "string") installRoutes(this);
-    return originalGet.call(this, path, ...handlers);
-  };
-}
-
-module.exports = { DEFAULT_CATEGORIES, canonicalSlug, slugify };
+module.exports = { DEFAULT_CATEGORIES, canonicalSlug, slugify, installRoutes };
