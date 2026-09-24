@@ -1,10 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { EmptyState } from "./AdminUIComponents";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
-import { normalizeCategory } from "../../utils/categoryUtils";
 
 export type Category = {
-  id: number;
+  id: string;
   name: string;
   slug: string;
   icon: string;
@@ -14,71 +13,61 @@ export type Category = {
 };
 
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: 1, name: "Penyuar", slug: "penyuar", icon: "🌸", productCount: 0, sortOrder: 1, active: true },
-  { id: 2, name: "Pijama", slug: "pijama", icon: "🌙", productCount: 0, sortOrder: 2, active: true },
-  { id: 3, name: "Byusgalter", slug: "byusgalter", icon: "👙", productCount: 0, sortOrder: 3, active: true },
-  { id: 4, name: "Mayka", slug: "mayka", icon: "🎽", productCount: 0, sortOrder: 4, active: true },
-  { id: 5, name: "Tursik", slug: "tursik", icon: "🩲", productCount: 0, sortOrder: 5, active: true },
+  { id: "pinyuar", name: "Penyuar", slug: "pinyuar", icon: "🌸", productCount: 0, sortOrder: 1, active: true },
+  { id: "pijama", name: "Pijama", slug: "pijama", icon: "🌙", productCount: 0, sortOrder: 2, active: true },
+  { id: "byustgalter", name: "Byusgalter", slug: "byustgalter", icon: "👙", productCount: 0, sortOrder: 3, active: true },
+  { id: "mayka", name: "Mayka", slug: "mayka", icon: "🎽", productCount: 0, sortOrder: 4, active: true },
+  { id: "tursik", name: "Tursik", slug: "tursik", icon: "🩲", productCount: 0, sortOrder: 5, active: true },
 ];
 
 export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) {
-  const [categories, setCategories] = useState<Category[]>(() => {
-    try {
-      const saved = localStorage.getItem("guli_admin_categories");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return DEFAULT_CATEGORIES;
-    } catch {
-      return DEFAULT_CATEGORIES;
-    }
-  });
-
-  // Calculate live product counts for each category
-  const [liveProducts, setLiveProducts] = useState<any[]>([]);
-
-  const categoriesWithLiveCounts = useMemo(() => {
-    let allProds = liveProducts;
-    try {
-      const savedProds = localStorage.getItem("guli_products");
-      if (savedProds) {
-        const parsed = JSON.parse(savedProds);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          allProds = parsed;
-        }
-      }
-    } catch {}
-
-    return categories.map((cat) => {
-      const normalizedCatName = normalizeCategory(cat.name);
-      const count = allProds.filter(
-        (p) => normalizeCategory(p.category) === normalizedCatName
-      ).length;
-      return { ...cat, productCount: count };
-    });
-  }, [categories, liveProducts]);
-
-  useEffect(() => {
-    fetch(`${getApiBaseUrl()}/api/products?limit=100`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json?.success && Array.isArray(json.data)) setLiveProducts(json.data);
-      })
-      .catch(() => {});
-  }, []);
-
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("🌸");
 
-  const saveToStorage = (cats: Category[]) => {
-    setCategories(cats);
-    try {
-      localStorage.setItem("guli_admin_categories", JSON.stringify(cats));
-    } catch {}
+  const adminRequest = async (path: string, options: RequestInit = {}) => {
+    const token = sessionStorage.getItem("guli_admin_token") || "";
+    const base = (sessionStorage.getItem("guli_custom_api_url") || getApiBaseUrl()).replace(/\/$/, "");
+    const response = await fetch(base + path, {
+      ...options,
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+        ...(options.headers || {}),
+      },
+    });
+    const json = await response.json().catch(() => null);
+    if (response.status === 401) throw new Error("Admin sessiyasi tugagan");
+    if (!response.ok || json?.success === false) {
+      throw new Error(json?.message || "Server xatosi");
+    }
+    return json;
   };
+
+  const loadCategories = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const json = await adminRequest("/api/admin/categories");
+      setCategories(Array.isArray(json.data) ? json.data : []);
+    } catch (error) {
+      if (!silent) {
+        setCategories((current) => current.length ? current : DEFAULT_CATEGORIES);
+        notify(error instanceof Error ? error.message : "Kategoriyalarni yuklashda xatolik");
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCategories();
+    const interval = window.setInterval(() => void loadCategories(true), 15000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleOpenAdd = () => {
     setEditingCat(null);
@@ -90,40 +79,58 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
   const handleOpenEdit = (c: Category) => {
     setEditingCat(c);
     setName(c.name);
-    setIcon(c.icon);
+    setIcon(c.icon || "🌸");
     setModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    const cleanName = name.trim();
+    if (!cleanName) return;
 
-    if (editingCat) {
-      const updated = categories.map((c) =>
-        c.id === editingCat.id ? { ...c, name: name.trim(), icon } : c
-      );
-      saveToStorage(updated);
-      notify("Kategoriya yangilandi ✓");
-    } else {
-      const newCat: Category = {
-        id: Date.now(),
-        name: name.trim(),
-        slug: name.trim().toLowerCase().replace(/\s+/g, "-"),
-        icon,
-        productCount: 0,
-        sortOrder: categories.length + 1,
-        active: true,
-      };
-      saveToStorage([...categories, newCat]);
-      notify("Yangi kategoriya qo‘shildi ✓");
+    try {
+      const body = JSON.stringify({
+        name: cleanName,
+        icon: icon.trim() || "🌸",
+        active: editingCat ? editingCat.active : true,
+        sortOrder: editingCat?.sortOrder,
+      });
+      if (editingCat) {
+        await adminRequest("/api/admin/categories/" + encodeURIComponent(editingCat.slug), {
+          method: "PUT",
+          body,
+        });
+        notify("Kategoriya yangilandi ✓");
+      } else {
+        await adminRequest("/api/admin/categories", {
+          method: "POST",
+          body,
+        });
+        notify("Yangi kategoriya qo‘shildi ✓");
+      }
+      setModalOpen(false);
+      await loadCategories(true);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Kategoriya saqlanmadi");
     }
-    setModalOpen(false);
   };
 
-  const toggleActive = (id: number) => {
-    const updated = categories.map((c) => (c.id === id ? { ...c, active: !c.active } : c));
-    saveToStorage(updated);
-    notify("Kategoriya holati o‘zgardi ✓");
+  const toggleActive = async (category: Category) => {
+    try {
+      await adminRequest("/api/admin/categories/" + encodeURIComponent(category.slug), {
+        method: "PUT",
+        body: JSON.stringify({
+          name: category.name,
+          icon: category.icon,
+          sortOrder: category.sortOrder,
+          active: !category.active,
+        }),
+      });
+      await loadCategories(true);
+      notify(category.active ? "Kategoriya o‘chirildi ✓" : "Kategoriya qayta yoqildi ✓");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Kategoriya holatini o‘zgartirib bo‘lmadi");
+    }
   };
 
   return (
@@ -138,7 +145,9 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
         </button>
       </div>
 
-      {categories.length === 0 ? (
+      {loading ? (
+        <div className="emptyAdmin">Kategoriyalar yuklanmoqda…</div>
+      ) : categories.length === 0 ? (
         <EmptyState
           icon="🗂"
           title="Kategoriyalar mavjud emas"
@@ -161,23 +170,15 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
               </tr>
             </thead>
             <tbody>
-              {categoriesWithLiveCounts.map((cat) => (
+              {categories.map((cat) => (
                 <tr key={cat.id}>
-                  <td>
-                    <span className="catIconDisplay">{cat.icon}</span>
-                  </td>
-                  <td>
-                    <b>{cat.name}</b>
-                  </td>
-                  <td>
-                    <span className="promoCode">{cat.slug}</span>
-                  </td>
-                  <td>
-                    <b>{cat.productCount} ta mahsulot</b>
-                  </td>
+                  <td><span className="catIconDisplay">{cat.icon}</span></td>
+                  <td><b>{cat.name}</b></td>
+                  <td><span className="promoCode">{cat.slug}</span></td>
+                  <td><b>{cat.productCount} ta mahsulot</b></td>
                   <td>#{cat.sortOrder}</td>
                   <td>
-                    <span className={`pill ${cat.active ? "" : "mutedPill"}`}>
+                    <span className={"pill " + (cat.active ? "" : "mutedPill")}>
                       {cat.active ? "Faol" : "O‘chiq"}
                     </span>
                   </td>
@@ -189,7 +190,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
                       <button
                         type="button"
                         className="dangerBtn"
-                        onClick={() => toggleActive(cat.id)}
+                        onClick={() => void toggleActive(cat)}
                       >
                         {cat.active ? "O‘chirish" : "Yoqish"}
                       </button>
@@ -210,9 +211,7 @@ export function AdminCategoriesTab({ notify }: { notify: (m: string) => void }) 
                 <span className="proEyebrow">KATEGORIYA</span>
                 <h2>{editingCat ? "Kategoriyani tahrirlash" : "Yangi kategoriya"}</h2>
               </div>
-              <button type="button" onClick={() => setModalOpen(false)}>
-                ×
-              </button>
+              <button type="button" onClick={() => setModalOpen(false)}>×</button>
             </div>
             <form onSubmit={handleSave}>
               <div className="formGrid">
