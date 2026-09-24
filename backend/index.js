@@ -652,7 +652,18 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
       if (!custErr && Array.isArray(dbCustomers)) {
         for (const c of dbCustomers) {
           const key = c.auth_user_id ? `auth_${c.auth_user_id}` : c.telegram_id ? `tg_${c.telegram_id}` : `cust_${c.id}`;
-          if (!usersMap.has(key)) {
+          if (usersMap.has(key)) {
+            const existing = usersMap.get(key);
+            // Telegram users are inserted first; merge the canonical customer avatar
+            // instead of discarding it because the key already exists.
+            if (c.avatar_url && !existing.photo_url && !existing.avatar_url) existing.photo_url = c.avatar_url;
+            if (c.phone && !existing.phone) existing.phone = c.phone;
+            if (c.full_name && !existing.first_name) {
+              const parts = String(c.full_name).trim().split(/\\s+/);
+              existing.first_name = parts[0] || existing.first_name || "";
+              existing.last_name = parts.slice(1).join(" ") || existing.last_name || "";
+            }
+          } else {
             const parts = (c.full_name || "").trim().split(" ");
             usersMap.set(key, {
               id: key,
