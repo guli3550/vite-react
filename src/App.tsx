@@ -2235,7 +2235,7 @@ export default function App() {
         }));
       setServerCategories(next);
       setSelectedCategory((current) =>
-        current !== "Barchasi" && !next.some((item) => item.name === current)
+        current !== "Barchasi" && !next.some((item: CategoryInfo) => item.name === current)
           ? "Barchasi"
           : current,
       );
