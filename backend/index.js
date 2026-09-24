@@ -477,12 +477,35 @@ app.get("/api/admin/orders", requireAdmin, async (req, res) => {
       .order("created_at", { ascending: false })
       .limit(Math.min(Number(req.query.limit) || 200, 500));
     if (error) throw error;
-    const formatted = (data || []).map(row => ({
-      ...row,
-      items: normalizeAdminItems(row.items)
-    }));
+
+    const rows = data || [];
+    const telegramIds = [...new Set(rows.map(r => Number(r.telegram_id)).filter(Number.isFinite))];
+    const [{ data: customerRows }, { data: telegramRows }] = telegramIds.length
+      ? await Promise.all([
+          supabase.from("customers").select("telegram_id,avatar_url").in("telegram_id", telegramIds),
+          supabase.from("telegram_users").select("telegram_id,profile_photos").in("telegram_id", telegramIds),
+        ])
+      : [{ data: [] }, { data: [] }];
+
+    const customerPhotoMap = new Map((customerRows || []).map(r => [String(r.telegram_id), r.avatar_url || null]));
+    const telegramPhotoMap = new Map((telegramRows || []).map(r => [
+      String(r.telegram_id),
+      Array.isArray(r.profile_photos) && r.profile_photos[0]
+        ? adminCustomerPhotoUrl(r.telegram_id, r.profile_photos[0])
+        : null,
+    ]));
+
+    const formatted = rows.map(row => {
+      const tgKey = row.telegram_id != null ? String(row.telegram_id) : "";
+      return {
+        ...row,
+        customer_photo_url: telegramPhotoMap.get(tgKey) || customerPhotoMap.get(tgKey) || null,
+        items: normalizeAdminItems(row.items)
+      };
+    });
     res.json({ success: true, data: formatted });
   } catch (error) {
+    console.error("Admin orders photo enrichment error:", error);
     res.status(500).json({ success: false, message: "Admin buyurtmalarini yuklashda xatolik" });
   }
 });
@@ -569,6 +592,17 @@ app.put("/api/admin/orders/:id/payment", requireAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "To‘lov statusini yangilashda xatolik" });
   }
 });
+function adminCustomerPhotoUrl(telegramId, fileId) {
+  const id = Number(telegramId);
+  const fid = String(fileId || "").trim();
+  if (!ADMIN_SECRET || !Number.isFinite(id) || !fid) return null;
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  const signature = crypto.createHmac("sha256", ADMIN_SECRET)
+    .update(`${id}.${fid}.${expires}`)
+    .digest("base64url");
+  return `/api/admin/users/${encodeURIComponent(id)}/photo/${encodeURIComponent(fid)}?expires=${expires}&signature=${encodeURIComponent(signature)}`;
+}
+
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 300, 1000);
@@ -578,7 +612,7 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const { data: tgUsers, error: tgErr } = await supabase
         .from("telegram_users")
-        .select("telegram_id,username,first_name,last_name,telegram_phone,updated_at")
+        .select("telegram_id,username,first_name,last_name,telegram_phone,profile_photos,updated_at")
         .order("updated_at", { ascending: false })
         .limit(limit);
       if (!tgErr && Array.isArray(tgUsers)) {
@@ -593,6 +627,9 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
             last_name: u.last_name || "",
             telegram_phone: u.telegram_phone || "",
             phone: u.telegram_phone || "",
+            photo_url: Array.isArray(u.profile_photos) && u.profile_photos[0]
+              ? adminCustomerPhotoUrl(u.telegram_id, u.profile_photos[0])
+              : null,
             updated_at: u.updated_at || new Date().toISOString(),
             orders_count: 0,
             total_spent: 0,
