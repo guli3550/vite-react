@@ -1,4 +1,4 @@
-import { useState, useRef, type TouchEvent, type FC } from "react";
+import { useEffect, useState, useRef, type TouchEvent, type FC } from "react";
 
 export interface Product {
   id: number;
@@ -65,10 +65,32 @@ const getResponsiveSources = (url: string) => {
 export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false, onOpen }) => {
   const [index, setIndex] = useState(0);
   const [imgError, setImgError] = useState(false);
-  
+  const preloadedImagesRef = useRef<Set<string>>(new Set());
+
   // Extract all available valid images
   const rawList = [product.image, ...(product.images || [])].filter(Boolean);
   const imageList = rawList.length > 0 ? Array.from(new Set(rawList)) : [];
+
+  // Detail sahifasi ochilishi bilan butun galereyani oldindan yuklaymiz.
+  // Keyingi rasmga o'tishda tarmoq kutishidan keladigan uzilishlar shu bilan yo'qoladi.
+  useEffect(() => {
+    if (!detail || imageList.length <= 1) return;
+
+    imageList.forEach((url) => {
+      const normalized = formatImageUrl(url);
+      if (!normalized || preloadedImagesRef.current.has(normalized)) return;
+
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => preloadedImagesRef.current.add(normalized);
+      image.onerror = () => {};
+      image.src = normalized;
+    });
+  }, [detail, imageList]);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [index]);
 
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
