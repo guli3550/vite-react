@@ -169,14 +169,11 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
             transition: isAnimating ? "transform 220ms cubic-bezier(.22,.61,.36,1)" : "none",
           }}
         >
-          {(detail
-            ? [
-                imageList.length > 1 ? imageList[(index - 1 + imageList.length) % imageList.length] : imageList[index],
-                imageList[index],
-                imageList.length > 1 ? imageList[(index + 1) % imageList.length] : imageList[index],
-              ]
-            : [imageList[index]]
-          ).map((url, slot) => {
+          {[
+            imageList.length > 1 ? imageList[(index - 1 + imageList.length) % imageList.length] : imageList[index],
+            imageList[index],
+            imageList.length > 1 ? imageList[(index + 1) % imageList.length] : imageList[index],
+          ].map((url, slot) => {
             const normalized = formatImageUrl(url || "");
             return (
               <img
