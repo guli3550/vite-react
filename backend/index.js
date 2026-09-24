@@ -659,7 +659,7 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
             if (c.avatar_url && !existing.photo_url && !existing.avatar_url) existing.photo_url = c.avatar_url;
             if (c.phone && !existing.phone) existing.phone = c.phone;
             if (c.full_name && !existing.first_name) {
-              const parts = String(c.full_name).trim().split(/\\s+/);
+              const parts = String(c.full_name).trim().split(/\s+/);
               existing.first_name = parts[0] || existing.first_name || "";
               existing.last_name = parts.slice(1).join(" ") || existing.last_name || "";
             }
