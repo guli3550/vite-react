@@ -37,7 +37,11 @@ const originalGet = express.application.get;
 let installed = false;
 
 function route(app, method, path, ...handlers) {
-  return app.route(path)[method](...handlers);
+  const router = app._router;
+  if (!router || typeof router.route !== "function") {
+    throw new Error("Express router is not initialized");
+  }
+  return router.route(path)[method](...handlers);
 }
 
 const DEFAULT_CATEGORIES = [
