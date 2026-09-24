@@ -108,6 +108,27 @@ function parsePhoto(value) {
   return { mime, buffer, ext: mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg' };
 }
 
+async function persistTelegramProfilePhoto(telegramId, photoUrl) {
+  const id = Number(telegramId);
+  const url = String(photoUrl || '').trim();
+  if (!Number.isSafeInteger(id) || id <= 0 || !/^https:\/\//i.test(url)) return;
+  try {
+    // The photo_url comes from Telegram's validated WebApp initData. Keep the
+    // canonical Telegram photo URL on users so browser profile + chat can use
+    // the same durable source. Never let this auxiliary sync block a review.
+    await supabase.from('users')
+      .update({ telegram_photo_url: url, updated_at: new Date().toISOString() })
+      .eq('telegram_id', id);
+    // Do not overwrite a customer's manually uploaded avatar.
+    await supabase.from('customers')
+      .update({ avatar_url: url, updated_at: new Date().toISOString() })
+      .eq('telegram_id', id)
+      .is('avatar_url', null);
+  } catch (error) {
+    console.warn('Telegram profile photo sync skipped:', error?.message || error);
+  }
+}
+
 async function ensureReviewBucket() {
   if (!supabase) throw new Error('Supabase sozlanmagan');
   const existing = await supabase.storage.getBucket('review-images');
@@ -234,6 +255,7 @@ install('post', '/api/reviews', requireCustomer, async (req, res) => {
     };
     const { data, error } = await supabase.from('product_reviews').insert([row]).select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number').single();
     if (error) throw error;
+    await persistTelegramProfilePhoto(req.customerIdentity.telegram_id, req.customerIdentity.photo_url);
     res.status(201).json({ success: true, message: 'Sharhingiz e’lon qilindi ✓', data: { ...data, display_name: display(data) } });
   } catch (error) {
     console.error('Canonical review POST:', error);
