@@ -62,7 +62,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
         const client = getSupabase();
         if (client) {
           try {
-            let q = client.from("product_reviews").select("*");
+            let q = client.from("product_reviews").select("id,product_id,product_code,first_name,photo_url,rating,comment,photos,verified_purchase,status,created_at");
             if (productId && productCode) {
               q = q.or(`product_id.eq.${productId},product_code.eq.${productCode}`);
             } else if (productId) {
@@ -78,7 +78,7 @@ export const ProductReviewsSection: React.FC<ProductReviewsSectionProps> = ({ pr
                 product_code: r.product_code || productCode,
                 product_name: productName,
                 photo_url: r.photo_url || null,
-                display_name: r.display_name || r.first_name || (r.username ? `@${r.username}` : "Anonim mijoz"),
+                display_name: r.display_name || r.first_name || "Anonim mijoz",
                 rating: Number(r.rating) || 5,
                 comment: String(r.comment || ""),
                 photos: Array.isArray(r.photos) ? r.photos : [],
