@@ -418,7 +418,7 @@ function installRoutes(app) {
         const b = banners[i] || {};
         const slug = "banner_" + (b.id || i + 1);
         const actionTarget = String(b.actionTarget || "").trim();
-        if (actionTarget && !/^https?:\\/\\//i.test(actionTarget)) {
+        if (actionTarget && !/^https?:\/\//i.test(actionTarget)) {
           return res.status(400).json({
             success: false,
             message: "Banner yo‘naltirish URL manzili http:// yoki https:// bilan boshlanishi kerak",
@@ -454,7 +454,7 @@ function installRoutes(app) {
   route(app, "put", "/api/admin/settings/banner", requireAdmin, async (req, res) => {
     try {
       const imageUrl = String(req.body?.image_url || "").trim();
-      if (!imageUrl || !/^https?:\\/\\//i.test(imageUrl)) {
+      if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
         return res.status(400).json({ success: false, message: "To‘g‘ri rasm URL manzili kerak" });
       }
       const { data, error } = await supabase
