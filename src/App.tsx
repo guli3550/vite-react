@@ -880,6 +880,7 @@ export default function App() {
   // returning to Home makes the other category cards appear empty.
   const [homeProducts, setHomeProducts] = useState<Product[]>([]);
   const [serverCategories, setServerCategories] = useState<CategoryInfo[]>([]);
+  const initialSplashStartedAtRef = useRef(Date.now());
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
@@ -2305,8 +2306,45 @@ export default function App() {
         rows = [...rows, ...next];
       }
 
-      // Reveal the storefront only after all product image resources are ready.
-      await preloadImages(rows);
+      // The initial GULI splash must stay visible for at least 3 seconds.
+      // During this window we finish the complete catalog, category data,
+      // banners and every product image so the Home screen appears as one
+      // fully populated surface instead of cards/images arriving separately.
+      await Promise.all([
+        preloadImages(rows),
+        loadCategories(),
+        initialBannerManifestPromise.then(async (banners) => {
+          const urls = (banners || [])
+            .map((b: Banner) => String(b.imageUrl || "").trim())
+            .filter(Boolean);
+          await Promise.all(
+            urls.map(
+              (url) =>
+                new Promise<void>((resolve) => {
+                  const img = new Image();
+                  let settled = false;
+                  const done = () => {
+                    if (settled) return;
+                    settled = true;
+                    resolve();
+                  };
+                  img.onload = done;
+                  img.onerror = done;
+                  img.decoding = "async";
+                  img.src = url;
+                }),
+            ),
+          );
+        }).catch(() => {}),
+      ]);
+
+      // Never reveal the storefront before the full 3-second splash window.
+      const elapsed = Date.now() - initialSplashStartedAtRef.current;
+      const remaining = Math.max(0, 3000 - elapsed);
+      if (remaining) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
+      }
+
       if (!cancelled) setProductsLoading(false);
     };
 
