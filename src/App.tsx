@@ -997,7 +997,7 @@ export default function App() {
     return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
   });
   const [brandName, setBrandName] = useState<string>(() => {
-    return localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name") || "Guli premium";
+    return localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name") || "Guli Market";
   });
   const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
