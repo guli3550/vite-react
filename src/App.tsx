@@ -1475,8 +1475,6 @@ export default function App() {
       if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
       const savedLang = localStorage.getItem("guli_lang") as Language;
       if (savedLang === "uz" || savedLang === "ru" || savedLang === "en") setLanguage(savedLang);
-      const savedBrand = localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name");
-      if (savedBrand) setBrandName(savedBrand);
     };
 
     const handleThemeEvt = (e: any) => {
