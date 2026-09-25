@@ -1,23 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Truck, ShieldCheck, HeartHandshake } from "lucide-react";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "./GuliStartupSplash.css";
 
-/**
- * GuliStartupSplash — purely visual, non-blocking startup overlay.
- *
- * It never gates the real application: <App/> mounts and starts its own
- * initialization (catalog, auth state, Telegram, Supabase, etc.) at the
- * exact same time this overlay is painted on top of it. This component
- * only controls how long the *overlay* stays visible before fading away.
- *
- * Dismiss timing:
- *  - Never later than MAX_MS after mount (hard safety cap).
- *  - Not before MIN_MS, so the brand animation has time to play once the
- *    browser has actually painted a frame (two rAFs = paint confirmed).
- *  - Respects prefers-reduced-motion by shortening both bounds and
- *    skipping transform-based animation (see CSS).
- */
+/** GULI branded startup splash. App initializes underneath the overlay. */
 
 const BENEFITS = [
   { Icon: Truck, label: "Tez yetkazib berish" },
@@ -29,8 +15,7 @@ export function GuliStartupSplash() {
   const [mounted, setMounted] = useState(true);
   const [leaving, setLeaving] = useState(false);
   const [ready, setReady] = useState(false); // true just before hide -> swaps status copy
-  const timers = useRef<number[]>([]);
-  const raf = useRef<number[]>([]);
+
 
   useEffect(() => {
     // Keep the branded splash on screen for exactly 3 seconds.
