@@ -5,7 +5,9 @@
   const ref = rawRef.replace(/^product[_:-]?/i, '').trim();
   if (!ref) return;
 
-  const api = 'https://guli-gateway.parizodabaxtiyorov.workers.dev';
+  // Resolve the product through the current storefront API.
+  // Never depend on a cached/old Vercel or gateway catalog for deep links.
+  const api = location.origin + '/api';
   let targetName = '';
   let targetCode = ref;
   let opened = false;
@@ -76,10 +78,17 @@
 
   const loadTarget = async () => {
     try {
-      const r = await fetch(`${api}/api/products?limit=100&search=${encodeURIComponent(ref)}`);
-      const j = await r.json();
+      const r = await fetch(`${api}/products?limit=100&search=${encodeURIComponent(ref)}`, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+      });
+      const j = await r.json().catch(() => ({}));
       const list = Array.isArray(j.data) ? j.data : [];
-      const product = list.find((p) => String(p.product_code || '') === ref) || list.find((p) => String(p.id || '') === ref) || list[0];
+      const normalized = ref.toLowerCase();
+      const product =
+        list.find((p) => String(p.product_code || '').trim().toLowerCase() === normalized) ||
+        list.find((p) => String(p.id || '').trim() === ref) ||
+        null;
       if (product) {
         updateSeo(product);
         targetName = String(product.name || '').trim();
