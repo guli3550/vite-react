@@ -79,10 +79,10 @@ function normalizeSearchText(value) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/ʻ|ʼ|‘|’|\`/g, "'")
-    .replace(/[^a-z0-9\\u0400-\\u04ff]+/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/[^a-z0-9\u0400-\u04ff]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
