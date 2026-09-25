@@ -2294,21 +2294,14 @@ export default function App() {
     };
 
     const loadHomeCompletely = async () => {
-      // Keep the skeleton visible while every catalog page is fetched.
-      let rows = await loadProducts(false, false, true);
+      // First page = the actual Home surface. Do not wait for the entire
+      // catalog before the 3-second splash can finish.
+      const rows = await loadProducts(false, false, true);
       if (cancelled) return;
 
-      while (productsHasMoreRef.current) {
-        const next = await loadProducts(true, true);
-        if (cancelled) return;
-        if (!next.length) break;
-        rows = [...rows, ...next];
-      }
-
-      // Preload the first storefront surface without allowing a slow
-      // network resource to freeze the application indefinitely. The
-      // startup splash is exactly 3 seconds; anything still downloading
-      // continues in the background and is cached by the browser.
+      // Preload visible product images, categories and the active banner in
+      // parallel. A hard 2.6s bound prevents one slow image/API from freezing
+      // the startup forever; the browser continues caching remaining assets.
       const preloadWork = Promise.all([
         preloadImages(rows),
         loadCategories(),
@@ -2345,7 +2338,15 @@ export default function App() {
       ]);
 
       if (!cancelled) setProductsLoading(false);
-      void preloadWork.catch(() => {});
+
+      // Continue filling the catalog in the background. This no longer gates
+      // the Home screen or the 3-second branded splash.
+      void (async () => {
+        while (!cancelled && productsHasMoreRef.current) {
+          const next = await loadProducts(true, true);
+          if (cancelled || !next.length) break;
+        }
+      })();
     };
 
     loadHomeCompletely().catch(() => {
