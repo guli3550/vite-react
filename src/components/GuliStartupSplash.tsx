@@ -33,48 +33,18 @@ export function GuliStartupSplash() {
   const raf = useRef<number[]>([]);
 
   useEffect(() => {
-    const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    const MIN_MS = reduceMotion ? 300 : 1100;
-    const MAX_MS = reduceMotion ? 650 : 1800;
-    const FADE_MS = reduceMotion ? 120 : 380;
-
-    const addTimer = (fn: () => void, ms: number) => {
-      const id = window.setTimeout(fn, ms);
-      timers.current.push(id);
-      return id;
-    };
-
-    const startLeave = () => {
+    // Keep the branded splash on screen for exactly 3 seconds.
+    // App initialization starts underneath it immediately, so the 3-second
+    // window is used for catalog/category/banner/image preloading.
+    const DURATION_MS = 3000;
+    const leaveTimer = window.setTimeout(() => {
       setReady(true);
-      // brief "welcome" swap before the overlay actually fades
-      addTimer(() => {
-        setLeaving(true);
-        addTimer(() => setMounted(false), FADE_MS);
-      }, reduceMotion ? 80 : 260);
-    };
-
-    const startedAt = Date.now();
-    const id1 = requestAnimationFrame(() => {
-      const id2 = requestAnimationFrame(() => {
-        // Browser has painted at least one real frame of the app underneath.
-        const elapsed = Date.now() - startedAt;
-        addTimer(startLeave, Math.max(0, MIN_MS - elapsed));
-      });
-      raf.current.push(id2);
-    });
-    raf.current.push(id1);
-
-    // Hard safety cap regardless of rAF/timer state.
-    addTimer(startLeave, MAX_MS);
+      setLeaving(true);
+      window.setTimeout(() => setMounted(false), 380);
+    }, DURATION_MS);
 
     return () => {
-      timers.current.forEach((t) => window.clearTimeout(t));
-      raf.current.forEach((r) => cancelAnimationFrame(r));
-      timers.current = [];
-      raf.current = [];
+      window.clearTimeout(leaveTimer);
     };
   }, []);
 
