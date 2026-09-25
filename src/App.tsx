@@ -883,6 +883,10 @@ export default function App() {
   const initialSplashStartedAtRef = useRef(Date.now());
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
+  useEffect(() => {
+    if (productsLoading) return;
+    window.dispatchEvent(new Event("guli_initial_storefront_ready"));
+  }, [productsLoading]);
   const [productsHasMore, setProductsHasMore] = useState(true);
   const productsOffsetRef = useRef(0);
   const productsHasMoreRef = useRef(true);
