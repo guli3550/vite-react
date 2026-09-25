@@ -180,7 +180,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
                 key={`${index}-${slot}-${url}`}
                 src={normalized || placeholder(product.name)}
                 alt={`${product.name} - rasm ${index + 1}`}
-                loading={detail ? "eager" : "lazy"}
+                loading="eager"
                 decoding="async"
                 draggable={false}
                 onError={(event) => {
