@@ -396,3 +396,15 @@ html[data-platform="tv"] .bottomNav {
   border-radius: 28px 28px 0 0;
 }
 
+
+
+/* Search field: keep the container as the only visible focus surface. */
+.searchBox input,
+.searchBox input:focus,
+.searchBox input:focus-visible {
+  border: 0 !important;
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
