@@ -53,6 +53,23 @@
   transform: translateY(2%);
 }
 
+ .guliSplashLogoWrap {
+  width: clamp(92px, 24vw, 150px);
+  height: clamp(92px, 24vw, 150px);
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 12px 24px rgba(164, 45, 77, 0.18));
+}
+
+.guliSplashLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .guliSplashBrand {
   margin-top: 0;
   font-family: Georgia, "Times New Roman", serif;
@@ -111,13 +128,14 @@
   flex-shrink: 0;
 }
 
-.guliSplashBenefitLabel {
+ .guliSplashBenefitLabel {
   font-size: clamp(12px, 2.6vw, 16px);
   line-height: 1.25;
   color: #6d3d49;
   font-weight: 600;
   width: 100%;
   max-width: 155px;
+  white-space: pre-line;
   overflow-wrap: break-word;
 }
 
@@ -126,15 +144,15 @@
   z-index: 2;
   left: 24px;
   right: 24px;
-  bottom: max(58px, calc(env(safe-area-inset-bottom) + 34px));
+  bottom: max(54px, calc(env(safe-area-inset-bottom) + 30px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 13px;
+  gap: 10px;
 }
 
 .guliSplashProgressTrack {
-  width: min(74vw, 430px);
+  width: min(58vw, 300px);
   height: 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.68);
@@ -175,6 +193,12 @@
   .guliSplashBenefit {
     flex-basis: 100px;
     gap: 8px;
+  }
+
+  .guliSplashLogoWrap {
+    width: 104px;
+    height: 104px;
+    margin-bottom: 12px;
   }
 
   .guliSplashBenefitIcon {
