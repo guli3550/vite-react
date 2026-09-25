@@ -318,6 +318,7 @@ export default function AdminPro() {
   const [promos, setPromos] = useState<Promo[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [product, setProduct] = useState<Product>(emptyProduct);
@@ -732,16 +733,25 @@ export default function AdminPro() {
     }
   };
 
+  const productCategories = useMemo(() => {
+    const counts = new Map<string, number>();
+    products.forEach((p) => {
+      const name = String(p.category || "Boshqa").trim() || "Boshqa";
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products]);
+
   const productsFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return !q
-      ? products
-      : products.filter((p) =>
-          `${p.product_code || ""} ${p.name} ${p.category} ${p.id || ""}`
-            .toLowerCase()
-            .includes(q)
-        );
-  }, [products, query]);
+    const category = productCategoryFilter.trim().toLowerCase();
+    return products.filter((p) => {
+      const productCategory = String(p.category || "Boshqa").trim().toLowerCase();
+      const matchesCategory = category === "all" || productCategory === category;
+      const haystack = [p.product_code || "", p.name, p.category, p.id || ""].join(" ").toLowerCase();
+      return matchesCategory && (!q || haystack.includes(q));
+    });
+  }, [products, query, productCategoryFilter]);
 
   const ordersFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -1396,6 +1406,21 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {/* Tab 3: 👗 Mahsulotlar */}
         {tab === "products" && (
           <section className="proPanel tablePanel">
+            <div className="filterRow" style={{ flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              <button type="button" className={productCategoryFilter === "all" ? "active" : ""} onClick={() => setProductCategoryFilter("all")}>
+                Barchasi <small>({products.length})</small>
+              </button>
+              {productCategories.map(([category, count]) => (
+                <button
+                  type="button"
+                  key={category}
+                  className={productCategoryFilter.toLowerCase() === category.toLowerCase() ? "active" : ""}
+                  onClick={() => setProductCategoryFilter(category)}
+                >
+                  {category} <small>({count})</small>
+                </button>
+              ))}
+            </div>
             <div className="panelHead">
               <div>
                 <span className="proEyebrow">CATALOG</span>
