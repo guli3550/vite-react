@@ -880,13 +880,8 @@ export default function App() {
   // returning to Home makes the other category cards appear empty.
   const [homeProducts, setHomeProducts] = useState<Product[]>([]);
   const [serverCategories, setServerCategories] = useState<CategoryInfo[]>([]);
-  const initialSplashStartedAtRef = useRef(Date.now());
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
-  useEffect(() => {
-    if (productsLoading) return;
-    window.dispatchEvent(new Event("guli_initial_storefront_ready"));
-  }, [productsLoading]);
   const [productsHasMore, setProductsHasMore] = useState(true);
   const productsOffsetRef = useRef(0);
   const productsHasMoreRef = useRef(true);
@@ -2310,46 +2305,47 @@ export default function App() {
         rows = [...rows, ...next];
       }
 
-      // The initial GULI splash must stay visible for at least 3 seconds.
-      // During this window we finish the complete catalog, category data,
-      // banners and every product image so the Home screen appears as one
-      // fully populated surface instead of cards/images arriving separately.
-      await Promise.all([
+      // Preload the first storefront surface without allowing a slow
+      // network resource to freeze the application indefinitely. The
+      // startup splash is exactly 3 seconds; anything still downloading
+      // continues in the background and is cached by the browser.
+      const preloadWork = Promise.all([
         preloadImages(rows),
         loadCategories(),
-        initialBannerManifestPromise.then(async (banners) => {
-          const urls = (banners || [])
-            .map((b: Banner) => String(b.imageUrl || "").trim())
-            .filter(Boolean);
-          await Promise.all(
-            urls.map(
-              (url) =>
-                new Promise<void>((resolve) => {
-                  const img = new Image();
-                  let settled = false;
-                  const done = () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve();
-                  };
-                  img.onload = done;
-                  img.onerror = done;
-                  img.decoding = "async";
-                  img.src = url;
-                }),
-            ),
-          );
-        }).catch(() => {}),
+        initialBannerManifestPromise
+          .then(async (banners) => {
+            const urls = (banners || [])
+              .map((b: Banner) => String(b.imageUrl || "").trim())
+              .filter(Boolean);
+            await Promise.all(
+              urls.map(
+                (url) =>
+                  new Promise<void>((resolve) => {
+                    const img = new Image();
+                    let settled = false;
+                    const done = () => {
+                      if (settled) return;
+                      settled = true;
+                      resolve();
+                    };
+                    img.onload = done;
+                    img.onerror = done;
+                    img.decoding = "async";
+                    img.src = url;
+                  }),
+              ),
+            );
+          })
+          .catch(() => {}),
       ]);
 
-      // Never reveal the storefront before the full 3-second splash window.
-      const elapsed = Date.now() - initialSplashStartedAtRef.current;
-      const remaining = Math.max(0, 3000 - elapsed);
-      if (remaining) {
-        await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
-      }
+      await Promise.race([
+        preloadWork,
+        new Promise<void>((resolve) => window.setTimeout(resolve, 2600)),
+      ]);
 
       if (!cancelled) setProductsLoading(false);
+      void preloadWork.catch(() => {});
     };
 
     loadHomeCompletely().catch(() => {
