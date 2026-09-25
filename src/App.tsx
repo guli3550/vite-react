@@ -2293,9 +2293,20 @@ export default function App() {
       );
     };
 
+    const reportStartupProgress = (progress: number) => {
+      if (typeof window === "undefined") return;
+      window.dispatchEvent(
+        new CustomEvent("guli_startup_progress", {
+          detail: { progress: Math.max(0, Math.min(100, progress)) },
+        }),
+      );
+    };
+
     const loadHomeCompletely = async () => {
-      // First page = the actual Home surface. Start it immediately, but
-      // never let a slow connection freeze the 3-second splash.
+      // The splash progress is driven by real startup milestones:
+      // first catalog page -> visible image/category/banner preload -> ready.
+      reportStartupProgress(8);
+
       const firstPagePromise = loadProducts(false, false, true);
       const rows = await Promise.race([
         firstPagePromise,
@@ -2303,9 +2314,8 @@ export default function App() {
       ]);
       if (cancelled) return;
 
-      // Preload visible product images, categories and the active banner in
-      // parallel. A hard 2.6s bound prevents one slow image/API from freezing
-      // the startup forever; the browser continues caching remaining assets.
+      reportStartupProgress(rows.length ? 38 : 24);
+
       const preloadWork = Promise.all([
         preloadImages(rows),
         loadCategories(),
@@ -2336,12 +2346,17 @@ export default function App() {
           .catch(() => {}),
       ]);
 
+      reportStartupProgress(58);
+
       await Promise.race([
         preloadWork,
         new Promise<void>((resolve) => window.setTimeout(resolve, 2600)),
       ]);
 
-      if (!cancelled) setProductsLoading(false);
+      if (!cancelled) {
+        setProductsLoading(false);
+        reportStartupProgress(100);
+      }
 
       // Continue filling the catalog in the background. This no longer gates
       // the Home screen or the 3-second branded splash.
