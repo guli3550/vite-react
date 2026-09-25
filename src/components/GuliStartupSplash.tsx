@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Truck, ShieldCheck, Gift } from "lucide-react";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "./GuliStartupSplash.css";
 
 /**
@@ -11,7 +12,7 @@ import "./GuliStartupSplash.css";
 const BENEFITS = [
   { Icon: Truck, label: "Tez yetkazib berish" },
   { Icon: ShieldCheck, label: "Xavfsiz savdo" },
-  { Icon: Gift, label: "Siz uchun ehtiyotkorlik bilan" },
+  { Icon: Gift, label: "Siz uchun\nbilan" },
 ];
 
 export function GuliStartupSplash() {
@@ -57,6 +58,9 @@ export function GuliStartupSplash() {
       <div className="guliSplashGlow" aria-hidden="true" />
 
       <div className="guliSplashBody">
+        <div className="guliSplashLogoWrap">
+          <img src={GULI_LOGO_BASE64} alt="GULI" className="guliSplashLogo" draggable={false} />
+        </div>
         <div className="guliSplashBrand">GULI MARKET</div>
         <div className="guliSplashTagline">Go‘zallik har doim siz bilan</div>
         <div className="guliSplashHeart" aria-hidden="true">♥</div>
@@ -74,6 +78,9 @@ export function GuliStartupSplash() {
       </div>
 
       <div className="guliSplashFooter">
+        <div className="guliSplashStatus">
+          {isReady ? "Guli Market'ga xush kelibsiz!" : "Tizim yuklanmoqda..."}
+        </div>
         <div
           className="guliSplashProgressTrack"
           role="progressbar"
@@ -86,9 +93,6 @@ export function GuliStartupSplash() {
             className="guliSplashProgressBar"
             style={{ width: `${progress}%` }}
           />
-        </div>
-        <div className="guliSplashStatus">
-          {isReady ? "Guli Market'ga xush kelibsiz!" : "Tizim yuklanmoqda..."}
         </div>
       </div>
     </div>
