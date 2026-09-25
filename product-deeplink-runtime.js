@@ -5,13 +5,13 @@
   const ref = rawRef.replace(/^product[_:-]?/i, '').trim();
   if (!ref) return;
 
-  // Resolve the product through the current storefront API.
-  // Never depend on a cached/old Vercel or gateway catalog for deep links.
   const api = location.origin + '/api';
   let targetName = '';
   let targetCode = ref;
+  let targetId = '';
   let opened = false;
   let searchStarted = false;
+  let loadAttempts = 0;
 
   const setReactInput = (input, value) => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -27,7 +27,10 @@
     if (!catalogInput && catalogButton) {
       searchStarted = true;
       catalogButton.click();
-      window.setTimeout(openCatalogSearch, 250);
+      window.setTimeout(() => {
+        searchStarted = false;
+        openCatalogSearch();
+      }, 300);
       return;
     }
     if (catalogInput) {
@@ -40,16 +43,16 @@
     const name = String(product?.name || '').trim();
     if (!name) return;
     const category = String(product?.category || '').trim();
-    const description = String(product?.description || '').trim() || `${name} — Guli Market onlayn do‘konida. ${category}`;
-    const canonical = `${location.origin}${location.pathname}${location.search}`;
-    document.title = `${name} | Guli Market`;
+    const description = String(product?.description || '').trim() || (name + ' — Guli Market onlayn do‘konida. ' + category);
+    const canonical = location.origin + location.pathname + location.search;
+    document.title = name + ' | Guli Market';
     const setMeta = (selector, attrs) => {
       let el = document.head.querySelector(selector);
       if (!el) { el = document.createElement('meta'); document.head.appendChild(el); }
       Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, String(v)));
     };
     setMeta('meta[name="description"]', { name: 'description', content: description.slice(0, 300) });
-    setMeta('meta[property="og:title"]', { property: 'og:title', content: `${name} | Guli Market` });
+    setMeta('meta[property="og:title"]', { property: 'og:title', content: name + ' | Guli Market' });
     setMeta('meta[property="og:description"]', { property: 'og:description', content: description.slice(0, 300) });
     setMeta('meta[property="og:url"]', { property: 'og:url', content: canonical });
     const image = product.image || (Array.isArray(product.images) ? product.images[0] : '');
@@ -78,10 +81,12 @@
 
   const loadTarget = async () => {
     try {
-      const r = await fetch(`${api}/products?limit=100&search=${encodeURIComponent(ref)}`, {
+      loadAttempts += 1;
+      const r = await fetch(api + '/products?limit=100&search=' + encodeURIComponent(ref), {
         cache: 'no-store',
         headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
       });
+      if (!r.ok) throw new Error('products API status ' + r.status);
       const j = await r.json().catch(() => ({}));
       const list = Array.isArray(j.data) ? j.data : [];
       const normalized = ref.toLowerCase();
@@ -89,32 +94,47 @@
         list.find((p) => String(p.product_code || '').trim().toLowerCase() === normalized) ||
         list.find((p) => String(p.id || '').trim() === ref) ||
         null;
+
       if (product) {
         updateSeo(product);
         targetName = String(product.name || '').trim();
         targetCode = String(product.product_code || ref).trim();
+        targetId = String(product.id || '').trim();
+        return true;
       }
     } catch {}
+
+    if (!targetName && loadAttempts < 20) {
+      window.setTimeout(loadTarget, 500);
+    }
+    return false;
   };
 
   const findAndOpen = () => {
     if (opened || !targetName) return;
+
+    const exactCard = targetId ? document.getElementById('product-card-' + targetId) : null;
     const cards = [...document.querySelectorAll('article.productCard, .productCard')];
-    const card = cards.find((el) => {
+    const card = exactCard || cards.find((el) => {
       const text = (el.textContent || '').toLowerCase();
       return (targetCode && text.includes(targetCode.toLowerCase())) || text.includes(targetName.toLowerCase());
     });
+
     if (card) {
       opened = true;
-      card.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    } else {
-      openCatalogSearch();
+      card.click();
+      return;
     }
+
+    openCatalogSearch();
   };
 
   loadTarget().then(findAndOpen);
   const observer = new MutationObserver(findAndOpen);
   observer.observe(document.body, { childList: true, subtree: true });
-  const timer = window.setInterval(findAndOpen, 350);
-  window.setTimeout(() => { observer.disconnect(); clearInterval(timer); }, 15000);
+  const timer = window.setInterval(findAndOpen, 250);
+  window.setTimeout(() => {
+    observer.disconnect();
+    clearInterval(timer);
+  }, 20000);
 })();
