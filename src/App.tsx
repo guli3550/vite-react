@@ -2294,9 +2294,13 @@ export default function App() {
     };
 
     const loadHomeCompletely = async () => {
-      // First page = the actual Home surface. Do not wait for the entire
-      // catalog before the 3-second splash can finish.
-      const rows = await loadProducts(false, false, true);
+      // First page = the actual Home surface. Start it immediately, but
+      // never let a slow connection freeze the 3-second splash.
+      const firstPagePromise = loadProducts(false, false, true);
+      const rows = await Promise.race([
+        firstPagePromise,
+        new Promise<Product[]>((resolve) => window.setTimeout(() => resolve([]), 2200)),
+      ]);
       if (cancelled) return;
 
       // Preload visible product images, categories and the active banner in
