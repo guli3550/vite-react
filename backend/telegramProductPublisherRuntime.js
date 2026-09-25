@@ -43,8 +43,15 @@ function parseDataImage(value) {
   return { buffer, contentType: contentType === "image/jpg" ? "image/jpeg" : contentType, filename: `broadcast-${Date.now()}.${contentType.split("/")[1].replace("jpeg", "jpg")}` };
 }
 
-function baseUrl() { return MINI_APP_URL.includes("?") ? `${MINI_APP_URL}&` : `${MINI_APP_URL}?`; }
-function productUrl(product) { const ref = String(product?.product_code || product?.id || "").trim(); return `${baseUrl()}product=${encodeURIComponent(ref)}`; }
+const CANONICAL_STORE_URL = "https://gulii.uz";
+function productUrl(product) {
+  // New-product Telegram links must always point to the real production
+  // storefront, never to an old Vercel deployment/alias.
+  const ref = String(product?.product_code || product?.id || "").trim();
+  return ref
+    ? CANONICAL_STORE_URL + "/?product=" + encodeURIComponent(ref)
+    : CANONICAL_STORE_URL + "/";
+}
 function caption(product) { const name = String(product?.name || product?.title || "GULI mahsuloti").trim(); const code = product?.product_code ? `\n🔖 Kod: ${product.product_code}` : ""; const price = Number(product?.price || 0).toLocaleString("uz-UZ"); return `🌷 <b>${name.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</b>${code}\n💰 ${price} so‘m`; }
 function productImage(product) { return String(product?.image || (Array.isArray(product?.images) ? product.images[0] : "") || "").trim(); }
 function replyMarkup(product) { return { inline_keyboard: [[{ text: "🛍️ Online Market", url: productUrl(product) }]] }; }
