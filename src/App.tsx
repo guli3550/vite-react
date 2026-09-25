@@ -3867,7 +3867,7 @@ export default function App() {
                                 flexDirection: "column",
                                 background: "var(--bg-card-sub, rgba(0,0,0,0.03))",
                                 borderRadius: "12px",
-                                overflow: "hidden",
+                                overflow: "visible",
                                 border: "1px solid var(--border-color)",
                               }}
                               onClick={(e) => {
