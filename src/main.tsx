@@ -11,6 +11,12 @@ import './admin/CustomerIdentity.css'
 import './components/ModernProfileCardBg.css'
 import { GULI_LOGO_BASE64 } from './utils/guliLogoBase64'
 
+// Remove the legacy pre-React splash if an older cached index.html still
+// contains it. The React GuliStartupSplash is now the single startup overlay.
+if (typeof document !== 'undefined') {
+  document.getElementById('guli-initial-splash')?.remove()
+}
+
 type Props = { children: ReactNode }
 type State = { failed: boolean; message: string }
 
