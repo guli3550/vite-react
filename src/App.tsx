@@ -996,9 +996,6 @@ export default function App() {
     const saved = (localStorage.getItem(`guli_lang_${currentUserId}`) || localStorage.getItem("guli_lang")) as Language;
     return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
   });
-  const [brandName, setBrandName] = useState<string>(() => {
-    return localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name") || "Guli Market";
-  });
   const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
     return saved === "UZS" || saved === "USD" || saved === "RUB" ? saved : "UZS";
@@ -4592,7 +4589,7 @@ export default function App() {
             className="brand"
             onClick={() => go("home")}
             type="button"
-            aria-label="GULI Home"
+            aria-label="Gulii Market Home"
           >
             <span
               className="brandIcon guli-brand-circle-logo"
@@ -4614,7 +4611,7 @@ export default function App() {
             >
               <img
                 src={appLogo || GULI_LOGO_BASE64}
-                alt="Guli Premium"
+                alt="Gulii Market"
                 style={{
                   width: "100%",
                   height: "100%",
@@ -4635,8 +4632,7 @@ export default function App() {
               />
             </span>
             <span>
-              <b>{brandName}</b>
-              <small>{t("brand_sub")}</small>
+              <b className="brandMarketWord">MARKET</b>
             </span>
           </button>
         </div>
