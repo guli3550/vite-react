@@ -305,10 +305,24 @@ app.post("/api/promo/validate", async (req, res) => {
 
 app.get("/api/promos", async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("promo_codes")
       .select("id, code, discount_type, discount_value, min_order_amount, max_discount_amount, starts_at, expires_at, usage_limit, used_count, active, created_at")
       .order("created_at", { ascending: false });
+
+    // Keep the public promo endpoint compatible with older production schemas.
+    // The canonical repair SQL adds max_discount_amount, but a stale database
+    // should not turn the whole public promo feed into HTTP 500.
+    if (error && /column .*max_discount_amount.* does not exist/i.test(error.message || "")) {
+      const fallback = await supabase
+        .from("promo_codes")
+        .select("id, code, discount_type, discount_value, min_order_amount, starts_at, expires_at, usage_limit, used_count, active, created_at")
+        .order("created_at", { ascending: false });
+      if (fallback.error) throw fallback.error;
+      data = (fallback.data || []).map((row) => ({ ...row, max_discount_amount: null }));
+      error = null;
+    }
+
     if (error) throw error;
     const now = Date.now();
     const promosWithStatus = (data || []).map((p) => {
