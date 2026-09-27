@@ -536,21 +536,40 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   const vipProgressPercent = Math.min(100, Math.round((realTotalSpent / VIP_THRESHOLD) * 100));
   const remainingForVip = Math.max(0, VIP_THRESHOLD - realTotalSpent);
 
-  // Real active admin promos count
-  const [activePromosCount, setActivePromosCount] = useState<number | null>(null);
+  // Customer-saved promo count: match the promos explicitly added
+  // to this customer's own promo list, not total admin promo inventory.
+  const getSavedPromoCount = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("guli_added_promos") || "[]");
+      const deleted = JSON.parse(localStorage.getItem("guli_deleted_promos") || "[]");
+      if (!Array.isArray(saved)) return 0;
+      const deletedSet = new Set(
+        Array.isArray(deleted) ? deleted.map((code: unknown) => String(code).toUpperCase()) : []
+      );
+      const uniqueCodes = new Set<string>();
+      for (const promo of saved) {
+        const code = String((promo as { code?: unknown })?.code || "").toUpperCase();
+        if (code && !deletedSet.has(code)) uniqueCodes.add(code);
+      }
+      return uniqueCodes.size;
+    } catch {
+      return 0;
+    }
+  };
+
+  const [savedPromosCount, setSavedPromosCount] = useState<number>(() => getSavedPromoCount());
+
   useEffect(() => {
-    let isMounted = true;
-    fetch(buildApiUrl(`/api/promos?_guli_promo_refresh=${Date.now()}`), { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (isMounted && d.success && Array.isArray(d.data)) {
-          const activeList = d.data.filter((p: any) => p.status === "active");
-          setActivePromosCount(activeList.length);
-        }
-      })
-      .catch(() => {});
+    const refreshSavedPromoCount = () => setSavedPromosCount(getSavedPromoCount());
+    refreshSavedPromoCount();
+
+    window.addEventListener("storage", refreshSavedPromoCount);
+    window.addEventListener("guli-promos-changed", refreshSavedPromoCount);
+    window.addEventListener("focus", refreshSavedPromoCount);
     return () => {
-      isMounted = false;
+      window.removeEventListener("storage", refreshSavedPromoCount);
+      window.removeEventListener("guli-promos-changed", refreshSavedPromoCount);
+      window.removeEventListener("focus", refreshSavedPromoCount);
     };
   }, []);
 
@@ -1728,7 +1747,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         >
           <span style={{ fontSize: "20px", display: "block", marginBottom: "4px" }}>🎟️</span>
           <b style={{ fontSize: "14px", display: "block", color: "#d97706" }}>
-            {activePromosCount !== null ? `${activePromosCount} ta faol` : "Kuponlar"}
+            {`${savedPromosCount} ta faol`}
           </b>
           <span style={{ fontSize: "11px", color: "var(--text-muted, #64748b)" }}>Promokodlar</span>
         </div>
