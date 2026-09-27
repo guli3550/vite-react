@@ -24,7 +24,6 @@ export const PromosModal: FC<{
   onShowToast: (msg: string) => void;
 }> = ({ onClose, onApplyPromo, onShowToast }) => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [adminPromos, setAdminPromos] = useState<AdminPromo[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search & Management State
