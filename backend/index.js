@@ -305,10 +305,17 @@ app.post("/api/promo/validate", async (req, res) => {
 
 app.get("/api/promos", async (req, res) => {
   try {
-    let { data, error } = await supabase
+    const requestedCode = String(req.query?.code || "").trim().toUpperCase();
+    let promoQuery = supabase
       .from("promo_codes")
       .select("id, code, discount_type, discount_value, min_order_amount, max_discount_amount, starts_at, expires_at, usage_limit, used_count, active, created_at")
       .order("created_at", { ascending: false });
+
+    if (requestedCode) {
+      promoQuery = promoQuery.eq("code", requestedCode);
+    }
+
+    let { data, error } = await promoQuery;
 
     // Keep the public promo endpoint compatible with older production schemas.
     // The canonical repair SQL adds max_discount_amount, but a stale database
