@@ -2683,8 +2683,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         document.body
       )}
 
-      {/* MODAL 2: Wallet & Cashback details */}
-      {isWalletModalOpen && (
+      {/* MODAL 2: Wallet & Cashback details — viewport-safe portal */}
+      {isWalletModalOpen && typeof document !== "undefined" && createPortal(
         <div
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsWalletModalOpen(false);
@@ -2692,20 +2692,27 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           style={{
             position: "fixed",
             inset: 0,
+            width: "100vw",
+            height: "100dvh",
+            boxSizing: "border-box",
             backgroundColor: isDark ? "rgba(0, 0, 0, 0.82)" : "rgba(15, 23, 42, 0.65)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
-            zIndex: 999999,
+            zIndex: 99999999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "16px",
+            padding: "16px 16px calc(16px + env(safe-area-inset-bottom, 0px))",
+            overflowY: "auto",
           }}
         >
           <div
             style={{
               width: "100%",
               maxWidth: "420px",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
+              boxSizing: "border-box",
               backgroundColor: isDark ? "#1c1317" : "#ffffff",
               color: isDark ? "#fbeff2" : "#1e293b",
               borderRadius: "24px",
@@ -2784,7 +2791,8 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
               Tushunarli
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* MODAL 2: Logout Confirmation (Rendered directly into body for perfect viewport centering) */}
