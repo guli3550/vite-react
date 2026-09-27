@@ -412,7 +412,7 @@ export const PromosModal: FC<{
                 Hozircha saqlangan promokodlar yo‘q
               </h4>
               <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted, #64748b)", lineHeight: 1.5 }}>
-                Admin promokodini yuqoridagi qidiruv maydoni orqali topib, ro'yxatingizga qo'shishingiz mumkin.
+                Guli promokodini yuqoridagi qidiruv maydoni orqali topib, ro'yxatingizga qo'shishingiz mumkin.
               </p>
             </div>
           ) : (
