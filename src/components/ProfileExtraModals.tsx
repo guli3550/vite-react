@@ -145,6 +145,7 @@ export const PromosModal: FC<{
       const updatedAdded = [...customAddedPromos, promoToAdd];
       setCustomAddedPromos(updatedAdded);
       localStorage.setItem("guli_added_promos", JSON.stringify(updatedAdded));
+      window.dispatchEvent(new Event("guli-promos-changed"));
     }
 
     onShowToast(`✓ ${code} promokodi ro'yxatga qo'shildi!`);
@@ -165,6 +166,7 @@ export const PromosModal: FC<{
     const nextAdded = customAddedPromos.filter((p) => p.code.toUpperCase() !== upper);
     setCustomAddedPromos(nextAdded);
     localStorage.setItem("guli_added_promos", JSON.stringify(nextAdded));
+    window.dispatchEvent(new Event("guli-promos-changed"));
 
     onShowToast(`✓ ${code} promokodi ro‘yxatdan o‘chirildi`);
     try {
