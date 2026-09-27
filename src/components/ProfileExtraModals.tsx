@@ -47,6 +47,15 @@ export const PromosModal: FC<{
 
   const [customAddedPromos, setCustomAddedPromos] = useState<AdminPromo[]>(() => {
     try {
+      // One-time migration: older builds automatically copied all admin promos
+      // into this customer-local list. Those entries were never explicitly
+      // added by the customer, so remove the legacy list once.
+      const migrationKey = "guli_promo_manual_add_migration_v1";
+      if (localStorage.getItem(migrationKey) !== "1") {
+        localStorage.removeItem("guli_added_promos");
+        localStorage.setItem(migrationKey, "1");
+        return [];
+      }
       return JSON.parse(localStorage.getItem("guli_added_promos") || "[]");
     } catch {
       return [];
