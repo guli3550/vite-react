@@ -1226,27 +1226,45 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   title="Profilni tahrirlash"
                   style={{
                     position: "absolute",
-                    top: "-6px",
-                    right: "-2px",
-                    backgroundColor: "rgba(255, 255, 255, 0.32)",
-                    border: "1px solid rgba(255, 255, 255, 0.6)",
+                    top: "-5px",
+                    right: "-4px",
+                    width: "30px",
+                    height: "30px",
+                    padding: 0,
+                    background: "transparent",
+                    border: "none",
                     color: "#ffffff",
-                    padding: "5px 11px",
-                    borderRadius: "14px",
-                    fontSize: "11.5px",
-                    fontWeight: 800,
                     cursor: "pointer",
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    backdropFilter: "blur(8px)",
-                    WebkitBackdropFilter: "blur(8px)",
-                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
-                    transition: "transform 0.15s ease",
+                    justifyContent: "center",
+                    borderRadius: "50%",
+                    transition: "transform 0.15s ease, opacity 0.15s ease",
+                    opacity: 0.92,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.12)";
+                    e.currentTarget.style.opacity = "1";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.opacity = "0.92";
                   }}
                 >
-                  <span style={{ fontSize: "12px" }}>✏️</span>
-                  <span>Tahrirlash</span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
                 </button>
               </div>
 
@@ -1499,26 +1517,44 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
                   style={{
                     position: "absolute",
                     top: "-4px",
-                    right: "-2px",
-                    backgroundColor: isDark ? "rgba(20, 4, 12, 0.78)" : "rgba(255, 255, 255, 0.92)",
-                    border: isDark ? "1px solid rgba(255, 255, 255, 0.28)" : "1px solid rgba(225, 29, 72, 0.28)",
+                    right: "-4px",
+                    width: "30px",
+                    height: "30px",
+                    padding: 0,
+                    background: "transparent",
+                    border: "none",
                     color: isDark ? "#ffffff" : "#9f1239",
-                    padding: "5px 11px",
-                    borderRadius: "14px",
-                    fontSize: "11.5px",
-                    fontWeight: 700,
                     cursor: "pointer",
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    gap: "4px",
-                    backdropFilter: "blur(8px)",
-                    WebkitBackdropFilter: "blur(8px)",
-                    boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.5)" : "0 2px 8px rgba(159, 18, 57, 0.12)",
-                    transition: "transform 0.15s ease",
+                    justifyContent: "center",
+                    borderRadius: "50%",
+                    transition: "transform 0.15s ease, opacity 0.15s ease",
+                    opacity: 0.92,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "scale(1.12)";
+                    e.currentTarget.style.opacity = "1";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.opacity = "0.92";
                   }}
                 >
-                  <span style={{ fontSize: "12px" }}>✏️</span>
-                  <span>Tahrirlash</span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
                 </button>
               </div>
 
