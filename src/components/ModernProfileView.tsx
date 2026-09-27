@@ -540,7 +540,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
   const [activePromosCount, setActivePromosCount] = useState<number | null>(null);
   useEffect(() => {
     let isMounted = true;
-    fetch(buildApiUrl("/api/promos"))
+    fetch(buildApiUrl(`/api/promos?_guli_promo_refresh=${Date.now()}`), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (isMounted && d.success && Array.isArray(d.data)) {
