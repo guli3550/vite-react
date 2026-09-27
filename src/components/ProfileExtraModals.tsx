@@ -106,7 +106,7 @@ export const PromosModal: FC<{
     try {
       // Search the exact promo code on the server.
       // This does NOT add it to the customer's list.
-      const res = await fetch(buildApiUrl(`/api/promos?code=${encodeURIComponent(query)}`));
+      const res = await fetch(buildApiUrl(`/api/promos?code=${encodeURIComponent(query)}&_guli_promo_refresh=${Date.now()}`), { cache: "no-store" });
       const data = await res.json();
 
       if (res.ok && data.success && Array.isArray(data.data) && data.data.length > 0) {
@@ -226,7 +226,7 @@ export const PromosModal: FC<{
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Admin promokodini qidiring (masalan: GULI2025)..."
+              placeholder="Guli promokodini qidiring (masalan: GULI2025)..."
               style={{
                 flex: 1,
                 padding: "12px 14px",
