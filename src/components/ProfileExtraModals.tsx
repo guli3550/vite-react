@@ -53,42 +53,21 @@ export const PromosModal: FC<{
     }
   });
 
-  // Fetch admin created promos
+  // IMPORTANT: Admin-created promos are NOT loaded into the customer's list automatically.
+  // Only promos explicitly searched for and added by the customer are displayed.
   useEffect(() => {
-    let isMounted = true;
-    fetch(buildApiUrl("/api/promos"))
-      .then((res) => res.json())
-      .then((data) => {
-        if (isMounted && data.success && Array.isArray(data.data)) {
-          setAdminPromos(data.data);
-        }
-      })
-      .catch((err) => {
-        console.warn("Failed to load admin promos:", err);
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
-    return () => {
-      isMounted = false;
-    };
+    setLoading(false);
   }, []);
 
-  // Compute active displayed promos
   const combinedPromos = useMemo(() => {
     const map = new Map<string, AdminPromo>();
-    for (const p of adminPromos) {
-      if (!deletedCodes.includes(p.code.toUpperCase())) {
-        map.set(p.code.toUpperCase(), p);
-      }
-    }
     for (const p of customAddedPromos) {
       if (!deletedCodes.includes(p.code.toUpperCase())) {
         map.set(p.code.toUpperCase(), p);
       }
     }
     return Array.from(map.values());
-  }, [adminPromos, customAddedPromos, deletedCodes]);
+  }, [customAddedPromos, deletedCodes]);
 
   const handleCopy = async (code: string, isActive: boolean) => {
     if (!isActive) {
@@ -117,41 +96,13 @@ export const PromosModal: FC<{
     setSearchResult(null);
 
     try {
-      // 1. Check in already loaded admin promos list
-      const matched = adminPromos.find(
-        (p) => p.code.trim().toUpperCase() === query
-      );
-
-      if (matched) {
-        setSearchResult({
-          status: "found",
-          promo: matched,
-          searchedCode: query,
-        });
-        setIsSearching(false);
-        return;
-      }
-
-      // 2. Query backend validate endpoint
-      const res = await fetch(buildApiUrl("/api/promo/validate"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: query, subtotal: 100000 }),
-      });
+      // Search the exact promo code on the server.
+      // This does NOT add it to the customer's list.
+      const res = await fetch(buildApiUrl(`/api/promos?code=${encodeURIComponent(query)}`));
       const data = await res.json();
 
-      if (res.ok && data.success && data.data) {
-        const foundPromo: AdminPromo = {
-          id: data.data.id || query,
-          code: data.data.code || query,
-          discount_type: data.data.discount_type || "percent",
-          discount_value: Number(data.data.discount_value || data.data.discount || 10),
-          min_order_amount: data.data.min_order_amount || null,
-          max_discount_amount: data.data.max_discount_amount || null,
-          expires_at: data.data.expires_at || null,
-          status: "active",
-          statusLabel: "Faol",
-        };
+      if (res.ok && data.success && Array.isArray(data.data) && data.data.length > 0) {
+        const foundPromo = data.data[0] as AdminPromo;
         setSearchResult({
           status: "found",
           promo: foundPromo,
