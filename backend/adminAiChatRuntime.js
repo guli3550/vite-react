@@ -322,24 +322,7 @@ async function executeTool(name, args) {
           }
         }
 
-        // Resilient fallback filtering
-        let matched = FALLBACK_PRODUCTS.filter((p) => {
-          if (category && !String(p.category || "").toLowerCase().includes(category)) return false;
-          if (query && !String(p.name || "").toLowerCase().includes(query)) return false;
-          if (lowStockOnly && p.stock >= 5) return false;
-          return true;
-        });
-
-        return {
-          topilgan_mahsulotlar_soni: matched.length,
-          mahsulotlar: matched.map((p) => ({
-            id: p.id,
-            nomi: p.name,
-            kategoriya: p.category,
-            narxi: p.price,
-            ombor_qoldigi: p.stock,
-          })),
-        };
+        return { error: DB_UNAVAILABLE_ERROR };
       }
 
       case "search_orders": {
