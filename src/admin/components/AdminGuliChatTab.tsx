@@ -61,15 +61,33 @@ export const AVAILABLE_MODELS = [
     tier: "Free Tier",
   },
   {
-    id: "gemini-3.1-flash-lite",
-    name: "Gemini 3.1 Flash Lite",
-    tag: "Tezkor / Yengil",
+    id: "gemini-3.7-flash",
+    name: "Gemini 3.7 Flash",
+    tag: "Kuchli / Barqaror",
+    tier: "Free Tier",
+  },
+  {
+    id: "gemini-3.6-flash",
+    name: "Gemini 3.6 Flash",
+    tag: "Multimodal / Barqaror",
     tier: "Free Tier",
   },
   {
     id: "gemini-3.5-flash",
     name: "Gemini 3.5 Flash",
-    tag: "Zaxira / Fallback",
+    tag: "Universal / Barqaror",
+    tier: "Free Tier",
+  },
+  {
+    id: "gemini-3.5-flash-lite",
+    name: "Gemini 3.5 Flash Lite",
+    tag: "Tezkor / Tejamkor",
+    tier: "Free Tier",
+  },
+  {
+    id: "gemini-3.1-flash-lite",
+    name: "Gemini 3.1 Flash Lite",
+    tag: "Engil / Tezkor",
     tier: "Free Tier",
   },
 ];
