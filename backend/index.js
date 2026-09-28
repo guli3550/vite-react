@@ -772,7 +772,7 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       const { data: orders, error: ordersErr } = await supabase
         .from("orders")
-        .select("id,order_number,telegram_id,auth_user_id,customer_name,first_name,last_name,username,phone,total,status,created_at")
+        .select("id,order_number,telegram_id,auth_user_id,first_name,username,phone,total,status,created_at")
         .order("created_at", { ascending: false })
         .limit(2000);
 
@@ -798,7 +798,7 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
           }
 
           // If not matched, check by phone or create an order-customer entry
-          if (!matched && (o.phone || o.customer_name || o.telegram_id)) {
+          if (!matched && (o.phone || o.first_name || o.telegram_id)) {
             const phoneKey = o.phone ? `phone_${o.phone.replace(/\D/g, "")}` : `order_${o.id}`;
             if (!usersMap.has(phoneKey)) {
               usersMap.set(phoneKey, {
@@ -806,8 +806,8 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
                 telegram_id: o.telegram_id ? Number(o.telegram_id) : null,
                 provider: o.telegram_id ? "telegram" : "email",
                 username: o.username || "",
-                first_name: o.first_name || (o.customer_name ? o.customer_name.split(" ")[0] : ""),
-                last_name: o.last_name || (o.customer_name ? o.customer_name.split(" ").slice(1).join(" ") : ""),
+                first_name: o.first_name || "",
+                last_name: "",
                 telegram_phone: o.phone || "",
                 phone: o.phone || "",
                 updated_at: o.created_at || new Date().toISOString(),
