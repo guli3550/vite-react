@@ -646,6 +646,9 @@ function adminCustomerPhotoUrl(telegramId, fileId) {
 }
 
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
   try {
     const limit = Math.min(Number(req.query.limit) || 300, 1000);
     const usersMap = new Map();
