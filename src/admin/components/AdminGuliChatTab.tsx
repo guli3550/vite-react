@@ -1785,11 +1785,23 @@ export default function AdminGuliChatTab({
                     </div>
 
                     {/* Sources badge (e.g. ▲⚫ Источники / Manbalar) */}
-                    <div className="chatgpt-sources-badge">
+                    <div className="chatgpt-sources-badge" title={(msg.sources || []).map((s) => s.name).join(" • ")}>
                       <span className="chatgpt-source-triangle">▲</span>
                       <span className="chatgpt-source-circle">●</span>
                       <span>Источники</span>
+                      {msg.sources && msg.sources.length > 0 && (
+                        <span className="chatgpt-source-count"> {msg.sources.length}</span>
+                      )}
                     </div>
+                    {msg.sources && msg.sources.length > 0 && (
+                      <div className="chatgpt-real-sources">
+                        {msg.sources.map((source, index) => (
+                          <span key={`${source.name}-${index}`} className="chatgpt-real-source-chip">
+                            {source.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
