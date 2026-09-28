@@ -45,21 +45,42 @@ const ALLOWED_MODELS = {
     tier: "Free Tier / Standard",
     isDefault: true,
     capabilities: ["text", "vision", "tools", "reasoning"],
-    description: "Tavsiya etiladi. Savdo tahlili, ombor qoldiqlari va rasm tahlili uchun eng tezkor va aqlli model."
+    description: "Asosiy model. Savdo tahlili, ombor, katalog va rasm tahlili uchun."
+  },
+  "gemini-3.7-flash": {
+    displayName: "Gemini 3.7 Flash",
+    tier: "Free Tier / Standard",
+    isDefault: false,
+    capabilities: ["text", "vision", "tools", "reasoning"],
+    description: "Agentik va ko'p bosqichli vazifalar uchun barqaror Flash modeli."
+  },
+  "gemini-3.6-flash": {
+    displayName: "Gemini 3.6 Flash",
+    tier: "Free Tier / Standard",
+    isDefault: false,
+    capabilities: ["text", "vision", "tools"],
+    description: "Tezlik va multimodal imkoniyatlar muvozanatiga ega Flash modeli."
+  },
+  "gemini-3.5-flash": {
+    displayName: "Gemini 3.5 Flash",
+    tier: "Free Tier / Standard",
+    isDefault: false,
+    capabilities: ["text", "vision", "tools"],
+    description: "Yuqori hajmdagi kundalik vazifalar uchun barqaror Flash modeli."
+  },
+  "gemini-3.5-flash-lite": {
+    displayName: "Gemini 3.5 Flash Lite",
+    tier: "Free Tier / Lightweight",
+    isDefault: false,
+    capabilities: ["text", "vision", "fast_qa", "tools"],
+    description: "Tezkor va tejamkor, yuqori hajmdagi so'rovlar uchun yengil model."
   },
   "gemini-3.1-flash-lite": {
     displayName: "Gemini 3.1 Flash Lite",
     tier: "Free Tier / Lightweight",
     isDefault: false,
-    capabilities: ["text", "vision", "fast_qa"],
+    capabilities: ["text", "vision", "fast_qa", "tools"],
     description: "Minimal kechikishli, tezkor javoblar uchun yengil model."
-  },
-  "gemini-3.5-flash": {
-    displayName: "Gemini 3.5 Flash",
-    tier: "Free Tier / Fallback",
-    isDefault: false,
-    capabilities: ["text", "vision", "tools"],
-    description: "Zaxira (fallback) modeli."
   }
 };
 
