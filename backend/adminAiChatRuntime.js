@@ -467,7 +467,7 @@ async function executeTool(name, args) {
 }
 
 // --- Multi-turn Conversation / Gemini Orchestrator ---
-async function runGeminiConversation({ modelName, userPrompt, history = [], image = null, audio = null }) {
+async function runGeminiConversation({ modelName, userPrompt, history = [], image = null, audio = null, sourceCollector = null }) {
   const ai = getGeminiClient();
   if (!ai) {
     throw new Error("GEMINI_API_KEY_MISSING");
@@ -542,7 +542,24 @@ async function runGeminiConversation({ modelName, userPrompt, history = [], imag
   while (response.functionCalls && response.functionCalls.length > 0 && toolDepth < 3) {
     toolDepth++;
     const call = response.functionCalls[0];
-    const toolResult = await executeTool(call.name, call.args || {});
+    const callArgs = call.args || {};
+    if (Array.isArray(sourceCollector)) {
+      const labels = {
+        search_orders: "Buyurtmalar bazasi",
+        lookup_order: "Buyurtma tafsilotlari",
+        search_catalog: "Mahsulotlar katalogi",
+        inspect_inventory: "Ombor / qoldiqlar",
+        get_store_metrics: "Do'kon statistikasi",
+        get_promo_metrics: "Promokodlar bazasi",
+      };
+      const base = labels[call.name] || call.name;
+      let detail = "";
+      if ((call.name === "search_orders" || call.name === "search_catalog") && callArgs.query) {
+        detail = ` — qidiruv: ${String(callArgs.query).slice(0, 50)}`;
+      }
+      sourceCollector.push({ name: base + detail });
+    }
+    const toolResult = await executeTool(call.name, callArgs);
 
     // Untrusted store data marker to guard against injection
     const safeDataPayload = {
@@ -625,6 +642,7 @@ async function handleAdminAiChat(req, res) {
   const requestId = `GULI-AI-${crypto.randomBytes(4).toString("hex")}`;
   const body = req.body || {};
   const userMessage = String(body.message || "").trim();
+  const usedSources = [];
   const requestedModel = String(body.model || "gemini-3.8-flash").trim();
   const history = Array.isArray(body.history) ? body.history : [];
   const image = body.image || null;
@@ -764,6 +782,7 @@ async function handleAdminAiChat(req, res) {
         history,
         image: validatedImage,
         audio: validatedAudio,
+        sourceCollector: usedSources,
       });
       usedModel = currentModel;
       if (i > 0) {
@@ -831,6 +850,7 @@ async function handleAdminAiChat(req, res) {
     fallbackFrom: fallbackFrom || undefined,
     fallbackReason: fallbackReason || undefined,
     requestId,
+    sources: usedSources.length ? [...new Map(usedSources.map(s => [s.name, s])).values()] : [{ name: "GULI AI" }],
   });
 }
 
