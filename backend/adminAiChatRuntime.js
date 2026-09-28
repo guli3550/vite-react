@@ -63,7 +63,7 @@ const ALLOWED_MODELS = {
   }
 };
 
-const FALLBACK_CHAIN = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+const FALLBACK_CHAIN = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 
 // --- Rate Limiting (In-Memory per Admin / IP) ---
 const rateLimitMap = new Map();
@@ -304,16 +304,21 @@ async function executeTool(name, args) {
               q = q.lt("stock", 5);
             }
 
-            const { data, error } = await q.order("stock", { ascending: true }).limit(20);
+            const { data, error } = await q.order("stock", { ascending: true }).limit(50);
             if (!error && data) {
               return {
                 topilgan_mahsulotlar_soni: data.length,
                 mahsulotlar: data.map((p) => ({
                   id: p.id,
+                  mahsulot_kodi: p.product_code || null,
                   nomi: p.name,
                   kategoriya: p.category,
+                  tavsif: p.description || null,
                   narxi: p.price,
+                  eski_narxi: p.old_price || null,
                   ombor_qoldigi: p.stock,
+                  olchamlar: p.sizes || null,
+                  ranglar: p.colors || null,
                 })),
               };
             }
@@ -332,15 +337,34 @@ async function executeTool(name, args) {
         if (!db) return { error: DB_UNAVAILABLE_ERROR };
         try {
           const fields = "id,order_number,telegram_id,username,first_name,phone,telegram_phone,total,status,payment,payment_status,items,created_at,updated_at,promo_code";
-          let q;
-          if (/^-?\d+$/.test(query)) q = db.from("orders").select(fields).eq("telegram_id", Number(query)).order("created_at",{ascending:false}).limit(limit);
-          else {
-            const clean = query.replace(/[%_]/g, "");
-            q = db.from("orders").select(fields).or("order_number.ilike.%" + clean + "%,username.ilike.%" + clean + "%,first_name.ilike.%" + clean + "%,phone.ilike.%" + clean + "%,telegram_phone.ilike.%" + clean + "%").order("created_at",{ascending:false}).limit(limit);
+          const raw = query;
+          const phone = raw.replace(/[\s()\-]/g, "");
+          let data = [];
+          if (/^-?\d+$/.test(raw)) {
+            const result = await db.from("orders").select(fields).eq("telegram_id", Number(raw)).order("created_at",{ascending:false}).limit(limit);
+            if (result.error) throw result.error;
+            data = result.data || [];
+          } else if (/^\+?\d{10,15}$/.test(phone)) {
+            const [a,b] = await Promise.all([
+              db.from("orders").select(fields).eq("phone", phone).order("created_at",{ascending:false}).limit(limit),
+              db.from("orders").select(fields).eq("telegram_phone", phone).order("created_at",{ascending:false}).limit(limit)
+            ]);
+            if (a.error) throw a.error;
+            if (b.error) throw b.error;
+            const byId = new Map();
+            for (const row of [...(a.data||[]), ...(b.data||[])]) byId.set(row.id, row);
+            data = [...byId.values()].sort((x,y)=>new Date(y.created_at||0)-new Date(x.created_at||0)).slice(0, limit);
+          } else {
+            const clean = raw.replace(/[%_]/g, "");
+            const result = await db.from("orders").select(fields)
+              .or("order_number.ilike.%" + clean + "%,username.ilike.%" + clean + "%,first_name.ilike.%" + clean + "%,phone.ilike.%" + clean + "%,telegram_phone.ilike.%" + clean + "%")
+              .order("created_at",{ascending:false}).limit(limit);
+            if (result.error) throw result.error;
+            data = result.data || [];
           }
-          if (args?.status) q = q.eq("status", String(args.status).slice(0,80));
-          const {data,error}=await q; if(error) throw error;
-          return {topilgan_buyurtmalar_soni:(data||[]).length,buyurtmalar:(data||[]).map(o=>({buyurtma_raqami:o.order_number||o.id,telegram_id:o.telegram_id||null,username:o.username||null,mijoz_ismi:o.first_name||"Mijoz",telefon:o.phone||o.telegram_phone||null,jami_summa:o.total,holati:o.status,tolov_holati:o.payment_status||null,tolov_usuli:o.payment||null,promo_kod:o.promo_code||null,tovarlar_soni:Array.isArray(o.items)?o.items.length:0,yaratilgan_vaqti:o.created_at}))};
+          if (args?.status) data = data.filter(o => String(o.status || "") === String(args.status).slice(0,80));
+          console.info("[GULI-AI] search_orders query=%s normalized=%s results=%s", raw, phone, data.length);
+          return {topilgan_buyurtmalar_soni:data.length,buyurtmalar:data.map(o=>({buyurtma_raqami:o.order_number||o.id,telegram_id:o.telegram_id||null,username:o.username||null,mijoz_ismi:o.first_name||"Mijoz",telefon:o.phone||o.telegram_phone||null,jami_summa:o.total,holati:o.status,tolov_holati:o.payment_status||null,tolov_usuli:o.payment||null,promo_kod:o.promo_code||null,tovarlar_soni:Array.isArray(o.items)?o.items.length:0,yaratilgan_vaqti:o.created_at}))};
         } catch(e) { console.warn("[GULI-AI] search_orders DB query failed:",e.message); return {error:DB_UNAVAILABLE_ERROR}; }
       }
 
@@ -729,23 +753,42 @@ async function handleAdminAiChat(req, res) {
   let fallbackReason = null;
   let lastError = null;
 
+  // Fast fallback: a 503/high-demand response is not retried three times on the same model.
+  // One model attempt is followed immediately by the next capacity pool.
   for (let i = 0; i < attemptModels.length; i++) {
     const currentModel = attemptModels[i];
-    for (let retry = 0; retry <= 2; retry++) {
-      try {
-        if (retry > 0) await new Promise(resolve => setTimeout(resolve, Math.min(4000, 700 * Math.pow(2, retry - 1))));
-        finalResponseText = await runGeminiConversation({modelName:currentModel,userPrompt:userMessage,history,image:validatedImage,audio:validatedAudio});
-        usedModel=currentModel;
-        if(i>0){fallbackOccurred=true;fallbackFrom=attemptModels[0];fallbackReason="model_fallback";}else if(retry>0){fallbackReason="transient_retry";}
-        break;
-      } catch(err) {
-        lastError=err;
-        console.warn(`[GULI-AI] model=${currentModel} retry=${retry+1} failed:`,err.message);
-        if(err.message==="GEMINI_API_KEY_MISSING") return res.status(503).json({success:false,message:"GEMINI_API_KEY sozlanmagan. Render environment sozlamasida GEMINI_API_KEY ni kiriting.",requestId});
-        if(!isQuotaOrTransientError(err)) break;
+    try {
+      finalResponseText = await runGeminiConversation({
+        modelName: currentModel,
+        userPrompt: userMessage,
+        history,
+        image: validatedImage,
+        audio: validatedAudio,
+      });
+      usedModel = currentModel;
+      if (i > 0) {
+        fallbackOccurred = true;
+        fallbackFrom = attemptModels[0];
+        fallbackReason = "model_fallback";
       }
+      break;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[GULI-AI] model=${currentModel} failed:`, err.message);
+      if (err.message === "GEMINI_API_KEY_MISSING") {
+        return res.status(503).json({
+          success: false,
+          message: "GEMINI_API_KEY sozlanmagan. Render environment sozlamasida GEMINI_API_KEY ni kiriting.",
+          requestId,
+        });
+      }
+      // 503/overload is moved to the next model immediately; only a non-transient
+      // error ends the chain.
+      if (!isQuotaOrTransientError(err)) break;
     }
-    if(finalResponseText) break;
+    if (i < attemptModels.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 120));
+    }
   }
   if (!finalResponseText) {
     console.error(`[GULI-AI] All model attempts failed. Last error:`, lastError);
