@@ -63,7 +63,7 @@ const ALLOWED_MODELS = {
   }
 };
 
-const FALLBACK_CHAIN = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash"];
+const FALLBACK_CHAIN = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 
 // --- Rate Limiting (In-Memory per Admin / IP) ---
 const rateLimitMap = new Map();
@@ -189,6 +189,15 @@ const GULI_TOOL_DECLARATIONS = [
     },
   },
   {
+    name: "search_orders",
+    description: "Real buyurtmalar bazasidan buyurtma raqami, telefon, Telegram username/ID, mijoz ismi yoki holati bo‘yicha qidiradi. Faqat real Supabase orders ma'lumotlarini qaytaradi.",
+    parameters: { type: "OBJECT", properties: {
+      query: { type: "STRING", description: "Buyurtma raqami, telefon, username, Telegram ID yoki mijoz ismi" },
+      status: { type: "STRING", description: "Ixtiyoriy status filtri" },
+      limit: { type: "NUMBER", description: "Natijalar soni, maksimal 50" }
+    }, required: ["query"] },
+  },
+  {
     name: "lookup_order",
     description: "Aniq buyurtma raqami (masalan: GULI-...) yoki ID bo'yicha buyurtma holatini, summasini va tarkibini tekshiradi.",
     parameters: {
@@ -274,18 +283,7 @@ async function executeTool(name, args) {
           }
         }
 
-        // Database unavailable
-        const lowStock = FALLBACK_PRODUCTS.filter((p) => p.stock < 5);
-        return {
-          davr: period,
-          manba: "do'kon_katalogi",
-          jami_faol_mahsulotlar: FALLBACK_PRODUCTS.length,
-          jami_buyurtmalar_soni: 18,
-          umumiy_tushum_som: 6450000,
-          bugungi_tushum_som: 980000,
-          buyurtma_statuslari: { "Yangi": 4, "Yetkazilmoqda": 6, "Yetkazib berildi": 8 },
-          kam_qolgan_mahsulotlar: lowStock.map((p) => ({ id: p.id, name: p.name, stock: p.stock })),
-        };
+        return { error: DB_UNAVAILABLE_ERROR };
       }
 
       case "search_catalog": {
@@ -295,7 +293,7 @@ async function executeTool(name, args) {
 
         if (db) {
           try {
-            let q = db.from("products").select("id, name, category, price, old_price, stock, active").eq("active", true);
+            let q = db.from("products").select("id, name, product_code, category, description, price, old_price, stock, active, sizes, colors").eq("active", true);
             if (category) {
               q = q.ilike("category", `%${category}%`);
             }
@@ -344,44 +342,39 @@ async function executeTool(name, args) {
         };
       }
 
-      case "lookup_order": {
-        const orderNum = String(args?.order_number || "").slice(0, 60).trim();
-        if (!orderNum) return { error: "Buyurtma raqami ko'rsatilmadi" };
-
-        if (db) {
-          try {
-            let { data, error } = await db.from("orders").select("id, order_number, status, total, items, created_at, payment_status, receipt_url").eq("id", orderNum).maybeSingle();
-            if (!data) {
-              const byNumber = await db.from("orders").select("id, order_number, status, total, items, created_at, payment_status, receipt_url").eq("order_number", orderNum).maybeSingle();
-              data = byNumber.data;
-            }
-
-            if (data) {
-              return {
-                topildi: true,
-                buyurtma_raqami: data.order_number || data.id,
-                holati: data.status,
-                tolov_holati: data.payment_status,
-                tolov_usuli: data.payment_method,
-                jami_summa: data.total,
-                mijoz_ismi: data.customer_name || data.first_name || "Mijoz",
-                mijoz_telefoni: data.phone || data.customer_phone || "Mavjud emas",
-                manzil: data.shipping_address,
-                yaratilgan_vaqti: data.created_at,
-                tovarlar_soni: Array.isArray(data.items) ? data.items.length : 0,
-              };
-            }
-          } catch (dbErr) {
-            console.warn("[GULI-AI] lookup_order DB query failed:", dbErr.message);
+      case "search_orders": {
+        const query = String(args?.query || "").slice(0, 120).trim();
+        const limit = Math.max(1, Math.min(Number(args?.limit || 20), 50));
+        if (!query) return { topilgan_buyurtmalar_soni: 0, buyurtmalar: [] };
+        if (!db) return { error: DB_UNAVAILABLE_ERROR };
+        try {
+          const fields = "id,order_number,telegram_id,username,first_name,phone,telegram_phone,total,status,payment,payment_status,items,created_at,updated_at,promo_code";
+          let q;
+          if (/^-?\d+$/.test(query)) q = db.from("orders").select(fields).eq("telegram_id", Number(query)).order("created_at",{ascending:false}).limit(limit);
+          else {
+            const clean = query.replace(/[%_]/g, "");
+            q = db.from("orders").select(fields).or("order_number.ilike.%" + clean + "%,username.ilike.%" + clean + "%,first_name.ilike.%" + clean + "%,phone.ilike.%" + clean + "%,telegram_phone.ilike.%" + clean + "%").order("created_at",{ascending:false}).limit(limit);
           }
-        }
-
-        return {
-          topildi: false,
-          xabar: `Buyurtma (${orderNum}) topilmadi yoki tizimda mavjud emas.`,
-        };
+          if (args?.status) q = q.eq("status", String(args.status).slice(0,80));
+          const {data,error}=await q; if(error) throw error;
+          return {topilgan_buyurtmalar_soni:(data||[]).length,buyurtmalar:(data||[]).map(o=>({buyurtma_raqami:o.order_number||o.id,telegram_id:o.telegram_id||null,username:o.username||null,mijoz_ismi:o.first_name||"Mijoz",telefon:o.phone||o.telegram_phone||null,jami_summa:o.total,holati:o.status,tolov_holati:o.payment_status||null,tolov_usuli:o.payment||null,promo_kod:o.promo_code||null,tovarlar_soni:Array.isArray(o.items)?o.items.length:0,yaratilgan_vaqti:o.created_at}))};
+        } catch(e) { console.warn("[GULI-AI] search_orders DB query failed:",e.message); return {error:DB_UNAVAILABLE_ERROR}; }
       }
 
+      case "lookup_order": {
+        const orderNum=String(args?.order_number||"").slice(0,60).trim();
+        if(!orderNum) return {error:"Buyurtma raqami ko‘rsatilmagan"};
+        if(!db) return {error:DB_UNAVAILABLE_ERROR};
+        try {
+          const fields="id,order_number,telegram_id,username,first_name,phone,telegram_phone,total,status,payment,payment_status,items,created_at,updated_at,promo_code,address";
+          let q=await db.from("orders").select(fields).eq("order_number",orderNum).maybeSingle();
+          if(q.error) throw q.error;
+          let data=q.data;
+          if(!data && /^[0-9a-f-]{36}$/i.test(orderNum)){q=await db.from("orders").select(fields).eq("id",orderNum).maybeSingle();if(q.error)throw q.error;data=q.data;}
+          if(!data) return {topildi:false,xabar:"Buyurtma ("+orderNum+") topilmadi."};
+          return {topildi:true,buyurtma_raqami:data.order_number||data.id,holati:data.status,tolov_holati:data.payment_status||null,tolov_usuli:data.payment||null,jami_summa:data.total,mijoz_ismi:data.first_name||"Mijoz",mijoz_username:data.username||null,mijoz_telefoni:data.phone||data.telegram_phone||null,telegram_id:data.telegram_id||null,manzil:data.address||null,promo_kod:data.promo_code||null,yaratilgan_vaqti:data.created_at,tovarlar_soni:Array.isArray(data.items)?data.items.length:0,tovarlar:Array.isArray(data.items)?data.items.slice(0,50):[]};
+        } catch(e) { console.warn("[GULI-AI] lookup_order DB query failed:",e.message); return {error:DB_UNAVAILABLE_ERROR}; }
+      }
       case "inspect_inventory": {
         const threshold = Math.max(1, Math.min(Number(args?.threshold || 5), 100));
 
@@ -413,19 +406,7 @@ async function executeTool(name, args) {
           }
         }
 
-        // Database unavailable
-        const lowStockItems = FALLBACK_PRODUCTS.filter((p) => p.stock <= threshold);
-        return {
-          kritik_chegara: threshold,
-          kam_qolgan_tovarlar_soni: lowStockItems.length,
-          tovarlar: lowStockItems.map((p) => ({
-            id: p.id,
-            nomi: p.name,
-            kategoriya: p.category,
-            ombor_qoldigi: p.stock,
-            narxi: p.price,
-          })),
-        };
+        return { error: DB_UNAVAILABLE_ERROR };
       }
 
       case "get_promo_metrics": {
@@ -466,10 +447,7 @@ async function executeTool(name, args) {
           }
         }
 
-        return {
-          jami_promokodlar: FALLBACK_PROMOS.length,
-          promokodlar: FALLBACK_PROMOS,
-        };
+        return { error: DB_UNAVAILABLE_ERROR };
       }
 
       default:
@@ -770,42 +748,22 @@ async function handleAdminAiChat(req, res) {
 
   for (let i = 0; i < attemptModels.length; i++) {
     const currentModel = attemptModels[i];
-    try {
-      finalResponseText = await runGeminiConversation({
-        modelName: currentModel,
-        userPrompt: userMessage,
-        history,
-        image: validatedImage,
-        audio: validatedAudio,
-      });
-      usedModel = currentModel;
-      if (i > 0) {
-        fallbackOccurred = true;
-        fallbackFrom = attemptModels[0];
-        fallbackReason = "quota_exceeded";
-      }
-      break; // Success!
-    } catch (err) {
-      lastError = err;
-      console.warn(`[GULI-AI] Attempt ${i + 1} with ${currentModel} failed:`, err.message);
-
-      // Stop immediately if missing API key or invalid non-quota error
-      if (err.message === "GEMINI_API_KEY_MISSING") {
-        return res.status(503).json({
-          success: false,
-          message:
-            "GEMINI_API_KEY sozlanmagan. Iltimos, AI Studio Settings > Secrets yoki Render environment sozlamalarida GEMINI_API_KEY ni kiriting.",
-          requestId,
-        });
-      }
-
-      // ONLY fallback for quota/transient errors
-      if (!isQuotaOrTransientError(err)) {
-        break; // Non-transient error, do not retry
+    for (let retry = 0; retry <= 2; retry++) {
+      try {
+        if (retry > 0) await new Promise(resolve => setTimeout(resolve, Math.min(4000, 700 * Math.pow(2, retry - 1))));
+        finalResponseText = await runGeminiConversation({modelName:currentModel,userPrompt:userMessage,history,image:validatedImage,audio:validatedAudio});
+        usedModel=currentModel;
+        if(i>0){fallbackOccurred=true;fallbackFrom=attemptModels[0];fallbackReason="model_fallback";}else if(retry>0){fallbackReason="transient_retry";}
+        break;
+      } catch(err) {
+        lastError=err;
+        console.warn(`[GULI-AI] model=${currentModel} retry=${retry+1} failed:`,err.message);
+        if(err.message==="GEMINI_API_KEY_MISSING") return res.status(503).json({success:false,message:"GEMINI_API_KEY sozlanmagan. Render environment sozlamasida GEMINI_API_KEY ni kiriting.",requestId});
+        if(!isQuotaOrTransientError(err)) break;
       }
     }
+    if(finalResponseText) break;
   }
-
   if (!finalResponseText) {
     console.error(`[GULI-AI] All model attempts failed. Last error:`, lastError);
     return res.status(500).json({
