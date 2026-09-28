@@ -159,6 +159,8 @@ async function handleReliableBroadcast(req, res) {
 
 const originalPost = express.application.post;
 express.application.post = function reliableBroadcastPost(routePath, ...handlers) {
-  if (routePath === "/api/admin/broadcast-telegram") return originalPost.call(this, routePath, handleReliableBroadcast);
+  // The dedicated broadcastDirectRoutePatch owns this route and correctly
+  // handles channel/group/bot/groups/channels/all + selected IDs.
+  // Do not shadow it with the legacy reliability handler.
   return originalPost.call(this, routePath, ...handlers);
 };
