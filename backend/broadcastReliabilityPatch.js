@@ -10,6 +10,20 @@ const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim();
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_SECRET_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
 const MINI_APP_URL = String(process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829").trim();
+
+// Never expose an internal Vercel deployment URL in customer-facing Telegram broadcasts.
+function getCanonicalBroadcastUrl(value) {
+  const raw = String(value || MINI_APP_URL).trim();
+  try {
+    const parsed = new URL(raw);
+    if (parsed.hostname === "vite-react-seven-inky-10.vercel.app" || parsed.hostname.endsWith(".vercel.app")) {
+      return "https://gulii.uz/?tgapp=v20260928";
+    }
+    return raw;
+  } catch {
+    return "https://gulii.uz/?tgapp=v20260928";
+  }
+}
 const supabase = SUPABASE_URL && SUPABASE_SECRET_KEY ? createClient(SUPABASE_URL, SUPABASE_SECRET_KEY) : null;
 
 function safeEqual(a, b) {
@@ -102,7 +116,7 @@ async function handleReliableBroadcast(req, res) {
     const markup = {
       inline_keyboard: [[{
         text: String(buttonText || "🛍️ Online Marketni Ochish").trim().slice(0, 64),
-        url: String(buttonUrl || MINI_APP_URL).trim(),
+        url: getCanonicalBroadcastUrl(buttonUrl || MINI_APP_URL),
       }]],
     };
 
