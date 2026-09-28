@@ -645,7 +645,14 @@ export default function AdminGuliChatTab({
       }
     }
 
-    const data = await res.json();
+    const rawResponse = await res.text();
+    let data: any = null;
+    try {
+      data = rawResponse ? JSON.parse(rawResponse) : null;
+    } catch {
+      const snippet = rawResponse.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 240);
+      throw new Error(snippet || `Server xatosi (${res.status})`);
+    }
     if (!res.ok) {
       throw new Error(data?.message || data?.error || `Server xatosi (${res.status})`);
     }
