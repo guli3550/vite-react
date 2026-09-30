@@ -3456,7 +3456,7 @@ export default function App() {
   const handleShare = async () => {
     const shareText =
       "GULI Premium — Nafis va sifatli ayollar ichki kiyimlari to‘plami 🌷";
-    const shareUrl = "https://t.me/guli3550bot";
+    const shareUrl = "https://t.me/Guli_MARKET_bot";
     if (navigator.share) {
       try {
         await navigator.share({ title: "GULI Premium", text: shareText, url: shareUrl });
