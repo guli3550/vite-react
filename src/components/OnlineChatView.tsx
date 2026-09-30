@@ -1130,12 +1130,12 @@ export function OnlineChatView({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ color: "#71717A" }}>💬 Telegram Bot:</span>
                 <a
-                  href="https://t.me/guli3550bot"
+                  href="https://t.me/Guli_MARKET_bot"
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontWeight: 600, color: "#0284C7", textDecoration: "none" }}
                 >
-                  @guli3550bot
+                  @Guli_MARKET_bot
                 </a>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
