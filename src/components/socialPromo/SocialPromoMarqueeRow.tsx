@@ -66,11 +66,6 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
             transform: translate3d(0, 0, 0);
           }
         }
-        @media (prefers-reduced-motion: reduce) {
-          .guli-social-marquee-track-${rowNumber} {
-            animation-play-state: paused !important;
-          }
-        }
         .guli-social-promo-pill:hover {
           transform: translateY(-2px) scale(1.03);
         }
