@@ -175,7 +175,7 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
   const isRu = language === "ru";
   const isEn = language === "en";
 
-  const [items, setItems] = useState<SocialPromoItem[]>(FALLBACK_ITEMS);
+  const [items, setItems] = useState<SocialPromoItem[]>([]);
   const [settings, setSettings] = useState<SocialPromoRowSetting[]>(FALLBACK_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -189,15 +189,15 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
         if (!res.ok) throw new Error("Network response was not ok");
         const json: SocialPromosApiResponse = await res.json();
         if (isMounted && json?.success && json?.data) {
-          if (Array.isArray(json.data.items) && json.data.items.length > 0) {
+          if (Array.isArray(json.data.items)) {
             setItems(json.data.items);
           }
-          if (Array.isArray(json.data.settings) && json.data.settings.length > 0) {
+          if (Array.isArray(json.data.settings)) {
             setSettings(json.data.settings);
           }
         }
       } catch {
-        // Fallback remains active, never crash the profile page
+        // Keep the profile usable; do not display hard-coded links when the API is unavailable.
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -223,76 +223,21 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
   const row2Setting = settings.find((s) => s.row_number === 2);
   const row3Setting = settings.find((s) => s.row_number === 3);
 
+  if (!items.length || ![row1Items, row2Items, row3Items].some((row) => row.length)) return null;
+
   return (
     <section
       className="guli-social-promo-section"
       aria-label="Social media links marquee"
       style={{
         width: "100%",
-        marginTop: "24px",
-        marginBottom: "16px",
+        marginTop: "6px",
+        marginBottom: "8px",
         display: "flex",
         flexDirection: "column",
         gap: "10px",
       }}
     >
-      {/* Section Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 16px",
-          marginBottom: "4px",
-        }}
-      >
-        <div>
-          <span
-            style={{
-              fontSize: "10px",
-              fontWeight: 800,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: isDark ? "rgba(225, 29, 72, 0.9)" : "#be185d",
-            }}
-          >
-            {isRu
-              ? "ОФИЦИАЛЬНЫЕ СООБЩЕСТВА"
-              : isEn
-              ? "OFFICIAL COMMUNITIES"
-              : "RASMIY HAMJAMIYAT"}
-          </span>
-          <h3
-            style={{
-              fontSize: "16px",
-              fontWeight: 800,
-              margin: "2px 0 0",
-              color: isDark ? "#ffffff" : "#1f191b",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {isRu
-              ? "Мы в социальных сетях"
-              : isEn
-              ? "Follow us on Social Media"
-              : "Biz ijtimoiy tarmoqlarda"}
-          </h3>
-        </div>
-
-        <span
-          style={{
-            fontSize: "11px",
-            color: isDark ? "#c4a3ad" : "#64748b",
-            background: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.04)",
-            padding: "4px 8px",
-            borderRadius: "10px",
-            fontWeight: 650,
-          }}
-        >
-          {isRu ? "3 канала" : isEn ? "3 channels" : "3 ta tarmoq"}
-        </span>
-      </div>
-
       {/* 3-Row Animated Marquee Tracks */}
       <div
         style={{
