@@ -63,6 +63,7 @@ import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
 import { getSupabase, signOutEverywhere } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
+import { SocialPromoSection } from "./components/socialPromo/SocialPromoSection";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
@@ -4588,6 +4589,7 @@ export default function App() {
           }}
           t={t}
         />
+        <SocialPromoSection language={language} isDark={theme === "dark"} />
         <div
           className="profileWatermark"
           style={{
