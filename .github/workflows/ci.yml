@@ -44,3 +44,5 @@ jobs:
           done < <(find . -maxdepth 1 -type f -name '*.js' -print0 | sort -z)
       - name: Run payment security static audit
         run: node scripts/audit-payment-security.js
+      - name: Social promo route-order regression
+        run: node scripts/test-social-promo-route-order.mjs
