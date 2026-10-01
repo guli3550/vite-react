@@ -44,28 +44,8 @@ VALUES
     (3, true, 'left', 36)
 ON CONFLICT (row_number) DO NOTHING;
 
--- 4. Seed official Guli Market social buttons
-INSERT INTO public.social_promo_items 
-    (title, platform, label, target_url, row_number, sort_order, is_active, open_in_new_tab)
-VALUES
-    -- Row 1: Primary Brand Socials
-    ('Instagram Guli', 'instagram', 'Instagram · @guli_market', 'https://www.instagram.com/guli_market', 1, 10, true, true),
-    ('Telegram Kanal', 'telegram', 'Telegram · Rasmiy kanal', 'https://t.me/guli_market', 1, 20, true, true),
-    ('YouTube Guli', 'youtube', 'YouTube · Guli Market TV', 'https://www.youtube.com/@guli_market', 1, 30, true, true),
-    ('Telegram Bot', 'telegram', 'Telegram · Buyurtma boti', 'https://t.me/guli_market_bot', 1, 40, true, true),
-
-    -- Row 2: Customer Community & Lifestyle
-    ('Instagram Obzor', 'instagram', 'Instagram · Yangi kolleksiya', 'https://www.instagram.com/guli_market', 2, 10, true, true),
-    ('Telegram Hamjamiyat', 'telegram', 'Telegram · Mijozlar guruhi', 'https://t.me/guli_market_chat', 2, 20, true, true),
-    ('YouTube Obzor', 'youtube', 'YouTube · Moda va stillar', 'https://www.youtube.com/@guli_market', 2, 30, true, true),
-    ('Instagram Reels', 'instagram', 'Instagram · Eksklyuziv Reels', 'https://www.instagram.com/guli_market/reels', 2, 40, true, true),
-
-    -- Row 3: Support, VIP & Exclusive Drops
-    ('Telegram Aloqa', 'telegram', 'Telegram · 24/7 Qo‘llab-quvvatlash', 'https://t.me/guli_support', 3, 10, true, true),
-    ('Instagram VIP', 'instagram', 'Instagram · Maxsus chegirmalar', 'https://www.instagram.com/guli_market', 3, 20, true, true),
-    ('YouTube Shorts', 'youtube', 'YouTube · Mahsulot videolari', 'https://www.youtube.com/@guli_market/shorts', 3, 30, true, true),
-    ('Telegram Yangiliklar', 'telegram', 'Telegram · Hafta yangiliklari', 'https://t.me/guli_news', 3, 40, true, true)
-ON CONFLICT DO NOTHING;
+-- Promo items are intentionally not seeded with assumed handles or URLs.
+-- Add official social destinations through the admin panel after verifying them.
 
 -- 5. Enable Row Level Security (RLS)
 ALTER TABLE public.social_promo_items ENABLE ROW LEVEL SECURITY;

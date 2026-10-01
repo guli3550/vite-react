@@ -230,14 +230,7 @@ install("get", "/api/social-promos", async (req, res) => {
   try {
     const client = getSupabaseClient();
     if (!client) {
-      return res.json({
-        success: true,
-        source: "memory_fallback",
-        data: {
-          items: memoryItems.filter((it) => it.is_active),
-          settings: memorySettings.filter((s) => s.is_enabled),
-        },
-      });
+      return res.status(503).json({ success: false, source: "database_unavailable", message: "Reklama ma’lumotlari vaqtincha yuklanmadi." });
     }
 
     // Query active items from DB
@@ -259,9 +252,10 @@ install("get", "/api/social-promos", async (req, res) => {
     let settings = settingsResult.data;
 
     // Check if table not created or query errored
-    if (itemsResult.error || !items || items.length === 0) {
-      items = memoryItems.filter((it) => it.is_active);
-    } else {
+    if (itemsResult.error || settingsResult.error) throw itemsResult.error || settingsResult.error;
+    if (!items) items = [];
+    if (!settings) settings = [];
+    {
       // Filter out any date-expired or upcoming promos
       items = items.filter((it) => {
         if (it.start_at && it.start_at > nowIso) return false;
@@ -270,9 +264,6 @@ install("get", "/api/social-promos", async (req, res) => {
       });
     }
 
-    if (settingsResult.error || !settings || settings.length === 0) {
-      settings = memorySettings;
-    }
 
     // Group items by row
     return res.json({
@@ -284,14 +275,7 @@ install("get", "/api/social-promos", async (req, res) => {
     });
   } catch (error) {
     console.warn("[Social Promos] Public GET error:", error?.message || error);
-    return res.json({
-      success: true,
-      source: "resilience_fallback",
-      data: {
-        items: memoryItems.filter((it) => it.is_active),
-        settings: memorySettings,
-      },
-    });
+    return res.status(503).json({ success: false, source: "database_error", message: "Reklama ma’lumotlari vaqtincha yuklanmadi." });
   }
 });
 
@@ -302,14 +286,7 @@ install("get", "/api/admin/social-promos", requireAdmin, async (req, res) => {
   try {
     const client = getSupabaseClient();
     if (!client) {
-      return res.json({
-        success: true,
-        source: "memory",
-        data: {
-          items: memoryItems,
-          settings: memorySettings,
-        },
-      });
+      return res.status(503).json({ success: false, message: "Supabase sozlanmagan. Admin ma'lumotlari xavfsiz saqlanmadi." });
     }
 
     const [itemsResult, settingsResult] = await Promise.all([
@@ -328,12 +305,11 @@ install("get", "/api/admin/social-promos", requireAdmin, async (req, res) => {
     let items = itemsResult.data;
     let settings = settingsResult.data;
 
-    if (itemsResult.error || !items || items.length === 0) {
-      items = memoryItems;
+    if (itemsResult.error || settingsResult.error) {
+      throw itemsResult.error || settingsResult.error;
     }
-    if (settingsResult.error || !settings || settings.length === 0) {
-      settings = memorySettings;
-    }
+    items = items || [];
+    settings = settings || [];
 
     return res.json({
       success: true,
@@ -405,20 +381,10 @@ install("post", "/api/admin/social-promos", requireAdmin, async (req, res) => {
         memoryItems.unshift(data);
         return res.status(201).json({ success: true, message: "Promo tugma muvaffaqiyatli yaratildi ✓", data });
       }
-      if (error && !/relation .* does not exist/i.test(error.message)) {
-        throw error;
-      }
+      if (error) throw error;
     }
 
-    // Memory fallback creation
-    const newItem = {
-      id: `promo-custom-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
-      ...payload,
-      created_at: new Date().toISOString(),
-    };
-    memoryItems.unshift(newItem);
-
-    return res.status(201).json({ success: true, message: "Promo tugma yaratildi (xotirada) ✓", data: newItem });
+    return res.status(503).json({ success: false, message: "Promo bazaga saqlanmadi. Supabase jadvali va ulanishini tekshiring." });
   } catch (error) {
     console.error("[Social Promos] Create error:", error);
     return res.status(500).json({ success: false, message: error?.message || "Saqlashda xatolik yuz berdi" });
@@ -464,20 +430,15 @@ install("patch", "/api/admin/social-promos/:id", requireAdmin, async (req, res) 
         .select()
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         memoryItems = memoryItems.map((m) => (m.id === id ? { ...m, ...data } : m));
         return res.json({ success: true, message: "O'zgarishlar saqlandi ✓", data });
       }
     }
 
-    // In-memory update
-    const idx = memoryItems.findIndex((it) => it.id === id);
-    if (idx !== -1) {
-      memoryItems[idx] = { ...memoryItems[idx], ...updates };
-      return res.json({ success: true, message: "O'zgarishlar saqlandi ✓", data: memoryItems[idx] });
-    }
-
-    return res.status(404).json({ success: false, message: "Promo tugma topilmadi" });
+    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. O'zgarish saqlanmadi." });
+    return res.status(404).json({ success: false, message: "Promo tugma topilmadi yoki bazada yangilanmadi" });
   } catch (error) {
     console.error("[Social Promos] Update error:", error);
     return res.status(500).json({ success: false, message: error?.message || "Tahrirlashda xatolik yuz berdi" });
@@ -492,17 +453,9 @@ install("delete", "/api/admin/social-promos/:id", requireAdmin, async (req, res)
     const id = req.params.id;
 
     const client = getSupabaseClient();
-    if (client) {
-      const { error } = await client
-        .from("social_promo_items")
-        .delete()
-        .eq("id", id);
-
-      if (error && !/relation .* does not exist/i.test(error.message)) {
-        throw error;
-      }
-    }
-
+    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. Promo o'chirilmadi." });
+    const { error } = await client.from("social_promo_items").delete().eq("id", id);
+    if (error) throw error;
     memoryItems = memoryItems.filter((it) => it.id !== id);
 
     return res.json({ success: true, message: "Promo tugma muvaffaqiyatli o'chirildi ✓" });
@@ -522,6 +475,7 @@ install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, 
 
     const updatedSettings = [];
     const client = getSupabaseClient();
+    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. Sozlamalar saqlanmadi." });
 
     for (const s of settingsList) {
       const rowNumber = Number(s.row_number);
@@ -535,27 +489,14 @@ install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, 
         updated_at: new Date().toISOString(),
       };
 
-      if (client) {
-        const { data, error } = await client
-          .from("social_promo_settings")
-          .upsert([rowUpdate], { onConflict: "row_number" })
-          .select()
-          .single();
-
-        if (!error && data) {
-          updatedSettings.push(data);
-          continue;
-        }
-      }
-
-      // Memory fallback update
-      const memIdx = memorySettings.findIndex((m) => m.row_number === rowNumber);
-      if (memIdx !== -1) {
-        memorySettings[memIdx] = { ...memorySettings[memIdx], ...rowUpdate };
-      } else {
-        memorySettings.push(rowUpdate);
-      }
-      updatedSettings.push(rowUpdate);
+      const { data, error } = await client
+        .from("social_promo_settings")
+        .upsert([rowUpdate], { onConflict: "row_number" })
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error("Qator sozlamasi bazadan tasdiqlanmadi");
+      updatedSettings.push(data);
     }
 
     return res.json({
@@ -577,9 +518,9 @@ install("post", "/api/admin/social-promos/upload-logo", requireAdmin, async (req
     const body = req.body || {};
     const dataUri = String(body.dataUri || body.image || "").trim();
 
-    const match = dataUri.match(/^data:(image\/(?:jpeg|jpg|png|webp|svg\+xml));base64,(.+)$/i);
+    const match = dataUri.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,(.+)$/i);
     if (!match) {
-      return res.status(400).json({ success: false, message: "Faqat PNG, JPG, WebP yoki SVG rasm formatlari qo'llab-quvvatlanadi" });
+      return res.status(400).json({ success: false, message: "Faqat PNG, JPG yoki WebP rasm formatlari qo'llab-quvvatlanadi" });
     }
 
     const mime = match[1].toLowerCase();
