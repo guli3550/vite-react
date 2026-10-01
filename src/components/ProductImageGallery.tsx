@@ -83,7 +83,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
         setIsNearViewport(true);
         observer.disconnect();
       }
-    }, { rootMargin: "700px 0px" });
+    }, { rootMargin: "320px 0px" });
     observer.observe(target);
     return () => observer.disconnect();
   }, [detail, isNearViewport]);
@@ -208,7 +208,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
                 key={`${index}-${slot}-${url}`}
                 src={isNearViewport && (detail || slot === 1) ? (normalized || placeholder(product.name)) : placeholder(product.name)}
                 alt={`${product.name} - rasm ${index + 1}`}
-                loading={detail || isNearViewport ? "eager" : "lazy"}
+                loading={detail ? "eager" : "lazy"}
                 fetchPriority={detail ? "high" : "auto"}
                 decoding="async"
                 draggable={false}
