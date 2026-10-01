@@ -259,9 +259,10 @@ install("get", "/api/social-promos", async (req, res) => {
     let settings = settingsResult.data;
 
     // Check if table not created or query errored
-    if (itemsResult.error || !items || items.length === 0) {
-      items = memoryItems.filter((it) => it.is_active);
-    } else {
+    if (itemsResult.error || settingsResult.error) throw itemsResult.error || settingsResult.error;
+    if (!items) items = [];
+    if (!settings) settings = [];
+    {
       // Filter out any date-expired or upcoming promos
       items = items.filter((it) => {
         if (it.start_at && it.start_at > nowIso) return false;
@@ -270,9 +271,6 @@ install("get", "/api/social-promos", async (req, res) => {
       });
     }
 
-    if (settingsResult.error || !settings || settings.length === 0) {
-      settings = memorySettings;
-    }
 
     // Group items by row
     return res.json({
@@ -397,9 +395,7 @@ install("post", "/api/admin/social-promos", requireAdmin, async (req, res) => {
         memoryItems.unshift(data);
         return res.status(201).json({ success: true, message: "Promo tugma muvaffaqiyatli yaratildi ✓", data });
       }
-      if (error && !/relation .* does not exist/i.test(error.message)) {
-        throw error;
-      }
+      if (error) throw error;
     }
 
     return res.status(503).json({ success: false, message: "Promo bazaga saqlanmadi. Supabase jadvali va ulanishini tekshiring." });
@@ -448,7 +444,8 @@ install("patch", "/api/admin/social-promos/:id", requireAdmin, async (req, res) 
         .select()
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         memoryItems = memoryItems.map((m) => (m.id === id ? { ...m, ...data } : m));
         return res.json({ success: true, message: "O'zgarishlar saqlandi ✓", data });
       }
@@ -492,6 +489,7 @@ install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, 
 
     const updatedSettings = [];
     const client = getSupabaseClient();
+    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. Sozlamalar saqlanmadi." });
 
     for (const s of settingsList) {
       const rowNumber = Number(s.row_number);
@@ -505,21 +503,14 @@ install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, 
         updated_at: new Date().toISOString(),
       };
 
-      if (client) {
-        const { data, error } = await client
-          .from("social_promo_settings")
-          .upsert([rowUpdate], { onConflict: "row_number" })
-          .select()
-          .single();
-
-        if (!error && data) {
-          updatedSettings.push(data);
-          continue;
-        }
-      }
-
+      const { data, error } = await client
+        .from("social_promo_settings")
+        .upsert([rowUpdate], { onConflict: "row_number" })
+        .select()
+        .single();
       if (error) throw error;
-      return res.status(503).json({ success: false, message: "Qator sozlamalari bazaga saqlanmadi." });
+      if (!data) throw new Error("Qator sozlamasi bazadan tasdiqlanmadi");
+      updatedSettings.push(data);
     }
 
     return res.json({
