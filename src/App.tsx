@@ -2345,14 +2345,11 @@ export default function App() {
         reportStartupProgress(100);
       }
 
-      // Continue filling the catalog in the background. This no longer gates
-      // the Home screen or the 3-second branded splash.
-      void (async () => {
-        while (!cancelled && productsHasMoreRef.current) {
-          const next = await loadProducts(true, true);
-          if (cancelled || !next.length) break;
-        }
-      })();
+      // Do not drain every catalog page in the background. Keep the initial
+      // page ready for Home; the Catalog's near-end observer loads additional
+      // pages only as the customer approaches the end of the visible list.
+      // This bounds startup network work and prevents unbounded card growth
+      // while the customer is browsing Home.
     };
 
     loadHomeCompletely().catch(() => {
