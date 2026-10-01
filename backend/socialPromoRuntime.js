@@ -393,8 +393,12 @@ install("post", "/api/admin/social-promos", requireAdmin, async (req, res) => {
 
 // ----------------------------------------------------------------------------
 // 4. ADMIN API: PATCH /api/admin/social-promos/:id (Update Item)
+// NOTE: "/api/admin/social-promos/settings" is a literal sibling route that is
+// registered after this parameterised route, so `settings` must fall through
+// via next() instead of being treated as an item id.
 // ----------------------------------------------------------------------------
-install("patch", "/api/admin/social-promos/:id", requireAdmin, async (req, res) => {
+install("patch", "/api/admin/social-promos/:id", requireAdmin, async (req, res, next) => {
+  if (req.params.id === "settings") return next();
   try {
     const id = req.params.id;
     const body = req.body || {};
