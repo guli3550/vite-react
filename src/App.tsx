@@ -886,6 +886,7 @@ export default function App() {
   const productsOffsetRef = useRef(0);
   const productsHasMoreRef = useRef(true);
   const productsLoadingMoreRef = useRef(false);
+  const catalogRequestVersionRef = useRef(0);
   const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   // Keeps the storefront self-healing when the Render service is cold-starting.
   // A customer must never need to refresh the entire page to recover the catalog.
@@ -1869,6 +1870,7 @@ export default function App() {
     }
   };
   const loadProducts = useCallback(async (silent = false, append = false, keepInitialLoading = false) => {
+    const requestVersion = append ? catalogRequestVersionRef.current : ++catalogRequestVersionRef.current;
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -1935,6 +1937,7 @@ export default function App() {
         throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
       }
 
+      if (requestVersion !== catalogRequestVersionRef.current) return [];
       const rows: Product[] = j.data;
       const nextOffset = offset + rows.length;
       const hasMore = Boolean(j.pagination?.hasMore);
@@ -1969,6 +1972,7 @@ export default function App() {
 
       return rows;
     } catch (error) {
+      if (requestVersion !== catalogRequestVersionRef.current) return [];
       if (!append) {
         const message =
           error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
@@ -1992,8 +1996,8 @@ export default function App() {
     } finally {
       if (append) {
         productsLoadingMoreRef.current = false;
-        setProductsLoadingMore(false);
-      } else if (!silent && !keepInitialLoading) {
+        if (requestVersion === catalogRequestVersionRef.current) setProductsLoadingMore(false);
+      } else if (requestVersion === catalogRequestVersionRef.current && !silent && !keepInitialLoading) {
         setProductsLoading(false);
       }
     }
