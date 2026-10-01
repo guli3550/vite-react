@@ -9,7 +9,6 @@ interface SocialPromoSectionProps {
   isDark?: boolean;
 }
 
-// Fallback seed in case of network latency
 const FALLBACK_SETTINGS: SocialPromoRowSetting[] = [
   { row_number: 1, is_enabled: true, direction: "left", duration_seconds: 34 },
   { row_number: 2, is_enabled: true, direction: "right", duration_seconds: 42 },
@@ -17,12 +16,8 @@ const FALLBACK_SETTINGS: SocialPromoRowSetting[] = [
 ];
 
 export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
-  language = "uz",
   isDark = false,
 }) => {
-  const isRu = language === "ru";
-  const isEn = language === "en";
-
   const [items, setItems] = useState<SocialPromoItem[]>([]);
   const [settings, setSettings] = useState<SocialPromoRowSetting[]>(FALLBACK_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -37,23 +32,17 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
         if (!res.ok) throw new Error("Network response was not ok");
         const json: SocialPromosApiResponse = await res.json();
         if (isMounted && json?.success && json?.data) {
-          if (Array.isArray(json.data.items)) {
-            setItems(json.data.items);
-          }
-          if (Array.isArray(json.data.settings)) {
-            setSettings(json.data.settings);
-          }
+          if (Array.isArray(json.data.items)) setItems(json.data.items);
+          if (Array.isArray(json.data.settings)) setSettings(json.data.settings);
         }
       } catch {
-        // Keep the profile usable; do not display hard-coded links when the API is unavailable.
+        // Do not show hard-coded destinations if the API is unavailable.
       } finally {
         if (isMounted) setIsLoading(false);
       }
     }
 
     fetchSocialPromos();
-
-    // Listen for custom event from admin panel to refresh immediately
     const handleRefresh = () => fetchSocialPromos();
     window.addEventListener("guli_refresh_social_promos", handleRefresh);
 
@@ -66,7 +55,6 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
   const row1Items = items.filter((it) => it.row_number === 1);
   const row2Items = items.filter((it) => it.row_number === 2);
   const row3Items = items.filter((it) => it.row_number === 3);
-
   const row1Setting = settings.find((s) => s.row_number === 1);
   const row2Setting = settings.find((s) => s.row_number === 2);
   const row3Setting = settings.find((s) => s.row_number === 3);
@@ -86,7 +74,6 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
         gap: "10px",
       }}
     >
-      {/* 3-Row Animated Marquee Tracks */}
       <div
         style={{
           display: "flex",
@@ -97,29 +84,9 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
           transition: "opacity 0.25s ease",
         }}
       >
-        {/* ROW 1: Right-to-Left (left) */}
-        <SocialPromoMarqueeRow
-          rowNumber={1}
-          items={row1Items}
-          setting={row1Setting}
-          isDark={isDark}
-        />
-
-        {/* ROW 2: Left-to-Right (right) */}
-        <SocialPromoMarqueeRow
-          rowNumber={2}
-          items={row2Items}
-          setting={row2Setting}
-          isDark={isDark}
-        />
-
-        {/* ROW 3: Right-to-Left (left) */}
-        <SocialPromoMarqueeRow
-          rowNumber={3}
-          items={row3Items}
-          setting={row3Setting}
-          isDark={isDark}
-        />
+        <SocialPromoMarqueeRow rowNumber={1} items={row1Items} setting={row1Setting} isDark={isDark} />
+        <SocialPromoMarqueeRow rowNumber={2} items={row2Items} setting={row2Setting} isDark={isDark} />
+        <SocialPromoMarqueeRow rowNumber={3} items={row3Items} setting={row3Setting} isDark={isDark} />
       </div>
     </section>
   );
