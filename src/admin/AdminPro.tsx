@@ -16,6 +16,7 @@ import { AdminAnalyticsTab } from "./components/AdminAnalyticsTab";
 import { AdminCallCenterTab } from "./components/AdminCallCenterTab";
 import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
+import { AdminSocialPromosTab } from "./components/AdminSocialPromosTab";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
@@ -1816,6 +1817,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
 
         {/* Tab 12: 🔔 Xabarlar */}
         {tab === "notifications" && <AdminNotificationsTab notify={notify} />}
+
+        {/* Marketing — alohida modul; eski Settings social URLs o‘zgarmaydi */}
+        {tab === "marketing" && <AdminSocialPromosTab notify={notify} />}
 
         {/* Tab 13: ⚙️ Sozlamalar */}
         {tab === "settings" && (
