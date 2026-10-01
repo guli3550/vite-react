@@ -2251,6 +2251,10 @@ export default function App() {
     };
   }, [loadCategories]);
 
+  const startupLoadProductsRef = useRef(loadProducts);
+  startupLoadProductsRef.current = loadProducts;
+  const catalogFilterKeyRef = useRef({ category: selectedCategory, search: debouncedSearch });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -2298,7 +2302,7 @@ export default function App() {
       // first catalog page -> visible image/category/banner preload -> ready.
       reportStartupProgress(8);
 
-      const firstPagePromise = loadProducts(false, false, true);
+      const firstPagePromise = startupLoadProductsRef.current(false, false, true);
       const rows = await Promise.race([
         firstPagePromise,
         new Promise<Product[]>((resolve) => window.setTimeout(() => resolve([]), 2200)),
@@ -2367,7 +2371,14 @@ export default function App() {
         productsRecoveryTimerRef.current = null;
       }
     };
-  }, [loadProducts]);
+  }, []);
+
+  useEffect(() => {
+    const previous = catalogFilterKeyRef.current;
+    if (previous.category === selectedCategory && previous.search === debouncedSearch) return;
+    catalogFilterKeyRef.current = { category: selectedCategory, search: debouncedSearch };
+    void loadProducts(false, false).catch(() => {});
+  }, [selectedCategory, debouncedSearch, loadProducts]);
 
   useEffect(() => {
     if (page !== "catalog" || !productsHasMore || productsLoading || productsLoadingMore) {
