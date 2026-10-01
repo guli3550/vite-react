@@ -111,7 +111,7 @@ jobs:
           body="$(curl -sS --fail --max-time 30 "${GATEWAY_URL}/api/products?limit=1")"
           echo "$body" | head -c 2000
           grep -q '"success":true' <<< "$body"
-          grep -q '"data":[' <<< "$body"
+          python -c 'import json,sys; x=json.load(sys.stdin); assert x.get("success") is True, "API success flag missing"; assert isinstance(x.get("data"), list), "API data is not an array"' <<< "$body"
           echo "Gateway catalog OK"
 
       - name: Check category settings API through gateway
