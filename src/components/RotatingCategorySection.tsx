@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, type FC } from "react";
+import { useEffect, useState, useMemo, useRef, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
 import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
@@ -63,23 +63,39 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
   const [activeItemIndex, setActiveItemIndex] = useState(0);
   const [isFading, setIsFading] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isCardVisible, setIsCardVisible] = useState(false);
+
+  // Ko'rinmayotgan kategoriya kartalarida timer va rasm almashishini to'xtatamiz.
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setIsCardVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsCardVisible(Boolean(entry?.isIntersecting));
+    }, { rootMargin: "80px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (rotatingItems.length <= 1) return;
-
-    // Har bir karta bir xil vaqtda emas, ketma-ket (staggered) o'zgarishi uchun
-    const intervalDuration = 3400 + (index % 3) * 600;
-
-    const timer = setInterval(() => {
+    if (!isCardVisible || rotatingItems.length <= 1) return;
+    const intervalDuration = 4200 + (index % 3) * 500;
+    let fadeTimer: number | undefined;
+    const timer = window.setInterval(() => {
       setIsFading(true);
-      setTimeout(() => {
+      fadeTimer = window.setTimeout(() => {
         setActiveItemIndex(prev => (prev + 1) % rotatingItems.length);
         setIsFading(false);
-      }, 280);
+      }, 220);
     }, intervalDuration);
-
-    return () => clearInterval(timer);
-  }, [rotatingItems.length, index]);
+    return () => {
+      window.clearInterval(timer);
+      if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
+    };
+  }, [isCardVisible, rotatingItems.length, index]);
 
   const currentItem = rotatingItems[activeItemIndex] || null;
 
@@ -93,6 +109,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
 
   return (
     <div
+      ref={cardRef}
       className="rotatingCategoryCard"
       id={`cat-card-${category.name.toLowerCase().replace(/\s+/g, "-")}`}
       role="button"
@@ -113,7 +130,7 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
             src={currentItem.imageUrl}
             alt={currentItem.title}
             className={`catCardImg ${isFading ? "fading" : ""}`}
-            loading="eager"
+            loading={isCardVisible ? "lazy" : "lazy"}
             decoding="async"
           />
         ) : (
