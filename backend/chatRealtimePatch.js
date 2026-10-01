@@ -134,9 +134,11 @@ async function getCachedCustomerProfile(telegramId) {
     console.warn("[Chat realtime] customer CRM/profile enrichment failed:", error.message);
   }
 
-  if (BOT_TOKEN) {
+  // Telegram is an optional enrichment source; never let its network latency
+  // hold chat delivery. Only query when the persisted profile lacks key fields.
+  if (BOT_TOKEN && (!customer.username || !customer.first_name || !customer.photoFileId)) {
     try {
-      const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${telegramId}`);
+      const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${telegramId}`, { signal: AbortSignal.timeout(3500) });
       const result = await response.json().catch(() => null);
       const chat = result?.ok ? result.result : null;
       if (chat) {
