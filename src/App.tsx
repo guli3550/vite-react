@@ -5117,7 +5117,7 @@ export default function App() {
               />
 
               <section className="recommendSection">
-                <div className="sectionTitle">
+                <div className="sectionTitle recommendationHeading">
                   <div>
                     <span>{t("you_may_also_like")}</span>
                     <h2>{t("similar_products")}</h2>
@@ -5321,7 +5321,7 @@ export default function App() {
                 </div>
                 {productsLoading ? (
                   <div className="wishlistPopularSection">
-                    <div className="sectionTitle">
+                    <div className="sectionTitle wishlistPopularHeading">
                       <div>
                         <span className="sectionEyebrow">{t("badge_featured")}</span>
                         <h2>{t("popular_products")}</h2>
