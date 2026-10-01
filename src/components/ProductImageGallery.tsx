@@ -206,7 +206,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
             return (
               <img
                 key={`${index}-${slot}-${url}`}
-                src={isNearViewport && (detail || slot === 1) ? (normalized || placeholder(product.name)) : placeholder(product.name)}
+                src={isNearViewport ? (normalized || placeholder(product.name)) : placeholder(product.name)}
                 alt={`${product.name} - rasm ${index + 1}`}
                 loading={detail ? "eager" : "lazy"}
                 fetchPriority={detail ? "high" : "auto"}
