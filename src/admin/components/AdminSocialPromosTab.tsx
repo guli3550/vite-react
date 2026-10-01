@@ -45,7 +45,10 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
   const [formStartAt, setFormStartAt] = useState<string>("");
   const [formEndAt, setFormEndAt] = useState<string>("");
 
-  const API = getApiBaseUrl();
+  // Match the exact API origin selected during AdminPro login (gateway or direct Render fallback).
+  // Sending a valid admin token to a different backend can produce a misleading 401.
+  const API = (typeof window !== "undefined" ? sessionStorage.getItem("guli_custom_api_url") : "") || getApiBaseUrl();
+  const API_BASE = API.replace(/\/$/, "");
 
   const getAdminHeaders = () => {
     const token = sessionStorage.getItem("guli_admin_token") || localStorage.getItem("guli_admin_token") || "";
@@ -58,7 +61,7 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/admin/social-promos`, {
+      const res = await fetch(`${API_BASE}/api/admin/social-promos`, {
         headers: getAdminHeaders(),
       });
       if (!res.ok) throw new Error("Yuklab bo‘lmadi");
@@ -221,7 +224,7 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
 
       const updated = { ...existing, ...updates };
 
-      const res = await fetch(`${API}/api/admin/social-promos/settings`, {
+      const res = await fetch(`${API_BASE}/api/admin/social-promos/settings`, {
         method: "PATCH",
         headers: getAdminHeaders(),
         body: JSON.stringify(updated),
@@ -255,7 +258,7 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
 
       // Attempt upload to server storage
       try {
-        const res = await fetch(`${API}/api/admin/social-promos/upload-logo`, {
+        const res = await fetch(`${API_BASE}/api/admin/social-promos/upload-logo`, {
           method: "POST",
           headers: getAdminHeaders(),
           body: JSON.stringify({ dataUri }),
