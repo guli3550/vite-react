@@ -230,14 +230,7 @@ install("get", "/api/social-promos", async (req, res) => {
   try {
     const client = getSupabaseClient();
     if (!client) {
-      return res.json({
-        success: true,
-        source: "memory_fallback",
-        data: {
-          items: memoryItems.filter((it) => it.is_active),
-          settings: memorySettings.filter((s) => s.is_enabled),
-        },
-      });
+      return res.status(503).json({ success: false, source: "database_unavailable", message: "Reklama ma’lumotlari vaqtincha yuklanmadi." });
     }
 
     // Query active items from DB
@@ -282,14 +275,7 @@ install("get", "/api/social-promos", async (req, res) => {
     });
   } catch (error) {
     console.warn("[Social Promos] Public GET error:", error?.message || error);
-    return res.json({
-      success: true,
-      source: "resilience_fallback",
-      data: {
-        items: memoryItems.filter((it) => it.is_active),
-        settings: memorySettings,
-      },
-    });
+    return res.status(503).json({ success: false, source: "database_error", message: "Reklama ma’lumotlari vaqtincha yuklanmadi." });
   }
 });
 
