@@ -48,7 +48,7 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
   const API = getApiBaseUrl();
 
   const getAdminHeaders = () => {
-    const token = localStorage.getItem("guli_admin_token") || "";
+    const token = sessionStorage.getItem("guli_admin_token") || localStorage.getItem("guli_admin_token") || "";
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
