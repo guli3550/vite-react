@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type TouchEvent, type FC } from "react";
+import { useEffect, useMemo, useState, useRef, type TouchEvent, type FC } from "react";
 
 export interface Product {
   id: number;
@@ -58,11 +58,13 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
   const preloadedImagesRef = useRef<Set<string>>(new Set());
 
   // Extract all available valid images
-  const rawList = [product.image, ...(product.images || [])].filter(Boolean);
-  const imageList = rawList.length > 0 ? Array.from(new Set(rawList)) : [];
+  const imageList = useMemo(() => {
+    const rawList = [product.image, ...(product.images || [])].filter(Boolean);
+    return rawList.length > 0 ? Array.from(new Set(rawList)) : [];
+  }, [product.image, product.images]);
 
-  // Detail sahifasi ochilishi bilan butun galereyani oldindan yuklaymiz.
-  // Keyingi rasmga o'tishda tarmoq kutishidan keladigan uzilishlar shu bilan yo'qoladi.
+  // Faqat mahsulot tafsiloti ochilganda galereyani preload qilamiz.
+  // Katalog kartalarida barcha qo'shimcha rasmlarni oldindan yuklamaymiz.
   useEffect(() => {
     if (!detail || imageList.length <= 1) return;
 
@@ -180,7 +182,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
                 key={`${index}-${slot}-${url}`}
                 src={normalized || placeholder(product.name)}
                 alt={`${product.name} - rasm ${index + 1}`}
-                loading="eager"
+                loading={detail ? "eager" : "lazy"}
                 decoding="async"
                 draggable={false}
                 onError={(event) => {
