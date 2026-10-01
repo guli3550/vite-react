@@ -5232,3 +5232,35 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
     border-radius: 50% !important;
   }
 }
+
+
+/* Mobile scrolling and rendering: keep native touch momentum and skip offscreen card paint. */
+.rotatingCategoryScroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 14px;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.rotatingCategoryScroll > .rotatingCategoryCard {
+  scroll-snap-align: start;
+  backface-visibility: hidden;
+}
+.productGrid > .productCard {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 430px;
+}
+.productCard,
+.rotatingCategoryCard {
+  -webkit-tap-highlight-color: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .productCard,
+  .rotatingCategoryCard,
+  .catCardImg {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
