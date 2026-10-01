@@ -224,6 +224,14 @@ function isValidUrl(raw) {
 }
 
 // ----------------------------------------------------------------------------
+// ROUTE ORDER NOTE
+// routeRegistry mounts routes in install() call order, so a literal path such as
+// "/api/admin/social-promos/settings" MUST be installed before the parameterised
+// "/api/admin/social-promos/:id" routes that would otherwise capture "settings"
+// as an id. Regression test: scripts/test-social-promo-route-order.mjs
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
 // 1. PUBLIC API: GET /api/social-promos
 // ----------------------------------------------------------------------------
 install("get", "/api/social-promos", async (req, res) => {
@@ -392,6 +400,52 @@ install("post", "/api/admin/social-promos", requireAdmin, async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// 6. ADMIN API: PATCH /api/admin/social-promos/settings (Row Marquee Settings)
+// Installed BEFORE PATCH /:id on purpose (see ROUTE ORDER NOTE above).
+// ----------------------------------------------------------------------------
+install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const settingsList = Array.isArray(body.settings) ? body.settings : [body];
+
+    const updatedSettings = [];
+    const client = getSupabaseClient();
+    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. Sozlamalar saqlanmadi." });
+
+    for (const s of settingsList) {
+      const rowNumber = Number(s.row_number);
+      if (!rowNumber || rowNumber < 1 || rowNumber > 3) continue;
+
+      const rowUpdate = {
+        row_number: rowNumber,
+        is_enabled: s.is_enabled !== false,
+        direction: s.direction === "right" ? "right" : "left",
+        duration_seconds: Math.max(8, Math.min(180, Number(s.duration_seconds) || 35)),
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await client
+        .from("social_promo_settings")
+        .upsert([rowUpdate], { onConflict: "row_number" })
+        .select()
+        .single();
+      if (error) throw error;
+      if (!data) throw new Error("Qator sozlamasi bazadan tasdiqlanmadi");
+      updatedSettings.push(data);
+    }
+
+    return res.json({
+      success: true,
+      message: "Qator sozlamalari yangilandi ✓",
+      data: updatedSettings.length ? updatedSettings : memorySettings,
+    });
+  } catch (error) {
+    console.error("[Social Promos] Settings update error:", error);
+    return res.status(500).json({ success: false, message: "Qator sozlamalarini saqlashda xatolik" });
+  }
+});
+
+// ----------------------------------------------------------------------------
 // 4. ADMIN API: PATCH /api/admin/social-promos/:id (Update Item)
 // ----------------------------------------------------------------------------
 install("patch", "/api/admin/social-promos/:id", requireAdmin, async (req, res) => {
@@ -462,51 +516,6 @@ install("delete", "/api/admin/social-promos/:id", requireAdmin, async (req, res)
   } catch (error) {
     console.error("[Social Promos] Delete error:", error);
     return res.status(500).json({ success: false, message: error?.message || "O'chirishda xatolik" });
-  }
-});
-
-// ----------------------------------------------------------------------------
-// 6. ADMIN API: PATCH /api/admin/social-promos/settings (Row Marquee Settings)
-// ----------------------------------------------------------------------------
-install("patch", "/api/admin/social-promos/settings", requireAdmin, async (req, res) => {
-  try {
-    const body = req.body || {};
-    const settingsList = Array.isArray(body.settings) ? body.settings : [body];
-
-    const updatedSettings = [];
-    const client = getSupabaseClient();
-    if (!client) return res.status(503).json({ success: false, message: "Supabase ulanmagan. Sozlamalar saqlanmadi." });
-
-    for (const s of settingsList) {
-      const rowNumber = Number(s.row_number);
-      if (!rowNumber || rowNumber < 1 || rowNumber > 3) continue;
-
-      const rowUpdate = {
-        row_number: rowNumber,
-        is_enabled: s.is_enabled !== false,
-        direction: s.direction === "right" ? "right" : "left",
-        duration_seconds: Math.max(8, Math.min(180, Number(s.duration_seconds) || 35)),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await client
-        .from("social_promo_settings")
-        .upsert([rowUpdate], { onConflict: "row_number" })
-        .select()
-        .single();
-      if (error) throw error;
-      if (!data) throw new Error("Qator sozlamasi bazadan tasdiqlanmadi");
-      updatedSettings.push(data);
-    }
-
-    return res.json({
-      success: true,
-      message: "Qator sozlamalari yangilandi ✓",
-      data: updatedSettings.length ? updatedSettings : memorySettings,
-    });
-  } catch (error) {
-    console.error("[Social Promos] Settings update error:", error);
-    return res.status(500).json({ success: false, message: "Qator sozlamalarini saqlashda xatolik" });
   }
 });
 
