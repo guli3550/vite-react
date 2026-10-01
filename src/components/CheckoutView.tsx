@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { QrCode, Camera } from "lucide-react";
 import type { Address, CartItem } from "../types";
 import { formatColorName } from "../utils/colorHelpers";
 import { getDeliveryEstimate } from "../utils/delivery";
 import { type Language } from "../utils/translations";
+import { QrCodeScannerModal } from "./QrCodeScannerModal";
 
 interface CheckoutViewProps {
   onBack: () => void;
@@ -39,6 +41,13 @@ interface CheckoutViewProps {
     longitude: number;
     onChange: (lat: number, lon: number) => void;
   }>;
+  promo?: string;
+  setPromo?: (v: string) => void;
+  promoApplied?: boolean;
+  promoDiscount?: number;
+  promoLoading?: boolean;
+  onApplyPromo?: (code?: string) => Promise<boolean> | void;
+  onRemovePromo?: () => void;
 }
 
 export const CheckoutView: React.FC<CheckoutViewProps> = ({
@@ -72,10 +81,54 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   onToggleCashback,
   cashbackDiscount = 0,
   LocationPicker,
+  promo = "",
+  setPromo,
+  promoApplied = false,
+  promoDiscount = 0,
+  promoLoading = false,
+  onApplyPromo,
+  onRemovePromo,
 }) => {
   const isRu = language === "ru";
   const isEn = language === "en";
   const [showOrderSummary, setShowOrderSummary] = useState(false);
+  const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
+  const [promoInput, setPromoInput] = useState(promo || "");
+
+  // Keep promoInput in sync with external promo state
+  useEffect(() => {
+    if (promo && promo !== promoInput) {
+      setPromoInput(promo);
+    }
+  }, [promo]);
+
+  const handleApplyPromo = async (codeToApply?: string) => {
+    const targetCode = (codeToApply !== undefined ? codeToApply : promoInput).trim().toUpperCase();
+    if (!targetCode) {
+      showToast(isRu ? "Введите промокод" : isEn ? "Please enter promo code" : "Iltimos, promokodni kiriting");
+      return;
+    }
+    if (setPromo) setPromo(targetCode);
+    if (onApplyPromo) {
+      await onApplyPromo(targetCode);
+    }
+  };
+
+  const handleScanSuccess = async (scannedCode: string) => {
+    const cleaned = scannedCode.trim().toUpperCase();
+    setPromoInput(cleaned);
+    if (setPromo) setPromo(cleaned);
+    showToast(
+      isRu
+        ? `📷 Промокод считан: ${cleaned}`
+        : isEn
+        ? `📷 Scanned promo code: ${cleaned}`
+        : `📷 Promokod o‘qildi: ${cleaned}`
+    );
+    if (onApplyPromo) {
+      await onApplyPromo(cleaned);
+    }
+  };
 
   // Avtomatik ravishda profil ma'lumotlarini buyurtma rasmiylashtirish maydonlariga kiritish (Sync & Prefill)
   useEffect(() => {
@@ -910,6 +963,220 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </div>
       </div>
 
+      {/* Promo Code & Camera QR Scanner Section */}
+      <div
+        className="checkoutCard promoCard"
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "20px",
+          padding: "16px 18px",
+          marginBottom: "16px",
+          boxShadow: "var(--shadow-sm)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "12px",
+                background: "linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(225, 29, 72, 0.06))",
+                color: "var(--primary)",
+                display: "grid",
+                placeItems: "center",
+                fontSize: "18px",
+                flexShrink: 0,
+              }}
+            >
+              🎟️
+            </div>
+            <div>
+              <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-main)" }}>
+                {isRu ? "Промокод и купоны" : isEn ? "Promo Code & Coupons" : "Promokod va vaucherlar"}
+              </div>
+              <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "2px" }}>
+                {isRu
+                  ? "Введите вручную или отсканируйте камерой"
+                  : isEn
+                  ? "Enter manually or scan with camera"
+                  : "Kodni kiriting yoki kamera bilan skanerlang"}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick QR Scanner Pill Button */}
+          <button
+            type="button"
+            onClick={() => setIsQrScannerOpen(true)}
+            id="checkout-qr-scanner-btn"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 12px",
+              borderRadius: "12px",
+              background: "linear-gradient(135deg, rgba(225, 29, 72, 0.12), rgba(225, 29, 72, 0.05))",
+              border: "1px solid rgba(225, 29, 72, 0.35)",
+              color: "var(--primary)",
+              fontSize: "11.5px",
+              fontWeight: 800,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            <QrCode size={15} />
+            <span>{isRu ? "QR-сканер" : isEn ? "Scan QR" : "QR Skaner"}</span>
+          </button>
+        </div>
+
+        {/* Input + Action Buttons */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <input
+              type="text"
+              value={promoInput}
+              onChange={(e) => {
+                const val = e.target.value.toUpperCase();
+                setPromoInput(val);
+                if (promoApplied && onRemovePromo) {
+                  onRemovePromo();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !promoLoading) {
+                  e.preventDefault();
+                  handleApplyPromo(promoInput);
+                }
+              }}
+              placeholder={isRu ? "Введите промокод" : isEn ? "Enter promo code" : "Promokod (masalan: GULI20)"}
+              maxLength={40}
+              style={{
+                width: "100%",
+                padding: "11px 40px 11px 12px",
+                borderRadius: "13px",
+                border: promoApplied
+                  ? "1.5px solid #10b981"
+                  : "1px solid var(--border-input)",
+                background: "var(--bg-input)",
+                color: "var(--text-main)",
+                fontSize: "13px",
+                fontWeight: 700,
+                letterSpacing: "0.5px",
+                boxSizing: "border-box",
+                textTransform: "uppercase",
+              }}
+            />
+            {/* Embedded Mini QR Camera icon inside input field for quick click */}
+            <button
+              type="button"
+              onClick={() => setIsQrScannerOpen(true)}
+              title={isRu ? "Сканировать камерой" : isEn ? "Scan with camera" : "Kamera orqali skanerlash"}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "transparent",
+                border: "none",
+                color: "var(--primary)",
+                cursor: "pointer",
+                padding: 4,
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <Camera size={18} />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleApplyPromo(promoInput)}
+            disabled={promoLoading || !promoInput.trim()}
+            style={{
+              padding: "11px 16px",
+              borderRadius: "13px",
+              background: promoApplied
+                ? "#10b981"
+                : promoInput.trim()
+                ? "var(--primary)"
+                : "var(--bg-card-sub)",
+              color: promoInput.trim() || promoApplied ? "#ffffff" : "var(--text-muted)",
+              border: "none",
+              fontSize: "12.5px",
+              fontWeight: 800,
+              cursor: promoLoading || !promoInput.trim() ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {promoLoading
+              ? isRu ? "Проверка…" : isEn ? "Checking…" : "Tekshirilmoqda…"
+              : promoApplied
+              ? isRu ? "✓ Применен" : isEn ? "✓ Applied" : "✓ Qo‘llandi"
+              : isRu ? "Применить" : isEn ? "Apply" : "Qo‘llash"}
+          </button>
+        </div>
+
+        {/* Applied Promo Banner / Tag */}
+        {promoApplied && promoDiscount > 0 ? (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "9px 12px",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              borderRadius: "12px",
+              border: "1px solid rgba(16, 185, 129, 0.28)",
+              color: "#059669",
+              fontSize: "12px",
+              fontWeight: 750,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span>✓</span>
+              <span>
+                <b>{promoInput || promo}</b> {isRu ? "скидка применена:" : isEn ? "discount applied:" : "chegirmasi qo‘llandi:"}{" "}
+                <b>−{formatPrice(promoDiscount)}</b>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (onRemovePromo) onRemovePromo();
+                setPromoInput("");
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#e11d48",
+                fontSize: "11px",
+                fontWeight: 800,
+                cursor: "pointer",
+                padding: "2px 6px",
+              }}
+            >
+              {isRu ? "Удалить" : isEn ? "Remove" : "Bekor qilish"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginTop: 8, fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
+            <span>💡</span>
+            <span>
+              {isRu
+                ? "Нажмите «QR-сканер» чтобы мгновенно считать промокод с купона или чека."
+                : isEn
+                ? "Tap “Scan QR” to instantly read promo code from voucher or card."
+                : "Kupon yoki chekdagi promokodni o‘qish uchun «QR Skaner» tugmasini bosing."}
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Real Cashback Spending Section */}
       <div
         className="checkoutCard cashbackCard"
@@ -1060,6 +1327,13 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               : "Bepul (600 000+ so‘m)"}
           </b>
         </div>
+
+        {Boolean(promoApplied && promoDiscount && promoDiscount > 0) && (
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--primary)", marginBottom: 8, fontWeight: 700 }}>
+            <span>{isRu ? "🎟️ Скидка по промокоду:" : isEn ? "🎟️ Promo discount:" : "🎟️ Promokod chegirmasi:"}</span>
+            <b>−{formatPrice(promoDiscount)}</b>
+          </div>
+        )}
 
         {Boolean(useCashback && cashbackDiscount && cashbackDiscount > 0) && (
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--success-badge-color, #059669)", marginBottom: 8, fontWeight: 700 }}>
@@ -1304,6 +1578,14 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
             : `Karta orqali to‘lov qilish — ${formatPrice(total)}`}
         </span>
       </button>
+
+      {/* QR Code Camera Scanner Modal */}
+      <QrCodeScannerModal
+        isOpen={isQrScannerOpen}
+        onClose={() => setIsQrScannerOpen(false)}
+        onScanSuccess={handleScanSuccess}
+        language={language}
+      />
     </main>
   );
 };

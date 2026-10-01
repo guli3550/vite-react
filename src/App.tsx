@@ -251,8 +251,8 @@ const persistOrdersSafely = (orders: Order[]) => {
   // Receipts can be large data URLs. They must never be persisted in localStorage
   // together with the complete order list; that can exhaust the Web Storage quota
   // and crash the React app during checkout/realtime updates.
-  const compact = orders.map((order) => {
-    const { receipt_url: _receiptUrl, ...rest } = order;
+  const compact = orders.map(({ receipt_url: _unused, ...rest }) => {
+    void _unused;
     return rest;
   });
   try {
@@ -2884,16 +2884,17 @@ export default function App() {
         }),
     [products],
   );
-  const applyPromo = async () => {
+  const applyPromo = async (codeOverride?: string) => {
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
     } catch {}
-    const code = promo.trim().toUpperCase();
+    const rawCode = codeOverride !== undefined ? codeOverride : promo;
+    const code = rawCode.trim().toUpperCase();
     if (!code) {
       setPromoApplied(false);
       setPromoDiscount(0);
       showToast(t("promo_placeholder"));
-      return;
+      return false;
     }
     setPromoLoading(true);
     try {
@@ -2905,8 +2906,10 @@ export default function App() {
       const j = await r.json();
       if (!r.ok || !j.success)
         throw new Error(j.message || "Promo kodni tekshirishda xatolik");
-      setPromo(j.data?.code || code);
-      setPromoDiscount(Number(j.data?.discount || 0));
+      const validCode = j.data?.code || code;
+      const validDiscount = Number(j.data?.discount || 0);
+      setPromo(validCode);
+      setPromoDiscount(validDiscount);
       setPromoApplied(true);
       try {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
@@ -2914,8 +2917,9 @@ export default function App() {
         );
       } catch {}
       showToast(
-        `Promo qo‘llandi: −${formatPrice(Number(j.data?.discount || 0))} ✓`,
+        `Promo qo‘llandi: −${formatPrice(validDiscount)} ✓`,
       );
+      return true;
     } catch (e) {
       setPromoApplied(false);
       setPromoDiscount(0);
@@ -2927,9 +2931,23 @@ export default function App() {
       showToast(
         e instanceof Error ? e.message : "Promo kodni tekshirishda xatolik",
       );
+      return false;
     } finally {
       setPromoLoading(false);
     }
+  };
+
+  const removePromo = () => {
+    setPromo("");
+    setPromoApplied(false);
+    setPromoDiscount(0);
+    showToast(
+      language === "ru"
+        ? "Промокод отменен"
+        : language === "en"
+        ? "Promo code removed"
+        : "Promo kod bekor qilindi"
+    );
   };
   const reverseGeocode = async (lat: number, lon: number) => {
     let rawState = "";
@@ -5208,7 +5226,7 @@ export default function App() {
                     placeholder="Promo kod"
                     maxLength={40}
                   />
-                  <button onClick={applyPromo} disabled={promoLoading}>
+                  <button onClick={() => applyPromo()} disabled={promoLoading}>
                     {promoLoading
                       ? "Tekshirilmoqda…"
                       : promoApplied
@@ -5291,6 +5309,13 @@ export default function App() {
             onToggleCashback={setUseCashback}
             cashbackDiscount={appliedCashback}
             LocationPicker={LocationPicker}
+            promo={promo}
+            setPromo={setPromo}
+            promoApplied={promoApplied}
+            promoDiscount={promoDiscount}
+            promoLoading={promoLoading}
+            onApplyPromo={applyPromo}
+            onRemovePromo={removePromo}
           />
         )}
         {page === "wishlist" && (
