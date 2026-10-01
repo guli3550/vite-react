@@ -3287,8 +3287,15 @@ export default function App() {
         ? p.description.slice(0, 55) + "…"
         : p.description
       : "";
-    const ratingValue = p.rating && p.rating > 0 ? p.rating : 5.0;
-    const reviewCount = p.reviews && p.reviews > 0 ? p.reviews : Math.floor(((p.id * 17) % 45) + 8);
+    const rawRating = Number(p.rating);
+    const ratingValue = Number.isFinite(rawRating) && rawRating > 0 ? rawRating : 5.0;
+    const rawReviews = Number(p.reviews);
+    const rawProductId = Number(p.id);
+    const reviewCount = Number.isFinite(rawReviews) && rawReviews > 0
+      ? Math.floor(rawReviews)
+      : Number.isFinite(rawProductId) && rawProductId > 0
+        ? Math.floor(((rawProductId * 17) % 45) + 8)
+        : 0;
     const isOutOfStock = p.stock !== undefined && p.stock <= 0;
 
     return (
