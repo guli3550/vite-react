@@ -12,7 +12,7 @@ import "./GuliStartupSplash.css";
 const BENEFITS = [
   { Icon: Truck, label: "Tez yetkazib berish" },
   { Icon: ShieldCheck, label: "Xavfsiz savdo" },
-  { Icon: Gift, label: "Siz uchun\nbilan" },
+  { Icon: Gift, label: "Siz uchun" },
 ];
 
 export function GuliStartupSplash() {
