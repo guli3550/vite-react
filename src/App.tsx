@@ -886,6 +886,7 @@ export default function App() {
   const productsOffsetRef = useRef(0);
   const productsHasMoreRef = useRef(true);
   const productsLoadingMoreRef = useRef(false);
+  const catalogRequestVersionRef = useRef(0);
   const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   // Keeps the storefront self-healing when the Render service is cold-starting.
   // A customer must never need to refresh the entire page to recover the catalog.
@@ -1869,6 +1870,7 @@ export default function App() {
     }
   };
   const loadProducts = useCallback(async (silent = false, append = false, keepInitialLoading = false) => {
+    const requestVersion = append ? catalogRequestVersionRef.current : ++catalogRequestVersionRef.current;
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -1935,6 +1937,7 @@ export default function App() {
         throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
       }
 
+      if (requestVersion !== catalogRequestVersionRef.current) return [];
       const rows: Product[] = j.data;
       const nextOffset = offset + rows.length;
       const hasMore = Boolean(j.pagination?.hasMore);
@@ -1969,6 +1972,7 @@ export default function App() {
 
       return rows;
     } catch (error) {
+      if (requestVersion !== catalogRequestVersionRef.current) return [];
       if (!append) {
         const message =
           error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
@@ -1992,8 +1996,8 @@ export default function App() {
     } finally {
       if (append) {
         productsLoadingMoreRef.current = false;
-        setProductsLoadingMore(false);
-      } else if (!silent && !keepInitialLoading) {
+        if (requestVersion === catalogRequestVersionRef.current) setProductsLoadingMore(false);
+      } else if (requestVersion === catalogRequestVersionRef.current && !silent && !keepInitialLoading) {
         setProductsLoading(false);
       }
     }
@@ -2247,6 +2251,10 @@ export default function App() {
     };
   }, [loadCategories]);
 
+  const startupLoadProductsRef = useRef(loadProducts);
+  startupLoadProductsRef.current = loadProducts;
+  const catalogFilterKeyRef = useRef({ category: selectedCategory, search: debouncedSearch });
+
   useEffect(() => {
     let cancelled = false;
 
@@ -2294,7 +2302,7 @@ export default function App() {
       // first catalog page -> visible image/category/banner preload -> ready.
       reportStartupProgress(8);
 
-      const firstPagePromise = loadProducts(false, false, true);
+      const firstPagePromise = startupLoadProductsRef.current(false, false, true);
       const rows = await Promise.race([
         firstPagePromise,
         new Promise<Product[]>((resolve) => window.setTimeout(() => resolve([]), 2200)),
@@ -2345,14 +2353,11 @@ export default function App() {
         reportStartupProgress(100);
       }
 
-      // Continue filling the catalog in the background. This no longer gates
-      // the Home screen or the 3-second branded splash.
-      void (async () => {
-        while (!cancelled && productsHasMoreRef.current) {
-          const next = await loadProducts(true, true);
-          if (cancelled || !next.length) break;
-        }
-      })();
+      // Do not drain every catalog page in the background. Keep the initial
+      // page ready for Home; the Catalog's near-end observer loads additional
+      // pages only as the customer approaches the end of the visible list.
+      // This bounds startup network work and prevents unbounded card growth
+      // while the customer is browsing Home.
     };
 
     loadHomeCompletely().catch(() => {
@@ -2366,7 +2371,14 @@ export default function App() {
         productsRecoveryTimerRef.current = null;
       }
     };
-  }, [loadProducts]);
+  }, []);
+
+  useEffect(() => {
+    const previous = catalogFilterKeyRef.current;
+    if (previous.category === selectedCategory && previous.search === debouncedSearch) return;
+    catalogFilterKeyRef.current = { category: selectedCategory, search: debouncedSearch };
+    void loadProducts(false, false).catch(() => {});
+  }, [selectedCategory, debouncedSearch, loadProducts]);
 
   useEffect(() => {
     if (page !== "catalog" || !productsHasMore || productsLoading || productsLoadingMore) {
@@ -3290,8 +3302,15 @@ export default function App() {
         ? p.description.slice(0, 55) + "…"
         : p.description
       : "";
-    const ratingValue = p.rating && p.rating > 0 ? p.rating : 5.0;
-    const reviewCount = p.reviews && p.reviews > 0 ? p.reviews : Math.floor(((p.id * 17) % 45) + 8);
+    const rawRating = Number(p.rating);
+    const ratingValue = Number.isFinite(rawRating) && rawRating > 0 ? rawRating : 5.0;
+    const rawReviews = Number(p.reviews);
+    const rawProductId = Number(p.id);
+    const reviewCount = Number.isFinite(rawReviews) && rawReviews > 0
+      ? Math.floor(rawReviews)
+      : Number.isFinite(rawProductId) && rawProductId > 0
+        ? Math.floor(((rawProductId * 17) % 45) + 8)
+        : 0;
     const isOutOfStock = p.stock !== undefined && p.stock <= 0;
 
     return (
