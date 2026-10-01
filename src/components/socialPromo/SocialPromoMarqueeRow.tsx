@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import type { SocialPromoItem, SocialPromoRowSetting } from "../../types/socialPromo";
 import { SocialPromoButton } from "./SocialPromoButton";
 
@@ -16,29 +16,29 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
   isDark = false,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
-  const trackRef = useRef<HTMLDivElement>(null);
 
-  if (!items || items.length === 0) return null;
-  if (setting && setting.is_enabled === false) return null;
+  if (!items?.length || setting?.is_enabled === false) return null;
 
   const direction = setting?.direction === "right" ? "right" : "left";
-  const duration = Math.max(10, Math.min(180, setting?.duration_seconds || (rowNumber === 2 ? 42 : rowNumber === 3 ? 36 : 34)));
+  const duration = Math.max(5, Math.min(180, Number(setting?.duration_seconds) || (rowNumber === 2 ? 42 : rowNumber === 3 ? 36 : 34)));
 
-  // Ensure sufficient item quantity for seamless wrap-around loop across wide monitors
+  // Keep enough cards to cover wide screens, then duplicate one exact-width group.
   let displayList = [...items];
-  while (displayList.length < 5) {
-    displayList = [...displayList, ...items];
-  }
+  while (displayList.length < 5) displayList = [...displayList, ...items];
 
   const animationName = direction === "right" ? `guliMarqueeRight_${rowNumber}` : `guliMarqueeLeft_${rowNumber}`;
+
+  const renderCards = (suffix: string) => displayList.map((item, idx) => (
+    <SocialPromoButton key={`r${rowNumber}-${suffix}-${item.id}-${idx}`} item={item} isDark={isDark} />
+  ));
 
   return (
     <div
       className="guli-social-marquee-container"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      onTouchStart={() => setIsPaused(true)}
-      onTouchEnd={() => setIsPaused(false)}
+      onFocusCapture={() => setIsPaused(true)}
+      onBlurCapture={() => setIsPaused(false)}
       style={{
         width: "100%",
         overflow: "hidden",
@@ -51,61 +51,36 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
     >
       <style>{`
         @keyframes guliMarqueeLeft_${rowNumber} {
-          0% {
-            transform: translate3d(0, 0, 0);
-          }
-          100% {
-            transform: translate3d(-50%, 0, 0);
-          }
+          from { transform: translate3d(0, 0, 0); }
+          to { transform: translate3d(-50%, 0, 0); }
         }
         @keyframes guliMarqueeRight_${rowNumber} {
-          0% {
-            transform: translate3d(-50%, 0, 0);
-          }
-          100% {
-            transform: translate3d(0, 0, 0);
-          }
+          from { transform: translate3d(-50%, 0, 0); }
+          to { transform: translate3d(0, 0, 0); }
         }
-        .guli-social-promo-pill:hover {
-          transform: translateY(-2px) scale(1.03);
-        }
-        .guli-social-promo-pill:active {
-          transform: scale(0.96);
-        }
+        .guli-social-promo-pill:hover { transform: translateY(-2px) scale(1.03); }
+        .guli-social-promo-pill:active { transform: scale(0.96); }
       `}</style>
 
       <div
-        ref={trackRef}
-        className={`guli-social-marquee-track-${rowNumber}`}
+        className={`guli-social-marquee-track guli-social-marquee-track-${rowNumber}`}
         style={{
           display: "flex",
-          gap: "12px",
+          flexWrap: "nowrap",
+          gap: 0,
           width: "max-content",
+          minWidth: "max-content",
           willChange: "transform",
-          animationName,
-          animationDuration: `${duration}s`,
-          animationTimingFunction: "linear",
-          animationIterationCount: "infinite",
+          animation: `${animationName} ${duration}s linear infinite`,
           animationPlayState: isPaused ? "paused" : "running",
         }}
       >
-        {/* First Half */}
-        {displayList.map((item, idx) => (
-          <SocialPromoButton
-            key={`r${rowNumber}-a-${item.id}-${idx}`}
-            item={item}
-            isDark={isDark}
-          />
-        ))}
-
-        {/* Second Half (duplicate for seamless wrap-around loop) */}
-        {displayList.map((item, idx) => (
-          <SocialPromoButton
-            key={`r${rowNumber}-b-${item.id}-${idx}`}
-            item={item}
-            isDark={isDark}
-          />
-        ))}
+        <div className="guli-social-marquee-group" style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}>
+          {renderCards("a")}
+        </div>
+        <div className="guli-social-marquee-group" aria-hidden="true" style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}>
+          {renderCards("b")}
+        </div>
       </div>
     </div>
   );
