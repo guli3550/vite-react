@@ -121,7 +121,7 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
            the global reduced-motion rule would otherwise freeze it at 0.01ms. */
         @media (prefers-reduced-motion: reduce) {
           .guli-social-marquee-track-${rowNumber} {
-            animation-duration: ${duration}s !important;
+            animation-duration: ${resolved.durationSeconds}s !important;
             animation-iteration-count: infinite !important;
           }
         }
