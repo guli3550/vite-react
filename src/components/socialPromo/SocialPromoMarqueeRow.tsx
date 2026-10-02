@@ -116,6 +116,15 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
         }
         .guli-social-promo-pill:hover { transform: translateY(-2px) scale(1.03); }
         .guli-social-promo-pill:active { transform: scale(0.96); }
+
+        /* Keep this explicitly configured storefront marquee moving even when
+           the global reduced-motion rule would otherwise freeze it at 0.01ms. */
+        @media (prefers-reduced-motion: reduce) {
+          .guli-social-marquee-track-${rowNumber} {
+            animation-duration: ${duration}s !important;
+            animation-iteration-count: infinite !important;
+          }
+        }
       `}</style>
 
       <div
