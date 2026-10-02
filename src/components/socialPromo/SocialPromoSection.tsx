@@ -79,61 +79,14 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
         width: "100%",
         maxWidth: "100%",
         boxSizing: "border-box",
-        marginTop: "24px",
-        marginBottom: "16px",
+        marginTop: "0px",
+        marginBottom: "0px",
         display: "flex",
         flexDirection: "column",
-        gap: "10px",
+        gap: "6px",
         overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 16px",
-          marginBottom: "4px",
-        }}
-      >
-        <div>
-          <span
-            style={{
-              fontSize: "10px",
-              fontWeight: 800,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-              color: isDark ? "rgba(225, 29, 72, 0.9)" : "#be185d",
-            }}
-          >
-            {isRu ? "ОФИЦИАЛЬНЫЕ СООБЩЕСТВА" : isEn ? "OFFICIAL COMMUNITIES" : "RASMIY HAMJAMIYAT"}
-          </span>
-          <h3
-            style={{
-              fontSize: "16px",
-              fontWeight: 800,
-              margin: "2px 0 0",
-              color: isDark ? "#ffffff" : "#1f191b",
-              letterSpacing: "-0.01em",
-            }}
-          >
-            {isRu ? "Мы в социальных сетях" : isEn ? "Follow us on Social Media" : "Biz ijtimoiy tarmoqlarda"}
-          </h3>
-        </div>
-        <span
-          style={{
-            fontSize: "11px",
-            color: isDark ? "#c4a3ad" : "#64748b",
-            background: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.04)",
-            padding: "4px 8px",
-            borderRadius: "10px",
-            fontWeight: 650,
-          }}
-        >
-          {isRu ? "3 канала" : isEn ? "3 channels" : "3 ta tarmoq"}
-        </span>
-      </div>
-
       <div
         style={{
           display: "flex",

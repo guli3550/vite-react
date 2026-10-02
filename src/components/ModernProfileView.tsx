@@ -2218,20 +2218,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
       </section>
 
       {/* Watermark */}
-      <div
-        style={{
-          textAlign: "center",
-          padding: "16px 0",
-          color: "var(--text-muted, #94a3b8)",
-          opacity: 0.6,
-          fontSize: "12px",
-          letterSpacing: "0.5px",
-        }}
-      >
-        GULI Lingerie & Homewear · Online Market v3.0
-      </div>
-
-      {/* MODAL 1: Edit Profile Modal (Centered, Attractive, Real Photo Only, Synced to Checkout) */}
+            {/* MODAL 1: Edit Profile Modal (Centered, Attractive, Real Photo Only, Synced to Checkout) */}
       {isEditModalOpen && typeof document !== "undefined" && createPortal(
         <div
           id="profile-edit-modal-overlay"
