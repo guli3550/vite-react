@@ -1,12 +1,49 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { SocialPromoItem, SocialPromoRowSetting } from "../../types/socialPromo";
 import { SocialPromoButton } from "./SocialPromoButton";
+import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import {
+  buildDisplayList,
+  marqueeAnimationName,
+  marqueeAnimationValue,
+  minCardsForWidth,
+  resolveRowSetting,
+} from "../../lib/socialPromoMotion";
 
 interface SocialPromoMarqueeRowProps {
   rowNumber: 1 | 2 | 3;
   items: SocialPromoItem[];
   setting?: SocialPromoRowSetting;
   isDark?: boolean;
+  /** External pause (e.g. the expandable panel is closed). */
+  paused?: boolean;
+}
+
+const STATIC_CSS = `
+  .guli-social-static-group .guli-social-promo-pill { max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .guli-social-static-group .guli-social-promo-pill > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+`;
+
+function readViewportWidth(): number {
+  if (typeof window === "undefined") return 390;
+  return window.innerWidth || 390;
+}
+
+function useViewportWidth(): number {
+  const [width, setWidth] = useState<number>(readViewportWidth);
+  useEffect(() => {
+    let timer = 0;
+    const onResize = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setWidth(readViewportWidth()), 150);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+  return width;
 }
 
 export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
@@ -14,31 +51,74 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
   items,
   setting,
   isDark = false,
+  paused = false,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+  const viewportWidth = useViewportWidth();
 
-  if (!items?.length || setting?.is_enabled === false) return null;
+  // Admin value (seconds) -> safe 5-180 range; DB value always beats the code default.
+  const resolved = resolveRowSetting(setting, rowNumber);
 
-  const direction = setting?.direction === "right" ? "right" : "left";
-  const duration = Math.max(5, Math.min(180, Number(setting?.duration_seconds) || (rowNumber === 2 ? 42 : rowNumber === 3 ? 36 : 34)));
+  // Repeat cards until one group is at least as wide as the screen (no empty tail on desktop).
+  const displayList = useMemo(
+    () => buildDisplayList(items ?? [], minCardsForWidth(viewportWidth)),
+    [items, viewportWidth]
+  );
 
-  // Keep enough cards to cover wide screens, then duplicate one exact-width group.
-  let displayList = [...items];
-  while (displayList.length < 5) displayList = [...displayList, ...items];
+  if (!items?.length || !resolved.isEnabled) return null;
 
-  const animationName = direction === "right" ? `guliMarqueeRight_${rowNumber}` : `guliMarqueeLeft_${rowNumber}`;
+  // Reduced motion: no moving track at all, cards are shown statically (fade handled by the section).
+  if (reducedMotion) {
+    return (
+      <div
+        className="guli-social-marquee-container guli-social-static"
+        style={{ width: "100%", boxSizing: "border-box", padding: "4px 16px" }}
+      >
+        <style>{STATIC_CSS}</style>
+        <div
+          className="guli-social-static-group"
+          style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "flex-start" }}
+        >
+          {items.map((item) => (
+            <SocialPromoButton key={`r${rowNumber}-static-${item.id}`} item={item} isDark={isDark} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
-  const renderCards = (suffix: string) => displayList.map((item, idx) => (
-    <SocialPromoButton key={`r${rowNumber}-${suffix}-${item.id}-${idx}`} item={item} isDark={isDark} />
-  ));
+  const isRunning = !paused && !isPaused;
+
+  const renderCards = (suffix: string) =>
+    displayList.map((item, idx) => (
+      <SocialPromoButton key={`r${rowNumber}-${suffix}-${item.id}-${idx}`} item={item} isDark={isDark} />
+    ));
+
+  // Hover pause is for real mice only: touch emulates mouseenter and would leave the row paused.
+  const onPointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse") setIsPaused(true);
+  };
+  const onPointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse") setIsPaused(false);
+  };
+  // Keyboard focus pauses; a tap-focus (touch) does not.
+  const onFocusCapture = (e: React.FocusEvent<HTMLDivElement>) => {
+    try {
+      if (e.target.matches(":focus-visible")) setIsPaused(true);
+    } catch {
+      // :focus-visible unsupported -> never pause on focus
+    }
+  };
+  const onBlurCapture = () => setIsPaused(false);
 
   return (
     <div
       className="guli-social-marquee-container"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-      onFocusCapture={() => setIsPaused(true)}
-      onBlurCapture={() => setIsPaused(false)}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onFocusCapture={onFocusCapture}
+      onBlurCapture={onBlurCapture}
       style={{
         width: "100%",
         overflow: "hidden",
@@ -50,11 +130,11 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
       }}
     >
       <style>{`
-        @keyframes guliMarqueeLeft_${rowNumber} {
+        @keyframes ${marqueeAnimationName(rowNumber, "left")} {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(-50%, 0, 0); }
         }
-        @keyframes guliMarqueeRight_${rowNumber} {
+        @keyframes ${marqueeAnimationName(rowNumber, "right")} {
           from { transform: translate3d(-50%, 0, 0); }
           to { transform: translate3d(0, 0, 0); }
         }
@@ -64,21 +144,30 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
 
       <div
         className={`guli-social-marquee-track guli-social-marquee-track-${rowNumber}`}
+        data-duration-seconds={resolved.durationSeconds}
+        data-direction={resolved.direction}
         style={{
           display: "flex",
           flexWrap: "nowrap",
           gap: 0,
           width: "max-content",
           minWidth: "max-content",
-          willChange: "transform",
-          animation: `${animationName} ${duration}s linear infinite`,
-          animationPlayState: isPaused ? "paused" : "running",
+          willChange: isRunning ? "transform" : "auto",
+          animation: marqueeAnimationValue(rowNumber, resolved.direction, resolved.durationSeconds),
+          animationPlayState: isRunning ? "running" : "paused",
         }}
       >
-        <div className="guli-social-marquee-group" style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}>
+        <div
+          className="guli-social-marquee-group"
+          style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}
+        >
           {renderCards("a")}
         </div>
-        <div className="guli-social-marquee-group" aria-hidden="true" style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}>
+        <div
+          className="guli-social-marquee-group"
+          aria-hidden="true"
+          style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}
+        >
           {renderCards("b")}
         </div>
       </div>
