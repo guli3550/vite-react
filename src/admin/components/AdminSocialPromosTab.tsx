@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type {
   SocialPlatform,
   SocialPromoItem,
@@ -9,6 +9,16 @@ import {
   PlatformLogoRenderer,
 } from "../../components/socialPromo/SocialPlatformLogos";
 import { SocialPromoMarqueeRow } from "../../components/socialPromo/SocialPromoMarqueeRow";
+import {
+  MAX_DURATION_SECONDS,
+  MIN_DURATION_SECONDS,
+  SAVE_DEBOUNCE_MS,
+  classifyDurationDraft,
+  createLatestGate,
+  defaultDirectionForRow,
+  defaultDurationForRow,
+  type LatestGate,
+} from "../../lib/socialPromoMotion";
 
 interface AdminSocialPromosTabProps {
   notify: (msg: string) => void;
@@ -24,6 +34,14 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
   const [loading, setLoading] = useState(true);
   const [filterRow, setFilterRow] = useState<number | "all">("all");
   const [previewViewport, setPreviewViewport] = useState<"mobile" | "desktop">("mobile");
+
+  // Speed input drafts (text as typed). A draft is only sent to the server when it is a valid
+  // 5-180 value, after a short pause, or on blur/Enter. Empty or garbage text is never saved.
+  const [durationDrafts, setDurationDrafts] = useState<Record<number, string>>({});
+  const settingsRef = useRef<SocialPromoRowSetting[]>(settings);
+  settingsRef.current = settings;
+  const rowGatesRef = useRef<Record<number, LatestGate>>({});
+  const saveTimersRef = useRef<Record<number, number>>({});
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,6 +99,13 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const timers = saveTimersRef.current;
+    return () => {
+      Object.values(timers).forEach((t) => window.clearTimeout(t));
+    };
   }, []);
 
   const openCreateModal = (presetRow?: 1 | 2 | 3) => {
@@ -213,17 +238,32 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
     }
   };
 
+  const getRowGate = (rowNum: number): LatestGate => {
+    if (!rowGatesRef.current[rowNum]) rowGatesRef.current[rowNum] = createLatestGate();
+    return rowGatesRef.current[rowNum];
+  };
+
   const handleSaveRowSetting = async (rowNum: 1 | 2 | 3, updates: Partial<SocialPromoRowSetting>) => {
+    const existing: SocialPromoRowSetting = settingsRef.current.find((s) => s.row_number === rowNum) || {
+      row_number: rowNum,
+      is_enabled: true,
+      direction: defaultDirectionForRow(rowNum),
+      duration_seconds: defaultDurationForRow(rowNum),
+    };
+    const updated: SocialPromoRowSetting = { ...existing, ...updates };
+
+    // Optimistic local update, so the next request for this row builds on the newest values and an
+    // older response can never put an old value back on screen.
+    const applyLocal = (prev: SocialPromoRowSetting[]): SocialPromoRowSetting[] =>
+      prev.some((s) => s.row_number === rowNum)
+        ? prev.map((s) => (s.row_number === rowNum ? { ...s, ...updated } : s))
+        : [...prev, updated];
+    settingsRef.current = applyLocal(settingsRef.current);
+    setSettings(applyLocal);
+
+    const gate = getRowGate(rowNum);
+    const token = gate.next();
     try {
-      const existing = settings.find((s) => s.row_number === rowNum) || {
-        row_number: rowNum,
-        is_enabled: true,
-        direction: rowNum === 2 ? "right" : "left",
-        duration_seconds: 35,
-      };
-
-      const updated = { ...existing, ...updates };
-
       const res = await fetch(`${API_BASE}/api/admin/social-promos/settings`, {
         method: "PATCH",
         headers: getAdminHeaders(),
@@ -231,15 +271,58 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
       });
 
       const json = await res.json();
+      if (!gate.isLatest(token)) return; // a newer save for this row is in flight: ignore this response
       if (!res.ok || !json.success) throw new Error(json.message);
       notify(`${rowNum}-qator sozlamalari yangilandi ✓`);
-      setSettings((prev) => prev.map((s) => (s.row_number === rowNum ? { ...s, ...updated } : s)));
       try {
         window.dispatchEvent(new CustomEvent("guli_refresh_social_promos"));
       } catch {}
     } catch {
+      if (!gate.isLatest(token)) return;
       notify("Qator sozlamalarini saqlashda xatolik");
+      loadData(); // re-sync with what the server really has
     }
+  };
+
+  const clearSaveTimer = (rowNum: number) => {
+    const timer = saveTimersRef.current[rowNum];
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      delete saveTimersRef.current[rowNum];
+    }
+  };
+
+  const dropDraft = (rowNum: number) => {
+    setDurationDrafts((prev) => {
+      const next = { ...prev };
+      delete next[rowNum];
+      return next;
+    });
+  };
+
+  const commitDuration = (rowNum: 1 | 2 | 3, draft: string) => {
+    clearSaveTimer(rowNum);
+    const result = classifyDurationDraft(draft);
+    dropDraft(rowNum);
+    if (result.value === null) {
+      // Empty or not a number: nothing is saved, the last saved value stays.
+      notify(`Tezlik ${MIN_DURATION_SECONDS}–${MAX_DURATION_SECONDS} soniya oralig'ida bo'lishi kerak`);
+      return;
+    }
+    if (result.status === "out_of_range") {
+      notify(`Tezlik ${MIN_DURATION_SECONDS}–${MAX_DURATION_SECONDS} soniyaga moslashtirildi`);
+    }
+    const current = settingsRef.current.find((s) => s.row_number === rowNum)?.duration_seconds;
+    if (current === result.value) return;
+    void handleSaveRowSetting(rowNum, { duration_seconds: result.value });
+  };
+
+  const onDurationChange = (rowNum: 1 | 2 | 3, value: string) => {
+    setDurationDrafts((prev) => ({ ...prev, [rowNum]: value }));
+    clearSaveTimer(rowNum);
+    // Partial typing ("3" on the way to "30"), empty or out-of-range text waits for blur/Enter.
+    if (classifyDurationDraft(value).status !== "ok") return;
+    saveTimersRef.current[rowNum] = window.setTimeout(() => commitDuration(rowNum, value), SAVE_DEBOUNCE_MS);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,10 +404,13 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
           const rowSetting = settings.find((s) => s.row_number === rNum) || {
             row_number: rNum,
             is_enabled: true,
-            direction: rNum === 2 ? "right" : "left",
-            duration_seconds: rNum === 2 ? 42 : rNum === 3 ? 36 : 34,
+            direction: defaultDirectionForRow(rNum),
+            duration_seconds: defaultDurationForRow(rNum),
           };
           const count = items.filter((it) => it.row_number === rNum).length;
+          const draftValue = durationDrafts[rNum];
+          const draftStatus = draftValue === undefined ? null : classifyDurationDraft(draftValue).status;
+          const draftBad = draftStatus !== null && draftStatus !== "ok";
 
           return (
             <div
@@ -410,21 +496,35 @@ export const AdminSocialPromosTab: React.FC<AdminSocialPromosTabProps> = ({ noti
                   </label>
                   <input
                     type="number"
-                    min={10}
-                    max={120}
-                    value={rowSetting.duration_seconds}
-                    onChange={(e) => handleSaveRowSetting(rNum as 1 | 2 | 3, { duration_seconds: Number(e.target.value) || 35 })}
+                    inputMode="numeric"
+                    min={MIN_DURATION_SECONDS}
+                    max={MAX_DURATION_SECONDS}
+                    step={1}
+                    value={draftValue ?? String(rowSetting.duration_seconds)}
+                    onChange={(e) => onDurationChange(rNum as 1 | 2 | 3, e.target.value)}
+                    onBlur={(e) => {
+                      if (durationDrafts[rNum] !== undefined) commitDuration(rNum as 1 | 2 | 3, e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitDuration(rNum as 1 | 2 | 3, e.currentTarget.value);
+                      }
+                    }}
                     style={{
                       width: "100%",
                       padding: "7px 10px",
                       borderRadius: "10px",
-                      border: "1px solid var(--border-input)",
+                      border: draftBad ? "1px solid #ef4444" : "1px solid var(--border-input)",
                       background: "var(--bg-input)",
                       fontSize: "12px",
                       color: "var(--text-main)",
                       boxSizing: "border-box",
                     }}
                   />
+                  <small style={{ display: "block", marginTop: "3px", fontSize: "10.5px", color: draftBad ? "#ef4444" : "var(--text-muted)" }}>
+                    {MIN_DURATION_SECONDS}–{MAX_DURATION_SECONDS} soniya
+                  </small>
                 </div>
               </div>
             </div>
