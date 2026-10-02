@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import type { SocialPromoItem, SocialPromoRowSetting } from "../../types/socialPromo";
 import { SocialPromoButton } from "./SocialPromoButton";
-import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 import {
   buildDisplayList,
   marqueeAnimationName,
@@ -18,11 +17,6 @@ interface SocialPromoMarqueeRowProps {
   /** External pause (e.g. the expandable panel is closed). */
   paused?: boolean;
 }
-
-const STATIC_CSS = `
-  .guli-social-static-group .guli-social-promo-pill { max-width: 100%; min-width: 0; box-sizing: border-box; }
-  .guli-social-static-group .guli-social-promo-pill > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-`;
 
 function readViewportWidth(): number {
   if (typeof window === "undefined") return 390;
@@ -54,7 +48,6 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
   paused = false,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
-  const reducedMotion = usePrefersReducedMotion();
   const viewportWidth = useViewportWidth();
 
   // Admin value (seconds) -> safe 5-180 range; DB value always beats the code default.
@@ -68,25 +61,8 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
 
   if (!items?.length || !resolved.isEnabled) return null;
 
-  // Reduced motion: no moving track at all, cards are shown statically (fade handled by the section).
-  if (reducedMotion) {
-    return (
-      <div
-        className="guli-social-marquee-container guli-social-static"
-        style={{ width: "100%", boxSizing: "border-box", padding: "4px 16px" }}
-      >
-        <style>{STATIC_CSS}</style>
-        <div
-          className="guli-social-static-group"
-          style={{ display: "flex", flexWrap: "wrap", gap: "10px", justifyContent: "flex-start" }}
-        >
-          {items.map((item) => (
-            <SocialPromoButton key={`r${rowNumber}-static-${item.id}`} item={item} isDark={isDark} />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // Keep each configured row on one horizontal track. The marquee remains active
+  // across mobile WebViews as requested; it must never wrap into extra visual rows.
 
   const isRunning = !paused && !isPaused;
 
