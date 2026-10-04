@@ -29,6 +29,13 @@ This change is staged behind explicit runtime flags. It does not alter productio
 - Compare measured egress bytes over comparable windows.
 - Merge and production deploy only with separate approval.
 
+## Confirmed runtime dependencies (repository inspection)
+- `index.html` loads `public/browser-payment-status-sync.js`; it calls `GET /api/customer/orders` after 1.2 seconds and every 5 seconds while a session exists. It creates local payment-status notifications. Do not disable this loop until order-status notification behavior is replaced or intentionally removed.
+- The customer-facing Help & Support modal opens the React `chat` page. A profile contact link currently points to `https://t.me/guli_lingerie_admin`; repository search did not find a literal `COL-SENT` destination. Confirm the intended COL-SENT handle/link with the owner before changing links.
+- The backend startup preload chain includes `telegramAdminBotProduction.js`. Legacy files such as `telegramAdminBotNotificationPatch.js`, `telegramAdminBotSingleMessagePatch.js`, and `telegramAdminBotFinalPatch.js` appear in the repository, but are not in the current `backend/package.json` preload list. Avoid treating their timers as active production load without runtime evidence.
+- The admin worker also owns order/payment actions and customer status-message updates. Its kill switch remains OFF until these flows are independently tested.
+- Chat history endpoints currently select full rows and enrich messages; turning off SSE alone will not stop all chat REST/history traffic. The chat kill switch remains OFF pending complete route/UI fallback work.
+
 ## Rollback
 - Revert the runtime flag or disable the low-resource environment setting.
 - No database migration or destructive cleanup is part of this plan.
