@@ -56,7 +56,7 @@
   }
 
   async function sync() {
-    if (running || !hasSession()) return;
+    if (running || document.visibilityState === 'hidden' || !hasSession()) return;
     running = true;
     try {
       const r = await fetch(`${API}/customer/orders`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
@@ -80,5 +80,11 @@
     } catch {} finally { running = false; }
   }
 
-  setTimeout(sync, 1200); setInterval(sync, 5000);
+  // Payment status changes are not high-frequency; reduce background API traffic.
+  // Re-check immediately when the customer returns to the page.
+  setTimeout(sync, 1200);
+  setInterval(sync, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sync();
+  });
 })();
