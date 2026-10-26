@@ -312,4 +312,21 @@ async function sync(){
     }
   }
 }
-if(process.env.GULI_DISABLE_TELEGRAM_ADMIN_WORKER==='true'){console.info('[GULI resource saver] Telegram admin worker disabled by GULI_DISABLE_TELEGRAM_ADMIN_WORKER.');}else if(!globalThis.__GULI_ADMIN_PROD_BOT_STARTED__){globalThis.__GULI_ADMIN_PROD_BOT_STARTED__=true;(async()=>{try{await tg('setMyCommands',{commands:[{command:'ai',description:'GULI AI suhbatini boshlash'},{command:'ai_model',description:'GULI AI modelini tanlash'},{command:'stopai',description:'GULI AI suhbatini yakunlash'},{command:'ai_clear',description:'GULI AI suhbat kontekstini tozalash'}]})}catch(e){console.warn('[GULI admin AI] command setup failed:',e.message)}while(true){try{await poll();await sync()}catch(e){console.error('[GULI admin bot]',e)}await new Promise(r=>setTimeout(r,5000))}})()}
+async function syncWithBackoff(){
+  const now=Date.now();
+  if(now < Number(state.syncNextAt||0)) return;
+  try{
+    await sync();
+    state.syncBackoffMs=0;
+    state.syncNextAt=Date.now()+15000;
+  }catch(e){
+    const status=Number(e?.status||e?.statusCode||e?.code||0);
+    const retryable=status===402||status===429||(status>=500&&status<=599)||!status;
+    const previous=Number(state.syncBackoffMs||0);
+    const next=retryable?Math.min(previous?previous*2:15000,300000):30000;
+    state.syncBackoffMs=next;
+    state.syncNextAt=Date.now()+next;
+    console.error('[GULI admin sync] deferred after error; retry in '+Math.round(next/1000)+'s; status='+status+':',e?.message||e);
+  }
+}
+if(process.env.GULI_DISABLE_TELEGRAM_ADMIN_WORKER==='true'){console.info('[GULI resource saver] Telegram admin worker disabled by GULI_DISABLE_TELEGRAM_ADMIN_WORKER.');}else if(!globalThis.__GULI_ADMIN_PROD_BOT_STARTED__){globalThis.__GULI_ADMIN_PROD_BOT_STARTED__=true;(async()=>{try{await tg('setMyCommands',{commands:[{command:'ai',description:'GULI AI suhbatini boshlash'},{command:'ai_model',description:'GULI AI modelini tanlash'},{command:'stopai',description:'GULI AI suhbatini yakunlash'},{command:'ai_clear',description:'GULI AI suhbat kontekstini tozalash'}]})}catch(e){console.warn('[GULI admin AI] command setup failed:',e.message)}while(true){try{await poll()}catch(e){console.error('[GULI admin bot poll]',e)}try{await syncWithBackoff()}catch(e){console.error('[GULI admin bot sync wrapper]',e)}await new Promise(r=>setTimeout(r,5000))}})()}
