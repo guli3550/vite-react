@@ -56,10 +56,16 @@
   }
 
   async function sync() {
-    if (running || !hasSession()) return;
+    if (running || document.visibilityState === 'hidden' || !hasSession()) return;
     running = true;
     try {
-      const r = await fetch(`${API}/customer/orders`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
+      let r = await fetch(`${API}/customer/payment-status`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
+      // During a staggered rollout, the frontend preview can reach a backend
+      // that does not have the lightweight endpoint yet. Fall back only on 404;
+      // auth/server errors must not silently switch to the heavier endpoint.
+      if (r.status === 404) {
+        r = await fetch(`${API}/customer/orders`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
+      }
       if (!r.ok) return;
       const j = await r.json().catch(() => null);
       if (!j?.success || !Array.isArray(j.data)) return;
@@ -80,5 +86,11 @@
     } catch {} finally { running = false; }
   }
 
-  setTimeout(sync, 1200); setInterval(sync, 5000);
+  // Payment status changes are not high-frequency; reduce background API traffic.
+  // Re-check immediately when the customer returns to the page.
+  setTimeout(sync, 1200);
+  setInterval(sync, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') sync();
+  });
 })();

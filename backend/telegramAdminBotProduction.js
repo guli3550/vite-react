@@ -4,7 +4,7 @@ const ADMIN_BOT=String(process.env.TELEGRAM_ADMIN_BOT_TOKEN||'').trim(),CUSTOMER
 const db=URL&&KEY?createClient(URL,KEY,{auth:{persistSession:false,autoRefreshToken:false}}):null;
 const state=globalThis.__GULI_ADMIN_PROD_BOT__||{running:false,offset:0,sigs:new Map(),startedAt:new Date().toISOString(),aiHistory:new Map(),aiRate:new Map(),aiActive:new Set(),aiModel:new Map(),aiMessages:new Map()};globalThis.__GULI_ADMIN_PROD_BOT__=state;
 async function tg(method,body,token=ADMIN_BOT){if(!token)throw Error('Telegram bot token sozlanmagan');const r=await fetch(`https://api.telegram.org/bot${token}/${method}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok||!j?.ok)throw Error(j?.description||`Telegram ${r.status}`);return j.result}
-async function admins(){const s=new Set(String(process.env.TELEGRAM_ADMIN_CHAT_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));if(db){const r=await db.from('telegram_admin_bot_chats').select('chat_id').eq('active',true);for(const x of r.data||[])s.add(String(x.chat_id))}return[...s]}
+async function admins(){const s=new Set(String(process.env.TELEGRAM_ADMIN_CHAT_IDS||'').split(',').map(x=>x.trim()).filter(Boolean));if(db){const r=await db.from('telegram_admin_bot_chats').select('chat_id').eq('active',true);if(r.error)throw r.error;for(const x of r.data||[])s.add(String(x.chat_id))}return[...s]}
 const money=v=>`${Math.round(Number(v||0)).toLocaleString('uz-UZ')} so‘m`;
 function caption(o,title='🛒 YANGI BUYURTMA'){const items=Array.isArray(o.items)?o.items:[],lines=items.slice(0,15).map((x,i)=>{const p=x?.product||x?.product_data||x?.productDetails||x||{};return`${i+1}. ${p.name||p.title||x.name||'Mahsulot'}${p.product_code||x.product_code?` #${p.product_code||x.product_code}`:''} × ${Number(x.quantity||x.qty||1)} dona`});const ps=String(o.payment_status||'pending').toLowerCase();const pay=ps==='verified'?'✅ To‘lov tasdiqlangan':ps==='rejected'?'❌ Chek rad etilgan':ps==='receipt_uploaded'?'🧾 Chek yuklangan — tekshirish kutilmoqda':'⏳ To‘lov kutilmoqda';return[`<b>${title}</b>`,`🛒 <b>№:</b> <code>${o.order_number||o.id}</code>`,`👤 <b>Mijoz:</b> ${o.customer_name||[o.first_name,o.last_name].filter(Boolean).join(' ')||o.username||'Mijoz'}`,`📞 <b>Telefon:</b> ${o.phone||'—'}`,`💰 <b>Jami:</b> ${money(o.total)}`,`💳 <b>To‘lov:</b> ${o.payment||'—'}`,`🔎 <b>To‘lov holati:</b> ${pay}`,`📦 <b>Status:</b> ${o.status||'⏳ Buyurtma kutilmoqda'}`,'',`👗 <b>Mahsulotlar (${items.length} ta):</b>`,lines.join('\n')||'—','',`🧾 <b>Cheklar:</b> ${Array.isArray(o.payment_receipt_history)?o.payment_receipt_history.length:(o.payment_receipt_path?1:0)} ta`].join('\n').slice(0,1024)}
 function keyboard(o){const ps=String(o.payment_status||'pending').toLowerCase();return o?.id&&['pending','receipt_uploaded'].includes(ps)?{inline_keyboard:[[{text:'✅ To‘lovni tasdiqlash',callback_data:`guli_pay:verified:${o.id}`},{text:'❌ Chekni rad etish',callback_data:`guli_pay:rejected:${o.id}`}]]}:{inline_keyboard:[]}}
@@ -261,13 +261,22 @@ async function sync(){
   if(!db||!ADMIN_BOT)return;
   const ids=await admins();
   if(!ids.length)return;
-  const r=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  const r=await db.from('orders')
+    .select('id,order_number,created_at,customer_name,first_name,last_name,username,phone,total,payment,payment_status,status,items,payment_receipt_history,payment_receipt_path,telegram_id,telegram_status_message_id,updated_at,auth_user_id')
+    .order('created_at',{ascending:false}).limit(100);
   if(r.error)throw r.error;
   for(const o of r.data||[]){
     const sig=crypto.createHash('sha256').update(JSON.stringify({status:o.status,payment_status:o.payment_status,items:o.items,payment_receipt_history:o.payment_receipt_history,payment_receipt_path:o.payment_receipt_path,total:o.total})).digest('hex');
+    const previousSig=state.sigs.get(String(o.id));
+    // The worker runs repeatedly; unchanged orders should not create a database RPC every cycle.
+    // Keep failed / backoff events uncached so they can be retried.
+    if(previousSig===sig)continue;
     const eventKey=`${o.id}-${sig}`;
     const claim = await claimEvent(eventKey, 'order_update', o.id, 5);
-    if (!claim.claimed) continue;
+    if (!claim.claimed) {
+      if(['already_sent','max_retries_exceeded'].includes(String(claim.reason||'')))state.sigs.set(String(o.id),sig);
+      continue;
+    }
     try {
       const{data:prev}=await db.from('telegram_admin_bot_events').select('id').eq('order_id',o.id).neq('event_key',eventKey).limit(1);
       const isUpdate=prev&&prev.length>0;
@@ -293,6 +302,7 @@ async function sync(){
       }
       if (allSucceeded) {
         await markEventSent(eventKey);
+        state.sigs.set(String(o.id),sig);
       } else {
         await markEventFailed(eventKey, new Error('Delivery failed for some admin chats'), claim.retry_count);
       }
@@ -302,4 +312,21 @@ async function sync(){
     }
   }
 }
-if(process.env.GULI_DISABLE_TELEGRAM_ADMIN_WORKER==='true'){console.info('[GULI resource saver] Telegram admin worker disabled by GULI_DISABLE_TELEGRAM_ADMIN_WORKER.');}else if(!globalThis.__GULI_ADMIN_PROD_BOT_STARTED__){globalThis.__GULI_ADMIN_PROD_BOT_STARTED__=true;(async()=>{try{await tg('setMyCommands',{commands:[{command:'ai',description:'GULI AI suhbatini boshlash'},{command:'ai_model',description:'GULI AI modelini tanlash'},{command:'stopai',description:'GULI AI suhbatini yakunlash'},{command:'ai_clear',description:'GULI AI suhbat kontekstini tozalash'}]})}catch(e){console.warn('[GULI admin AI] command setup failed:',e.message)}while(true){try{await poll();await sync()}catch(e){console.error('[GULI admin bot]',e)}await new Promise(r=>setTimeout(r,5000))}})()}
+async function syncWithBackoff(){
+  const now=Date.now();
+  if(now < Number(state.syncNextAt||0)) return;
+  try{
+    await sync();
+    state.syncBackoffMs=0;
+    state.syncNextAt=Date.now()+15000;
+  }catch(e){
+    const status=Number(e?.status||e?.statusCode||e?.code||0);
+    const retryable=status===402||status===429||(status>=500&&status<=599)||!status;
+    const previous=Number(state.syncBackoffMs||0);
+    const next=retryable?Math.min(previous?previous*2:15000,300000):30000;
+    state.syncBackoffMs=next;
+    state.syncNextAt=Date.now()+next;
+    console.error('[GULI admin sync] deferred after error; retry in '+Math.round(next/1000)+'s; status='+status+':',e?.message||e);
+  }
+}
+if(process.env.GULI_DISABLE_TELEGRAM_ADMIN_WORKER==='true'){console.info('[GULI resource saver] Telegram admin worker disabled by GULI_DISABLE_TELEGRAM_ADMIN_WORKER.');}else if(!globalThis.__GULI_ADMIN_PROD_BOT_STARTED__){globalThis.__GULI_ADMIN_PROD_BOT_STARTED__=true;(async()=>{try{await tg('setMyCommands',{commands:[{command:'ai',description:'GULI AI suhbatini boshlash'},{command:'ai_model',description:'GULI AI modelini tanlash'},{command:'stopai',description:'GULI AI suhbatini yakunlash'},{command:'ai_clear',description:'GULI AI suhbat kontekstini tozalash'}]})}catch(e){console.warn('[GULI admin AI] command setup failed:',e.message)}while(true){try{await poll()}catch(e){console.error('[GULI admin bot poll]',e)}try{await syncWithBackoff()}catch(e){console.error('[GULI admin bot sync wrapper]',e)}await new Promise(r=>setTimeout(r,5000))}})()}

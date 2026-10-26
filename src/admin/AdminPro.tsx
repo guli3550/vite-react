@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl, LEGACY_RENDER_ORIGIN } from "../lib/apiOrigin";
 import ProductModalV2 from "./ProductModalV2";
 import AdminChatTab from "../components/AdminChatTab";
@@ -579,8 +579,11 @@ export default function AdminPro() {
     return j;
   }, [token, customApiUrl]);
 
+  const loadInFlight = useRef(false);
+
   const load = useCallback(async (silent = false) => {
-    if (!token) return;
+    if (!token || document.visibilityState === "hidden" || loadInFlight.current) return;
+    loadInFlight.current = true;
     if (!silent) setBusy(true);
     const errors: string[] = [];
     try {
@@ -636,6 +639,7 @@ export default function AdminPro() {
     } catch (e) {
       if (!silent) notify(e instanceof Error ? e.message : "Yuklashda xatolik");
     } finally {
+      loadInFlight.current = false;
       if (!silent) setBusy(false);
     }
   }, [token, request]);
@@ -643,8 +647,17 @@ export default function AdminPro() {
   useEffect(() => {
     if (!token) return;
     load(false);
-    const timer = window.setInterval(() => load(true), 15000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load(true);
+    }, 30000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [token, load]);
 
   const doLogin = async (e: FormEvent) => {
