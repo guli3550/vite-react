@@ -159,6 +159,65 @@ async function listOrders(req, res) {
   }
 }
 
+
+// Lightweight polling endpoint: no product payloads or signed receipt URLs.
+// It uses the same verified identity rules as the full order-history endpoint.
+async function listPaymentStatuses(req, res) {
+  const user = customer(req);
+  if (!user || !['auth', 'telegram'].includes(user.type)) {
+    return res.status(401).json({ success: false, message: 'Autentifikatsiya talab qilinadi.' });
+  }
+  if (!supabase) return res.status(503).json({ success: false, message: 'Buyurtmalar xizmati sozlanmagan.' });
+  try {
+    let query = supabase.from('orders')
+      .select('id,order_number,payment_status,status,total,updated_at,auth_user_id')
+      .order('created_at', { ascending: false }).limit(100);
+    if (user.type === 'auth') {
+      let linkedTelegramId = user.telegram_id;
+      let linkedUserId = user.id;
+      if (!linkedTelegramId) {
+        try {
+          const filters = [`id.eq.${user.id}`];
+          if (user.phone_number) {
+            const digits = String(user.phone_number).trim();
+            if (digits.length >= 7) filters.push(`phone_number.eq.${digits}`);
+          }
+          const { data: uData } = await supabase.from('users')
+            .select('id,telegram_id,phone_number').or(filters.join(',')).limit(5);
+          const match = Array.isArray(uData) ? uData.find(Boolean) : null;
+          if (match) {
+            linkedUserId = match.id || linkedUserId;
+            linkedTelegramId = match.telegram_id || linkedTelegramId;
+          }
+        } catch {}
+      }
+      const verifiedPhone = String(user.phone_number || '').trim();
+      const clauses = [`auth_user_id.eq.${linkedUserId}`];
+      if (linkedTelegramId) clauses.push(`telegram_id.eq.${Number(linkedTelegramId)}`);
+      if (verifiedPhone.length >= 7) clauses.push(`phone.eq.${verifiedPhone}`);
+      query = query.or(clauses.join(','));
+    } else {
+      query = query.eq('telegram_id', user.id);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({ success: true, data: (data || []).map(row => ({
+      id: String(row.id || ''),
+      order_number: String(row.order_number || row.id || ''),
+      payment_status: row.payment_status || 'pending',
+      status: row.status || '',
+      total: Number(row.total || 0),
+      updated_at: row.updated_at || undefined,
+      auth_user_id: row.auth_user_id || undefined,
+    })) });
+  } catch (error) {
+    console.error('[Customer payment statuses]', error);
+    return res.status(500).json({ success: false, message: 'To‘lov holatini tekshirishda xatolik.' });
+  }
+}
+
 install('get', '/api/orders', listOrders);
 install('get', '/api/customer/orders', listOrders);
+install('get', '/api/customer/payment-status', listPaymentStatuses);
 install('get', '/api/guest/orders', listOrders);
