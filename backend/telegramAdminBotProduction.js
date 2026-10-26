@@ -261,13 +261,22 @@ async function sync(){
   if(!db||!ADMIN_BOT)return;
   const ids=await admins();
   if(!ids.length)return;
-  const r=await db.from('orders').select('*').order('created_at',{ascending:false}).limit(100);
+  const r=await db.from('orders')
+    .select('id,order_number,created_at,customer_name,first_name,last_name,username,phone,total,payment,payment_status,status,items,payment_receipt_history,payment_receipt_path,telegram_id,telegram_status_message_id,updated_at,auth_user_id')
+    .order('created_at',{ascending:false}).limit(100);
   if(r.error)throw r.error;
   for(const o of r.data||[]){
     const sig=crypto.createHash('sha256').update(JSON.stringify({status:o.status,payment_status:o.payment_status,items:o.items,payment_receipt_history:o.payment_receipt_history,payment_receipt_path:o.payment_receipt_path,total:o.total})).digest('hex');
+    const previousSig=state.sigs.get(String(o.id));
+    // The worker runs repeatedly; unchanged orders should not create a database RPC every cycle.
+    // Keep failed / backoff events uncached so they can be retried.
+    if(previousSig===sig)continue;
     const eventKey=`${o.id}-${sig}`;
     const claim = await claimEvent(eventKey, 'order_update', o.id, 5);
-    if (!claim.claimed) continue;
+    if (!claim.claimed) {
+      if(['already_sent','max_retries_exceeded'].includes(String(claim.reason||'')))state.sigs.set(String(o.id),sig);
+      continue;
+    }
     try {
       const{data:prev}=await db.from('telegram_admin_bot_events').select('id').eq('order_id',o.id).neq('event_key',eventKey).limit(1);
       const isUpdate=prev&&prev.length>0;
@@ -293,6 +302,7 @@ async function sync(){
       }
       if (allSucceeded) {
         await markEventSent(eventKey);
+        state.sigs.set(String(o.id),sig);
       } else {
         await markEventFailed(eventKey, new Error('Delivery failed for some admin chats'), claim.retry_count);
       }
