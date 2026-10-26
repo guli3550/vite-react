@@ -59,7 +59,7 @@
     if (running || document.visibilityState === 'hidden' || !hasSession()) return;
     running = true;
     try {
-      const r = await fetch(`${API}/customer/orders`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
+      const r = await fetch(`${API}/customer/payment-status`, { headers: headers(), cache: 'no-store', credentials: 'same-origin' });
       if (!r.ok) return;
       const j = await r.json().catch(() => null);
       if (!j?.success || !Array.isArray(j.data)) return;
