@@ -1,4 +1,5 @@
-import {
+import React, {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -22,7 +23,7 @@ import {
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
-import { getSynchronizedCategories, normalizeCategory, type CategoryInfo } from "./utils/categoryUtils";
+import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
 import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
@@ -63,11 +64,10 @@ import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
 import { getSupabase, signOutEverywhere } from "./lib/supabaseClient";
 import { ModernProfileView } from "./components/ModernProfileView";
-import { SocialPromoSection } from "./components/socialPromo/SocialPromoSection";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
-import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
-import "./components/PwaInstallPrompt.css";
+import { VideoAdCard } from "./components/videoAds/VideoAdCard";
+import type { VideoAd } from "./types/videoAd";
 
 declare global {
   interface Window {
@@ -169,30 +169,6 @@ const orderStateKey = (order: Pick<Order, "status" | "payment_status">) =>
     paymentStatus: String(order.payment_status || "pending"),
   });
 
-const canShowReceiptUpload = (order: Pick<Order, "status" | "payment_status">) => {
-  const paymentStatus = String(order.payment_status || "").trim().toLowerCase();
-  if (paymentStatus === "verified") return false;
-
-  const status = String(order.status || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[‘’]/g, "'");
-
-  // Receipt upload/re-upload is only needed before the order is accepted.
-  // Once the order reaches Qabul qilindi or any later lifecycle status,
-  // the customer must no longer see this action.
-  const acceptedOrLaterStatuses = [
-    "qabul qilindi",
-    "tayyorlanmoqda",
-    "yo'lda",
-    "yetkazildi",
-    "bekor qilindi",
-    "tasdiqlandi",
-  ];
-
-  return !acceptedOrLaterStatuses.some((value) => status.includes(value));
-};
-
 const orderNotificationKey = (userId: string | number) =>
   `guli_order_notifications_v2_${String(userId)}`;
 const orderStateKeyStorage = (userId: string | number) =>
@@ -213,47 +189,13 @@ type Page =
 const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
-const BANNER_CACHE_KEY = "guli_customer_banners_v1";
-
-// Start the banner manifest request immediately when the JS bundle executes.
-// This removes the React-render/effect delay that was leaving the hero area blank.
-const initialBannerManifestPromise = fetch(`${API_URL}/api/banners`, {
-  cache: "default",
-  headers: { Accept: "application/json" },
-})
-  .then(async (res) => {
-    if (!res.ok) throw new Error(`Banner API status: ${res.status}`);
-    const json = await res.json();
-    if (json?.success !== true || !Array.isArray(json?.data)) {
-      throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
-    }
-    return json.data.filter((b: Banner) => b.active !== false) as Banner[];
-  })
-  .catch(() => null);
-
-try {
-  // On repeat visits this starts the image request before React finishes mounting.
-  const cached = localStorage.getItem(BANNER_CACHE_KEY);
-  const parsed = cached ? JSON.parse(cached) : null;
-  const firstUrl = Array.isArray(parsed) ? String(parsed[0]?.imageUrl || "").trim() : "";
-  if (firstUrl && !firstUrl.startsWith("data:")) {
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = firstUrl;
-    link.fetchPriority = "high";
-    link.setAttribute("data-guli-banner-preload", "1");
-    document.head.appendChild(link);
-  }
-} catch {}
-
-
 const persistOrdersSafely = (orders: Order[]) => {
   // Receipts can be large data URLs. They must never be persisted in localStorage
   // together with the complete order list; that can exhaust the Web Storage quota
   // and crash the React app during checkout/realtime updates.
-  const compact = orders.map(({ receipt_url: _unused, ...rest }) => {
-    void _unused;
+  const compact = orders.map((order) => {
+    const rest = { ...order };
+    delete (rest as { receipt_url?: string }).receipt_url;
     return rest;
   });
   try {
@@ -872,22 +814,14 @@ export default function App() {
   const [page, setPage] = useState<Page>("home");
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
-  // Initial storefront load uses the API maximum page size.
-  const PRODUCTS_PAGE_SIZE = 100;
+  const PRODUCTS_PAGE_SIZE = 40;
   const [products, setProducts] = useState<Product[]>([]);
-  // Home category cards must keep their own unfiltered product pool.
-  // Catalog filtering is server-side, so selectedCategory can legitimately
-  // replace "products" with one category only. Without this separate cache,
-  // returning to Home makes the other category cards appear empty.
-  const [homeProducts, setHomeProducts] = useState<Product[]>([]);
-  const [serverCategories, setServerCategories] = useState<CategoryInfo[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
   const productsOffsetRef = useRef(0);
   const productsHasMoreRef = useRef(true);
   const productsLoadingMoreRef = useRef(false);
-  const catalogRequestVersionRef = useRef(0);
   const productsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   // Keeps the storefront self-healing when the Render service is cold-starting.
   // A customer must never need to refresh the entire page to recover the catalog.
@@ -895,6 +829,8 @@ export default function App() {
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
+  const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
+  const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -997,6 +933,9 @@ export default function App() {
   const [language, setLanguage] = useState<Language>(() => {
     const saved = (localStorage.getItem(`guli_lang_${currentUserId}`) || localStorage.getItem("guli_lang")) as Language;
     return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
+  });
+  const [brandName, setBrandName] = useState<string>(() => {
+    return localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name") || "Guli premium";
   });
   const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
@@ -1168,31 +1107,24 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Cached banner metadata is rendered immediately; network refresh runs in parallel.
-    try {
-      const cached = localStorage.getItem(BANNER_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) {
-          const active = parsed.filter((b: Banner) => b.active !== false);
-          setHeroBanners(active);
-          setActiveBannerIdx(0);
-        }
-      }
-    } catch {}
-
     const syncBanners = async () => {
       try {
-        const active = await initialBannerManifestPromise;
-        if (!active) throw new Error("Banner manifest unavailable");
+        const res = await fetch(`${API_URL}/api/banners`, {
+          cache: "no-store",
+          headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+        });
+        if (!res.ok) throw new Error(`Banner API status: ${res.status}`);
+        const json = await res.json();
+        if (json.success !== true || !Array.isArray(json.data)) {
+          throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
+        }
+        const active = json.data.filter((b: Banner) => b.active !== false);
         setHeroBanners(active);
         setActiveBannerIdx(0);
-        try {
-          localStorage.setItem(BANNER_CACHE_KEY, JSON.stringify(active));
-        } catch {}
       } catch (error) {
         console.warn("[GULI] Production banner load failed", error);
-        // Keep cached banners visible if production API is temporarily slow.
+        setHeroBanners([]);
+        setActiveBannerIdx(0);
       }
     };
 
@@ -1218,26 +1150,6 @@ export default function App() {
     };
   }, []);
 
-  // Preload the first banner as soon as its URL is known.
-  // The image itself remains the original 1600px WebP, so visual quality is unchanged.
-  useEffect(() => {
-    const url = String(heroBanners[0]?.imageUrl || promoBannerUrl || "").trim();
-    if (!url || url.startsWith("data:")) return;
-    const existing = document.head.querySelector('link[data-guli-banner-preload="1"]');
-    if (existing && (existing as HTMLLinkElement).href === url) return;
-    existing?.remove();
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = url;
-    link.fetchPriority = "high";
-    link.setAttribute("data-guli-banner-preload", "1");
-    document.head.appendChild(link);
-    return () => {
-      if (link.parentNode) link.parentNode.removeChild(link);
-    };
-  }, [heroBanners, promoBannerUrl]);
-
   // Automatic banner rotation every 5s if multiple active banners
   useEffect(() => {
     if (heroBanners.length <= 1 || isHeroDragging) return;
@@ -1246,6 +1158,22 @@ export default function App() {
     }, 5000);
     return () => clearInterval(timer);
   }, [heroBanners.length, isHeroDragging]);
+
+  // Load active video ads for Home and Feed
+  useEffect(() => {
+    const platform = isTelegramWebapp ? "telegram" : "web";
+    fetch(`${API_URL}/api/video-ads?placement=all&platform=${platform}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          const home = json.data.filter((ad: VideoAd) => ad.placement === "home" || ad.placement === "all");
+          const feed = json.data.filter((ad: VideoAd) => ad.placement === "product_feed" || ad.placement === "all");
+          setHomeVideoAds(home);
+          setFeedVideoAds(feed);
+        }
+      })
+      .catch((err) => console.warn("[VideoAds] Storefront fetch warning:", err));
+  }, [isTelegramWebapp]);
 
   const t = (key: TranslationKey) => getTranslation(key, language);
   const formatPrice = (n: number) => {
@@ -1477,6 +1405,8 @@ export default function App() {
       if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
       const savedLang = localStorage.getItem("guli_lang") as Language;
       if (savedLang === "uz" || savedLang === "ru" || savedLang === "en") setLanguage(savedLang);
+      const savedBrand = localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name");
+      if (savedBrand) setBrandName(savedBrand);
     };
 
     const handleThemeEvt = (e: any) => {
@@ -1489,13 +1419,21 @@ export default function App() {
       if (l === "uz" || l === "ru" || l === "en") setLanguage(l);
     };
 
+    const handleBrandEvt = (e: any) => {
+      const b = e.detail || localStorage.getItem("guli_store_name") || "Guli premium";
+      setBrandName(b);
+    };
+
     window.addEventListener("guli_settings_updated", handleSettingsUpdate);
     window.addEventListener("guli_theme_changed", handleThemeEvt);
     window.addEventListener("guli_lang_changed", handleLangEvt);
+    window.addEventListener("guli_brand_name_updated", handleBrandEvt);
+
     return () => {
       window.removeEventListener("guli_settings_updated", handleSettingsUpdate);
       window.removeEventListener("guli_theme_changed", handleThemeEvt);
       window.removeEventListener("guli_lang_changed", handleLangEvt);
+      window.removeEventListener("guli_brand_name_updated", handleBrandEvt);
     };
   }, []);
 
@@ -1541,29 +1479,12 @@ export default function App() {
     };
 
     refreshUnread();
-
-    // The chat store now emits a dedicated notification-count event whenever
-    // the canonical message state changes. Listen to it directly so the bell
-    // badge updates immediately for Telegram/admin media and text messages,
-    // without waiting for another render, tab change, or manual refresh.
-    const handleNotificationCountUpdate = () => {
-      refreshUnread();
-    };
-
     const unsubscribe = subscribeToChat(refreshUnread);
     window.addEventListener("guli_new_admin_message", handleNewAdminMsg);
-    window.addEventListener(
-      "guli_notifications_updated",
-      handleNotificationCountUpdate,
-    );
 
     return () => {
       unsubscribe();
       window.removeEventListener("guli_new_admin_message", handleNewAdminMsg);
-      window.removeEventListener(
-        "guli_notifications_updated",
-        handleNotificationCountUpdate,
-      );
     };
   }, [currentUserId, page]);
 
@@ -1870,8 +1791,7 @@ export default function App() {
       setReuploadingOrderId(null);
     }
   };
-  const loadProducts = useCallback(async (silent = false, append = false, keepInitialLoading = false) => {
-    const requestVersion = append ? catalogRequestVersionRef.current : ++catalogRequestVersionRef.current;
+  const loadProducts = useCallback(async (silent = false, append = false) => {
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -1938,7 +1858,6 @@ export default function App() {
         throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
       }
 
-      if (requestVersion !== catalogRequestVersionRef.current) return [];
       const rows: Product[] = j.data;
       const nextOffset = offset + rows.length;
       const hasMore = Boolean(j.pagination?.hasMore);
@@ -1952,18 +1871,6 @@ export default function App() {
         productsRecoveryTimerRef.current = null;
       }
 
-      // Keep Home's rotating category cards independent from the catalog's
-      // server-side category/search result set. Only a clean "Barchasi"
-      // catalog response is allowed to refresh the Home cache.
-      if (selectedCategory === "Barchasi" && !normalizedSearch) {
-        setHomeProducts((prevHome) => {
-          if (!append) return rows;
-          const existingIds = new Set(prevHome.map((p) => String(p.id)));
-          const uniqueNew = rows.filter((p) => !existingIds.has(String(p.id)));
-          return [...prevHome, ...uniqueNew];
-        });
-      }
-
       setProducts((prev) => {
         if (!append) return rows;
         const existingIds = new Set(prev.map((p) => String(p.id)));
@@ -1973,7 +1880,6 @@ export default function App() {
 
       return rows;
     } catch (error) {
-      if (requestVersion !== catalogRequestVersionRef.current) return [];
       if (!append) {
         const message =
           error instanceof Error ? error.message : "Mahsulotlarni yuklashda xatolik";
@@ -1997,8 +1903,8 @@ export default function App() {
     } finally {
       if (append) {
         productsLoadingMoreRef.current = false;
-        if (requestVersion === catalogRequestVersionRef.current) setProductsLoadingMore(false);
-      } else if (requestVersion === catalogRequestVersionRef.current && !silent && !keepInitialLoading) {
+        setProductsLoadingMore(false);
+      } else if (!silent) {
         setProductsLoading(false);
       }
     }
@@ -2111,7 +2017,7 @@ export default function App() {
               : "⏳ To'lovni tasdiqlash kutilmoqda"),
           receipt_url: row.receipt_url || undefined,
           payment_receipt_path: row.payment_receipt_path || undefined,
-          createdAt: row.created_at || row.createdAt || "",
+          createdAt: row.created_at || new Date().toISOString(),
           updatedAt: row.updated_at || undefined,
           statusUpdatedAt: row.status_updated_at || row.updated_at || undefined,
         }));
@@ -2208,178 +2114,15 @@ export default function App() {
     [telegramUser?.id, authUser?.phone, registerOrderStateChanges],
   );
 
-  const loadCategories = useCallback(async () => {
-    try {
-      const response = await fetch(
-        API_URL + "/api/categories?_t=" + Date.now(),
-        { cache: "no-store", headers: { Accept: "application/json" } },
-      );
-      if (!response.ok) throw new Error("Categories status: " + response.status);
-      const json = await response.json();
-      if (json?.success !== true || !Array.isArray(json.data)) {
-        throw new Error(json?.message || "Kategoriyalar API noto‘g‘ri javob qaytardi");
-      }
-      const next = json.data
-        .filter((item: any) => item?.active !== false && item?.name)
-        .map((item: any): CategoryInfo => ({
-          name: normalizeCategory(item.name),
-          icon: item.icon || "🌸",
-          slug: item.slug || undefined,
-        }));
-      setServerCategories(next);
-      setSelectedCategory((current) =>
-        current !== "Barchasi" && !next.some((item: CategoryInfo) => item.name === current)
-          ? "Barchasi"
-          : current,
-      );
-    } catch {
-      // Keep the last known server categories during a temporary API failure.
-    }
-  }, []);
-
   useEffect(() => {
-    void loadCategories();
-    const interval = window.setInterval(() => {
-      void loadCategories();
-    }, 15000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void loadCategories();
-    };
-    document.addEventListener("visibilitychange", onVisible);
+    loadProducts(false).catch(() => {});
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [loadCategories]);
-
-  const startupLoadProductsRef = useRef(loadProducts);
-  startupLoadProductsRef.current = loadProducts;
-  const catalogFilterKeyRef = useRef({ category: selectedCategory, search: debouncedSearch });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const preloadImages = async (rows: Product[]) => {
-      const urls = Array.from(
-        new Set(
-          rows
-            .flatMap((p) => [p.image, ...(p.images || [])])
-            .filter((url): url is string => Boolean(url)),
-        ),
-      );
-      if (!urls.length) return;
-
-      await Promise.all(
-        urls.map(
-          (url) =>
-            new Promise<void>((resolve) => {
-              const img = new Image();
-              let settled = false;
-              const done = () => {
-                if (settled) return;
-                settled = true;
-                resolve();
-              };
-              img.onload = done;
-              img.onerror = done;
-              img.decoding = "async";
-              img.src = url;
-            }),
-        ),
-      );
-    };
-
-    const reportStartupProgress = (progress: number) => {
-      if (typeof window === "undefined") return;
-      window.dispatchEvent(
-        new CustomEvent("guli_startup_progress", {
-          detail: { progress: Math.max(0, Math.min(100, progress)) },
-        }),
-      );
-    };
-
-    const loadHomeCompletely = async () => {
-      // The splash progress is driven by real startup milestones:
-      // first catalog page -> visible image/category/banner preload -> ready.
-      reportStartupProgress(8);
-
-      const firstPagePromise = startupLoadProductsRef.current(false, false, true);
-      const rows = await Promise.race([
-        firstPagePromise,
-        new Promise<Product[]>((resolve) => window.setTimeout(() => resolve([]), 2200)),
-      ]);
-      if (cancelled) return;
-
-      reportStartupProgress(rows.length ? 38 : 24);
-
-      const preloadWork = Promise.all([
-        preloadImages(rows),
-        loadCategories(),
-        initialBannerManifestPromise
-          .then(async (banners) => {
-            const urls = (banners || [])
-              .map((b: Banner) => String(b.imageUrl || "").trim())
-              .filter(Boolean);
-            await Promise.all(
-              urls.map(
-                (url) =>
-                  new Promise<void>((resolve) => {
-                    const img = new Image();
-                    let settled = false;
-                    const done = () => {
-                      if (settled) return;
-                      settled = true;
-                      resolve();
-                    };
-                    img.onload = done;
-                    img.onerror = done;
-                    img.decoding = "async";
-                    img.src = url;
-                  }),
-              ),
-            );
-          })
-          .catch(() => {}),
-      ]);
-
-      reportStartupProgress(58);
-
-      await Promise.race([
-        preloadWork,
-        new Promise<void>((resolve) => window.setTimeout(resolve, 2600)),
-      ]);
-
-      if (!cancelled) {
-        setProductsLoading(false);
-        reportStartupProgress(100);
-      }
-
-      // Do not drain every catalog page in the background. Keep the initial
-      // page ready for Home; the Catalog's near-end observer loads additional
-      // pages only as the customer approaches the end of the visible list.
-      // This bounds startup network work and prevents unbounded card growth
-      // while the customer is browsing Home.
-    };
-
-    loadHomeCompletely().catch(() => {
-      if (!cancelled) setProductsLoading(false);
-    });
-
-    return () => {
-      cancelled = true;
       if (productsRecoveryTimerRef.current) {
         clearTimeout(productsRecoveryTimerRef.current);
         productsRecoveryTimerRef.current = null;
       }
     };
-  }, []);
-
-  useEffect(() => {
-    const previous = catalogFilterKeyRef.current;
-    if (previous.category === selectedCategory && previous.search === debouncedSearch) return;
-    catalogFilterKeyRef.current = { category: selectedCategory, search: debouncedSearch };
-    void loadProducts(false, false).catch(() => {});
-  }, [selectedCategory, debouncedSearch, loadProducts]);
+  }, [loadProducts]);
 
   useEffect(() => {
     if (page !== "catalog" || !productsHasMore || productsLoading || productsLoadingMore) {
@@ -2867,12 +2610,10 @@ export default function App() {
   const maxCashbackDeduction = Math.min(availableCashback, payableBeforeCashback);
   const appliedCashback = useCashback ? maxCashbackDeduction : 0;
   const total = Math.max(0, payableBeforeCashback - appliedCashback);
-  const allCategories = useMemo(() => {
-    if (serverCategories.length) {
-      return [{ name: "Barchasi", icon: "✨" }, ...serverCategories];
-    }
-    return getSynchronizedCategories(homeProducts);
-  }, [serverCategories, homeProducts]);
+  const allCategories = useMemo(
+    () => getSynchronizedCategories(products),
+    [products],
+  );
   const filtered = useMemo(
     () =>
       [...products]
@@ -2885,17 +2626,16 @@ export default function App() {
         }),
     [products],
   );
-  const applyPromo = async (codeOverride?: string) => {
+  const applyPromo = async () => {
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
     } catch {}
-    const rawCode = codeOverride !== undefined ? codeOverride : promo;
-    const code = rawCode.trim().toUpperCase();
+    const code = promo.trim().toUpperCase();
     if (!code) {
       setPromoApplied(false);
       setPromoDiscount(0);
       showToast(t("promo_placeholder"));
-      return false;
+      return;
     }
     setPromoLoading(true);
     try {
@@ -2907,10 +2647,8 @@ export default function App() {
       const j = await r.json();
       if (!r.ok || !j.success)
         throw new Error(j.message || "Promo kodni tekshirishda xatolik");
-      const validCode = j.data?.code || code;
-      const validDiscount = Number(j.data?.discount || 0);
-      setPromo(validCode);
-      setPromoDiscount(validDiscount);
+      setPromo(j.data?.code || code);
+      setPromoDiscount(Number(j.data?.discount || 0));
       setPromoApplied(true);
       try {
         window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.(
@@ -2918,9 +2656,8 @@ export default function App() {
         );
       } catch {}
       showToast(
-        `Promo qo‘llandi: −${formatPrice(validDiscount)} ✓`,
+        `Promo qo‘llandi: −${formatPrice(Number(j.data?.discount || 0))} ✓`,
       );
-      return true;
     } catch (e) {
       setPromoApplied(false);
       setPromoDiscount(0);
@@ -2932,23 +2669,9 @@ export default function App() {
       showToast(
         e instanceof Error ? e.message : "Promo kodni tekshirishda xatolik",
       );
-      return false;
     } finally {
       setPromoLoading(false);
     }
-  };
-
-  const removePromo = () => {
-    setPromo("");
-    setPromoApplied(false);
-    setPromoDiscount(0);
-    showToast(
-      language === "ru"
-        ? "Промокод отменен"
-        : language === "en"
-        ? "Promo code removed"
-        : "Promo kod bekor qilindi"
-    );
   };
   const reverseGeocode = async (lat: number, lon: number) => {
     let rawState = "";
@@ -3290,26 +3013,11 @@ export default function App() {
       showToast(e instanceof Error ? e.message : "Buyurtma yuborilmadi");
     }
   };
-  // "O'xshash mahsulotlar" katalogning joriy pagination holatiga bog'lanmasin.
-  // Mahsulot bosh sahifa/kategoriya kartasidan ochilgan bo'lsa, u products emas,
-  // homeProducts ichida bo'lishi mumkin. Ikkala manbani birlashtirib, kategoriya
-  // nomini trim/lowercase bilan solishtiramiz — eski va yangi mahsulotlar bir-birini
-  // to'liq ko'rishi kerak.
-  const similarSource = useMemo(() => {
-    const merged = new Map<string, Product>();
-    [...products, ...homeProducts].forEach((p) => {
-      if (!p || p.active === false) return;
-      merged.set(String(p.id), p);
-    });
-    return Array.from(merged.values());
-  }, [products, homeProducts]);
-
   const similar = selectedProduct
-    ? similarSource
+    ? products
         .filter(
           (p) =>
-            String(p.category || "").trim().toLowerCase() ===
-              String(selectedProduct.category || "").trim().toLowerCase() &&
+            p.category === selectedProduct.category &&
             p.id !== selectedProduct.id,
         )
         .slice(0, 4)
@@ -3321,15 +3029,8 @@ export default function App() {
         ? p.description.slice(0, 55) + "…"
         : p.description
       : "";
-    const rawRating = Number(p.rating);
-    const ratingValue = Number.isFinite(rawRating) && rawRating > 0 ? rawRating : 5.0;
-    const rawReviews = Number(p.reviews);
-    const rawProductId = Number(p.id);
-    const reviewCount = Number.isFinite(rawReviews) && rawReviews > 0
-      ? Math.floor(rawReviews)
-      : Number.isFinite(rawProductId) && rawProductId > 0
-        ? Math.floor(((rawProductId * 17) % 45) + 8)
-        : 0;
+    const ratingValue = p.rating && p.rating > 0 ? p.rating : 5.0;
+    const reviewCount = p.reviews && p.reviews > 0 ? p.reviews : Math.floor(((p.id * 17) % 45) + 8);
     const isOutOfStock = p.stock !== undefined && p.stock <= 0;
 
     return (
@@ -3494,7 +3195,7 @@ export default function App() {
   const handleShare = async () => {
     const shareText =
       "GULI Premium — Nafis va sifatli ayollar ichki kiyimlari to‘plami 🌷";
-    const shareUrl = "https://t.me/Guli_MARKET_bot";
+    const shareUrl = "https://t.me/guli3550bot";
     if (navigator.share) {
       try {
         await navigator.share({ title: "GULI Premium", text: shareText, url: shareUrl });
@@ -3895,7 +3596,7 @@ export default function App() {
                                 flexDirection: "column",
                                 background: "var(--bg-card-sub, rgba(0,0,0,0.03))",
                                 borderRadius: "12px",
-                                overflow: "visible",
+                                overflow: "hidden",
                                 border: "1px solid var(--border-color)",
                               }}
                               onClick={(e) => {
@@ -4060,8 +3761,8 @@ export default function App() {
                         ) : null}
                       </span>
                       <div className="orderActions" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                        {/* Chek yuklash / qayta yuklash faqat tasdiqlashgacha ko‘rinadi */}
-                        {(o.payment === "card" || o.receipt_url) && canShowReceiptUpload(o) ? (
+                        {/* Tezkor Chek yuklash / qayta yuklash tugmasi (Mijozga doim ochiq ko'rinadi) */}
+                        {o.payment === "card" || o.receipt_url ? (
                           <label
                             htmlFor={`quick-receipt-upload-${o.id}`}
                             className="orderReceiptQuickBtn"
@@ -4589,7 +4290,6 @@ export default function App() {
           }}
           t={t}
         />
-        <SocialPromoSection language={language} isDark={theme === "dark"} />
         <div
           className="profileWatermark"
           style={{
@@ -4618,7 +4318,7 @@ export default function App() {
             className="brand"
             onClick={() => go("home")}
             type="button"
-            aria-label="Gulii Market Home"
+            aria-label="GULI Home"
           >
             <span
               className="brandIcon guli-brand-circle-logo"
@@ -4640,7 +4340,7 @@ export default function App() {
             >
               <img
                 src={appLogo || GULI_LOGO_BASE64}
-                alt="Gulii Market"
+                alt="Guli Premium"
                 style={{
                   width: "100%",
                   height: "100%",
@@ -4661,7 +4361,8 @@ export default function App() {
               />
             </span>
             <span>
-              <b className="brandMarketWord">MARKET</b>
+              <b>{brandName}</b>
+              <small>{t("brand_sub")}</small>
             </span>
           </button>
         </div>
@@ -4717,7 +4418,6 @@ export default function App() {
         </div>
       </header>
       )}
-      <PwaInstallPrompt />
 
       <div
         className="tabSwipeArea pageAnimEnter"
@@ -4767,9 +4467,6 @@ export default function App() {
                         src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
-                        loading={idx === activeBannerIdx ? "eager" : "lazy"}
-                        fetchPriority={idx === activeBannerIdx ? "high" : "auto"}
-                        decoding="async"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = promoBannerUrl;
                         }}
@@ -4807,7 +4504,7 @@ export default function App() {
 
             <RotatingCategoriesSection
               categories={allCategories}
-              products={homeProducts}
+              products={products}
               onSelectCategory={(catName) => {
                 setSelectedCategory(catName);
                 go("catalog");
@@ -4818,6 +4515,35 @@ export default function App() {
                 go("catalog");
               }}
             />
+            {homeVideoAds.length > 0 && (
+              <VideoAdCard
+                ad={homeVideoAds[0]}
+                placement="home"
+                onOpenProduct={(prodId) => {
+                  const p = products.find(
+                    (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
+                  );
+                  if (p) openProduct(p, "home");
+                  else go("catalog");
+                }}
+                onNavigateUrl={(url) => {
+                  if (url.startsWith("/")) {
+                    if (url.includes("category=")) {
+                      const match = url.match(/category=([^&]+)/);
+                      if (match) setSelectedCategory(decodeURIComponent(match[1]));
+                    }
+                    go("catalog");
+                  } else {
+                    const tg = (window as any).Telegram?.WebApp;
+                    if (tg?.openLink) tg.openLink(url);
+                    else window.open(url, "_blank", "noopener,noreferrer");
+                  }
+                }}
+                onDismiss={() => {
+                  setHomeVideoAds((prev) => prev.slice(1));
+                }}
+              />
+            )}
             <section className="section">
               <div className="sectionTitle">
                 <h2>{t("featured_title")}</h2>
@@ -4833,8 +4559,9 @@ export default function App() {
                 </div>
               ) : (
                 <div className="productGrid">
-                  {homeProducts
+                  {products
                     .filter((p) => p.featured && p.active !== false)
+                    .slice(0, 8)
                     .map((p) => card(p))}
                 </div>
               )}
@@ -4904,7 +4631,38 @@ export default function App() {
               ) : filtered.length ? (
                 <>
                   <div className="productGrid">
-                    {filtered.map((p) => card(p))}
+                    {filtered.map((p, idx) => (
+                      <Fragment key={p.id || idx}>
+                        {card(p)}
+                        {idx === 3 && feedVideoAds.length > 0 && (
+                          <VideoAdCard
+                            ad={feedVideoAds[0]}
+                            placement="product_feed"
+                            onOpenProduct={(prodId) => {
+                              const found = products.find(
+                                (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
+                              );
+                              if (found) openProduct(found, "catalog");
+                            }}
+                            onNavigateUrl={(url) => {
+                              if (url.startsWith("/")) {
+                                if (url.includes("category=")) {
+                                  const match = url.match(/category=([^&]+)/);
+                                  if (match) setSelectedCategory(decodeURIComponent(match[1]));
+                                }
+                              } else {
+                                const tg = (window as any).Telegram?.WebApp;
+                                if (tg?.openLink) tg.openLink(url);
+                                else window.open(url, "_blank", "noopener,noreferrer");
+                              }
+                            }}
+                            onDismiss={() => {
+                              setFeedVideoAds((prev) => prev.slice(1));
+                            }}
+                          />
+                        )}
+                      </Fragment>
+                    ))}
                   </div>
                   <div ref={productsLoadMoreRef} aria-hidden="true" style={{ height: "4px", margin: "10px 0" }} />
                   {productsLoadingMore ? (
@@ -5137,7 +4895,7 @@ export default function App() {
               />
 
               <section className="recommendSection">
-                <div className="sectionTitle recommendationHeading">
+                <div className="sectionTitle">
                   <div>
                     <span>{t("you_may_also_like")}</span>
                     <h2>{t("similar_products")}</h2>
@@ -5228,7 +4986,7 @@ export default function App() {
                     placeholder="Promo kod"
                     maxLength={40}
                   />
-                  <button onClick={() => applyPromo()} disabled={promoLoading}>
+                  <button onClick={applyPromo} disabled={promoLoading}>
                     {promoLoading
                       ? "Tekshirilmoqda…"
                       : promoApplied
@@ -5311,13 +5069,6 @@ export default function App() {
             onToggleCashback={setUseCashback}
             cashbackDiscount={appliedCashback}
             LocationPicker={LocationPicker}
-            promo={promo}
-            setPromo={setPromo}
-            promoApplied={promoApplied}
-            promoDiscount={promoDiscount}
-            promoLoading={promoLoading}
-            onApplyPromo={applyPromo}
-            onRemovePromo={removePromo}
           />
         )}
         {page === "wishlist" && (
@@ -5348,7 +5099,7 @@ export default function App() {
                 </div>
                 {productsLoading ? (
                   <div className="wishlistPopularSection">
-                    <div className="sectionTitle wishlistPopularHeading">
+                    <div className="sectionTitle">
                       <div>
                         <span className="sectionEyebrow">{t("badge_featured")}</span>
                         <h2>{t("popular_products")}</h2>
@@ -5407,24 +5158,8 @@ export default function App() {
                     last_name: telegramUser.last_name,
                     username: telegramUser.username,
                     photo_url: telegramUser.photo_url,
-                    phone,
                   }
-                : (() => {
-                    try {
-                      const raw = JSON.parse(localStorage.getItem("guli_auth_user") || "null");
-                      if (!raw?.id) return undefined;
-                      return {
-                        id: raw.id,
-                        first_name: raw.full_name?.split(" ")[0] || raw.first_name,
-                        last_name: raw.full_name?.split(" ").slice(1).join(" ") || raw.last_name,
-                        username: raw.telegram_username || raw.username,
-                        photo_url: raw.telegram_photo_url || raw.avatar_url,
-                        phone: raw.phone || phone,
-                      };
-                    } catch {
-                      return undefined;
-                    }
-                  })()
+                : undefined
             }
             onShowToast={showToast}
           />

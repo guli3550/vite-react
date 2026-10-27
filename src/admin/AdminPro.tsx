@@ -17,6 +17,7 @@ import { AdminCallCenterTab } from "./components/AdminCallCenterTab";
 import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import { AdminSocialPromosTab } from "./components/AdminSocialPromosTab";
+import { VideoAdsAdminTab } from "./components/VideoAdsAdminTab";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
@@ -296,6 +297,7 @@ export default function AdminPro() {
   const [busy, setBusy] = useState(false);
 
   const [tab, setTab] = useState<NavTabKey>("dashboard");
+  const [marketingSubTab, setMarketingSubTab] = useState<"video_ads" | "social_promos">("video_ads");
   const [tabHistory, setTabHistory] = useState<NavTabKey[]>(["dashboard"]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -1831,8 +1833,43 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {/* Tab 12: 🔔 Xabarlar */}
         {tab === "notifications" && <AdminNotificationsTab notify={notify} />}
 
-        {/* Marketing — alohida modul; eski Settings social URLs o‘zgarmaydi */}
-        {tab === "marketing" && <AdminSocialPromosTab notify={notify} />}
+        {/* Tab: 🎬 Video reklamalar */}
+        {tab === "video_ads" && <VideoAdsAdminTab notify={notify} />}
+
+        {/* Marketing — Video reklamalar va Ijtimoiy tarmoqlar aksiyalari */}
+        {tab === "marketing" && (
+          <div className="space-y-4">
+            <div className="flex gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl w-fit">
+              <button
+                type="button"
+                onClick={() => setMarketingSubTab("video_ads")}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                  marketingSubTab === "video_ads"
+                    ? "bg-pink-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                🎬 Video reklamalar
+              </button>
+              <button
+                type="button"
+                onClick={() => setMarketingSubTab("social_promos")}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                  marketingSubTab === "social_promos"
+                    ? "bg-pink-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                📣 Ijtimoiy tarmoqlar aksiyalari
+              </button>
+            </div>
+            {marketingSubTab === "video_ads" ? (
+              <VideoAdsAdminTab notify={notify} />
+            ) : (
+              <AdminSocialPromosTab notify={notify} />
+            )}
+          </div>
+        )}
 
         {/* Tab 13: ⚙️ Sozlamalar */}
         {tab === "settings" && (

@@ -1,0 +1,241 @@
+/* ==========================================================================
+   GULI MARKET: PROFESSIONAL VIDEO AD CARD STYLES
+   ========================================================================== */
+
+/* HOME PLACEMENT (Feature Banner below categories or hero) */
+.guli-video-ad-home {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 1.5rem auto 2rem auto;
+  padding: 0 1rem;
+  box-sizing: border-box;
+}
+
+.guli-video-ad-home-container {
+  position: relative;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  background: #0f172a;
+  box-shadow: 0 10px 25px -5px rgba(225, 29, 72, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(244, 114, 182, 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 840px) {
+  .guli-video-ad-home-container {
+    flex-direction: row;
+    min-height: 340px;
+  }
+}
+
+.guli-video-media-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #090d16;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 840px) {
+  .guli-video-media-wrapper {
+    width: 60%;
+    aspect-ratio: auto;
+    min-height: 340px;
+  }
+}
+
+.guli-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.guli-video-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease;
+}
+
+/* Floating overlay controls */
+.guli-video-badge {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  z-index: 5;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fce7f3;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.guli-video-dismiss-btn {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.guli-video-dismiss-btn:hover {
+  background: rgba(225, 29, 72, 0.8);
+  transform: scale(1.05);
+}
+
+.guli-video-sound-btn {
+  position: absolute;
+  bottom: 0.85rem;
+  right: 0.85rem;
+  z-index: 10;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.guli-video-sound-btn:hover {
+  background: rgba(225, 29, 72, 0.85);
+  transform: scale(1.03);
+}
+
+/* Home text details column */
+.guli-video-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: linear-gradient(180deg, #1e1b2e 0%, #151421 100%);
+  color: #ffffff;
+  box-sizing: border-box;
+}
+
+@media (min-width: 840px) {
+  .guli-video-content {
+    width: 40%;
+    padding: 2.25rem;
+  }
+}
+
+.guli-video-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0 0 0.5rem 0;
+  color: #fff1f2;
+}
+
+.guli-video-desc {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+  margin: 0 0 1.25rem 0;
+}
+
+.guli-video-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  width: fit-content;
+}
+
+.guli-video-cta-btn:hover {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(225, 29, 72, 0.45);
+}
+
+/* PRODUCT FEED PLACEMENT (In-grid card) */
+.guli-video-ad-feed {
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #111827;
+  border: 1px solid rgba(244, 114, 182, 0.2);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.guli-video-ad-feed .guli-video-media-wrapper {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  min-height: auto;
+}
+
+.guli-video-ad-feed .guli-video-content {
+  width: 100%;
+  padding: 0.85rem;
+  background: #181c2e;
+}
+
+.guli-video-ad-feed .guli-video-title {
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+.guli-video-ad-feed .guli-video-desc {
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.guli-video-ad-feed .guli-video-cta-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  font-size: 0.825rem;
+}

@@ -12,6 +12,7 @@ const { listProducts, getProduct } = require("./catalog");
 const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
 const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
 require("./socialPromoRuntime");
+require("./videoAdsRuntime");
 
 const app = express();
 
