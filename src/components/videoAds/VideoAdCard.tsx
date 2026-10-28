@@ -270,11 +270,14 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               </div>
             )}
 
-            {/* Subtle fullscreen hint badge in bottom-right */}
+            {/* Icon-only fullscreen hint, positioned immediately before the close button */}
             {!hasError && ad.video_url && (
-              <div className="guli-video-fullscreen-hint" aria-hidden="true">
-                <Maximize2 size={14} />
-                <span>To‘liq ekran</span>
+              <div
+                className="guli-video-fullscreen-hint"
+                aria-hidden="true"
+                title="To‘liq ekranda ochish"
+              >
+                <Maximize2 size={16} />
               </div>
             )}
           </div>
