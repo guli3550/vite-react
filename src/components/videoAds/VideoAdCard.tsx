@@ -243,7 +243,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           </button>
 
           {/* Video or poster fallback */}
-          {!hasError && ad.video_url ? (
+          {!hasError && ad.video_url && (
             <video
               ref={videoRef}
               src={ad.video_url}
@@ -255,7 +255,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               preload="metadata"
               onError={() => setHasError(true)}
               onEnded={() => {
-                // Track video complete
                 try {
                   const apiBase = getApiBaseUrl();
                   fetch(`${apiBase}/api/video-ads/${ad.id}/events`, {
@@ -266,14 +265,16 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
                 } catch {}
               }}
             />
-          ) : ad.poster_url ? (
+          )}
+          {(hasError || !ad.video_url) && ad.poster_url && (
             <img
               src={ad.poster_url}
               alt={ad.title}
               className="guli-video-poster"
               referrerPolicy="no-referrer"
             />
-          ) : (
+          )}
+          {(hasError || !ad.video_url) && !ad.poster_url && (
             <div className="flex items-center justify-center w-full h-full text-slate-400 text-xs">
               Guli Market Video
             </div>
