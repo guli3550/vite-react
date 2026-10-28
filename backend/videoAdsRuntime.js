@@ -35,46 +35,6 @@ const supabase = new Proxy({}, {
   },
 });
 
-// Built-in fallback video ads in case database migration hasn't been applied yet
-const DEFAULT_VIDEO_ADS = [
-  {
-    id: "v-ad-default-1",
-    title: "Guli Premium Pijamalar To‘plami",
-    description: "Yangi ipak va paxta to‘plamlari bilan beqiyos qulaylikni his qiling.",
-    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    poster_url: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=800&q=80",
-    cta_text: "Xarid qilish",
-    destination_url: "/?category=Pijamalar",
-    product_id: null,
-    placement: "all",
-    platform: "all",
-    priority: 10,
-    frequency_cap: 5,
-    is_active: true,
-    starts_at: null,
-    ends_at: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
-// In-memory stats tracker for resilience
-const inMemoryEvents = [];
-const eventRateLimitMap = new Map();
-
-function isValidUrl(str) {
-  if (!str || typeof str !== "string") return false;
-  const s = str.trim();
-  if (/^(javascript|data|vbscript|file):/i.test(s)) return false;
-  if (s.startsWith("/")) return true;
-  return /^(https?:\/\/|tg:\/\/)/i.test(s);
-}
-
-function calculateCtr(clicks, impressions) {
-  if (!impressions || impressions <= 0 || clicks <= 0) return 0;
-  return Math.min(100, Math.round(((clicks / impressions) * 100) * 10) / 10);
-}
-
 // ----------------------------------------------------------------------------
 // 1. PUBLIC API: GET /api/video-ads
 // Returns active, unexpired video ads filtered by placement and platform
@@ -103,8 +63,12 @@ install("get", "/api/video-ads", async (req, res) => {
       }
 
       const { data, error } = await query;
+      if (error) {
+        console.error("[Video Ads] Public query failed:", error.message);
+        return res.status(503).json({ success: false, message: "Video reklamalar vaqtincha mavjud emas" });
+      }
 
-      if (!error && Array.isArray(data)) {
+      if (Array.isArray(data)) {
         // Filter by start and end timestamps in JS for time-zone reliability
         const filtered = data.filter((ad) => {
           if (ad.starts_at && new Date(ad.starts_at).toISOString() > nowIso) return false;
@@ -117,16 +81,8 @@ install("get", "/api/video-ads", async (req, res) => {
       }
     }
 
-    // Fallback if table not yet seeded or DB temporarily unavailable
-    const fallbackList = DEFAULT_VIDEO_ADS.filter((ad) => {
-      if (!ad.is_active) return false;
-      if (placement !== "all" && ad.placement !== "all" && ad.placement !== placement) return false;
-      if (platform !== "all" && ad.platform !== "all" && ad.platform !== platform) return false;
-      return true;
-    });
-
-    res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
-    return res.json({ success: true, data: fallbackList });
+    console.error("[Video Ads] Supabase is not configured");
+    return res.status(503).json({ success: false, message: "Video reklama xizmati vaqtincha mavjud emas" });
   } catch (error) {
     console.error("[Video Ads] Public GET error:", error);
     return res.status(500).json({ success: false, message: "Reklamalarni yuklashda xatolik yuz berdi" });
@@ -154,50 +110,29 @@ install("post", "/api/video-ads/:id/events", async (req, res) => {
       return res.status(400).json({ success: false, message: "Noto‘g‘ri event turi" });
     }
 
-    // Deduplication check: max 1 impression per ad per session per 3 minutes
-    if (sessionId && eventType === "impression") {
-      const dedupKey = `${adId}:${sessionId}:${eventType}`;
-      const lastRecorded = eventRateLimitMap.get(dedupKey);
-      const now = Date.now();
-      if (lastRecorded && now - lastRecorded < 180000) {
-        return res.json({ success: true, message: "Deduplicated" });
-      }
-      eventRateLimitMap.set(dedupKey, now);
-
-      // Clean up map periodically
-      if (eventRateLimitMap.size > 2000) {
-        const threshold = now - 300000;
-        for (const [k, v] of eventRateLimitMap.entries()) {
-          if (v < threshold) eventRateLimitMap.delete(k);
-        }
-      }
-    }
-
     const client = getSupabaseClient();
-    if (client) {
-      try {
-        await client.from("video_ad_events").insert([
-          {
-            ad_id: adId,
-            event_type: eventType,
-            session_id: sessionId,
-            platform,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      } catch (insertError) {
-        console.warn("[Video Ads] Event insert warning:", insertError.message);
-      }
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Statistika xizmati vaqtincha mavjud emas" });
     }
 
-    // Track in memory buffer for quick aggregated counts
-    inMemoryEvents.push({
-      ad_id: adId,
-      event_type: eventType,
-      created_at: Date.now(),
-    });
-    if (inMemoryEvents.length > 5000) {
-      inMemoryEvents.splice(0, 1000);
+    // Stable impression IDs make writes idempotent across retries and instances.
+    const eventId = eventType === "impression" && sessionId && sessionId !== "sid_anon"
+      ? "impression:" + adId + ":" + sessionId
+      : crypto.randomUUID();
+    const { error: insertError } = await client
+      .from("video_ad_events")
+      .upsert([{
+        event_id: eventId,
+        ad_id: adId,
+        event_type: eventType,
+        session_id: sessionId,
+        platform,
+        created_at: new Date().toISOString(),
+      }], { onConflict: "event_id", ignoreDuplicates: true });
+
+    if (insertError) {
+      console.error("[Video Ads] Event insert failed:", insertError.message);
+      return res.status(503).json({ success: false, message: "Statistikani saqlab bo‘lmadi" });
     }
 
     return res.json({ success: true });
@@ -214,31 +149,32 @@ install("post", "/api/video-ads/:id/events", async (req, res) => {
 install("get", "/api/admin/video-ads", requireAdmin, async (req, res) => {
   try {
     const client = getSupabaseClient();
-    let ads = [];
-
-    if (client) {
-      const { data, error } = await client
-        .from("video_ads")
-        .select("*")
-        .order("priority", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if (!error && Array.isArray(data)) {
-        ads = data;
-      }
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Video reklama bazasiga ulanish mavjud emas" });
     }
 
-    if (!ads.length) {
-      ads = [...DEFAULT_VIDEO_ADS];
+    const { data: ads, error: adsError } = await client
+      .from("video_ads")
+      .select("*")
+      .order("priority", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (adsError || !Array.isArray(ads)) {
+      console.error("[Video Ads] Admin list query failed:", adsError?.message || "Invalid response");
+      return res.status(503).json({ success: false, message: "Reklamalarni bazadan yuklab bo‘lmadi" });
     }
 
     // Calculate aggregated stats for each ad
     let statsByAd = {};
     if (client) {
       try {
-        const { data: eventsData } = await client
+        const { data: eventsData, error: eventsError } = await client
           .from("video_ad_events")
           .select("ad_id, event_type");
+        if (eventsError) {
+          console.error("[Video Ads] Admin event query failed:", eventsError.message);
+          return res.status(503).json({ success: false, message: "Reklama statistikasi mavjud emas" });
+        }
 
         if (Array.isArray(eventsData)) {
           for (const ev of eventsData) {
@@ -252,15 +188,6 @@ install("get", "/api/admin/video-ads", requireAdmin, async (req, res) => {
       } catch (statsErr) {
         console.warn("[Video Ads] Could not fetch DB events, using memory stats:", statsErr.message);
       }
-    }
-
-    // Merge in-memory events if DB events were empty
-    for (const ev of inMemoryEvents) {
-      if (!statsByAd[ev.ad_id]) {
-        statsByAd[ev.ad_id] = { impressions: 0, clicks: 0 };
-      }
-      if (ev.event_type === "impression") statsByAd[ev.ad_id].impressions++;
-      if (ev.event_type === "click") statsByAd[ev.ad_id].clicks++;
     }
 
     const adsWithStats = ads.map((ad) => {
@@ -289,41 +216,27 @@ install("get", "/api/admin/video-ads", requireAdmin, async (req, res) => {
 install("get", "/api/admin/video-ads/stats", requireAdmin, async (req, res) => {
   try {
     const client = getSupabaseClient();
-    let totalAds = 0;
-    let activeAds = 0;
-    let totalImpressions = 0;
-    let totalClicks = 0;
-
-    if (client) {
-      try {
-        const { count: countTotal } = await client.from("video_ads").select("*", { count: "exact", head: true });
-        const { count: countActive } = await client.from("video_ads").select("*", { count: "exact", head: true }).eq("is_active", true);
-        totalAds = countTotal || 0;
-        activeAds = countActive || 0;
-
-        const { data: eventsData } = await client.from("video_ad_events").select("event_type");
-        if (Array.isArray(eventsData)) {
-          for (const ev of eventsData) {
-            if (ev.event_type === "impression") totalImpressions++;
-            if (ev.event_type === "click") totalClicks++;
-          }
-        }
-      } catch (err) {
-        console.warn("[Video Ads] Stats DB query warning:", err.message);
-      }
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Video reklama bazasiga ulanish mavjud emas" });
     }
 
-    // Merge in-memory if DB counts were zero
-    if (totalImpressions === 0 && totalClicks === 0 && inMemoryEvents.length > 0) {
-      for (const ev of inMemoryEvents) {
-        if (ev.event_type === "impression") totalImpressions++;
-        if (ev.event_type === "click") totalClicks++;
-      }
+    const [totalResult, activeResult, impressionsResult, clicksResult] = await Promise.all([
+      client.from("video_ads").select("id", { count: "exact", head: true }),
+      client.from("video_ads").select("id", { count: "exact", head: true }).eq("is_active", true),
+      client.from("video_ad_events").select("id", { count: "exact", head: true }).eq("event_type", "impression"),
+      client.from("video_ad_events").select("id", { count: "exact", head: true }).eq("event_type", "click"),
+    ]);
+
+    const queryErrors = [totalResult.error, activeResult.error, impressionsResult.error, clicksResult.error].filter(Boolean);
+    if (queryErrors.length) {
+      console.error("[Video Ads] Stats query failed:", queryErrors.map((e) => e.message).join("; "));
+      return res.status(503).json({ success: false, message: "Statistikani bazadan yuklab bo‘lmadi" });
     }
-    if (totalAds === 0) {
-      totalAds = DEFAULT_VIDEO_ADS.length;
-      activeAds = DEFAULT_VIDEO_ADS.filter((a) => a.is_active).length;
-    }
+
+    const totalAds = totalResult.count || 0;
+    const activeAds = activeResult.count || 0;
+    const totalImpressions = impressionsResult.count || 0;
+    const totalClicks = clicksResult.count || 0;
 
     return res.json({
       success: true,
@@ -395,28 +308,22 @@ install("post", "/api/admin/video-ads", requireAdmin, async (req, res) => {
     };
 
     const client = getSupabaseClient();
-    if (client) {
-      const { data, error } = await client
-        .from("video_ads")
-        .insert([payload])
-        .select()
-        .single();
-
-      if (error) {
-        console.error("[Video Ads] DB Insert error:", error);
-        return res.status(500).json({ success: false, message: "Reklamani ma'lumotlar bazasiga saqlashda xatolik: " + error.message });
-      }
-
-      return res.status(201).json({ success: true, message: "Video reklama muvaffaqiyatli saqlandi", data });
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Supabase ulanishi mavjud emas; reklama saqlanmadi" });
     }
 
-    // In-memory fallback
-    const mockCreated = {
-      id: `v-ad-${Date.now()}`,
-      ...payload,
-    };
-    DEFAULT_VIDEO_ADS.unshift(mockCreated);
-    return res.status(201).json({ success: true, message: "Video reklama saqlandi (xotira rejimida)", data: mockCreated });
+    const { data, error } = await client
+      .from("video_ads")
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[Video Ads] DB Insert error:", error.message);
+      return res.status(503).json({ success: false, message: "Reklamani ma’lumotlar bazasiga saqlab bo‘lmadi" });
+    }
+
+    return res.status(201).json({ success: true, message: "Video reklama muvaffaqiyatli saqlandi", data });
   } catch (error) {
     console.error("[Video Ads] Create error:", error);
     return res.status(500).json({ success: false, message: "Serverda kutilmagan xatolik yuz berdi" });
@@ -461,29 +368,23 @@ install("put", "/api/admin/video-ads/:id", requireAdmin, async (req, res) => {
     };
 
     const client = getSupabaseClient();
-    if (client) {
-      const { data, error } = await client
-        .from("video_ads")
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error("[Video Ads] Update DB error:", error);
-        return res.status(500).json({ success: false, message: "Reklamani yangilashda xatolik: " + error.message });
-      }
-
-      return res.json({ success: true, message: "Video reklama yangilandi", data });
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Supabase ulanishi mavjud emas; o‘zgarishlar saqlanmadi" });
     }
 
-    const idx = DEFAULT_VIDEO_ADS.findIndex((a) => a.id === id);
-    if (idx !== -1) {
-      DEFAULT_VIDEO_ADS[idx] = { ...DEFAULT_VIDEO_ADS[idx], ...payload };
-      return res.json({ success: true, message: "Video reklama yangilandi", data: DEFAULT_VIDEO_ADS[idx] });
+    const { data, error } = await client
+      .from("video_ads")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[Video Ads] Update DB error:", error.message);
+      return res.status(503).json({ success: false, message: "Reklamani yangilab bo‘lmadi" });
     }
 
-    return res.status(404).json({ success: false, message: "Reklama topilmadi" });
+    return res.json({ success: true, message: "Video reklama yangilandi", data });
   } catch (error) {
     console.error("[Video Ads] Update error:", error);
     return res.status(500).json({ success: false, message: "Serverda kutilmagan xatolik yuz berdi" });
@@ -499,28 +400,23 @@ install("patch", "/api/admin/video-ads/:id/status", requireAdmin, async (req, re
     const isActive = Boolean(req.body?.is_active);
 
     const client = getSupabaseClient();
-    if (client) {
-      const { data, error } = await client
-        .from("video_ads")
-        .update({ is_active: isActive, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select("id, is_active")
-        .single();
-
-      if (error) {
-        return res.status(500).json({ success: false, message: "Holatni o‘zgartirishda xatolik" });
-      }
-
-      return res.json({ success: true, data });
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Supabase ulanishi mavjud emas; holat o‘zgartirilmadi" });
     }
 
-    const item = DEFAULT_VIDEO_ADS.find((a) => a.id === id);
-    if (item) {
-      item.is_active = isActive;
-      return res.json({ success: true, data: { id, is_active: isActive } });
+    const { data, error } = await client
+      .from("video_ads")
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("id, is_active")
+      .single();
+
+    if (error) {
+      console.error("[Video Ads] Status update failed:", error.message);
+      return res.status(503).json({ success: false, message: "Holatni o‘zgartirib bo‘lmadi" });
     }
 
-    return res.status(404).json({ success: false, message: "Reklama topilmadi" });
+    return res.json({ success: true, data });
   } catch (error) {
     console.error("[Video Ads] Status toggle error:", error);
     return res.status(500).json({ success: false, message: "Xatolik yuz berdi" });
@@ -535,24 +431,73 @@ install("delete", "/api/admin/video-ads/:id", requireAdmin, async (req, res) => 
     const id = String(req.params.id || "").trim();
 
     const client = getSupabaseClient();
-    if (client) {
-      const { error } = await client.from("video_ads").delete().eq("id", id);
-      if (error) {
-        return res.status(500).json({ success: false, message: "O‘chirishda xatolik: " + error.message });
-      }
-      return res.json({ success: true, message: "Reklama o‘chirildi" });
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Supabase ulanishi mavjud emas; reklama o‘chirilmadi" });
     }
 
-    const idx = DEFAULT_VIDEO_ADS.findIndex((a) => a.id === id);
-    if (idx !== -1) {
-      DEFAULT_VIDEO_ADS.splice(idx, 1);
-      return res.json({ success: true, message: "Reklama o‘chirildi" });
+    const { error } = await client.from("video_ads").delete().eq("id", id);
+    if (error) {
+      console.error("[Video Ads] Delete failed:", error.message);
+      return res.status(503).json({ success: false, message: "Reklamani o‘chirib bo‘lmadi" });
     }
-
-    return res.status(404).json({ success: false, message: "Reklama topilmadi" });
+    return res.json({ success: true, message: "Reklama o‘chirildi" });
   } catch (error) {
     console.error("[Video Ads] Delete error:", error);
     return res.status(500).json({ success: false, message: "Xatolik yuz berdi" });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// 9. ADMIN API: POST /api/admin/video-ads/upload-url
+// Creates a short-lived signed upload URL; browser uploads the binary directly.
+// ----------------------------------------------------------------------------
+install("post", "/api/admin/video-ads/upload-url", requireAdmin, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const mimeType = String(body.mimeType || "").toLowerCase().trim();
+    const mediaType = body.mediaType === "image" ? "image" : "video";
+    const size = Number(body.size);
+    const allowedMime = mediaType === "video"
+      ? new Set(["video/mp4", "video/webm", "video/quicktime"])
+      : new Set(["image/jpeg", "image/png", "image/webp"]);
+    const maxBytes = mediaType === "video" ? 50 * 1024 * 1024 : 6 * 1024 * 1024;
+
+    if (!allowedMime.has(mimeType)) {
+      return res.status(400).json({ success: false, message: "Fayl formati qo‘llab-quvvatlanmaydi" });
+    }
+    if (!Number.isFinite(size) || size <= 0 || size > maxBytes) {
+      return res.status(413).json({ success: false, message: "Fayl hajmi limitidan oshmasligi kerak" });
+    }
+
+    const extensionByMime = {
+      "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+    };
+    const folder = mediaType === "video" ? "videos" : "posters";
+    const path = folder + "/" + Date.now() + "-" + crypto.randomBytes(8).toString("hex") + "." + extensionByMime[mimeType];
+    const client = getSupabaseClient();
+    if (!client) {
+      return res.status(503).json({ success: false, message: "Supabase Storage ulanishi mavjud emas" });
+    }
+
+    const { data, error } = await client.storage.from("video-ads").createSignedUploadUrl(path);
+    if (error || !data?.signedUrl) {
+      console.error("[Video Ads] Signed upload URL error:", error?.message || "Missing signed URL");
+      return res.status(503).json({ success: false, message: "Yuklash havolasini yaratib bo‘lmadi" });
+    }
+
+    const { data: publicData } = client.storage.from("video-ads").getPublicUrl(path);
+    return res.json({
+      success: true,
+      signedUrl: data.signedUrl,
+      token: data.token,
+      path: data.path || path,
+      url: publicData?.publicUrl || null,
+      maxBytes,
+    });
+  } catch (error) {
+    console.error("[Video Ads] Signed upload URL handler error:", error.message);
+    return res.status(500).json({ success: false, message: "Yuklashni tayyorlashda xatolik yuz berdi" });
   }
 });
 
@@ -586,7 +531,7 @@ install("post", "/api/admin/video-ads/upload", requireAdmin, async (req, res) =>
     }
 
     const isVideo = safeMime.startsWith("video/");
-    const maxBytes = isVideo ? 50 * 1024 * 1024 : 6 * 1024 * 1024; // 50MB for video, 6MB for poster
+    const maxBytes = isVideo ? 10 * 1024 * 1024 : 4 * 1024 * 1024; // Legacy Base64 route must fit under the 15 MB JSON parser limit
     const buffer = Buffer.from(base64Data, "base64");
 
     if (buffer.length > maxBytes) {

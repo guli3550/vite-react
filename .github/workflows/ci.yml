@@ -24,6 +24,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build frontend
         run: npm run build
+      - name: Run automated tests
+        run: npm test
       - name: Install backend dependencies
         run: npm install --prefix backend
       - name: Validate all backend JavaScript syntax
