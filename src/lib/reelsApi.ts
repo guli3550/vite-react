@@ -1,5 +1,5 @@
 import type { ReelItem } from "../types/reels";
-import { BACKEND_API_URL } from "./supabaseClient";
+import { BACKEND_API_URL, getSupabase } from "./supabaseClient";
 
 type ApiResponse<T> = { success?: boolean; data?: T; message?: string };
 
@@ -84,4 +84,21 @@ export async function recordServerReelView(reelId: string): Promise<{ viewsCount
     method: "POST",
     body: "{}",
   });
+}
+
+export async function uploadReelMedia(file: File): Promise<string> {
+  if (file.size > 100 * 1024 * 1024) throw new Error("Fayl hajmi 100 MB dan oshmasligi kerak");
+  const contentType = file.type || (file.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "");
+  const signed = await request<{ path: string; token: string; publicUrl: string; bucket: string }>("/api/admin/reels/upload-url", {
+    method: "POST",
+    body: JSON.stringify({ fileName: file.name, contentType }),
+  }, true);
+  const client = getSupabase();
+  if (!client) throw new Error("Supabase public key sozlanmagan; VITE_SUPABASE_ANON_KEY ni tekshiring");
+  const { error } = await client.storage.from(signed.bucket).uploadToSignedUrl(signed.path, signed.token, file, {
+    contentType,
+    upsert: false,
+  });
+  if (error) throw error;
+  return signed.publicUrl;
 }
