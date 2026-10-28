@@ -128,7 +128,7 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("PUT", signedData.signedUrl);
+      xhr.open("POST", signedData.signedUrl);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {
