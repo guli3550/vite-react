@@ -43,3 +43,17 @@ alter table public.reels enable row level security;
 alter table public.reel_comments enable row level security;
 alter table public.reel_likes enable row level security;
 revoke all on public.reels, public.reel_comments, public.reel_likes from anon, authenticated;
+
+-- Public playback URLs, but uploads are issued only through the admin-authenticated API.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'reels-media',
+  'reels-media',
+  true,
+  104857600,
+  array['video/mp4','video/webm','video/quicktime','image/jpeg','image/png','image/webp','image/avif']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
