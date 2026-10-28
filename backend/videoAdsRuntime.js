@@ -592,6 +592,22 @@ install("post", "/api/admin/video-ads/upload", requireAdmin, async (req, res) =>
   }
 });
 
+// Shared validation helpers used by the video-ad API routes.
+function isValidUrl(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function calculateCtr(clicks, impressions) {
+  const totalImpressions = Number(impressions) || 0;
+  const totalClicks = Number(clicks) || 0;
+  return totalImpressions > 0 ? Number(((totalClicks / totalImpressions) * 100).toFixed(2)) : 0;
+}
+
 module.exports = {
   isValidUrl,
   calculateCtr,
