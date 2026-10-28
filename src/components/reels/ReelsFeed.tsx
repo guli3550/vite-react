@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
-import { loadReelsFromStorage, saveReelsToStorage } from "../../data/demoReels";
+import { loadReelsFromStorage } from "../../data/demoReels";
 import { fetchPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
   isIndexPreloaded,
