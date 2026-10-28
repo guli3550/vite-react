@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -238,7 +238,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               title="Reklamani yopish"
               aria-label="Reklamani yopish"
             >
-              ✕
+              <X size={16} strokeWidth={2.25} />
             </button>
 
             {/* Video or poster fallback */}
