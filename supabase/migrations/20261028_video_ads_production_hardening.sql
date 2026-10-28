@@ -10,7 +10,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_video_ad_events_event_id_unique
 
 -- Events must be written through the authenticated backend, not directly by anonymous clients.
 DROP POLICY IF EXISTS "Public record video ad events" ON public.video_ad_events;
-REVOKE INSERT, UPDATE, DELETE ON TABLE public.video_ad_events FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.video_ad_events FROM PUBLIC, anon, authenticated;
 
 -- Signed uploads are issued by the server. Public read is retained for ad media playback;
 -- this does not grant public upload permission.
