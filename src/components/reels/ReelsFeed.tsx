@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
 import { loadReelsFromStorage, saveReelsToStorage } from "../../data/demoReels";
+import { fetchPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
   isIndexPreloaded,
   evaluateSwipeGesture,
@@ -57,12 +58,16 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
   // Load active reels
-  const reloadReels = useCallback(() => {
-    const all = loadReelsFromStorage();
-    const active = all.filter((r) => r.status === "active");
-    setReels(active);
-    if (active.length > 0 && currentIndex >= active.length) {
-      setCurrentIndex(0);
+  const reloadReels = useCallback(async () => {
+    try {
+      const active = await fetchPublicReels();
+      setReels(active);
+      if (active.length > 0 && currentIndex >= active.length) setCurrentIndex(0);
+    } catch (error) {
+      console.error("[Reels] Server lentasini yuklab bo'lmadi:", error);
+      const fallback = loadReelsFromStorage().filter((r) => r.status === "active");
+      setReels(fallback);
+      if (fallback.length > 0 && currentIndex >= fallback.length) setCurrentIndex(0);
     }
   }, [currentIndex]);
 
@@ -83,6 +88,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   }, [reloadReels]);
 
   const currentReel = reels[currentIndex];
+  const viewedReelIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
+    viewedReelIdsRef.current.add(currentReel.id);
+    recordServerReelView(currentReel.id).then(({ viewsCount }) => {
+      setReels((previous) => previous.map((r) => r.id === currentReel.id ? { ...r, viewsCount } : r));
+    }).catch((error) => console.warn("[Reels] Ko'rish statistikasi saqlanmadi:", error));
+  }, [currentReel?.id]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -308,26 +321,17 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   };
 
   // Like Reel handler
-  const handleToggleLike = useCallback(() => {
+  const handleToggleLike = useCallback(async () => {
     if (!currentReel) return;
-    const all = loadReelsFromStorage();
-    const updated = all.map((r) => {
-      if (r.id === currentReel.id) {
-        const nextLiked = !r.isLiked;
-        return {
-          ...r,
-          isLiked: nextLiked,
-          likesCount: nextLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
-        };
-      }
-      return r;
-    });
-
-    saveReelsToStorage(updated);
-    setReels(updated.filter((r) => r.status === "active"));
-
-    if (!currentReel.isLiked) {
-      showToast("❤️ Sizga yoqdi");
+    try {
+      const result = await toggleServerReelLike(currentReel.id);
+      setReels((previous) => previous.map((r) => r.id === currentReel.id
+        ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount }
+        : r));
+      if (result.isLiked) showToast("❤️ Sizga yoqdi");
+    } catch (error) {
+      console.error("[Reels] Like saqlanmadi:", error);
+      showToast("Like saqlanmadi. Server aloqasini tekshiring.");
     }
   }, [currentReel, showToast]);
 
@@ -356,22 +360,17 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   };
 
   // Add Comment handler
-  const handleAddComment = (reelId: string, newComment: ReelComment) => {
-    const all = loadReelsFromStorage();
-    const updated = all.map((r) => {
-      if (r.id === reelId) {
-        return {
-          ...r,
-          commentsCount: r.commentsCount + 1,
-          comments: [newComment, ...r.comments],
-        };
-      }
-      return r;
-    });
-
-    saveReelsToStorage(updated);
-    setReels(updated.filter((r) => r.status === "active"));
-    showToast("✓ Izohingiz qoldirildi!");
+  const handleAddComment = async (reelId: string, newComment: ReelComment) => {
+    try {
+      const saved = await addServerReelComment(reelId, newComment.text);
+      setReels((previous) => previous.map((r) => r.id === reelId
+        ? { ...r, commentsCount: r.commentsCount + 1, comments: [saved, ...r.comments] }
+        : r));
+      showToast("✓ Izoh serverda saqlandi!");
+    } catch (error) {
+      console.error("[Reels] Izoh saqlanmadi:", error);
+      showToast("Izoh yuborilmadi. Server aloqasini tekshiring.");
+    }
   };
 
   // Error loading video
