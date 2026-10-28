@@ -10,6 +10,20 @@
 
 These are discovered from connected account metadata. They do not prove that the video ads database migration or upload flow is ready.
 
+## Current critical blocker observed during the audit (2026-10-28)
+
+Do **not** merge or deploy the video ads backend hardening to production yet. Supabase logs for project `qttwufydrvdwmhxcpgjb` show repeated HTTP 522 responses from `/rest/v1/video_ads`, `/rest/v1/video_ad_events`, and core tables including `products`, `orders`, and `chat_messages`. The same window contains Realtime `UnableToConnectToTenantDatabase` queue-timeout errors. Read-only SQL and migration-list requests also timed out, while project metadata still reports `ACTIVE_HEALTHY`.
+
+The official Supabase status page reported the platform operational at the time checked, so the evidence points to a project-specific database/connection health problem rather than a confirmed platform-wide outage. This is not enough to determine the root cause.
+
+Before release:
+1. Open the Supabase Dashboard for this project and inspect Database Reports (CPU, memory, disk I/O, connection/pool usage) and project health.
+2. Confirm whether the database is responsive using a simple read-only query and check table/migration state.
+3. If resource saturation or a crashed database is confirmed, choose the least disruptive remediation with the project owner. Restarting the database/project can interrupt active users and must not be done without explicit approval.
+4. Re-run read-only schema checks and migration history after recovery.
+5. Only then apply migrations and run the full smoke test.
+
+
 ## Required environment variables
 
 Check the Render API service's environment settings without copying secret values into logs or chat.
