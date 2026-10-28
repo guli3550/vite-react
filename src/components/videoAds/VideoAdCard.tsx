@@ -293,6 +293,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozni o‘chirish"}</span>
             </button>
           </div>
+        )}
         </div>
 
         {/* Content & Call to Action */}
