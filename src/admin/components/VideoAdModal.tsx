@@ -101,75 +101,92 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
   if (!isOpen) return null;
 
+  const uploadMediaFile = async (
+    file: File,
+    mediaType: "video" | "image",
+    onProgress?: (percent: number) => void,
+  ): Promise<string> => {
+    const token = sessionStorage.getItem("guli_admin_token") || "";
+    const apiBase = getApiBaseUrl();
+    const signedResponse = await fetch(apiBase + "/api/admin/video-ads/upload-url", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        mimeType: file.type,
+        size: file.size,
+        mediaType,
+      }),
+    });
+    const signedData = await signedResponse.json();
+    if (!signedResponse.ok || !signedData.success || !signedData.signedUrl || !signedData.url) {
+      throw new Error(signedData.message || "Xavfsiz yuklash havolasini olishda xatolik");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", signedData.signedUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve();
+        } else {
+          reject(new Error("Storage yuklash xatosi (HTTP " + xhr.status + ")"));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Storage bilan aloqa uzildi. Qayta urinib ko‘ring."));
+      xhr.onabort = () => reject(new Error("Yuklash bekor qilindi"));
+      xhr.send(file);
+    });
+
+    return signedData.url as string;
+  };
+
   const handleVideoFileUpload = async (file: File) => {
-    if (!file.type.startsWith("video/")) {
-      setErrorMessage("Faqat video fayl tanlang (MP4, WebM)");
+    const allowedTypes = ["video/mp4", "video/webm", "video/quicktime"];
+    if (!allowedTypes.includes(file.type)) {
+      setErrorMessage("Faqat MP4, WebM yoki MOV video fayl tanlang");
       return;
     }
 
-    if (file.size > 60 * 1024 * 1024) {
-      setErrorMessage("Video hajmi 60 MB dan oshmasligi kerak");
+    if (file.size > 50 * 1024 * 1024) {
+      setErrorMessage("Video hajmi 50 MB dan oshmasligi kerak");
       return;
     }
 
     setUploadingVideo(true);
-    setUploadProgress(20);
+    setUploadProgress(0);
     setErrorMessage("");
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          setUploadProgress(50);
-          const base64 = String(reader.result || "").split(",")[1];
-          const token = sessionStorage.getItem("guli_admin_token") || "";
-          const apiBase = getApiBaseUrl();
-
-          const res = await fetch(`${apiBase}/api/admin/video-ads/upload`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              data: base64,
-              mimeType: file.type,
-              extension: file.name.split(".").pop(),
-              mediaType: "video",
-            }),
-          });
-
-          setUploadProgress(85);
-          const data = await res.json();
-
-          if (!res.ok || !data.success) {
-            throw new Error(data.message || "Videoni yuklashda xatolik");
-          }
-
-          setVideoUrl(data.url);
-          setUploadProgress(100);
-          notify("Video muvaffaqiyatli yuklandi ✓");
-        } catch (err: any) {
-          setErrorMessage(err.message || "Video yuklashda xatolik yuz berdi");
-        } finally {
-          setUploadingVideo(false);
-        }
-      };
-      reader.readAsDataURL(file);
+      const url = await uploadMediaFile(file, "video", setUploadProgress);
+      setVideoUrl(url);
+      notify("Video muvaffaqiyatli yuklandi ✓");
     } catch (err: any) {
+      setErrorMessage(err.message || "Video yuklashda xatolik yuz berdi");
+    } finally {
       setUploadingVideo(false);
-      setErrorMessage(err.message || "Faylni o‘qishda xatolik");
     }
   };
 
   const handlePosterFileUpload = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setErrorMessage("Faqat rasm fayl tanlang (JPG, PNG, WebP)");
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      setErrorMessage("Faqat JPG, PNG yoki WebP poster tanlang");
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      setErrorMessage("Poster rasmi hajmi 8 MB dan oshmasligi kerak");
+    if (file.size > 6 * 1024 * 1024) {
+      setErrorMessage("Poster rasmi hajmi 6 MB dan oshmasligi kerak");
       return;
     }
 
@@ -177,44 +194,13 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
     setErrorMessage("");
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64 = String(reader.result || "").split(",")[1];
-          const token = sessionStorage.getItem("guli_admin_token") || "";
-          const apiBase = getApiBaseUrl();
-
-          const res = await fetch(`${apiBase}/api/admin/video-ads/upload`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              data: base64,
-              mimeType: file.type,
-              extension: file.name.split(".").pop(),
-              mediaType: "image",
-            }),
-          });
-
-          const data = await res.json();
-          if (!res.ok || !data.success) {
-            throw new Error(data.message || "Posterni yuklashda xatolik");
-          }
-
-          setPosterUrl(data.url);
-          notify("Poster rasmi saqlandi ✓");
-        } catch (err: any) {
-          setErrorMessage(err.message || "Poster yuklash xatosi");
-        } finally {
-          setUploadingPoster(false);
-        }
-      };
-      reader.readAsDataURL(file);
+      const url = await uploadMediaFile(file, "image");
+      setPosterUrl(url);
+      notify("Poster rasmi saqlandi ✓");
     } catch (err: any) {
+      setErrorMessage(err.message || "Poster yuklash xatosi");
+    } finally {
       setUploadingPoster(false);
-      setErrorMessage(err.message || "Faylni o‘qishda xatolik");
     }
   };
 
