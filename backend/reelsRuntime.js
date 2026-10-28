@@ -155,6 +155,24 @@ install("post", "/api/reels/:id/view", async (req, res) => {
   } catch (error) { return fail(res, error); }
 });
 
+// Admin receives a short-lived signed upload token; large media bypasses the JSON API.
+install("post", "/api/admin/reels/upload-url", requireAdmin, async (req, res) => {
+  try {
+    const fileName = String(req.body?.fileName || "media").replace(/[^a-zA-Z0-9._-]/g, "-").slice(-100);
+    const contentType = String(req.body?.contentType || "").toLowerCase();
+    const allowed = new Set(["video/mp4", "video/webm", "video/quicktime", "image/jpeg", "image/png", "image/webp", "image/avif"]);
+    if (!allowed.has(contentType)) return fail(res, new Error("Bu fayl formati qo'llab-quvvatlanmaydi"), 400);
+    const isVideo = contentType.startsWith("video/");
+    const ext = (fileName.match(/\.([a-zA-Z0-9]{2,5})$/) || [])[1] || (isVideo ? "mp4" : "webp");
+    const path = `${isVideo ? "videos" : "posters"}/${require("crypto").randomUUID()}.${ext.toLowerCase()}`;
+    const bucket = "reels-media";
+    const { data, error } = await db().storage.from(bucket).createSignedUploadUrl(path);
+    if (error) throw error;
+    const publicUrl = db().storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    return res.json({ success: true, data: { path, token: data.token, publicUrl, bucket } });
+  } catch (error) { return fail(res, error); }
+});
+
 // Admin endpoints all require the same signed admin session as the existing panel.
 install("get", "/api/admin/reels", requireAdmin, async (_req, res) => {
   try { return res.json({ success: true, data: await fetchReels(null) }); }
