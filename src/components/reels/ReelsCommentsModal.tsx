@@ -24,7 +24,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [isDraggingHandle, setIsDraggingHandle] = useState(false);
 
-  const commentsEndRef = useRef<HTMLDivElement>(null);
+  const commentsListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragStartYRef = useRef<number>(0);
 
@@ -47,25 +47,24 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  // Focus input automatically on open
+  // Reset sheet state on modal open without auto-focusing keyboard
   useEffect(() => {
     if (isOpen) {
       setHeightState("collapsed");
       setDragOffsetY(0);
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 200);
-      return () => clearTimeout(timer);
+      setIsDraggingHandle(false);
     }
   }, [isOpen]);
 
   // Touch gesture handling on the handle
   const handleHandleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
     dragStartYRef.current = e.touches[0].clientY;
     setIsDraggingHandle(true);
   };
 
   const handleHandleTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (!isDraggingHandle) return;
     const currentY = e.touches[0].clientY;
     const diffY = currentY - dragStartYRef.current;
@@ -73,7 +72,8 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
     setDragOffsetY(diffY);
   };
 
-  const handleHandleTouchEnd = () => {
+  const handleHandleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (!isDraggingHandle) return;
     setIsDraggingHandle(false);
     const deltaY = -dragOffsetY; // Positive = dragged UP
@@ -116,9 +116,10 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
     onAddComment(reel.id, newComment);
     setInputText("");
 
+    // Scroll to top where the newly prepended comment is displayed
     setTimeout(() => {
-      commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 120);
+      commentsListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }, 80);
   };
 
   const toggleCommentLike = (commentId: string) => {
@@ -134,6 +135,10 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
     <div
       className="reelsModalOverlay"
       onClick={onClose}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
       role="dialog"
       aria-modal="true"
       aria-label="Izohlar"
@@ -149,6 +154,10 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
             : undefined
         }
         onClick={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
         {/* Top Header & Drag Handle Area */}
         <div
@@ -176,18 +185,6 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
               <span className="reelsSheetTitle">
                 Izohlar ({reel.comments.length})
               </span>
-              <button
-                type="button"
-                className="reelsSheetSizeToggleBtn"
-                onClick={toggleHeightState}
-                aria-label={
-                  heightState === "collapsed"
-                    ? "Kengaytirish (92%)"
-                    : "Kichraytirish (60%)"
-                }
-              >
-                {heightState === "collapsed" ? "↕ Kengaytirish" : "↧ Kichraytirish"}
-              </button>
             </div>
 
             <button
@@ -203,7 +200,15 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
         </div>
 
         {/* Scrollable Comments List: Only this section scrolls */}
-        <div className="reelsCommentsList" tabIndex={0}>
+        <div
+          className="reelsCommentsList"
+          ref={commentsListRef}
+          tabIndex={0}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
           {reel.comments.length === 0 ? (
             <div className="reelsEmptyComments">
               <span className="reelsEmptyEmoji">💬</span>
@@ -272,11 +277,16 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
               );
             })
           )}
-          <div ref={commentsEndRef} />
         </div>
 
         {/* Pinned Bottom Composer Section */}
-        <div className="reelsComposerWrapper">
+        <div
+          className="reelsComposerWrapper"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
           {/* Quick Reaction Emojis */}
           <div className="reelsEmojiBar" aria-label="Tezkor emojilar">
             {quickEmojis.map((emoji) => (

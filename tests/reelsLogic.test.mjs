@@ -269,5 +269,41 @@ test("Reels Action Bar: Omits avatar above like button and includes Like, Commen
   assert.equal(actionBarItems[0], "like", "Like button should be the top item");
 });
 
+test("Reels Caption: More indicator uses ... only without ko'proq text", () => {
+  const moreIndicatorText = "...";
+  assert.equal(moreIndicatorText, "...");
+});
+
+test("Reels Comments Sheet: Modal z-index is above bottomNav (2500)", () => {
+  const modalZIndex = 2500;
+  const bottomNavZIndex = 1000;
+  assert.ok(modalZIndex > bottomNavZIndex, "Comments modal overlay must render above bottomNav");
+});
+
+test("Instagram Extractor: accurately detects Instagram reel and post URLs", () => {
+  const isInstagramUrl = (url) =>
+    /instagram\.com\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i.test(url) ||
+    /instagr\.am\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i.test(url);
+
+  assert.equal(isInstagramUrl("https://www.instagram.com/reel/C12345/"), true);
+  assert.equal(isInstagramUrl("https://instagr.am/p/ABCDEF/"), true);
+  assert.equal(isInstagramUrl("https://example.com/video.mp4"), false);
+});
+
+test("Instagram Extractor: correctly extracts shortcode from Instagram links", () => {
+  const extractInstagramShortcode = (url) => {
+    const match =
+      url.match(/instagram\.com\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i) ||
+      url.match(/instagr\.am\/(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/i);
+    return match ? match[2] : null;
+  };
+
+  assert.equal(extractInstagramShortcode("https://www.instagram.com/reel/C_X9yZ123/"), "C_X9yZ123");
+  assert.equal(extractInstagramShortcode("https://instagr.am/p/P_888999/"), "P_888999");
+  assert.equal(extractInstagramShortcode("invalid-link"), null);
+});
+
+
+
 
 

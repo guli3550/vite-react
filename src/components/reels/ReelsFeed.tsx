@@ -376,6 +376,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Error loading video
   const handleVideoError = (id: string) => {
+    const videoEl = videoRefs.current.get(id);
+    const fallbackUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+    if (videoEl && videoEl.src !== fallbackUrl) {
+      videoEl.src = fallbackUrl;
+      videoEl.load();
+      videoEl.play().catch(() => {});
+      return;
+    }
     setVideoError((prev) => ({ ...prev, [id]: true }));
     setIsLoadingVideo(false);
   };
@@ -451,23 +459,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
       {/* Main Viewport */}
       <div className="reelsViewport">
-        {/* Top Header Overlay: Minimalist, clean controls */}
-        <header className="reelsTopBar">
-          <div className="reelsTopControls">
-            {/* Back to Home Button */}
-            {onBack && (
-              <button
-                type="button"
-                className="reelsTopIconBtn"
-                onClick={onBack}
-                aria-label="Chiqish"
-                title="Bosh sahifaga qaytish"
-              >
-                <span>✕</span>
-              </button>
-            )}
-          </div>
-        </header>
+
 
         {/* Vertical Sliding Reel Track for Continuous Instagram-Style Gestures */}
         <div className="reelsTrack" style={trackTranslateStyle}>
@@ -738,7 +730,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                   >
                     <p className="reelsCaptionText">{reel.caption}</p>
                     {reel.caption.length > 70 && !captionExpanded && (
-                      <span className="reelsMoreToggle">...ko‘proq</span>
+                      <span className="reelsMoreToggle">...</span>
                     )}
                   </div>
 

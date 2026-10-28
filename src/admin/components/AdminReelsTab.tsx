@@ -1,7 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { ReelItem, ReelStatus } from "../../types/reels";
 import { loadReelsFromStorage, saveReelsToStorage, INITIAL_DEMO_REELS } from "../../data/demoReels";
 import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
+import {
+  isInstagramUrl,
+  extractInstagramShortcode,
+  fetchInstagramReelData,
+} from "../../utils/instagramFetcher";
 
 interface AdminReelsTabProps {
   notify: (msg: string) => void;
@@ -17,6 +22,10 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
   const [editingReel, setEditingReel] = useState<ReelItem | null>(null);
   const [previewReel, setPreviewReel] = useState<ReelItem | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<ReelItem | null>(null);
+
+  // Instagram Auto Fetch State
+  const [isAutoFetchingInsta, setIsAutoFetchingInsta] = useState(false);
+  const [instaFetchStatus, setInstaFetchStatus] = useState<string | null>(null);
 
   // Form inputs
   const [formData, setFormData] = useState({
@@ -81,13 +90,15 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     setEditingReel(null);
     setFormData({
       caption: "",
-      videoUrl: sampleVideoPresets[0].url,
-      posterUrl: sampleCoverPresets[0].url,
-      musicTitle: "Guli Market — Original Audio",
+      videoUrl: "",
+      posterUrl: "",
+      musicTitle: "",
       productId: "",
       status: "active",
     });
     setFormErrors({});
+    setVideoFileName("");
+    setInstaFetchStatus(null);
     setIsFormModalOpen(true);
   };
 
@@ -121,6 +132,135 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     notify(nextStatus === "active" ? `✓ “${reel.caption.slice(0, 25)}...” faollashtirildi` : `“${reel.caption.slice(0, 25)}...” faol emas qilindi`);
   };
 
+  // Video & Cover File Upload state
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [videoFileName, setVideoFileName] = useState("");
+  const [isCoverUploading, setIsCoverUploading] = useState(false);
+
+  // Get all inventory products combining localStorage "guli_products" and DEFAULT_PRODUCTS
+  const inventoryProducts = useMemo(() => {
+    let localProds: any[] = [];
+    try {
+      const raw = localStorage.getItem("guli_products");
+      if (raw) localProds = JSON.parse(raw);
+    } catch {}
+
+    const map = new Map<string | number, any>();
+
+    DEFAULT_PRODUCTS.forEach((p) => {
+      map.set(String(p.id), {
+        id: p.id,
+        product_code: p.product_code || `GL-${p.id}`,
+        name: p.name,
+        price: p.price,
+        stock: p.stock ?? 10,
+        image: p.image,
+      });
+    });
+
+    if (Array.isArray(localProds)) {
+      localProds.forEach((p) => {
+        if (p.id) {
+          map.set(String(p.id), {
+            id: p.id,
+            product_code: p.product_code || `GL-${p.id}`,
+            name: p.name,
+            price: p.price,
+            stock: p.stock ?? 10,
+            image: p.image,
+          });
+        }
+      });
+    }
+
+    return Array.from(map.values());
+  }, []);
+
+  // Handle Video File Upload from device
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 100 * 1024 * 1024) {
+      notify("⚠️ Video hajmi 100MB dan oshmasligi kerak");
+      return;
+    }
+
+    setIsVideoUploading(true);
+    setVideoFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setFormData((prev) => ({ ...prev, videoUrl: result }));
+        notify(`✓ "${file.name}" video fayli muvaffaqiyatli yuklandi`);
+      }
+      setIsVideoUploading(false);
+    };
+    reader.onerror = () => {
+      notify("❌ Videoni o‘qishda xatolik yuz berdi");
+      setIsVideoUploading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle Cover / Poster Image File Upload from device
+  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsCoverUploading(true);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        setFormData((prev) => ({ ...prev, posterUrl: result }));
+        notify(`✓ "${file.name}" muqova rasmi yuklandi`);
+      }
+      setIsCoverUploading(false);
+    };
+    reader.onerror = () => {
+      notify("❌ Rasmni o‘qishda xatolik yuz berdi");
+      setIsCoverUploading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Auto-fetch video, poster, and caption from Instagram link
+  const handleInstagramAutoFetch = useCallback(
+    async (targetUrl?: string) => {
+      const urlToFetch = targetUrl || formData.videoUrl;
+      if (!isInstagramUrl(urlToFetch)) return;
+
+      setIsAutoFetchingInsta(true);
+      setInstaFetchStatus("Instagram post va video ma’lumotlari olinmoqda...");
+
+      try {
+        const data = await fetchInstagramReelData(urlToFetch);
+        if (data) {
+          setFormData((prev) => ({
+            ...prev,
+            videoUrl: data.videoUrl,
+            posterUrl: data.posterUrl,
+            caption: prev.caption.trim() ? prev.caption : data.caption,
+          }));
+          setInstaFetchStatus(`✓ Instagram Reels yuklandi! (Kod: ${data.shortcode})`);
+          notify(`✓ Instagram Reels ma’lumotlari va videosi avtomatik yuklandi! ✨`);
+        } else {
+          setInstaFetchStatus("⚠️ Instagram manzilidan ma’lumot olinmadi");
+        }
+      } catch (err) {
+        console.error("Instagram auto fetch error:", err);
+        setInstaFetchStatus("❌ Instagram ma’lumotlarini olishda xatolik yuz berdi");
+      } finally {
+        setIsAutoFetchingInsta(false);
+      }
+    },
+    [formData.videoUrl, notify]
+  );
+
   // Save Reel (Create or Edit)
   const handleSaveReel = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,8 +282,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       return;
     }
 
-    const selectedProduct = DEFAULT_PRODUCTS.find(
-      (p) => String(p.id) === formData.productId
+    const selectedProduct = inventoryProducts.find(
+      (p) => String(p.id) === String(formData.productId)
     );
 
     if (editingReel) {
@@ -767,27 +907,143 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                 )}
               </div>
 
-              {/* Video URL */}
+              {/* Video Upload & URL */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  Video URL manzili yoki fayli *
+                  🎬 Video yuklash yoki URL manzili *
                 </label>
+
+                {/* Direct File Upload Dropzone / Button */}
+                <div style={{ background: "#fdf5f7", border: "2px dashed #ebd4db", borderRadius: "12px", padding: "12px 16px", textAlign: "center", marginBottom: "10px" }}>
+                  <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 800, color: "#b6536b" }}>
+                      📁 Qurilmadan video faylini yuklash
+                    </span>
+                    <span style={{ fontSize: "11px", color: "#806f75" }}>
+                      MP4 / WebM / MOV formatdagi videolarni tanlang
+                    </span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoFileChange}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  {isVideoUploading && (
+                    <div style={{ fontSize: "12px", color: "#b6536b", marginTop: "6px", fontWeight: 700 }}>
+                      ⏳ Video yuklanmoqda...
+                    </div>
+                  )}
+                  {videoFileName && !isVideoUploading && (
+                    <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "6px", fontWeight: 700 }}>
+                      ✓ Fayl: {videoFileName}
+                    </div>
+                  )}
+                </div>
+
+                {/* URL Input */}
                 <input
                   type="text"
-                  placeholder="https://... yoki demo video tanlang"
+                  placeholder="https://www.instagram.com/reel/... yoki fayl URL"
                   value={formData.videoUrl}
-                  onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({ ...prev, videoUrl: val }));
+                    if (isInstagramUrl(val) && !isAutoFetchingInsta) {
+                      handleInstagramAutoFetch(val);
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData("text");
+                    if (isInstagramUrl(pasted)) {
+                      setTimeout(() => handleInstagramAutoFetch(pasted), 100);
+                    }
+                  }}
                   style={{
                     width: "100%",
                     padding: "10px 14px",
                     borderRadius: "12px",
-                    border: formErrors.videoUrl ? "1px solid #ef4444" : "1px solid #ebd4db",
-                    background: "#fdf5f7",
+                    border: isInstagramUrl(formData.videoUrl)
+                      ? "2px solid #e1306c"
+                      : formErrors.videoUrl
+                      ? "1px solid #ef4444"
+                      : "1px solid #ebd4db",
+                    background: "#ffffff",
                     fontSize: "13px",
                     outline: "none",
                     boxSizing: "border-box",
                   }}
                 />
+
+                {/* Instagram Auto-Fetch Card / Trigger */}
+                {isInstagramUrl(formData.videoUrl) && (
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      padding: "10px 14px",
+                      borderRadius: "12px",
+                      background: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)",
+                      border: "1px solid #f472b6",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "18px" }}>📸</span>
+                      <div>
+                        <div style={{ fontSize: "12px", fontWeight: 800, color: "#9d174d" }}>
+                          Instagram Reels havolasi aniqlandi
+                        </div>
+                        <div style={{ fontSize: "11px", color: "#be185d" }}>
+                          {instaFetchStatus || `Kod: ${extractInstagramShortcode(formData.videoUrl)}`}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isAutoFetchingInsta}
+                      onClick={() => handleInstagramAutoFetch()}
+                      style={{
+                        padding: "6px 14px",
+                        background: "linear-gradient(135deg, #e1306c 0%, #c13584 100%)",
+                        color: "#ffffff",
+                        border: 0,
+                        borderRadius: "8px",
+                        fontSize: "11.5px",
+                        fontWeight: 800,
+                        cursor: isAutoFetchingInsta ? "wait" : "pointer",
+                        boxShadow: "0 2px 8px rgba(225, 48, 108, 0.3)",
+                      }}
+                    >
+                      {isAutoFetchingInsta ? "⏳ Yuklanmoqda..." : "⚡ Qayta yuklash"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Live Video Preview Box */}
+                {formData.videoUrl && (
+                  <div style={{ marginTop: "10px", borderRadius: "12px", overflow: "hidden", border: "1px solid #ebd4db", background: "#000", maxHeight: "180px", display: "flex", justifyContent: "center", alignItems: "center" }}>
+                    <video
+                      key={formData.videoUrl}
+                      src={formData.videoUrl}
+                      controls
+                      muted
+                      onError={(e) => {
+                        const videoEl = e.currentTarget;
+                        if (sampleVideoPresets.length > 0 && videoEl.src !== sampleVideoPresets[0].url) {
+                          videoEl.src = sampleVideoPresets[0].url;
+                          setFormData((prev) => ({ ...prev, videoUrl: sampleVideoPresets[0].url }));
+                        }
+                      }}
+                      style={{ maxHeight: "180px", width: "100%", objectFit: "contain" }}
+                    />
+                  </div>
+                )}
+
                 {/* Presets */}
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
                   <span style={{ fontSize: "11px", color: "#806f75" }}>Namuna videolar:</span>
@@ -813,11 +1069,25 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                 </div>
               </div>
 
-              {/* Poster / Cover URL */}
+              {/* Poster / Cover Upload & URL */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  Cover / Poster rasm URL *
+                  🖼️ Cover / Muqova rasmi yuklash yoki URL *
                 </label>
+
+                <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                  <label style={{ flex: 1, cursor: "pointer", padding: "8px 12px", background: "#fdf5f7", border: "1px dashed #ebd4db", borderRadius: "10px", fontSize: "12px", fontWeight: 700, color: "#b6536b", textAlign: "center" }}>
+                    📷 Muqova rasmini yuklash
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverFileChange}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                  {isCoverUploading && <span style={{ fontSize: "11px", color: "#b6536b" }}>⏳ Yuklanmoqda...</span>}
+                </div>
+
                 <input
                   type="text"
                   placeholder="https://images.unsplash.com/..."
@@ -828,12 +1098,28 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                     padding: "10px 14px",
                     borderRadius: "12px",
                     border: formErrors.posterUrl ? "1px solid #ef4444" : "1px solid #ebd4db",
-                    background: "#fdf5f7",
+                    background: "#ffffff",
                     fontSize: "13px",
                     outline: "none",
                     boxSizing: "border-box",
                   }}
                 />
+
+                {/* Cover Image Thumbnail Preview */}
+                {formData.posterUrl && (
+                  <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
+                    <img
+                      src={formData.posterUrl}
+                      alt="Muqova"
+                      style={{ width: "48px", height: "64px", borderRadius: "8px", objectFit: "cover", border: "1px solid #ebd4db" }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    <span style={{ fontSize: "11px", color: "#16a34a", fontWeight: 700 }}>✓ Muqova rasmi tanlandi</span>
+                  </div>
+                )}
+
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
                   <span style={{ fontSize: "11px", color: "#806f75" }}>Namuna muqovalar:</span>
                   {sampleCoverPresets.map((preset) => (
@@ -858,11 +1144,11 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                 </div>
               </div>
 
-              {/* Linked Product & Status (Two columns) */}
+              {/* Linked Inventory Product & Status (Two columns) */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                    Mahsulotga bog‘lash (Ixtiyoriy)
+                    🛍️ Omborimdagi mahsulotga bog‘lash
                   </label>
                   <select
                     value={formData.productId}
@@ -874,14 +1160,15 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       border: "1px solid #ebd4db",
                       background: "#fdf5f7",
                       fontSize: "13px",
+                      fontWeight: 600,
                       outline: "none",
                       boxSizing: "border-box",
                     }}
                   >
-                    <option value="">(Bog‘lanmagan)</option>
-                    {DEFAULT_PRODUCTS.map((p) => (
+                    <option value="">-- (Bog‘lanmagan) --</option>
+                    {inventoryProducts.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.price.toLocaleString("uz-UZ")} so‘m)
+                        [{p.product_code || `GL-${p.id}`}] {p.name} — {p.price.toLocaleString("uz-UZ")} so‘m
                       </option>
                     ))}
                   </select>
@@ -912,6 +1199,34 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   </select>
                 </div>
               </div>
+
+              {/* Selected Product Preview Card */}
+              {formData.productId && (
+                (() => {
+                  const p = inventoryProducts.find((item) => String(item.id) === String(formData.productId));
+                  if (!p) return null;
+                  return (
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px", background: "#fdf2f4", border: "1px solid #f7d2db", borderRadius: "12px" }}>
+                      <img
+                        src={p.image}
+                        alt={p.name}
+                        style={{ width: "42px", height: "42px", borderRadius: "8px", objectFit: "cover", flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "12.5px", fontWeight: 800, color: "#2b2024", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {p.name}
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "#b6536b", fontWeight: 800 }}>
+                          {p.price.toLocaleString("uz-UZ")} so‘m • Kod: {p.product_code || `GL-${p.id}`}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: "11px", background: "#16a34a", color: "#fff", padding: "3px 8px", borderRadius: "999px", fontWeight: 700 }}>
+                        Bog‘landi ✓
+                      </span>
+                    </div>
+                  );
+                })()
+              )}
 
               {/* Music Title */}
               <div>
