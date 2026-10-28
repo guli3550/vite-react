@@ -35,8 +35,6 @@ const supabase = new Proxy({}, {
   },
 });
 
-const eventRateLimitMap = new Map();
-
 // ----------------------------------------------------------------------------
 // 1. PUBLIC API: GET /api/video-ads
 // Returns active, unexpired video ads filtered by placement and platform
