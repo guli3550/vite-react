@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -238,7 +238,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               title="Reklamani yopish"
               aria-label="Reklamani yopish"
             >
-              ✕
+              <X size={16} strokeWidth={2.25} />
             </button>
 
             {/* Video or poster fallback */}
@@ -270,11 +270,14 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               </div>
             )}
 
-            {/* Subtle fullscreen hint badge in bottom-right */}
+            {/* Icon-only fullscreen hint, positioned immediately before the close button */}
             {!hasError && ad.video_url && (
-              <div className="guli-video-fullscreen-hint" aria-hidden="true">
-                <Maximize2 size={14} />
-                <span>To‘liq ekran</span>
+              <div
+                className="guli-video-fullscreen-hint"
+                aria-hidden="true"
+                title="To‘liq ekranda ochish"
+              >
+                <Maximize2 size={16} />
               </div>
             )}
           </div>
