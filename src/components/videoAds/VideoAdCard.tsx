@@ -37,6 +37,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [isMuted, setIsMuted] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [impressionRecorded, setImpressionRecorded] = useState(false);
@@ -138,6 +139,26 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     }
   };
 
+  const handleOpenFullscreen = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    // A direct tap is a user gesture, so request audio and expand the whole ad card.
+    video.muted = false;
+    setIsMuted(false);
+    setIsFullscreen(true);
+    try {
+      await video.play();
+    } catch {
+      // Keep the expanded player open; the sound toggle remains available below.
+    }
+  };
+
+  const handleCloseFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsFullscreen(false);
+  };
+
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
@@ -199,12 +220,16 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const wrapperClass = isFeed ? "guli-video-ad-feed" : "guli-video-ad-home";
 
   return (
-    <div className={wrapperClass} ref={containerRef}>
+    <div className={`${wrapperClass}${isFullscreen ? " guli-video-ad-fullscreen" : ""}`} ref={containerRef}>
       <div className={isFeed ? "guli-video-ad-feed-container" : "guli-video-ad-home-container"}>
         {/* Media column keeps sound control below, never over the video */}
         <div className="guli-video-media-column">
-        <div className="guli-video-media-wrapper" onClick={handleToggleSound}>
+        <div className="guli-video-media-wrapper" onClick={handleOpenFullscreen}>
           <div className="guli-video-badge">Reklama</div>
+
+          {isFullscreen && (
+            <button type="button" className="guli-video-fullscreen-close" onClick={handleCloseFullscreen} aria-label="To‘liq ekrandan chiqish" title="Yopish">✕</button>
+          )}
 
           {/* Dismiss button */}
           <button
