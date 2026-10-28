@@ -13,10 +13,12 @@ import { exportOrdersToPDF } from "./utils/pdfExport";
 import {
   Home3DIcon,
   Search3DIcon,
-  Heart3DIcon,
+  Reels3DIcon,
   Bag3DIcon,
   User3DIcon,
 } from "./components/Nav3DIcons";
+import { ReelsFeed } from "./components/reels/ReelsFeed";
+import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
   ProductImageGallery,
   type Product,
@@ -179,6 +181,7 @@ type Page =
   | "home"
   | "catalog"
   | "wishlist"
+  | "reels"
   | "cart"
   | "profile"
   | "checkout"
@@ -186,7 +189,7 @@ type Page =
   | "addresses"
   | "product"
   | "chat";
-const MAIN_TABS: Page[] = ["home", "catalog", "wishlist", "cart", "profile"];
+const MAIN_TABS: Page[] = ["home", "catalog", "reels", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
 const persistOrdersSafely = (orders: Order[]) => {
@@ -4323,8 +4326,8 @@ export default function App() {
   };
 
   return (
-    <div className={`appShell ${page === "chat" ? "chatPageActive" : ""}`}>
-      {page !== "chat" && (
+    <div className={`appShell ${page === "chat" ? "chatPageActive" : ""} ${page === "reels" ? "reelsPageActive" : ""}`}>
+      {page !== "chat" && page !== "reels" && (
       <header className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
           <button
@@ -4379,6 +4382,22 @@ export default function App() {
           </button>
         </div>
         <div className="headerActions">
+          <button
+            className="iconButton adminNavBtn"
+            id="topbar-admin-btn"
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
+              } catch {}
+              window.location.href = "/admin";
+            }}
+            aria-label="Admin panel"
+            title="Admin paneliga o'tish"
+          >
+            <span style={{ fontSize: "16px", display: "inline-flex", alignItems: "center" }}>
+              🛡️
+            </span>
+          </button>
           <button
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"
@@ -5083,6 +5102,22 @@ export default function App() {
             LocationPicker={LocationPicker}
           />
         )}
+        {page === "reels" && (
+          <ReelsFeed
+            onBack={() => go("home")}
+            onOpenProduct={(prodId) => {
+              const targetProd =
+                products.find((p) => p.id === Number(prodId)) ||
+                DEFAULT_PRODUCTS.find((p) => p.id === Number(prodId));
+              if (targetProd) {
+                openProduct(targetProd, "reels");
+              } else {
+                go("catalog");
+              }
+            }}
+            onNavigateToCatalog={() => go("catalog")}
+          />
+        )}
         {page === "wishlist" && (
           <main className="page">
             <div className="pageHeader">
@@ -5201,17 +5236,14 @@ export default function App() {
           </span>
         </button>
         <button
-          className={page === "wishlist" ? "active" : ""}
-          onClick={() => go("wishlist")}
-          aria-label={t("nav_wishlist")}
-          title={t("nav_wishlist")}
+          className={page === "reels" ? "active" : ""}
+          onClick={() => go("reels")}
+          aria-label={t("nav_reels")}
+          title={t("nav_reels")}
         >
           <span className="navIcon">
-            <Heart3DIcon active={page === "wishlist"} />
+            <Reels3DIcon active={page === "reels"} />
           </span>
-          {wishlist.length > 0 ? (
-            <em className="wishlistBadge">{wishlist.length}</em>
-          ) : null}
         </button>
         <button
           className={page === "cart" ? "active" : ""}

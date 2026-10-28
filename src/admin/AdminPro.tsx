@@ -18,6 +18,7 @@ import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import { AdminSocialPromosTab } from "./components/AdminSocialPromosTab";
 import { VideoAdsAdminTab } from "./components/VideoAdsAdminTab";
+import { AdminReelsTab } from "./components/AdminReelsTab";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
@@ -297,7 +298,7 @@ export default function AdminPro() {
   const [busy, setBusy] = useState(false);
 
   const [tab, setTab] = useState<NavTabKey>("dashboard");
-  const [marketingSubTab, setMarketingSubTab] = useState<"video_ads" | "social_promos">("video_ads");
+  const [marketingSubTab, setMarketingSubTab] = useState<"video_ads" | "reels" | "social_promos">("reels");
   const [tabHistory, setTabHistory] = useState<NavTabKey[]>(["dashboard"]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -1836,10 +1837,31 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {/* Tab: 🎬 Video reklamalar */}
         {tab === "video_ads" && <VideoAdsAdminTab notify={notify} />}
 
-        {/* Marketing — Video reklamalar va Ijtimoiy tarmoqlar aksiyalari */}
+        {/* Tab: 📱 Reels */}
+        {tab === "reels" && <AdminReelsTab notify={notify} />}
+
+        {/* Marketing — Video reklamalar, Reels va Ijtimoiy tarmoqlar */}
         {tab === "marketing" && (
           <div className="space-y-4">
             <div style={{ display: "inline-flex", gap: "4px", padding: "4px", background: "#f6eaed", border: "1px solid #ebd4db", borderRadius: "14px", marginBottom: "14px" }}>
+              <button
+                type="button"
+                onClick={() => setMarketingSubTab("reels")}
+                style={{
+                  border: 0,
+                  background: marketingSubTab === "reels" ? "var(--rose, #b6536b)" : "transparent",
+                  color: marketingSubTab === "reels" ? "#ffffff" : "#6e5d64",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                  padding: "7px 14px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  boxShadow: marketingSubTab === "reels" ? "0 4px 12px rgba(182, 83, 107, 0.25)" : "none",
+                }}
+              >
+                📱 Reels
+              </button>
               <button
                 type="button"
                 onClick={() => setMarketingSubTab("video_ads")}
@@ -1877,7 +1899,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                 📣 Ijtimoiy tarmoqlar aksiyalari
               </button>
             </div>
-            {marketingSubTab === "video_ads" ? (
+            {marketingSubTab === "reels" ? (
+              <AdminReelsTab notify={notify} />
+            ) : marketingSubTab === "video_ads" ? (
               <VideoAdsAdminTab notify={notify} />
             ) : (
               <AdminSocialPromosTab notify={notify} />

@@ -473,3 +473,110 @@ export const User3DIcon: FC<NavIconProps> = ({ active = false, className, ...pro
     <ellipse cx="29.5" cy="16.5" rx="4.5" ry="3" transform="rotate(-25 29.5 16.5)" fill="url(#emojiHeadGloss)" />
   </svg>
 )
+
+/**
+ * 🎬 3D Reels / Film Clapperboard Camera Sticker (Guli 3D Reels)
+ * Volumetric glossy rose-coral clapper with film reel slots, play badge & specular glow.
+ */
+export const Reels3DIcon: FC<NavIconProps> = ({ active = false, className, ...props }) => (
+  <svg
+    viewBox="0 0 64 64"
+    width="34"
+    height="34"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    style={{
+      transform: active ? 'translateY(-3px) scale(1.1)' : 'scale(1)',
+      transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+    }}
+    {...props}
+  >
+    <defs>
+      {/* 3D Main Body Gradient - Signature Guli Rose to Magenta */}
+      <linearGradient id="emojiReelsBody" x1="14" y1="18" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#ff4d79" />
+        <stop offset="35%" stopColor="#f43f5e" />
+        <stop offset="70%" stopColor="#e11d48" />
+        <stop offset="100%" stopColor="#9f1239" />
+      </linearGradient>
+
+      {/* Top Clapper Bar Gradient */}
+      <linearGradient id="emojiReelsClap" x1="12" y1="10" x2="52" y2="22" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#334155" />
+        <stop offset="50%" stopColor="#1e293b" />
+        <stop offset="100%" stopColor="#0f172a" />
+      </linearGradient>
+
+      {/* Play Icon 3D Metallic / White Gradient */}
+      <linearGradient id="emojiReelsPlay" x1="28" y1="28" x2="40" y2="44" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#ffffff" />
+        <stop offset="60%" stopColor="#fff1f2" />
+        <stop offset="100%" stopColor="#fecdd3" />
+      </linearGradient>
+
+      {/* Specular Top Glint */}
+      <linearGradient id="emojiReelsGlint" x1="16" y1="20" x2="48" y2="30" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+        <stop offset="100%" stopColor="#ffffff" stopOpacity="0.05" />
+      </linearGradient>
+
+      {/* Ambient shadow */}
+      <radialGradient id="emojiReelsShadow" cx="32" cy="56" r="21" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#9f1239" stopOpacity="0.36" />
+        <stop offset="100%" stopColor="#9f1239" stopOpacity="0" />
+      </radialGradient>
+    </defs>
+
+    {/* Ambient Floor Shadow */}
+    <ellipse cx="32" cy="56.5" rx="20" ry="4.5" fill="url(#emojiReelsShadow)" />
+
+    {/* Main Camera / Clapper Body */}
+    <rect
+      x="12"
+      y="21"
+      width="40"
+      height="31"
+      rx="9"
+      fill="url(#emojiReelsBody)"
+      stroke="#ffe4e6"
+      strokeWidth="0.8"
+    />
+
+    {/* Gloss Bevel Top Streak */}
+    <path
+      d="M17 22H47C49.8 22 51.5 23.5 51.5 25C47 28 20 28 12.5 25C12.5 23.5 14.2 22 17 22Z"
+      fill="url(#emojiReelsGlint)"
+    />
+
+    {/* Top Clapper Bar with Film Slots */}
+    <rect
+      x="11"
+      y="11"
+      width="42"
+      height="10"
+      rx="4.5"
+      fill="url(#emojiReelsClap)"
+      stroke="#64748b"
+      strokeWidth="0.6"
+    />
+
+    {/* Clapper Diagonal White Film Stripes */}
+    <path d="M19 12L15 20H18L22 12H19Z" fill="#ffffff" fillOpacity="0.85" />
+    <path d="M29 12L25 20H28L32 12H29Z" fill="#ffffff" fillOpacity="0.85" />
+    <path d="M39 12L35 20H38L42 12H39Z" fill="#ffffff" fillOpacity="0.85" />
+    <path d="M49 12L45 20H48L51 14C51 12.9 50.1 12 49 12Z" fill="#ffffff" fillOpacity="0.85" />
+
+    {/* Central 3D Play Button Triangle */}
+    <path
+      d="M28 29.5C28 28.3 29.3 27.5 30.3 28.1L40 33.8C41 34.4 41 35.8 40 36.4L30.3 42.1C29.3 42.7 28 41.9 28 40.7V29.5Z"
+      fill="url(#emojiReelsPlay)"
+      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.22))"
+    />
+
+    {/* Gloss Sparkle */}
+    <circle cx="45" cy="27" r="1.6" fill="#ffffff" fillOpacity="0.9" />
+    <circle cx="48" cy="31" r="0.9" fill="#ffffff" fillOpacity="0.75" />
+  </svg>
+)
+

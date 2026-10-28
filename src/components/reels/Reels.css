@@ -1,0 +1,1210 @@
+/* ==========================================================================
+   GULI MARKET — REELS FEED & MODALS STYLING
+   Instagram Reels style edge-to-edge vertical video feed, continuous swipe,
+   comments & share sheets
+   ========================================================================== */
+
+/* Main Fullscreen Container */
+.reelsContainer {
+  position: relative;
+  width: 100%;
+  max-width: none !important;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100%;
+  background: #000000;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Viewport: Fills 100% of available space edge-to-edge without card borders or outer dark voids */
+.reelsViewport {
+  position: relative;
+  width: 100%;
+  max-width: none !important;
+  height: 100%;
+  max-height: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  overflow: hidden;
+  background: #000000;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Sliding Vertical Track for Instagram-style Gestures */
+.reelsTrack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reelsTrack {
+    transition: none !important;
+  }
+}
+
+/* Individual Reel Slide */
+.reelsSlide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000000;
+}
+
+/* Media area */
+.reelsMediaWrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reelsVideoElement {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reelsPoster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.reelsPoster.hiddenBehindVideo {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Spinner */
+.reelsLoadingSpinner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.reelsSpinnerCircle {
+  width: 44px;
+  height: 44px;
+  border: 3.5px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ff4d79;
+  border-radius: 50%;
+  animation: reelsSpin 0.8s linear infinite;
+}
+
+@keyframes reelsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Centered Modern Play/Pause Animated Overlay */
+.reelsPlayPausePopup {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.reelsPlayPauseBubble {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: reelsPlayPausePop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes reelsPlayPausePop {
+  0% {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+/* Double tap heart animation */
+.reelsDoubleTapHeart {
+  position: absolute;
+  pointer-events: none;
+  z-index: 7;
+  font-size: 92px;
+  filter: drop-shadow(0 4px 20px rgba(255, 77, 121, 0.65));
+  animation: reelsPopHeart 0.9s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes reelsPopHeart {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-15deg);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.25) rotate(0deg);
+  }
+  75% {
+    opacity: 0.9;
+    transform: scale(1) translateY(-10px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.75) translateY(-44px);
+  }
+}
+
+/* Error state overlay */
+.reelsErrorOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 12, 15, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  z-index: 8;
+}
+
+.reelsErrorIcon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.reelsErrorText {
+  color: #ffffff;
+  font-size: 15px;
+  margin: 0 0 14px 0;
+}
+
+.reelsRetryBtn {
+  background: #ff4d79;
+  color: #ffffff;
+  border: 0;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.reelsRetryBtn:hover {
+  transform: scale(1.05);
+}
+
+/* Top Bar Overlay */
+.reelsTopBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: max(14px, env(safe-area-inset-top, 14px)) 16px 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.reelsTopControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.reelsTopIconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reelsTopIconBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+/* Right Action Column: Evenly spaced Like, Comment, Share, Audio */
+.reelsActionBar {
+  position: absolute;
+  right: 12px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  z-index: 12;
+  pointer-events: auto;
+}
+
+.reelsActionBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0;
+  gap: 3px;
+  transition: transform 0.15s ease;
+}
+
+.reelsActionBtn:active {
+  transform: scale(0.9);
+}
+
+.reelsActionIconCircle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reelsActionBtn:hover .reelsActionIconCircle {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.reelsActionBtn.liked .reelsActionIconCircle {
+  background: rgba(255, 77, 121, 0.3);
+}
+
+.reelsActionIcon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.reelsActionCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+}
+
+/* Spinning Vinyl Music Disc */
+.reelsMusicDisc {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #2a2a2a 40%, #000000 100%);
+  border: 2px solid #333333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  margin-top: 4px;
+}
+
+.reelsMusicDisc.spinning {
+  animation: reelsDiscSpin 4s linear infinite;
+}
+
+@keyframes reelsDiscSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.reelsMusicDiscIcon {
+  font-size: 14px;
+}
+
+/* Bottom Overlay Area */
+.reelsBottomOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 76px;
+  padding: 16px 14px calc(78px + env(safe-area-inset-bottom, 0px)) 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 11;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0) 100%);
+  pointer-events: auto;
+}
+
+/* Attached Product Pill */
+.reelsProductPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 5px 12px 5px 6px;
+  border-radius: 12px;
+  max-width: 100%;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, background 0.15s ease;
+  width: fit-content;
+}
+
+.reelsProductPill:hover {
+  transform: translateY(-2px);
+  background: #ffffff;
+}
+
+.reelsProductThumbWrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #fdf2f4;
+}
+
+.reelsProductThumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reelsProductDetails {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.reelsProductTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e1b4b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.reelsProductPrice {
+  font-size: 10px;
+  font-weight: 800;
+  color: #ff4d79;
+}
+
+.reelsProductArrow {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ff4d79;
+  margin-left: 2px;
+}
+
+/* Author Row: [Logo] Guli Market [Verified Badge] */
+.reelsAuthorRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.reelsAuthorLogoWrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.reelsAuthorRowLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reelsAuthorName {
+  color: #ffffff;
+  font-weight: 850;
+  font-size: 14.5px;
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  line-height: 1;
+}
+
+.reelsVerifiedCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #38bdf8;
+  color: #ffffff;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.reelsVerifiedSvg {
+  width: 10px;
+  height: 10px;
+  fill: #ffffff;
+}
+
+/* Modern Share / Send Paper Plane Icon */
+.reelsShareSendIcon {
+  width: 22px;
+  height: 22px;
+  color: #ffffff;
+  transform: translate(-1px, 1px);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+  transition: transform 0.18s ease;
+}
+
+.reelsActionBtn:hover .reelsShareSendIcon {
+  transform: translate(1px, -1px) scale(1.08);
+}
+
+/* Caption */
+.reelsCaptionBox {
+  cursor: pointer;
+}
+
+.reelsCaptionText {
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.reelsCaptionBox.expanded .reelsCaptionText {
+  -webkit-line-clamp: unset;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.reelsMoreToggle {
+  color: #d1d5db;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Music Ticker */
+.reelsMusicTrackRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.reelsMusicNote {
+  font-size: 12px;
+}
+
+.reelsMusicTicker {
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.reelsMusicTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Bottom Progress Bar */
+.reelsProgressBarContainer {
+  position: absolute;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.22);
+  z-index: 14;
+}
+
+.reelsProgressBarFill {
+  height: 100%;
+  background: #ff4d79;
+  transition: width 0.1s linear;
+}
+
+
+
+/* Toast */
+.reelsToast {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(18, 12, 16, 0.94);
+  color: #ffffff;
+  border: 1px solid rgba(255, 77, 121, 0.4);
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  pointer-events: none;
+  animation: reelsToastIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes reelsToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ==========================================================================
+   MODAL OVERLAYS (COMMENTS & SHARE)
+   ========================================================================== */
+
+.reelsModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 150;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: reelsFadeIn 0.2s ease-out;
+}
+
+@keyframes reelsFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Instagram-Style Bottom Sheets */
+.reelsCommentsSheet {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  will-change: height, transform;
+  transition: height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.25s ease;
+  animation: reelsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reelsCommentsSheet.collapsed {
+  height: 60vh;
+  height: 60dvh;
+  max-height: 60dvh;
+}
+
+.reelsCommentsSheet.expanded {
+  height: 92vh;
+  height: 92dvh;
+  max-height: 92dvh;
+}
+
+.reelsShareSheet {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  max-height: 72vh;
+  animation: reelsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes reelsSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Header & Handle */
+.reelsSheetHeader {
+  padding: 0;
+  background: #ffffff;
+  border-bottom: 1px solid #f2e4e8;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.reelsSheetHandleTouchArea {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 6px 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.reelsSheetHandleTouchArea:active {
+  cursor: grabbing;
+}
+
+.reelsSheetHandle {
+  width: 44px;
+  height: 4.5px;
+  border-radius: 999px;
+  background: #dfcfd4;
+  transition: background 0.2s ease, width 0.2s ease;
+}
+
+.reelsSheetHandleTouchArea:hover .reelsSheetHandle {
+  background: #c6aab3;
+  width: 48px;
+}
+
+.reelsSheetTitleRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 10px 16px;
+  box-sizing: border-box;
+}
+
+.reelsSheetTitleLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reelsSheetTitle {
+  font-size: 15px;
+  font-weight: 850;
+  color: #21191c;
+  letter-spacing: -0.2px;
+}
+
+.reelsSheetSizeToggleBtn {
+  background: #fdf2f4;
+  border: 1px solid #f7d2db;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 750;
+  color: #b84561;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reelsSheetSizeToggleBtn:hover {
+  background: #fae4e9;
+  border-color: #f2bac7;
+}
+
+.reelsCloseBtn {
+  background: #f6eaed;
+  border: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6e5d64;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reelsCloseBtn:hover {
+  background: #ecd4db;
+  color: #21191c;
+}
+
+/* Comments Scrollable List */
+.reelsCommentsList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reelsCommentItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.reelsCommentAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.reelsCommentContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.reelsCommentAuthorRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  flex-wrap: wrap;
+}
+
+.reelsCommentAuthor {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: #21191c;
+}
+
+.reelsCommentVerifiedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #38bdf8;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.reelsCommentTime {
+  font-size: 10.5px;
+  color: #9b7d86;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.reelsCommentBody {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #3b2c32;
+  margin: 0;
+  word-break: break-word;
+}
+
+.reelsCommentLikeBtn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.reelsCommentHeartIcon {
+  font-size: 13px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.reelsCommentLikeBtn:active .reelsCommentHeartIcon {
+  transform: scale(1.3);
+}
+
+.reelsCommentLikeCount {
+  font-size: 10px;
+  color: #9b7d86;
+  font-weight: 700;
+}
+
+.reelsEmptyComments {
+  padding: 48px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: auto 0;
+}
+
+.reelsEmptyEmoji {
+  font-size: 42px;
+  margin-bottom: 8px;
+}
+
+.reelsEmptyText {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #21191c;
+  margin: 0 0 4px 0;
+}
+
+.reelsEmptySub {
+  font-size: 12px;
+  color: #9b7d86;
+}
+
+/* Pinned Bottom Composer Section */
+.reelsComposerWrapper {
+  flex-shrink: 0;
+  border-top: 1px solid #f1e4e8;
+  background: #ffffff;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+}
+
+.reelsEmojiBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 6px 12px;
+  background: #fdfafb;
+  border-bottom: 1px solid #fcf0f3;
+}
+
+.reelsEmojiBtn {
+  background: transparent;
+  border: 0;
+  font-size: 21px;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: transform 0.15s ease;
+  line-height: 1;
+}
+
+.reelsEmojiBtn:hover {
+  transform: scale(1.25);
+}
+
+.reelsEmojiBtn:active {
+  transform: scale(0.95);
+}
+
+/* Comment Form */
+.reelsCommentForm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 6px 14px;
+  background: #ffffff;
+}
+
+.reelsUserAvatarMini {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid #ebd4db;
+  display: grid;
+  place-items: center;
+}
+
+.reelsUserAvatarMini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reelsCommentInput {
+  flex: 1;
+  background: #fdf5f7;
+  border: 1px solid #ebd4db;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  color: #2b2024;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.reelsCommentInput:focus {
+  border-color: #ff4d79;
+  background: #ffffff;
+}
+
+.reelsCommentSubmit {
+  background: linear-gradient(135deg, #ff4d79, #f43f5e);
+  color: #ffffff;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 12.5px;
+  font-weight: 850;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 10px rgba(244, 63, 94, 0.28);
+}
+
+.reelsCommentSubmit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: #d8c2c8;
+}
+
+/* Share Sheet Elements */
+.reelsShareSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fdf5f7;
+  border-bottom: 1px solid #f1e4e8;
+}
+
+.reelsShareThumb {
+  width: 44px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.reelsShareMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.reelsShareAuthor {
+  font-size: 12px;
+  font-weight: 800;
+  color: #ff4d79;
+}
+
+.reelsShareCaption {
+  font-size: 12px;
+  color: #403238;
+  margin: 3px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reelsShareTargetsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 20px 16px 14px 16px;
+}
+
+.reelsShareTargetBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  gap: 6px;
+}
+
+.reelsShareTargetIconWrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.reelsShareTargetBtn:hover .reelsShareTargetIconWrap {
+  transform: scale(1.1);
+}
+
+.reelsShareTargetLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #403238;
+}
+
+.reelsCopyLinkBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fdf5f7;
+  border: 1px solid #ebd4db;
+  border-radius: 14px;
+  margin: 6px 16px 20px 16px;
+  padding: 8px 12px;
+}
+
+.reelsCopyLinkText {
+  font-size: 12px;
+  color: #6e5d64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.reelsCopyLinkBtn {
+  background: #ff4d79;
+  color: #ffffff;
+  border: 0;
+  padding: 7px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.reelsCopyLinkBtn.copied {
+  background: #16a34a;
+}
+
+/* Empty View */
+.reelsEmptyView {
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reelsEmptyContent {
+  max-width: 320px;
+  text-align: center;
+  padding: 24px;
+  color: #ffffff;
+}
+
+.reelsEmptyIcon {
+  font-size: 54px;
+  margin-bottom: 12px;
+}
+
+.reelsEmptyTitle {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 8px 0;
+}
+
+.reelsEmptySubtitle {
+  font-size: 13px;
+  color: #d1d5db;
+  line-height: 1.5;
+  margin: 0 0 20px 0;
+}
+
+.reelsEmptyActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reelsBtnPrimary {
+  background: #ff4d79;
+  color: #ffffff;
+  border: 0;
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.reelsBtnSecondary {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 12px 18px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}

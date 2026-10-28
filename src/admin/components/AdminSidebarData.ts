@@ -15,7 +15,8 @@ export type NavTabKey =
   | "notifications"
   | "settings"
   | "marketing"
-  | "video_ads";
+  | "video_ads"
+  | "reels";
 
 export type NavItem = {
   key: NavTabKey;
@@ -35,6 +36,7 @@ export const SIDEBAR_NAV_ITEMS: NavItem[] = [
   { key: "promos", icon: "🎟", label: "Kuponlar" },
   { key: "banners", icon: "🖼", label: "Bannerlar" },
   { key: "video_ads", icon: "🎬", label: "Video reklamalar" },
+  { key: "reels", icon: "📱", label: "Reels" },
   { key: "analytics", icon: "📊", label: "Tahlillar" },
   { key: "guli_chat", icon: "✨", label: "Guli AI Chat" },
   { key: "chat", icon: "💬", label: "Online Chat" },

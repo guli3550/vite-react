@@ -87,6 +87,9 @@ img{max-width:100%}
 .appShell{min-height:100vh;padding-bottom:86px;background:var(--bg-main);position:relative}
 .appShell.chatPageActive{padding-bottom:0 !important;height:100vh !important;height:100dvh !important;max-height:100dvh !important;min-height:100vh !important;overflow:hidden !important}
 .appShell.chatPageActive .tabSwipeArea{height:100% !important;min-height:100% !important;display:flex !important;flex-direction:column !important;overflow:hidden !important}
+.appShell.reelsPageActive{padding-bottom:0 !important;height:100vh !important;height:100dvh !important;max-height:100dvh !important;min-height:100vh !important;overflow:hidden !important;background:#000000 !important}
+.appShell.reelsPageActive .tabSwipeArea{height:100% !important;min-height:100% !important;display:flex !important;flex-direction:column !important;overflow:hidden !important;padding:0 !important;margin:0 !important}
+.appShell.reelsPageActive .bottomNav{background:rgba(18,12,16,0.85) !important;backdrop-filter:blur(20px) !important;-webkit-backdrop-filter:blur(20px) !important;border-top:1px solid rgba(255,255,255,0.12) !important}
 .topbar{height:70px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;background:var(--bg-card);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);position:sticky;top:0;z-index:1000;border-bottom:1px solid var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,0.03)}
 [data-theme="dark"] .topbar{background:var(--bg-card)}
 
@@ -101,6 +104,10 @@ img{max-width:100%}
 .iconButton{position:relative;width:44px;height:44px;border-radius:50%;background:var(--bg-card);font-size:18px;box-shadow:var(--shadow-sm);border:1px solid var(--border-color);display:grid;place-items:center;color:var(--text-main);transition:all .18s ease}
 .iconButton:hover{border-color:var(--primary);transform:translateY(-1px)}
 .badge{position:absolute;top:-3px;right:-3px;background:#d94f6a;color:#fff;border-radius:50%;font-size:9px;font-weight:800;min-width:19px;height:19px;display:grid;place-items:center;border:2px solid var(--bg-card)}
+
+/* Admin Nav Button */
+.adminNavBtn{background:linear-gradient(135deg,var(--bg-card),rgba(225,29,72,.06));border-color:rgba(225,29,72,.25)}
+.adminNavBtn:hover{border-color:var(--primary);background:linear-gradient(135deg,var(--bg-card),rgba(225,29,72,.12));box-shadow:0 4px 12px rgba(225,29,72,.15)}
 
 /* Notification Bell & Pulse */
 .notifBellBtn{font-size:19px;color:var(--text-main);position:relative}
