@@ -78,22 +78,14 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     };
 
     const handlePlayAttempt = async () => {
+      // Always start ads silently. Sound is enabled only after an explicit user action.
+      video.muted = true;
+      setIsMuted(true);
       try {
-        // Attempt audio autoplay first as requested
-        video.muted = false;
         await video.play();
-        setIsMuted(false);
         sendEvent("video_start");
       } catch {
-        // Fallback to muted playback if browser policies block audio autoplay
-        try {
-          video.muted = true;
-          await video.play();
-          setIsMuted(true);
-          sendEvent("video_start");
-        } catch {
-          // Playback blocked or waiting for user interaction
-        }
+        // Playback may still be blocked until the user interacts with the page.
       }
     };
 
@@ -209,7 +201,8 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   return (
     <div className={wrapperClass} ref={containerRef}>
       <div className={isFeed ? "guli-video-ad-feed-container" : "guli-video-ad-home-container"}>
-        {/* Media Frame */}
+        {/* Media column keeps sound control below, never over the video */}
+        <div className="guli-video-media-column">
         <div className="guli-video-media-wrapper" onClick={handleToggleSound}>
           <div className="guli-video-badge">Reklama</div>
 
@@ -261,8 +254,9 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
             </div>
           )}
 
-          {/* Mute/Sound Toggle Pill */}
-          {!hasError && ad.video_url && (
+        </div>
+        {!hasError && ad.video_url && (
+          <div className="guli-video-sound-controls">
             <button
               type="button"
               className="guli-video-sound-btn"
@@ -270,9 +264,9 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               title={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
               aria-label={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
             >
-              <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozli"}</span>
+              <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozni o‘chirish"}</span>
             </button>
-          )}
+          </div>
         </div>
 
         {/* Content & Call to Action */}
