@@ -128,7 +128,8 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", signedData.signedUrl);
+      // Supabase Storage signed-upload endpoint expects PUT for the raw file body.
+      xhr.open("PUT", signedData.signedUrl);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {
@@ -140,7 +141,14 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
           onProgress?.(100);
           resolve();
         } else {
-          reject(new Error("Storage yuklash xatosi (HTTP " + xhr.status + ")"));
+          let detail = "";
+          try {
+            const parsed = JSON.parse(xhr.responseText || "{}");
+            detail = parsed.message || parsed.error || parsed.statusCode || "";
+          } catch {
+            detail = (xhr.responseText || "").slice(0, 180);
+          }
+          reject(new Error("Storage yuklash xatosi (HTTP " + xhr.status + ")" + (detail ? ": " + detail : "")));
         }
       };
       xhr.onerror = () => reject(new Error("Storage bilan aloqa uzildi. Qayta urinib ko‘ring."));
