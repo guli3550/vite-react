@@ -13,6 +13,7 @@ const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculateP
 const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
 require("./socialPromoRuntime");
 require("./videoAdsRuntime");
+require("./reelsRuntime");
 
 const app = express();
 
