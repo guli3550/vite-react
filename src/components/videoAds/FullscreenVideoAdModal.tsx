@@ -100,7 +100,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
     // Direct user tap triggered full-screen -> request unmuted audio
     video.muted = false;
-    setIsMuted(false);
 
     const playPromise = video.play();
     if (playPromise !== undefined) {
@@ -154,7 +153,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       // If video was muted due to policy, try unmuting on subsequent user tap
       if (video.muted) {
         video.muted = false;
-        setIsMuted(false);
       }
       video
         .play()
