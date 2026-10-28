@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { VideoAd } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
 
@@ -9,6 +9,21 @@ interface VideoAdModalProps {
   editingAd?: VideoAd | null;
   notify: (msg: string) => void;
 }
+
+const CTA_PRESETS = [
+  "Batafsil",
+  "Xarid qilish",
+  "Katalogga o‘tish",
+  "Aksiyani ko‘rish",
+  "Buyurtma berish",
+];
+
+const ROUTE_PRESETS = [
+  { label: "Bosh sahifa", url: "/" },
+  { label: "Katalog", url: "/catalog" },
+  { label: "Pijamalar", url: "/catalog?category=Pijamalar" },
+  { label: "Kolleksiya", url: "/catalog?category=Kolleksiya" },
+];
 
 export const VideoAdModal: React.FC<VideoAdModalProps> = ({
   isOpen,
@@ -41,6 +56,10 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [previewTab, setPreviewTab] = useState<"telegram" | "web">("telegram");
+  const [previewMuted, setPreviewMuted] = useState(true);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+
   useEffect(() => {
     if (editingAd) {
       setTitle(editingAd.title || "");
@@ -58,14 +77,14 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
       setStartsAt(editingAd.starts_at ? editingAd.starts_at.slice(0, 16) : "");
       setEndsAt(editingAd.ends_at ? editingAd.ends_at.slice(0, 16) : "");
       setVideoSourceMode("url");
-      setPosterSourceMode("url");
+      setPosterSourceMode(editingAd.poster_url ? "url" : "upload");
     } else {
       setTitle("");
       setDescription("");
       setVideoUrl("");
       setPosterUrl("");
       setCtaText("Batafsil");
-      setDestinationUrl("");
+      setDestinationUrl("/catalog");
       setProductId("");
       setPlacement("home");
       setPlatform("all");
@@ -82,29 +101,26 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleVideoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleVideoFileUpload = async (file: File) => {
     if (!file.type.startsWith("video/")) {
       setErrorMessage("Faqat video fayl tanlang (MP4, WebM)");
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      setErrorMessage("Video hajmi 50 MB dan oshmasligi kerak");
+    if (file.size > 60 * 1024 * 1024) {
+      setErrorMessage("Video hajmi 60 MB dan oshmasligi kerak");
       return;
     }
 
     setUploadingVideo(true);
-    setUploadProgress(15);
+    setUploadProgress(20);
     setErrorMessage("");
 
     try {
       const reader = new FileReader();
       reader.onload = async () => {
         try {
-          setUploadProgress(45);
+          setUploadProgress(50);
           const base64 = String(reader.result || "").split(",")[1];
           const token = sessionStorage.getItem("guli_admin_token") || "";
           const apiBase = getApiBaseUrl();
@@ -134,7 +150,7 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
           setUploadProgress(100);
           notify("Video muvaffaqiyatli yuklandi ✓");
         } catch (err: any) {
-          setErrorMessage(err.message || "Video yuklash xatosi");
+          setErrorMessage(err.message || "Video yuklashda xatolik yuz berdi");
         } finally {
           setUploadingVideo(false);
         }
@@ -146,17 +162,14 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
     }
   };
 
-  const handlePosterFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handlePosterFileUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       setErrorMessage("Faqat rasm fayl tanlang (JPG, PNG, WebP)");
       return;
     }
 
-    if (file.size > 6 * 1024 * 1024) {
-      setErrorMessage("Poster rasmi hajmi 6 MB dan oshmasligi kerak");
+    if (file.size > 8 * 1024 * 1024) {
+      setErrorMessage("Poster rasmi hajmi 8 MB dan oshmasligi kerak");
       return;
     }
 
@@ -191,7 +204,7 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
           }
 
           setPosterUrl(data.url);
-          notify("Poster rasmi yuklandi ✓");
+          notify("Poster rasmi saqlandi ✓");
         } catch (err: any) {
           setErrorMessage(err.message || "Poster yuklash xatosi");
         } finally {
@@ -207,19 +220,20 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage("");
 
     if (!title.trim()) {
-      setErrorMessage("Reklama nomi talab qilinadi");
+      setErrorMessage("Iltimos, reklama sarlavhasini kiriting");
       return;
     }
 
     if (!videoUrl.trim()) {
-      setErrorMessage("Video fayl yuklang yoki video URL kiriting");
+      setErrorMessage("Iltimos, video fayl yuklang yoki video URL manzilini kiriting");
       return;
     }
 
     setSubmitting(true);
+    setErrorMessage("");
+
     try {
       const token = sessionStorage.getItem("guli_admin_token") || "";
       const apiBase = getApiBaseUrl();
@@ -234,18 +248,18 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
         product_id: productId.trim() || null,
         placement,
         platform,
-        priority: Number(priority) || 0,
+        priority: Number(priority) || 10,
         frequency_cap: Number(frequencyCap) || 5,
         is_active: isActive,
         starts_at: startsAt ? new Date(startsAt).toISOString() : null,
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
       };
 
-      const url = editingAd
+      const isEdit = !!editingAd?.id;
+      const url = isEdit
         ? `${apiBase}/api/admin/video-ads/${editingAd.id}`
         : `${apiBase}/api/admin/video-ads`;
-
-      const method = editingAd ? "PUT" : "POST";
+      const method = isEdit ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -256,342 +270,485 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Saqlashda xatolik yuz berdi");
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || "Reklamani saqlashda server xatosi");
       }
 
-      notify(editingAd ? "Video reklama yangilandi ✓" : "Yangi video reklama yaratildi ✓");
+      notify(isEdit ? "Reklama yangilandi ✓" : "Yangi video reklama yaratildi ✓");
       onSaved();
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || "Saqlashda server xatosi");
+      setErrorMessage(err.message || "Saqlashda xatolik yuz berdi");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-slate-900 border border-pink-500/30 rounded-2xl p-6 text-white shadow-2xl my-8">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
-          <h2 className="text-xl font-bold text-pink-400">
-            {editingAd ? "Video reklamani tahrirlash" : "Yangi video reklama qo‘shish"}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl p-1"
-          >
+    <div className="vadsModalOverlay" onClick={onClose}>
+      <div className="vadsModalCard" onClick={(e) => e.stopPropagation()}>
+        {/* Modal Head */}
+        <div className="vadsModalHead">
+          <div>
+            <h2>{editingAd ? "Video reklamani tahrirlash" : "Yangi video reklama yaratish"}</h2>
+            <small style={{ color: "var(--muted)" }}>
+              Sayt va Telegram Mini App foydalanuvchilariga ko‘rsatiluvchi video reklama
+            </small>
+          </div>
+          <button type="button" onClick={onClose} className="vadsModalCloseBtn" aria-label="Yopish">
             ✕
           </button>
         </div>
 
-        {errorMessage && (
-          <div className="mb-4 p-3 bg-red-950/80 border border-red-500/50 rounded-lg text-red-200 text-sm">
-            {errorMessage}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Sarlavha & Tavsif */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Reklama nomi *
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Masalan: Yangi Ipak Pijamalar To‘plami"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Qisqa tavsif
-            </label>
-            <textarea
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Reklama haqida qo‘shimcha ma'lumot..."
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-            />
-          </div>
-
-          {/* Video manbasi (Yuklash yoki URL) */}
-          <div className="p-4 bg-slate-800/70 border border-slate-700/80 rounded-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-pink-300 uppercase tracking-wide">
-                Video Fayl Manbasi *
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setVideoSourceMode("upload")}
-                  className={`text-xs px-2.5 py-1 rounded-md transition ${
-                    videoSourceMode === "upload"
-                      ? "bg-pink-600 text-white font-semibold"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  Fayl yuklash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVideoSourceMode("url")}
-                  className={`text-xs px-2.5 py-1 rounded-md transition ${
-                    videoSourceMode === "url"
-                      ? "bg-pink-600 text-white font-semibold"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  Video URL
-                </button>
+        {/* Modal Body: 2 Columns on Desktop, Single Column on Mobile */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <div className="vadsModalBody">
+            {errorMessage && (
+              <div
+                style={{
+                  background: "#fff0f2",
+                  color: "#b13e55",
+                  border: "1px solid #fecdd3",
+                  borderRadius: "12px",
+                  padding: "10px 14px",
+                  fontSize: "12px",
+                  marginBottom: "14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span>⚠️</span>
+                <span>{errorMessage}</span>
               </div>
-            </div>
+            )}
 
-            {videoSourceMode === "upload" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
+              {/* Left Column: Form Fields */}
               <div>
-                <input
-                  type="file"
-                  accept="video/mp4,video/webm,video/quicktime"
-                  onChange={handleVideoFileUpload}
-                  disabled={uploadingVideo}
-                  className="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-pink-600 file:text-white hover:file:bg-pink-700 cursor-pointer"
-                />
-                {uploadingVideo && (
-                  <div className="mt-2 text-xs text-pink-400">
-                    Video yuklanmoqda... {uploadProgress}%
+                {/* 1. Asosiy ma'lumotlar */}
+                <div className="vadsFormSection">
+                  <span className="vadsFormSectionTitle">01. Asosiy ma’lumotlar</span>
+
+                  <div className="vadsFormGroup">
+                    <label>
+                      Reklama nomi <span style={{ color: "var(--rose)" }}>*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="Masalan: Yangi ipak va atlas pijamalar to‘plami"
+                      required
+                    />
                   </div>
-                )}
-                {videoUrl && (
-                  <p className="mt-1 text-xs text-emerald-400 truncate">
-                    ✓ Tanlangan: {videoUrl}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <input
-                type="url"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="https://... (mp4 yoki webm video havola)"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            )}
-          </div>
 
-          {/* Poster rasmi */}
-          <div className="p-4 bg-slate-800/70 border border-slate-700/80 rounded-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-pink-300 uppercase tracking-wide">
-                Poster (Muqova rasmi)
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPosterSourceMode("upload")}
-                  className={`text-xs px-2.5 py-1 rounded-md transition ${
-                    posterSourceMode === "upload"
-                      ? "bg-pink-600 text-white font-semibold"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
+                  <div className="vadsFormGroup">
+                    <label>Qisqa tavsif / Reklama matni</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      placeholder="Mijozlar e’tiborini tortuvchi qisqa izoh..."
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Video va Poster media */}
+                <div className="vadsFormSection">
+                  <span className="vadsFormSectionTitle">02. Video va Muqova (Poster)</span>
+
+                  <div className="vadsFormGroup">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <label style={{ margin: 0 }}>
+                        Video manbasi <span style={{ color: "var(--rose)" }}>*</span>
+                      </label>
+                      <div className="vadsViewSwitch">
+                        <button
+                          type="button"
+                          onClick={() => setVideoSourceMode("upload")}
+                          className={`vadsViewBtn ${videoSourceMode === "upload" ? "active" : ""}`}
+                        >
+                          Fayl yuklash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVideoSourceMode("url")}
+                          className={`vadsViewBtn ${videoSourceMode === "url" ? "active" : ""}`}
+                        >
+                          URL kiritish
+                        </button>
+                      </div>
+                    </div>
+
+                    {videoSourceMode === "upload" ? (
+                      <div className="vadsDropzone">
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime"
+                          id="modal-video-upload"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleVideoFileUpload(f);
+                          }}
+                        />
+                        <label htmlFor="modal-video-upload" style={{ cursor: "pointer", display: "block" }}>
+                          <span style={{ fontSize: "24px", display: "block", marginBottom: "4px" }}>📹</span>
+                          <span style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--rose)" }}>
+                            {uploadingVideo ? "Video yuklanmoqda..." : "MP4 video faylini tanlang"}
+                          </span>
+                          <small style={{ display: "block", color: "var(--muted)", fontSize: "11px", marginTop: "2px" }}>
+                            Format: MP4 (H.264) · Hajmi 60 MB gacha
+                          </small>
+                        </label>
+
+                        {uploadingVideo && (
+                          <div style={{ height: "4px", background: "#f2e3e7", borderRadius: "99px", overflow: "hidden", marginTop: "10px" }}>
+                            <div style={{ height: "100%", background: "var(--rose)", width: `${uploadProgress}%`, transition: "width 0.3s ease" }} />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        type="url"
+                        value={videoUrl}
+                        onChange={(e) => setVideoUrl(e.target.value)}
+                        placeholder="https://.../video.mp4"
+                      />
+                    )}
+
+                    {videoUrl && (
+                      <div style={{ marginTop: "6px", fontSize: "11px", color: "#059669", background: "#ecfdf5", padding: "6px 10px", borderRadius: "8px", border: "1px solid #a7f3d0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "260px" }}>
+                          ✓ Video tayyor: {videoUrl}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setVideoUrl("")}
+                          style={{ border: 0, background: "transparent", color: "#dc2626", cursor: "pointer", fontSize: "11px", fontWeight: 700 }}
+                        >
+                          Tozalash
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="vadsFormGroup">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <label style={{ margin: 0 }}>Muqova (Poster / Cover) rasm</label>
+                      <div className="vadsViewSwitch">
+                        <button
+                          type="button"
+                          onClick={() => setPosterSourceMode("upload")}
+                          className={`vadsViewBtn ${posterSourceMode === "upload" ? "active" : ""}`}
+                        >
+                          Yuklash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPosterSourceMode("url")}
+                          className={`vadsViewBtn ${posterSourceMode === "url" ? "active" : ""}`}
+                        >
+                          URL
+                        </button>
+                      </div>
+                    </div>
+
+                    {posterSourceMode === "upload" ? (
+                      <div className="vadsDropzone" style={{ padding: "12px" }}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id="modal-poster-upload"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handlePosterFileUpload(f);
+                          }}
+                        />
+                        <label htmlFor="modal-poster-upload" style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                          <span>🖼️</span>
+                          <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--ink)" }}>
+                            {uploadingPoster ? "Poster yuklanmoqda..." : "Poster rasmini tanlash"}
+                          </span>
+                        </label>
+                      </div>
+                    ) : (
+                      <input
+                        type="url"
+                        value={posterUrl}
+                        onChange={(e) => setPosterUrl(e.target.value)}
+                        placeholder="https://.../cover.webp"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. CTA va Yo'naltirish */}
+                <div className="vadsFormSection">
+                  <span className="vadsFormSectionTitle">03. CTA Tugmasi va Havola</span>
+
+                  <div className="vadsFormGroup">
+                    <label>Tugma matni (CTA text)</label>
+                    <input
+                      type="text"
+                      value={ctaText}
+                      onChange={(e) => setCtaText(e.target.value)}
+                      placeholder="Batafsil"
+                    />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+                      {CTA_PRESETS.map((txt) => (
+                        <button
+                          key={txt}
+                          type="button"
+                          onClick={() => setCtaText(txt)}
+                          className={`vadsChip ${ctaText === txt ? "active" : ""}`}
+                          style={{ fontSize: "11px", padding: "3px 8px" }}
+                        >
+                          {txt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="vadsFormGroup">
+                    <label>O‘tish manzili (Destination URL yoki ichki route)</label>
+                    <input
+                      type="text"
+                      value={destinationUrl}
+                      onChange={(e) => setDestinationUrl(e.target.value)}
+                      placeholder="/catalog?category=Pijamalar"
+                      style={{ fontFamily: "monospace", fontSize: "12px" }}
+                    />
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "6px" }}>
+                      {ROUTE_PRESETS.map((rt) => (
+                        <button
+                          key={rt.label}
+                          type="button"
+                          onClick={() => setDestinationUrl(rt.url)}
+                          className={`vadsChip ${destinationUrl === rt.url ? "active" : ""}`}
+                          style={{ fontSize: "11px", padding: "3px 8px" }}
+                        >
+                          {rt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Joylashuv va Platforma */}
+                <div className="vadsFormSection">
+                  <span className="vadsFormSectionTitle">04. Joylashuv va Rejalashtirish</span>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                    <div className="vadsFormGroup" style={{ margin: 0 }}>
+                      <label>Joylashuv</label>
+                      <select
+                        value={placement}
+                        onChange={(e) => setPlacement(e.target.value as any)}
+                      >
+                        <option value="home">Bosh sahifa</option>
+                        <option value="product_feed">Mahsulotlar oqimi</option>
+                        <option value="all">Barchasi</option>
+                      </select>
+                    </div>
+
+                    <div className="vadsFormGroup" style={{ margin: 0 }}>
+                      <label>Platforma</label>
+                      <select
+                        value={platform}
+                        onChange={(e) => setPlatform(e.target.value as any)}
+                      >
+                        <option value="all">Hammasi (Veb + TG)</option>
+                        <option value="web">Faqat Veb</option>
+                        <option value="telegram">Faqat Telegram</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div className="vadsFormGroup" style={{ margin: 0 }}>
+                      <label>Ustuvorlik (Priority: 1-100)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={priority}
+                        onChange={(e) => setPriority(Number(e.target.value))}
+                      />
+                    </div>
+
+                    <div className="vadsFormGroup" style={{ margin: 0, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", paddingBottom: "8px" }}>
+                        <input
+                          type="checkbox"
+                          checked={isActive}
+                          onChange={(e) => setIsActive(e.target.checked)}
+                          style={{ width: "18px", height: "18px", accentColor: "var(--rose)" }}
+                        />
+                        <span style={{ fontSize: "12.5px", fontWeight: 700, color: "var(--ink)" }}>
+                          Faol (Efirda ko‘rsatilsin)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Live Mobile Preview Simulation */}
+              <div style={{ background: "#fffafb", border: "1px solid #f2e3e7", borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 750, color: "var(--ink)" }}>
+                    📱 Jonli ko‘rinish simulyatsiyasi
+                  </span>
+                  <div className="vadsViewSwitch">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab("telegram")}
+                      className={`vadsViewBtn ${previewTab === "telegram" ? "active" : ""}`}
+                    >
+                      Telegram
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTab("web")}
+                      className={`vadsViewBtn ${previewTab === "web" ? "active" : ""}`}
+                    >
+                      Veb
+                    </button>
+                  </div>
+                </div>
+
+                {/* Simulated Phone Frame */}
+                <div
+                  style={{
+                    width: "100%",
+                    maxWidth: "300px",
+                    borderRadius: "22px",
+                    background: "#181116",
+                    border: "5px solid #2d1f28",
+                    padding: "8px",
+                    boxShadow: "0 14px 40px rgba(0,0,0,0.25)",
+                    color: "#ffffff",
+                  }}
                 >
-                  Rasm yuklash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPosterSourceMode("url")}
-                  className={`text-xs px-2.5 py-1 rounded-md transition ${
-                    posterSourceMode === "url"
-                      ? "bg-pink-600 text-white font-semibold"
-                      : "bg-slate-700 text-slate-300"
-                  }`}
-                >
-                  Rasm URL
-                </button>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "9px", color: "#a68f98", marginBottom: "6px", padding: "0 2px" }}>
+                    <span>9:41</span>
+                    <span>{previewTab === "telegram" ? "Telegram Mini App" : "gulii.uz"}</span>
+                    <span>🔋 99%</span>
+                  </div>
+
+                  <div
+                    style={{
+                      position: "relative",
+                      borderRadius: "14px",
+                      overflow: "hidden",
+                      background: "#000",
+                      aspectRatio: "16 / 10",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    {videoUrl ? (
+                      <video
+                        ref={previewVideoRef}
+                        src={videoUrl}
+                        poster={posterUrl || undefined}
+                        muted={previewMuted}
+                        autoPlay
+                        loop
+                        playsInline
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : posterUrl ? (
+                      <img
+                        src={posterUrl}
+                        alt=""
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#8d7d84", fontSize: "11px", textAlign: "center", padding: "10px" }}>
+                        Video yoki poster kiritilganda bu yerda avtomatik ijro etiladi
+                      </div>
+                    )}
+
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.15) 60%, transparent)", pointerEvents: "none" }} />
+
+                    <div style={{ position: "absolute", top: "6px", left: "6px", display: "flex", gap: "4px", zIndex: 2 }}>
+                      <span style={{ fontSize: "8.5px", fontWeight: 800, padding: "2px 5px", borderRadius: "4px", background: "rgba(0,0,0,0.7)", color: "#fbcfe8", border: "1px solid rgba(244,114,182,0.3)" }}>
+                        REKLAMA
+                      </span>
+                      <span style={{ fontSize: "8.5px", fontWeight: 600, padding: "2px 5px", borderRadius: "4px", background: "rgba(0,0,0,0.6)", color: "#fff" }}>
+                        {placement === "home" ? "Bosh sahifa" : "In-feed"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewMuted(!previewMuted);
+                        if (previewVideoRef.current) {
+                          previewVideoRef.current.muted = !previewMuted;
+                        }
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        right: "6px",
+                        zIndex: 2,
+                        width: "24px",
+                        height: "24px",
+                        borderRadius: "50%",
+                        background: "rgba(0,0,0,0.6)",
+                        color: "#fff",
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        fontSize: "10px",
+                        cursor: "pointer",
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      {previewMuted ? "🔇" : "🔊"}
+                    </button>
+
+                    <div style={{ position: "relative", zIndex: 2, padding: "8px" }}>
+                      <h4 style={{ margin: "0 0 2px", fontSize: "11px", fontWeight: 750, color: "#ffffff", textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
+                        {title || "Sarlavha bu yerda ko‘rinadi"}
+                      </h4>
+                      {description && (
+                        <p style={{ margin: "0 0 5px", fontSize: "9.5px", color: "#e2d9dc", textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>
+                          {description}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => notify(`CTA sinovi: ${destinationUrl || "/"}`)}
+                        className="vadsPrimaryBtn"
+                        style={{ width: "100%", padding: "6px 8px", fontSize: "10.5px", minHeight: "32px", borderRadius: "8px" }}
+                      >
+                        {ctaText || "Batafsil"} →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <small style={{ marginTop: "10px", color: "var(--muted)", fontSize: "11px", textAlign: "center" }}>
+                  Mijozlar reklamani aynan shu ko‘rinishda ko‘rishadi.
+                </small>
               </div>
             </div>
-
-            {posterSourceMode === "upload" ? (
-              <div>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handlePosterFileUpload}
-                  disabled={uploadingPoster}
-                  className="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-pink-600 file:text-white hover:file:bg-pink-700 cursor-pointer"
-                />
-                {uploadingPoster && (
-                  <div className="mt-2 text-xs text-pink-400">Rasm yuklanmoqda...</div>
-                )}
-                {posterUrl && (
-                  <p className="mt-1 text-xs text-emerald-400 truncate">
-                    ✓ Tanlangan: {posterUrl}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <input
-                type="url"
-                value={posterUrl}
-                onChange={(e) => setPosterUrl(e.target.value)}
-                placeholder="https://... (jpg, png yoki webp muqova rasmi)"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            )}
           </div>
 
-          {/* Jonli Video Preview */}
-          {videoUrl && (
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
-              <span className="block text-xs font-semibold text-slate-400 mb-2">
-                Jonli Video Ko‘rinishi:
-              </span>
-              <div className="relative aspect-video max-h-52 w-full mx-auto rounded-lg overflow-hidden bg-black flex items-center justify-center">
-                <video
-                  src={videoUrl}
-                  poster={posterUrl || undefined}
-                  controls
-                  playsInline
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* CTA & Manzil */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Tugma matni (CTA)
-              </label>
-              <input
-                type="text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                placeholder="Batafsil / Xarid qilish"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                O‘tish manzili (URL yoki havola)
-              </label>
-              <input
-                type="text"
-                value={destinationUrl}
-                onChange={(e) => setDestinationUrl(e.target.value)}
-                placeholder="/?category=Pijamalar yoki https://..."
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            </div>
-          </div>
-
-          {/* Joylashtirish & Platforma */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Joylashtirish (Placement)
-              </label>
-              <select
-                value={placement}
-                onChange={(e) => setPlacement(e.target.value as any)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              >
-                <option value="home">Bosh sahifa (Home Banner ostida)</option>
-                <option value="product_feed">Mahsulotlar oqimida (In-feed)</option>
-                <option value="all">Barcha joylarda (Bosh sahifa + Katalog)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Platforma
-              </label>
-              <select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value as any)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              >
-                <option value="all">Barchasi (Sayt + Telegram Mini App)</option>
-                <option value="web">Faqat Veb-sayt</option>
-                <option value="telegram">Faqat Telegram Mini App</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Prioritet & Muddat */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Prioritet (0 - 100)
-              </label>
-              <input
-                type="number"
-                value={priority}
-                onChange={(e) => setPriority(Number(e.target.value) || 0)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Boshlanish sanasi
-              </label>
-              <input
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Tugash sanasi
-              </label>
-              <input
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-pink-500"
-              />
-            </div>
-          </div>
-
-          {/* Faollik switch */}
-          <div className="flex items-center gap-3 pt-2">
-            <input
-              type="checkbox"
-              id="ad_active_toggle"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="w-4 h-4 rounded text-pink-600 focus:ring-pink-500 bg-slate-800 border-slate-700 cursor-pointer"
-            />
-            <label htmlFor="ad_active_toggle" className="text-sm font-medium text-slate-200 cursor-pointer">
-              Reklama faol (Mijozlarga ko‘rsatilsin)
-            </label>
-          </div>
-
-          {/* Submit buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition"
-            >
+          {/* Modal Foot */}
+          <div className="vadsModalFoot">
+            <button type="button" onClick={onClose} className="vadsSecondaryBtn">
               Bekor qilish
             </button>
-            <button
-              type="submit"
-              disabled={submitting || uploadingVideo || uploadingPoster}
-              className="px-6 py-2 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-semibold rounded-lg text-sm shadow-md transition disabled:opacity-50"
-            >
-              {submitting ? "Saqlanmoqda..." : editingAd ? "O‘zgarishlarni saqlash" : "Reklamani yaratish"}
+            <button type="submit" disabled={submitting} className="vadsPrimaryBtn">
+              {submitting ? "Saqlanmoqda..." : editingAd ? "O‘zgarishlarni saqlash ✓" : "Reklamani yaratish ✓"}
             </button>
           </div>
         </form>

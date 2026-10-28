@@ -1,0 +1,973 @@
+/* ==========================================================================
+   GULI MARKET — PROFESSIONAL VIDEO ADS ADMIN DESIGN SYSTEM
+   Cohesive with Guli Market AdminPro tokens (Rose / Cream / Ink / Line)
+   ========================================================================== */
+
+.videoAdsAdminRoot {
+  color: var(--ink, #201b20);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding-bottom: 96px; /* Safe space for mobile bottom navbar */
+  min-width: 0;
+  width: 100%;
+}
+
+/* Page Header */
+.vadsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.vadsHeaderTitleBlock {
+  flex: 1;
+  min-width: 240px;
+}
+
+.vadsBreadcrumb {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--rose, #b6536b);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  display: block;
+}
+
+.vadsHeaderTitleBlock h1 {
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  margin: 0 0 4px 0;
+  color: var(--ink, #201b20);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.vadsHeaderSubtitle {
+  font-size: 12.5px;
+  color: var(--muted, #8d7d84);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.vadsHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.vadsPrimaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #b6536b, #c9687f) !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 42px;
+  box-shadow: 0 8px 20px rgba(182, 83, 107, 0.22);
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.vadsPrimaryBtn:hover {
+  background: linear-gradient(135deg, #a8475f, #b9586f) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(182, 83, 107, 0.3);
+}
+
+.vadsSecondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #6e5d64;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 12px;
+  padding: 9px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 42px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.vadsSecondaryBtn:hover {
+  background: #fff8f9;
+  border-color: #d8c4ca;
+  color: var(--rose, #b6536b);
+}
+
+/* KPI Cards Grid */
+.vadsMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.vadsMetricCard {
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 18px rgba(73, 37, 48, 0.04);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+  min-width: 0;
+}
+
+.vadsMetricCard:hover {
+  transform: translateY(-1px);
+  border-color: #dfcbd1;
+}
+
+.vadsMetricIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #fbf3f5;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  flex-shrink: 0;
+  border: 1px solid #f2e3e7;
+}
+
+.vadsMetricContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.vadsMetricLabel {
+  display: block;
+  color: var(--muted, #8d7d84);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vadsMetricValue {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink, #201b20);
+  font-variant-numeric: tabular-nums;
+  display: block;
+}
+
+.vadsMetricSub {
+  font-size: 10px;
+  color: var(--muted, #8d7d84);
+  margin-top: 3px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Analytics Accordion Box */
+.vadsAnalyticsPanel {
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 4px 18px rgba(73, 37, 48, 0.04);
+  margin-bottom: 18px;
+}
+
+.vadsAnalyticsHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.vadsAnalyticsHeadTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vadsAnalyticsHeadTitle h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--ink, #201b20);
+}
+
+.vadsAnalyticsToggleBtn {
+  background: #fbf3f5;
+  border: 1px solid #f0dfe3;
+  color: var(--rose, #b6536b);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vadsAnalyticsToggleBtn:hover {
+  background: #f5e0e5;
+}
+
+.vadsAnalyticsBody {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f5eaed;
+}
+
+/* Chart Bars */
+.vadsBarItem {
+  margin-bottom: 10px;
+}
+
+.vadsBarHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+
+.vadsBarHead b {
+  color: var(--ink, #201b20);
+  max-width: 60%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vadsBarHead span {
+  color: var(--muted, #8d7d84);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.vadsBarTrack {
+  height: 8px;
+  background: #f4eaec;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.vadsBarFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b6536b, #c9687f);
+  transition: width 0.35s ease;
+}
+
+/* Toolbar & Filters */
+.vadsToolbar {
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 18px rgba(73, 37, 48, 0.04);
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vadsToolbarTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vadsSearchBox {
+  flex: 1;
+  min-width: 200px;
+  max-width: 420px;
+  position: relative;
+  background: #fcf8f9;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.vadsSearchBox:focus-within {
+  background: #ffffff;
+  border-color: #d79aa8;
+  box-shadow: 0 0 0 3px #f8e8ec;
+}
+
+.vadsSearchBox span {
+  font-size: 14px;
+  color: #aa939b;
+  margin-right: 6px;
+}
+
+.vadsSearchBox input {
+  border: 0;
+  outline: 0;
+  width: 100%;
+  padding: 9px 0;
+  background: transparent;
+  font-size: 12.5px;
+  color: var(--ink, #201b20);
+}
+
+.vadsToolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vadsSortSelect {
+  border: 1px solid var(--line, #eadfe2);
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--ink, #201b20);
+  outline: none;
+  cursor: pointer;
+  min-height: 38px;
+}
+
+.vadsSortSelect:focus {
+  border-color: #d79aa8;
+}
+
+.vadsViewSwitch {
+  display: flex;
+  background: #f7ecef;
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.vadsViewBtn {
+  border: 0;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #796b72;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.vadsViewBtn.active {
+  background: #ffffff;
+  color: var(--rose, #b6536b);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  font-weight: 700;
+}
+
+/* Filter Chips Row */
+.vadsFilterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid #f6ecf0;
+}
+
+.vadsChipGroup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.vadsChipLabel {
+  font-size: 11px;
+  color: var(--muted, #8d7d84);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.vadsChip {
+  border: 1px solid var(--line, #eadfe2);
+  background: #ffffff;
+  color: #6e5d64;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vadsChip:hover {
+  background: #fff8f9;
+  border-color: #dfccd2;
+}
+
+.vadsChip.active {
+  background: #f5dfe4;
+  color: var(--rose, #b6536b);
+  border-color: #e7c5cd;
+  font-weight: 750;
+}
+
+/* Ad Cards Grid View */
+.vadsCardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 16px;
+}
+
+.vadsCardItem {
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(73, 37, 48, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.vadsCardItem:hover {
+  transform: translateY(-2px);
+  border-color: #dfcad1;
+  box-shadow: 0 10px 28px rgba(73, 37, 48, 0.08);
+}
+
+.vadsCardMedia {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #20171d;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vadsCardMedia img,
+.vadsCardMedia video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vadsCardBadges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 5px;
+  z-index: 2;
+}
+
+.vadsBadgeChip {
+  font-size: 9.5px;
+  font-weight: 750;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(32, 27, 32, 0.78);
+  color: #ffffff;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  letter-spacing: 0.03em;
+}
+
+.vadsBadgeChip.placement {
+  background: var(--rose, #b6536b);
+}
+
+.vadsStatusBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vadsStatusBadge.active {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.vadsStatusBadge.inactive {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.vadsSimPlayOverlayBtn {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--rose, #b6536b);
+  border: 0;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease, background 0.18s ease;
+  z-index: 3;
+}
+
+.vadsSimPlayOverlayBtn:hover {
+  transform: scale(1.1);
+  background: #ffffff;
+}
+
+.vadsCardBody {
+  padding: 14px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.vadsCardTitle {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--ink, #201b20);
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vadsCardDesc {
+  font-size: 12px;
+  color: var(--muted, #8d7d84);
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Compact Metrics Strip inside Card */
+.vadsMiniStatsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  background: #faf2f4;
+  border: 1px solid #f2e3e7;
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.vadsMiniStatItem small {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--muted, #8d7d84);
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.vadsMiniStatItem b {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink, #201b20);
+  font-variant-numeric: tabular-nums;
+}
+
+.vadsMiniStatItem b.ctr {
+  color: #059669;
+}
+
+/* Secondary Meta */
+.vadsCardMetaList {
+  font-size: 11.5px;
+  color: var(--muted, #8d7d84);
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vadsCardMetaItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vadsCardMetaItem b {
+  color: var(--ink, #201b20);
+  font-weight: 600;
+  max-width: 65%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Card Actions Footer */
+.vadsCardFooter {
+  padding-top: 10px;
+  border-top: 1px solid #f5eaed;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vadsSwitchBtn {
+  border: 1px solid var(--line, #eadfe2);
+  background: #ffffff;
+  color: var(--ink, #201b20);
+  border-radius: 9px;
+  padding: 6px 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 36px;
+}
+
+.vadsSwitchBtn.active {
+  background: #fbf3f5;
+  color: var(--rose, #b6536b);
+  border-color: #f0dfe3;
+}
+
+.vadsSwitchBtn.inactive {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.vadsCardBtnGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vadsIconActionBtn {
+  border: 1px solid var(--line, #eadfe2);
+  background: #ffffff;
+  color: #6e5d64;
+  border-radius: 9px;
+  padding: 6px 9px;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 36px;
+  min-width: 36px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.vadsIconActionBtn:hover {
+  background: #fff8f9;
+  border-color: #d7c1c8;
+  color: var(--rose, #b6536b);
+}
+
+.vadsIconActionBtn.danger {
+  color: #dc2626;
+}
+
+.vadsIconActionBtn.danger:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* Table View */
+.vadsTableWrap {
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 16px;
+  overflow-x: auto;
+  box-shadow: 0 4px 18px rgba(73, 37, 48, 0.04);
+}
+
+.vadsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 720px;
+}
+
+.vadsTable th {
+  text-align: left;
+  color: var(--muted, #8d7d84);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line, #eadfe2);
+  background: #faf4f6;
+  white-space: nowrap;
+}
+
+.vadsTable td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f6ecf0;
+  vertical-align: middle;
+}
+
+.vadsTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.vadsTable tr:hover td {
+  background: #fffafb;
+}
+
+/* Modal Dialog (Light, Pro, Mobile-Safe) */
+.vadsModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(35, 22, 28, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.vadsModalCard {
+  width: min(840px, 100%);
+  max-height: 90vh;
+  background: #ffffff;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 22px;
+  box-shadow: 0 25px 70px rgba(35, 22, 28, 0.22);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--ink, #201b20);
+}
+
+.vadsModalHead {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line, #eadfe2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fffafb;
+}
+
+.vadsModalHead h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.vadsModalCloseBtn {
+  border: 0;
+  background: #f7ecef;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #796b72;
+  transition: all 0.15s ease;
+}
+
+.vadsModalCloseBtn:hover {
+  background: #f0dfe3;
+  color: var(--rose, #b6536b);
+}
+
+.vadsModalBody {
+  padding: 20px 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.vadsModalFoot {
+  padding: 14px 22px;
+  border-top: 1px solid var(--line, #eadfe2);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: #fffafb;
+}
+
+/* Form Sections */
+.vadsFormSection {
+  background: #fffafb;
+  border: 1px solid #f2e3e7;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.vadsFormSectionTitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rose, #b6536b);
+  margin-bottom: 10px;
+  display: block;
+}
+
+.vadsFormGroup {
+  margin-bottom: 12px;
+}
+
+.vadsFormGroup:last-child {
+  margin-bottom: 0;
+}
+
+.vadsFormGroup label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #55474d;
+  margin-bottom: 5px;
+}
+
+.vadsFormGroup input,
+.vadsFormGroup textarea,
+.vadsFormGroup select {
+  width: 100%;
+  border: 1px solid var(--line, #eadfe2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: #ffffff;
+  color: var(--ink, #201b20);
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-height: 42px;
+  box-sizing: border-box;
+}
+
+.vadsFormGroup textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.vadsFormGroup input:focus,
+.vadsFormGroup textarea:focus,
+.vadsFormGroup select:focus {
+  border-color: #d79aa8;
+  box-shadow: 0 0 0 3px #f8e8ec;
+}
+
+/* Upload Dropzone */
+.vadsDropzone {
+  border: 1.5px dashed #dfcad1;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.vadsDropzone:hover {
+  border-color: var(--rose, #b6536b);
+  background: #fff8f9;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 800px) {
+  .vadsMetricGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .vadsMetricCard {
+    padding: 10px 12px;
+    gap: 9px;
+  }
+
+  .vadsMetricIcon {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .vadsMetricValue {
+    font-size: 17px;
+  }
+
+  .vadsMetricLabel {
+    font-size: 10px;
+  }
+
+  .vadsHeaderTitleBlock h1 {
+    font-size: 20px;
+  }
+
+  .vadsCardsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .vadsModalCard {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 18px;
+  }
+
+  .vadsModalBody {
+    padding: 14px;
+  }
+
+  .vadsModalHead,
+  .vadsModalFoot {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vadsMetricGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .vadsMetricCard {
+    padding: 9px 10px;
+  }
+}

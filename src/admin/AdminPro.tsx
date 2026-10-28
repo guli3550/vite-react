@@ -1839,26 +1839,40 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {/* Marketing — Video reklamalar va Ijtimoiy tarmoqlar aksiyalari */}
         {tab === "marketing" && (
           <div className="space-y-4">
-            <div className="flex gap-2 p-1.5 bg-slate-900 border border-slate-800 rounded-xl w-fit">
+            <div style={{ display: "inline-flex", gap: "4px", padding: "4px", background: "#f6eaed", border: "1px solid #ebd4db", borderRadius: "14px", marginBottom: "14px" }}>
               <button
                 type="button"
                 onClick={() => setMarketingSubTab("video_ads")}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
-                  marketingSubTab === "video_ads"
-                    ? "bg-pink-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
+                style={{
+                  border: 0,
+                  background: marketingSubTab === "video_ads" ? "var(--rose, #b6536b)" : "transparent",
+                  color: marketingSubTab === "video_ads" ? "#ffffff" : "#6e5d64",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                  padding: "7px 14px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  boxShadow: marketingSubTab === "video_ads" ? "0 4px 12px rgba(182, 83, 107, 0.25)" : "none",
+                }}
               >
                 🎬 Video reklamalar
               </button>
               <button
                 type="button"
                 onClick={() => setMarketingSubTab("social_promos")}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
-                  marketingSubTab === "social_promos"
-                    ? "bg-pink-600 text-white shadow-sm"
-                    : "text-slate-400 hover:text-white"
-                }`}
+                style={{
+                  border: 0,
+                  background: marketingSubTab === "social_promos" ? "var(--rose, #b6536b)" : "transparent",
+                  color: marketingSubTab === "social_promos" ? "#ffffff" : "#6e5d64",
+                  fontWeight: 700,
+                  fontSize: "12px",
+                  padding: "7px 14px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  boxShadow: marketingSubTab === "social_promos" ? "0 4px 12px rgba(182, 83, 107, 0.25)" : "none",
+                }}
               >
                 📣 Ijtimoiy tarmoqlar aksiyalari
               </button>
