@@ -116,7 +116,7 @@ install("post", "/api/video-ads/:id/events", async (req, res) => {
     }
 
     // Stable impression IDs make writes idempotent across retries and instances.
-    const eventId = eventType === "impression" && sessionId
+    const eventId = eventType === "impression" && sessionId && sessionId !== "sid_anon"
       ? "impression:" + adId + ":" + sessionId
       : crypto.randomUUID();
     const { error: insertError } = await client
