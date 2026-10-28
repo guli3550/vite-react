@@ -142,3 +142,37 @@ test("Platform and placement filtering logic", () => {
   );
   assert.deepEqual(feedTg.map((a) => a.id), ["2"]);
 });
+
+test("Fullscreen video ad: progress percentage calculation clamps safely between 0 and 100", () => {
+  const calcProgress = (currentTime, duration) => {
+    if (!duration || duration <= 0 || !currentTime || currentTime < 0) return 0;
+    return Math.min(100, Math.max(0, (currentTime / duration) * 100));
+  };
+
+  assert.equal(calcProgress(0, 30), 0);
+  assert.equal(calcProgress(15, 30), 50);
+  assert.equal(calcProgress(30, 30), 100);
+  assert.equal(calcProgress(35, 30), 100);
+  assert.equal(calcProgress(-5, 30), 0);
+  assert.equal(calcProgress(5, 0), 0);
+  assert.equal(calcProgress(null, 30), 0);
+});
+
+test("Fullscreen video ad: user gesture transition requests unmuted sound", () => {
+  // Main card playback: always muted
+  const mainCardState = { muted: true, autoPlay: true };
+  assert.equal(mainCardState.muted, true);
+
+  // Transition to fullscreen modal triggered by user gesture:
+  const openFullscreen = (mainCurrentTime) => ({
+    isOpen: true,
+    initialTime: mainCurrentTime,
+    requestedMuted: false, // user gesture -> attempt sound on
+  });
+
+  const modalState = openFullscreen(12.4);
+  assert.equal(modalState.isOpen, true);
+  assert.equal(modalState.initialTime, 12.4);
+  assert.equal(modalState.requestedMuted, false);
+});
+

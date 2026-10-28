@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Maximize2 } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { detectPlatform } from "../../utils/platformAdapter";
+import { FullscreenVideoAdModal } from "./FullscreenVideoAdModal";
 import "./VideoAdCard.css";
 
 interface VideoAdCardProps {
@@ -36,8 +38,8 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [isMuted, setIsMuted] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenInitialTime, setFullscreenInitialTime] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [impressionRecorded, setImpressionRecorded] = useState(false);
@@ -52,7 +54,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     } catch {}
   }, [ad.id]);
 
-  // Video Autoplay & Intersection Observer
+  // Video Autoplay (Always Muted on Main Page) & Intersection Observer
   useEffect(() => {
     if (isDismissed || hasError || !ad.video_url) return;
 
@@ -79,14 +81,13 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     };
 
     const handlePlayAttempt = async () => {
-      // Always start ads silently. Sound is enabled only after an explicit user action.
+      // Main screen ad video always plays silently (muted)
       video.muted = true;
-      setIsMuted(true);
       try {
         await video.play();
         sendEvent("video_start");
       } catch {
-        // Playback may still be blocked until the user interacts with the page.
+        // Playback blocked or waiting for user interaction
       }
     };
 
@@ -125,38 +126,29 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     };
   }, [ad.id, ad.video_url, hasError, isDismissed, impressionRecorded]);
 
-  const handleToggleSound = (e: React.MouseEvent) => {
+  // Open Tolstoy-style Fullscreen Modal on User Tap
+  const handleOpenFullscreen = (e: React.MouseEvent) => {
     e.stopPropagation();
+    try {
+      (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+    } catch {}
+
     const video = videoRef.current;
-    if (!video) return;
+    if (video) {
+      setFullscreenInitialTime(video.currentTime || 0);
+      video.pause();
+    }
+    setIsFullscreen(true);
+  };
 
-    const nextMuted = !video.muted;
-    video.muted = nextMuted;
-    setIsMuted(nextMuted);
-
-    if (video.paused) {
+  // Close Fullscreen Modal and restore muted playback on main card
+  const handleCloseFullscreen = () => {
+    setIsFullscreen(false);
+    const video = videoRef.current;
+    if (video) {
+      video.muted = true;
       video.play().catch(() => {});
     }
-  };
-
-  const handleOpenFullscreen = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    // A direct tap is a user gesture, so request audio and expand the whole ad card.
-    video.muted = false;
-    setIsMuted(false);
-    setIsFullscreen(true);
-    try {
-      await video.play();
-    } catch {
-      // Keep the expanded player open; the sound toggle remains available below.
-    }
-  };
-
-  const handleCloseFullscreen = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsFullscreen(false);
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -220,97 +212,101 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const wrapperClass = isFeed ? "guli-video-ad-feed" : "guli-video-ad-home";
 
   return (
-    <div className={`${wrapperClass}${isFullscreen ? " guli-video-ad-fullscreen" : ""}`} ref={containerRef}>
-      <div className={isFeed ? "guli-video-ad-feed-container" : "guli-video-ad-home-container"}>
-        {/* Media column keeps sound control below, never over the video */}
-        <div className="guli-video-media-column">
-        <div className="guli-video-media-wrapper" onClick={handleOpenFullscreen}>
-          <div className="guli-video-badge">Reklama</div>
-
-          {isFullscreen && (
-            <button type="button" className="guli-video-fullscreen-close" onClick={handleCloseFullscreen} aria-label="To‘liq ekrandan chiqish" title="Yopish">✕</button>
-          )}
-
-          {/* Dismiss button */}
-          <button
-            type="button"
-            className="guli-video-dismiss-btn"
-            onClick={handleDismiss}
-            title="Reklamani yopish"
-            aria-label="Reklamani yopish"
+    <>
+      <div className={wrapperClass} ref={containerRef}>
+        <div className={isFeed ? "guli-video-ad-feed-container" : "guli-video-ad-home-container"}>
+          {/* Media Frame (Tapping opens Fullscreen Tolstoy-style Video Ad) */}
+          <div
+            className="guli-video-media-wrapper cursor-pointer"
+            onClick={handleOpenFullscreen}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                handleOpenFullscreen(e as any);
+              }
+            }}
+            aria-label="Videoni to‘liq ekranda ochish"
           >
-            ✕
-          </button>
+            <div className="guli-video-badge">Reklama</div>
 
-          {/* Video or poster fallback */}
-          {!hasError && ad.video_url && (
-            <video
-              ref={videoRef}
-              src={ad.video_url}
-              poster={ad.poster_url || undefined}
-              className="guli-video-element"
-              playsInline
-              webkit-playsinline="true"
-              loop
-              preload="metadata"
-              onError={() => setHasError(true)}
-              onEnded={() => {
-                try {
-                  const apiBase = getApiBaseUrl();
-                  fetch(`${apiBase}/api/video-ads/${ad.id}/events`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ event_type: "video_complete", session_id: getSessionId() }),
-                  }).catch(() => {});
-                } catch {}
-              }}
-            />
-          )}
-          {(hasError || !ad.video_url) && ad.poster_url && (
-            <img
-              src={ad.poster_url}
-              alt={ad.title}
-              className="guli-video-poster"
-              referrerPolicy="no-referrer"
-            />
-          )}
-          {(hasError || !ad.video_url) && !ad.poster_url && (
-            <div className="flex items-center justify-center w-full h-full text-slate-400 text-xs">
-              Guli Market Video
-            </div>
-          )}
-
-        </div>
-        {!hasError && ad.video_url && (
-          <div className="guli-video-sound-controls">
+            {/* Dismiss button */}
             <button
               type="button"
-              className="guli-video-sound-btn"
-              onClick={handleToggleSound}
-              title={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
-              aria-label={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
+              className="guli-video-dismiss-btn"
+              onClick={handleDismiss}
+              title="Reklamani yopish"
+              aria-label="Reklamani yopish"
             >
-              <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozni o‘chirish"}</span>
+              ✕
+            </button>
+
+            {/* Video or poster fallback */}
+            {!hasError && ad.video_url && (
+              <video
+                ref={videoRef}
+                src={ad.video_url}
+                poster={ad.poster_url || undefined}
+                className="guli-video-element"
+                playsInline
+                webkit-playsinline="true"
+                muted
+                loop
+                preload="metadata"
+                onError={() => setHasError(true)}
+              />
+            )}
+            {(hasError || !ad.video_url) && ad.poster_url && (
+              <img
+                src={ad.poster_url}
+                alt={ad.title}
+                className="guli-video-poster"
+                referrerPolicy="no-referrer"
+              />
+            )}
+            {(hasError || !ad.video_url) && !ad.poster_url && (
+              <div className="flex items-center justify-center w-full h-full text-slate-400 text-xs">
+                Guli Market Video
+              </div>
+            )}
+
+            {/* Subtle fullscreen hint badge in bottom-right */}
+            {!hasError && ad.video_url && (
+              <div className="guli-video-fullscreen-hint" aria-hidden="true">
+                <Maximize2 size={14} />
+                <span>To‘liq ekran</span>
+              </div>
+            )}
+          </div>
+
+          {/* Content & Call to Action */}
+          <div className="guli-video-content">
+            <h3 className="guli-video-title">{ad.title}</h3>
+            {ad.description && <p className="guli-video-desc">{ad.description}</p>}
+
+            <button
+              type="button"
+              className="guli-video-cta-btn"
+              onClick={handleCtaClick}
+            >
+              <span>{ad.cta_text || "Batafsil"}</span>
+              <span aria-hidden="true">→</span>
             </button>
           </div>
-        )}
-        </div>
-
-        {/* Content & Call to Action */}
-        <div className="guli-video-content">
-          <h3 className="guli-video-title">{ad.title}</h3>
-          {ad.description && <p className="guli-video-desc">{ad.description}</p>}
-
-          <button
-            type="button"
-            className="guli-video-cta-btn"
-            onClick={handleCtaClick}
-          >
-            <span>{ad.cta_text || "Batafsil"}</span>
-            <span aria-hidden="true">→</span>
-          </button>
         </div>
       </div>
-    </div>
+
+      {/* Tolstoy-style Fullscreen Modal */}
+      {isFullscreen && (
+        <FullscreenVideoAdModal
+          isOpen={isFullscreen}
+          ad={ad}
+          initialTime={fullscreenInitialTime}
+          onClose={handleCloseFullscreen}
+          onOpenProduct={onOpenProduct}
+          onNavigateUrl={onNavigateUrl}
+        />
+      )}
+    </>
   );
 };

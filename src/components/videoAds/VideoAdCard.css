@@ -39,26 +39,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.guli-video-media-column {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  background: #090d16;
+  cursor: pointer;
 }
 
 @media (min-width: 840px) {
-  .guli-video-media-column {
+  .guli-video-ad-home-container .guli-video-media-wrapper {
     width: 60%;
-  }
-
-  .guli-video-media-wrapper {
-    width: 100%;
-    flex: 1;
     aspect-ratio: auto;
-    min-height: 300px;
+    min-height: 340px;
   }
 }
 
@@ -123,35 +111,32 @@
   transform: scale(1.05);
 }
 
-.guli-video-sound-controls {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 0.45rem 0.75rem;
-  background: #090d16;
-}
-
-.guli-video-sound-btn {
-  position: static;
-  z-index: 2;
-  min-height: 2.25rem;
-  padding: 0.35rem 0.75rem;
+/* Subtle Fullscreen Hint on Video Hover/Tap */
+.guli-video-fullscreen-hint {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  z-index: 5;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #f1f5f9;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
   border-radius: 9999px;
-  background: rgba(225, 29, 72, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.15s ease;
+  gap: 0.35rem;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: background 0.2s ease;
 }
 
-.guli-video-sound-btn:hover {
+.guli-video-media-wrapper:hover .guli-video-fullscreen-hint {
   background: rgba(225, 29, 72, 0.85);
-  transform: scale(1.03);
+  color: #ffffff;
 }
 
 /* Home text details column */
@@ -255,37 +240,4 @@
   width: 100%;
   padding: 0.6rem 1rem;
   font-size: 0.825rem;
-}
-
-/* Expanded in-page player: video, sound control, title, description and CTA stay together. */
-.guli-video-ad-fullscreen {
-  position: fixed !important; inset: 0 !important; z-index: 99999 !important;
-  width: 100vw !important; max-width: none !important; height: 100dvh !important;
-  margin: 0 !important; padding: 0 !important; background: #090d16 !important;
-  overflow-y: auto !important; border-radius: 0 !important; box-sizing: border-box !important;
-  overscroll-behavior: contain;
-}
-.guli-video-ad-fullscreen .guli-video-ad-home-container,
-.guli-video-ad-fullscreen .guli-video-ad-feed-container {
-  min-height: 100%; height: auto; border: 0; border-radius: 0; overflow: visible;
-  display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.guli-video-ad-fullscreen .guli-video-media-column { width: 100%; flex: 0 0 auto; }
-.guli-video-ad-fullscreen .guli-video-media-wrapper {
-  width: 100%; aspect-ratio: 16 / 9; min-height: 0; max-height: 58dvh;
-}
-.guli-video-ad-fullscreen .guli-video-element { object-fit: contain; }
-.guli-video-fullscreen-close {
-  position: absolute; top: max(0.75rem, env(safe-area-inset-top, 0px)); right: 0.75rem;
-  z-index: 20; width: 2.5rem; height: 2.5rem; border-radius: 9999px;
-  background: rgba(15, 23, 42, 0.82); border: 1px solid rgba(255,255,255,.28);
-  color: #fff; font-size: 1.2rem; cursor: pointer;
-}
-.guli-video-ad-fullscreen .guli-video-content {
-  flex: 1 0 auto; width: 100%; padding: 1.25rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
-}
-.guli-video-ad-fullscreen .guli-video-sound-controls { padding: 0.6rem 1rem; }
-@media (min-width: 840px) {
-  .guli-video-ad-fullscreen .guli-video-media-wrapper { max-height: 65dvh; }
-  .guli-video-ad-fullscreen .guli-video-content { padding: 1.25rem 2rem 2rem; }
 }
