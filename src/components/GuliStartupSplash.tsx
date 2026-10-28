@@ -59,7 +59,15 @@ export function GuliStartupSplash() {
 
       <div className="guliSplashBody">
         <div className="guliSplashLogoWrap">
-          <img src={GULI_LOGO_BASE64} alt="GULI" className="guliSplashLogo" draggable={false} />
+          <img
+            src="/guli-logo.jpg"
+            alt="Guli Market"
+            className="guliSplashLogo"
+            draggable={false}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src = GULI_LOGO_BASE64;
+            }}
+          />
         </div>
         <div className="guliSplashBrand">GULI MARKET</div>
         <div className="guliSplashTagline">Go‘zallik har doim siz bilan</div>

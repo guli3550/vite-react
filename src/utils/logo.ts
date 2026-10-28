@@ -6,7 +6,11 @@ export const LOGO_STORAGE_KEY = "guli_custom_logo";
 
 export function getAppLogo(): string {
   try {
-    return localStorage.getItem(LOGO_STORAGE_KEY) || DEFAULT_LOGO;
+    const saved = localStorage.getItem(LOGO_STORAGE_KEY);
+    if (!saved || saved === "/guli-logo.webp" || saved === "/guli-logo.jpg") {
+      return DEFAULT_LOGO;
+    }
+    return saved;
   } catch {
     return DEFAULT_LOGO;
   }

@@ -935,7 +935,11 @@ export default function App() {
     return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
   });
   const [brandName, setBrandName] = useState<string>(() => {
-    return localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name") || "Guli premium";
+    const saved = localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name");
+    if (!saved || saved.toLowerCase().includes("guli premium")) {
+      return "Guli Market";
+    }
+    return saved;
   });
   const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
@@ -961,12 +965,17 @@ export default function App() {
   const [promoBannerUrl, setPromoBannerUrl] = useState<string>("");
 
   const [appLogo, setAppLogo] = useState<string>(() => {
-    return localStorage.getItem("guli_custom_logo") || GULI_LOGO_BASE64;
+    const saved = localStorage.getItem("guli_custom_logo");
+    if (!saved || saved === "/guli-logo.webp" || saved === "/guli-logo.jpg") {
+      return GULI_LOGO_BASE64;
+    }
+    return saved;
   });
 
   useEffect(() => {
     const handleLogoUpdate = (e: any) => {
-      const newLogo = e?.detail || localStorage.getItem("guli_custom_logo") || GULI_LOGO_BASE64;
+      const saved = e?.detail || localStorage.getItem("guli_custom_logo");
+      const newLogo = !saved || saved === "/guli-logo.webp" || saved === "/guli-logo.jpg" ? GULI_LOGO_BASE64 : saved;
       setAppLogo(newLogo);
     };
     window.addEventListener("guli_logo_updated", handleLogoUpdate);
@@ -1420,8 +1429,12 @@ export default function App() {
     };
 
     const handleBrandEvt = (e: any) => {
-      const b = e.detail || localStorage.getItem("guli_store_name") || "Guli premium";
-      setBrandName(b);
+      const b = e.detail || localStorage.getItem("guli_store_name");
+      if (!b || b.toLowerCase().includes("guli premium")) {
+        setBrandName("Guli Market");
+      } else {
+        setBrandName(b);
+      }
     };
 
     window.addEventListener("guli_settings_updated", handleSettingsUpdate);
@@ -4340,7 +4353,7 @@ export default function App() {
             >
               <img
                 src={appLogo || GULI_LOGO_BASE64}
-                alt="Guli Premium"
+                alt="Guli Market"
                 style={{
                   width: "100%",
                   height: "100%",
@@ -4361,41 +4374,11 @@ export default function App() {
               />
             </span>
             <span>
-              <b>{brandName}</b>
-              <small>{t("brand_sub")}</small>
+              <b className="brandMarketWord">{brandName && !brandName.toLowerCase().includes("guli premium") ? brandName : "Guli Market"}</b>
             </span>
           </button>
         </div>
         <div className="headerActions">
-          <button
-            className="adminHeaderBtn"
-            id="topbar-admin-btn"
-            onClick={() => {
-              window.location.href = "/admin";
-            }}
-            aria-label="Admin Panel"
-            title="Admin Panelga o'tish"
-            style={{
-              background: "linear-gradient(135deg, #c9526b, #9f3851)",
-              color: "#ffffff",
-              border: "1px solid rgba(255, 255, 255, 0.2)",
-              borderRadius: "20px",
-              padding: "0 11px",
-              height: "36px",
-              fontSize: "12px",
-              fontWeight: 700,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "5px",
-              cursor: "pointer",
-              boxShadow: "0 3px 10px rgba(201, 82, 107, 0.35)",
-              flexShrink: 0,
-              transition: "transform 0.15s ease, filter 0.15s ease",
-            }}
-          >
-            <span style={{ fontSize: "14px", lineHeight: 1 }}>🛡️</span>
-            <span style={{ whiteSpace: "nowrap", letterSpacing: "0.2px" }}>Admin</span>
-          </button>
           <button
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"

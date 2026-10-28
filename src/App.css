@@ -4454,8 +4454,10 @@ html[data-theme="dark"] .brand {
   color: var(--text-main) !important;
 }
 
-html[data-theme="dark"] .brand b {
+html[data-theme="dark"] .brand b,
+html[data-theme="dark"] .brandMarketWord {
   color: var(--text-main) !important;
+  text-shadow: none !important;
 }
 
 html[data-theme="dark"] .brandIcon {

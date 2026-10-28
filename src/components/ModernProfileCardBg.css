@@ -118,7 +118,7 @@
 
 /* Embedded GULI Logo in Base64 for 0ms Instant Rendering */
 :root {
-  --guli-logo-base64: url("/guli-logo.webp");
+  --guli-logo-base64: url("/guli-logo.png");
 }
 
 .guli-instant-logo-bg {

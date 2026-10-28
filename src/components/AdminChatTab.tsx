@@ -1188,7 +1188,7 @@ export default function AdminChatTab({
                     onEdit={(m) => handleStartEditMessage(m)}
                     onImageClick={(url) => setLightboxImageUrl(url)}
                     senderName={msg.sender === "admin" ? "GULI Operator (Siz)" : currentConversation?.userName || "Mijoz"}
-                    senderAvatar={msg.sender === "admin" ? "/guli-logo.webp" : undefined}
+                    senderAvatar={msg.sender === "admin" ? "/guli-logo.png" : undefined}
                   />
                 </div>
               );

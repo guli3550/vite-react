@@ -37,7 +37,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const [notifSoundEnabled, setNotifSoundEnabled] = useState(localStorage.getItem("guli_notif_sound_enabled") !== "false");
 
   // Web App Custom Logo
-  const [appLogo, setAppLogo] = useState<string>(localStorage.getItem("guli_custom_logo") || "/guli-logo.webp");
+  const [appLogo, setAppLogo] = useState<string>(localStorage.getItem("guli_custom_logo") || "/guli-logo.png");
   const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Social Links
@@ -50,9 +50,14 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   const [paymentCardHolder, setPaymentCardHolder] = useState(localStorage.getItem("guli_payment_card_holder") || saved.paymentCardHolder || "X.Yusufaliyev");
   const [supportCardNumber, setSupportCardNumber] = useState(localStorage.getItem("guli_support_card_number") || saved.supportCardNumber || "9860 1766 1229 1557");
   const [supportCardHolder, setSupportCardHolder] = useState(localStorage.getItem("guli_support_card_holder") || saved.supportCardHolder || "X.Yusufaliyev");
-
   const [callCenterPhone, setCallCenterPhone] = useState(localStorage.getItem("guli_callcenter_phone") || saved.callCenterPhone || "+998 90 581 11 17");
-  const [storeName, setStoreName] = useState(localStorage.getItem("guli_store_name") || saved.storeName || "Guli premium");
+  const [storeName, setStoreName] = useState(() => {
+    const savedName = localStorage.getItem("guli_store_name") || saved.storeName;
+    if (!savedName || savedName.toLowerCase().includes("guli premium")) {
+      return "Guli Market";
+    }
+    return savedName;
+  });
   const [workHours, setWorkHours] = useState(saved.workHours || "09:00 - 21:00 (Har kuni)");
   const [storeAddress, setStoreAddress] = useState(saved.storeAddress || "Toshkent sh., Navoiy ko'chasi 14");
   const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(
@@ -180,7 +185,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
   };
 
   const handleResetLogo = () => {
-    setAppLogo("/guli-logo.webp");
+    setAppLogo("/guli-logo.png");
     notify("🔄 Standart logotip tiklandi");
   };
 
@@ -206,9 +211,9 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       localStorage.setItem("guli_admin_settings", JSON.stringify(settingsObj));
       
       // Save Logo & Social Links
-      localStorage.setItem("guli_custom_logo", appLogo.trim() || "/guli-logo.webp");
-      localStorage.setItem("guli_store_name", storeName.trim() || "Guli premium");
-      localStorage.setItem("guli_custom_brand_name", storeName.trim() || "Guli premium");
+      localStorage.setItem("guli_custom_logo", appLogo.trim() || "/guli-logo.png");
+      localStorage.setItem("guli_store_name", storeName.trim() || "Guli Market");
+      localStorage.setItem("guli_custom_brand_name", storeName.trim() || "Guli Market");
       saveSocialLinks({
         instagram: instagramUrl.trim(),
         telegram: telegramUrl.trim(),
@@ -216,8 +221,8 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
       });
 
       if (telegramChannelId.trim()) await saveTelegramChat();
-      window.dispatchEvent(new CustomEvent("guli_logo_updated", { detail: appLogo.trim() || "/guli-logo.webp" }));
-      window.dispatchEvent(new CustomEvent("guli_brand_name_updated", { detail: storeName.trim() || "Guli premium" }));
+      window.dispatchEvent(new CustomEvent("guli_logo_updated", { detail: appLogo.trim() || "/guli-logo.png" }));
+      window.dispatchEvent(new CustomEvent("guli_brand_name_updated", { detail: storeName.trim() || "Guli Market" }));
       window.dispatchEvent(new Event("guli_settings_updated"));
       notify("✅ Barcha sozlamalar, logotip va ijtimoiy tarmoqlar saqlandi!");
     } catch (error) {
@@ -281,7 +286,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
 
   const resetSettings = () => {
     setThemeMode("light"); setLanguage("uz"); setNotifSoundEnabled(true);
-    setAppLogo("/guli-logo.webp");
+    setAppLogo("/guli-logo.png");
     setInstagramUrl(DEFAULT_SOCIAL_LINKS.instagram);
     setTelegramUrl(DEFAULT_SOCIAL_LINKS.telegram);
     setTiktokUrl(DEFAULT_SOCIAL_LINKS.tiktok);
@@ -345,14 +350,14 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
               <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 72, height: 72, borderRadius: "50%", overflow: "hidden", border: "3px solid #be123c", boxShadow: "0 4px 14px rgba(190,18,60,0.2)", background: "#fff", display: "grid", placeItems: "center" }}>
-                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp"; }} />
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.png"; }} />
                   </div>
                   <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Aylana ko'rinish</small>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 72, height: 72, borderRadius: 16, overflow: "hidden", border: "2px solid #cbd5e1", background: "#fff", display: "grid", placeItems: "center" }}>
-                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp"; }} />
+                    <img src={appLogo} alt="Logo preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/guli-logo.png"; }} />
                   </div>
                   <small style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Kvadrat ko'rinish</small>
                 </div>
@@ -364,7 +369,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
                       style={inputStyle}
                       value={appLogo}
                       onChange={(e) => setAppLogo(e.target.value)}
-                      placeholder="https://example.com/logo.png yoki /guli-logo.webp"
+                      placeholder="https://example.com/logo.png yoki /guli-logo.png"
                     />
                   </label>
 
@@ -394,7 +399,7 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
                 </div>
               </div>
 
-              {/* Do'kon nomini tahrirlash qatori (Guli premium) */}
+              {/* Do'kon nomini tahrirlash qatori (Guli Market) */}
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px dashed var(--border-color, #cbd5e1)" }}>
                 <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-main, #334155)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -405,17 +410,17 @@ export function AdminSettingsTab({ notify, activePlatform = "browser", onPlatfor
                       style={{ ...inputStyle, flex: "1 1 260px" }}
                       value={storeName}
                       onChange={(e) => setStoreName(e.target.value)}
-                      placeholder="Guli premium"
+                      placeholder="Guli Market"
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        setStoreName("Guli premium");
-                        notify("Nom standart 'Guli premium' ga tiklandi");
+                        setStoreName("Guli Market");
+                        notify("Nom standart 'Guli Market' ga tiklandi");
                       }}
                       style={{ padding: "9px 15px", borderRadius: 10, background: "#f1f5f9", color: "#475569", fontWeight: 700, fontSize: 13, border: "1px solid #cbd5e1", cursor: "pointer" }}
                     >
-                      🔄 Standart nom ("Guli premium")
+                      🔄 Standart nom ("Guli Market")
                     </button>
                   </div>
                   <small style={{ color: "#64748b", fontSize: 11.5 }}>

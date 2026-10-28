@@ -2052,38 +2052,6 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
           </div>
           <i>›</i>
         </button>
-        <button
-          className="menuRow"
-          id="profile-admin-btn"
-          onClick={() => {
-            window.location.href = "/admin";
-          }}
-          style={{
-            background: isDark
-              ? "linear-gradient(135deg, rgba(201, 82, 107, 0.25), rgba(158, 50, 72, 0.2))"
-              : "linear-gradient(135deg, #fff0f3, #ffe4e8)",
-            border: isDark ? "1px solid rgba(225, 29, 72, 0.4)" : "1px solid #fecdd3",
-          }}
-        >
-          <span className="profileSticker3D">🛡️</span>
-          <div>
-            <b style={{ color: "var(--primary, #be185d)" }}>
-              {language === "ru"
-                ? "Панель администратора"
-                : language === "en"
-                ? "Admin Panel"
-                : "Admin Paneli"}
-            </b>
-            <small style={{ color: isDark ? "#fda4af" : "#9f1239" }}>
-              {language === "ru"
-                ? "Управление товарами, заказами и видео-рекламой"
-                : language === "en"
-                ? "Manage products, orders, and video ads"
-                : "Mahsulotlar, buyurtmalar va video reklamani boshqarish"}
-            </small>
-          </div>
-          <i style={{ color: "var(--primary, #be185d)" }}>›</i>
-        </button>
       </section>
       </>
       )}
