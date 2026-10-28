@@ -37,6 +37,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [isMuted, setIsMuted] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [impressionRecorded, setImpressionRecorded] = useState(false);
@@ -78,22 +79,14 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     };
 
     const handlePlayAttempt = async () => {
+      // Always start ads silently. Sound is enabled only after an explicit user action.
+      video.muted = true;
+      setIsMuted(true);
       try {
-        // Attempt audio autoplay first as requested
-        video.muted = false;
         await video.play();
-        setIsMuted(false);
         sendEvent("video_start");
       } catch {
-        // Fallback to muted playback if browser policies block audio autoplay
-        try {
-          video.muted = true;
-          await video.play();
-          setIsMuted(true);
-          sendEvent("video_start");
-        } catch {
-          // Playback blocked or waiting for user interaction
-        }
+        // Playback may still be blocked until the user interacts with the page.
       }
     };
 
@@ -144,6 +137,26 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     if (video.paused) {
       video.play().catch(() => {});
     }
+  };
+
+  const handleOpenFullscreen = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    // A direct tap is a user gesture, so request audio and expand the whole ad card.
+    video.muted = false;
+    setIsMuted(false);
+    setIsFullscreen(true);
+    try {
+      await video.play();
+    } catch {
+      // Keep the expanded player open; the sound toggle remains available below.
+    }
+  };
+
+  const handleCloseFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsFullscreen(false);
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -207,11 +220,16 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const wrapperClass = isFeed ? "guli-video-ad-feed" : "guli-video-ad-home";
 
   return (
-    <div className={wrapperClass} ref={containerRef}>
+    <div className={`${wrapperClass}${isFullscreen ? " guli-video-ad-fullscreen" : ""}`} ref={containerRef}>
       <div className={isFeed ? "guli-video-ad-feed-container" : "guli-video-ad-home-container"}>
-        {/* Media Frame */}
-        <div className="guli-video-media-wrapper" onClick={handleToggleSound}>
+        {/* Media column keeps sound control below, never over the video */}
+        <div className="guli-video-media-column">
+        <div className="guli-video-media-wrapper" onClick={handleOpenFullscreen}>
           <div className="guli-video-badge">Reklama</div>
+
+          {isFullscreen && (
+            <button type="button" className="guli-video-fullscreen-close" onClick={handleCloseFullscreen} aria-label="To‘liq ekrandan chiqish" title="Yopish">✕</button>
+          )}
 
           {/* Dismiss button */}
           <button
@@ -225,7 +243,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           </button>
 
           {/* Video or poster fallback */}
-          {!hasError && ad.video_url ? (
+          {!hasError && ad.video_url && (
             <video
               ref={videoRef}
               src={ad.video_url}
@@ -237,7 +255,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               preload="metadata"
               onError={() => setHasError(true)}
               onEnded={() => {
-                // Track video complete
                 try {
                   const apiBase = getApiBaseUrl();
                   fetch(`${apiBase}/api/video-ads/${ad.id}/events`, {
@@ -248,21 +265,24 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
                 } catch {}
               }}
             />
-          ) : ad.poster_url ? (
+          )}
+          {(hasError || !ad.video_url) && ad.poster_url && (
             <img
               src={ad.poster_url}
               alt={ad.title}
               className="guli-video-poster"
               referrerPolicy="no-referrer"
             />
-          ) : (
+          )}
+          {(hasError || !ad.video_url) && !ad.poster_url && (
             <div className="flex items-center justify-center w-full h-full text-slate-400 text-xs">
               Guli Market Video
             </div>
           )}
 
-          {/* Mute/Sound Toggle Pill */}
-          {!hasError && ad.video_url && (
+        </div>
+        {!hasError && ad.video_url && (
+          <div className="guli-video-sound-controls">
             <button
               type="button"
               className="guli-video-sound-btn"
@@ -270,9 +290,10 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               title={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
               aria-label={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
             >
-              <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozli"}</span>
+              <span>{isMuted ? "🔇 Ovozni yoqish" : "🔊 Ovozni o‘chirish"}</span>
             </button>
-          )}
+          </div>
+        )}
         </div>
 
         {/* Content & Call to Action */}
