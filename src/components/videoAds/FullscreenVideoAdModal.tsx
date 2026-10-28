@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, Play, ArrowRight, Volume2, VolumeX } from "lucide-react";
+import { X, Play, ArrowRight } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -39,7 +39,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
 
@@ -108,7 +107,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       playPromise
         .then(() => {
           setIsPaused(false);
-          setIsMuted(false);
           if (!hasStarted) {
             setHasStarted(true);
             sendEvent("video_start");
@@ -117,7 +115,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         .catch(() => {
           // If browser policy blocks sound despite user gesture, keep video playing muted
           video.muted = true;
-          setIsMuted(true);
           video
             .play()
             .then(() => {
@@ -167,16 +164,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       video.pause();
       setIsPaused(true);
     }
-  };
-
-  // Toggle sound if user taps the subtle audio indicator
-  const handleToggleSound = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    const nextMuted = !video.muted;
-    video.muted = nextMuted;
-    setIsMuted(nextMuted);
   };
 
   // Close full-screen
@@ -254,17 +241,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           </div>
 
           <div className="guli-fullscreen-actions">
-            {/* Subtle sound toggle if muted */}
-            <button
-              type="button"
-              className="guli-fullscreen-sound-pill"
-              onClick={handleToggleSound}
-              aria-label={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
-              title={isMuted ? "Ovozni yoqish" : "Ovozni o‘chirish"}
-            >
-              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </button>
-
             {/* Close button */}
             <button
               type="button"
