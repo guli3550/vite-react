@@ -99,13 +99,15 @@ async function loadCustomerProfile(telegramId) {
   if (cached && cached.expiresAt > Date.now()) return cached.customer;
 
   const customer = {};
+  let latestOrder = null;
   try {
-    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrder }] = await Promise.all([
+    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrder: latestOrderRow }] = await Promise.all([
       supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("users").select("telegram_id,phone_number,full_name,telegram_username,telegram_photo_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("customers").select("telegram_id,phone,full_name,avatar_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("orders").select("order_number,username,first_name,phone,telegram_phone,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle()
     ]);
+    latestOrder = latestOrderRow;
 
     if (user) Object.assign(customer, user);
     if (canonicalUser) {
@@ -197,7 +199,6 @@ async function loadCustomerProfile(telegramId) {
   try {
     const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("telegram_id", telegramId);
     customer.orderCount = Number(count || 0);
-    const { data: latestOrder } = await supabase.from("orders").select("order_number,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (latestOrder) {
       customer.lastOrderNumber = latestOrder.order_number || null;
       customer.lastOrderStatus = latestOrder.status || null;
