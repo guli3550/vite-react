@@ -56,6 +56,9 @@ function deliverToClients(message) { for (const c of clients) { if (c.admin || N
 function telegramMiniAppOnline(telegramId) { const id = Number(telegramId); return Number.isFinite(id) && [...clients].some(c => c.telegramMiniApp && Number(c.chatId) === id); }
 globalThis.__GULI_TELEGRAM_MINIAPP_ONLINE = telegramMiniAppOnline;
 const customerProfileCache = new Map();
+// Coalesce concurrent history loads: a chat history can contain many messages
+// from the same customer, and each message enrichment must share one profile lookup.
+const customerProfileInflight = new Map();
 
 function extractTelegramPhotoFileId(value) {
   try {
@@ -75,6 +78,22 @@ function signedAdminPhotoUrl(telegramId, fileId) {
 }
 
 async function getCachedCustomerProfile(telegramId) {
+  const key = String(telegramId);
+  const cached = customerProfileCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.customer;
+  const pending = customerProfileInflight.get(key);
+  if (pending) return pending;
+
+  const lookup = loadCustomerProfile(telegramId);
+  customerProfileInflight.set(key, lookup);
+  try {
+    return await lookup;
+  } finally {
+    if (customerProfileInflight.get(key) === lookup) customerProfileInflight.delete(key);
+  }
+}
+
+async function loadCustomerProfile(telegramId) {
   const key = String(telegramId);
   const cached = customerProfileCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.customer;
