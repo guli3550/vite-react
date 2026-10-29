@@ -18,6 +18,8 @@ import {
   User3DIcon,
 } from "./components/Nav3DIcons";
 import { ReelsFeed } from "./components/reels/ReelsFeed";
+import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
+import "./components/PwaInstallPrompt.css";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
   ProductImageGallery,
@@ -5601,6 +5603,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <PwaInstallPrompt />
 
       {toast ? <div className="toast">{toast}</div> : null}
 
