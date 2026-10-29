@@ -14,6 +14,11 @@ import "./Reels.css";
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
 
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
 
 function readReelsCycleState(): ReelsCycleState {
@@ -100,6 +105,9 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [showBrowserInstallGate, setShowBrowserInstallGate] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState<InstallPromptEvent | null>(null);
+  const [isInstallingApp, setIsInstallingApp] = useState(false);
 
   // Big popping heart on double-tap
   const [showHeartAnim, setShowHeartAnim] = useState(false);
@@ -125,6 +133,50 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Video element references map
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+
+  // Require browser visitors to install the GULI MARKET PWA before viewing Reels.
+  // Installed standalone app and Telegram Mini App users bypass this gate.
+  useEffect(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+      || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+    const isTelegramMiniApp = Boolean((window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData);
+    setShowBrowserInstallGate(!isStandalone && !isTelegramMiniApp);
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as InstallPromptEvent);
+    };
+    const handleAppInstalled = () => {
+      setIsInstallingApp(false);
+      setShowBrowserInstallGate(false);
+      // Refresh the entry route after installation; browsers that support it open the installed app themselves.
+      window.location.assign("/");
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = useCallback(async () => {
+    if (!installPromptEvent) {
+      window.alert("Chrome menyusini (⋮) ochib, ‘Ilovani o‘rnatish’ yoki ‘Bosh ekranga qo‘shish’ bandini tanlang.");
+      return;
+    }
+    try {
+      setIsInstallingApp(true);
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+      setInstallPromptEvent(null);
+      if (choice.outcome === "dismissed") setIsInstallingApp(false);
+      // On acceptance, keep the spinner until appinstalled fires.
+    } catch {
+      setIsInstallingApp(false);
+      setInstallPromptEvent(null);
+    }
+  }, [installPromptEvent]);
 
   // Load active reels in a persisted randomized cycle, resuming at the first unseen Reel.
   const reloadReels = useCallback(async () => {
@@ -479,13 +531,40 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
+  if (showBrowserInstallGate) {
+    return (
+      <main className="reelsContainer reelsEmptyView reelsInstallGate">
+        <div className="reelsEmptyContent reelsInstallGateContent">
+          <div className="reelsInstallBrandIcon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" role="img">
+              <rect x="7" y="15" width="50" height="43" rx="10" fill="#ff4d79" />
+              <path d="M10 15h44l7-10H17z" fill="#fff" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
+              <path d="M23 27v19l17-9.5z" fill="#fff" />
+              <path d="M21 7l7 8M34 6l7 9M47 6l5 8" stroke="#1f2937" strokeWidth="4" />
+            </svg>
+          </div>
+          <h2 className="reelsEmptyTitle reelsInstallGateTitle">Reels ko‘rish uchun</h2>
+          <p className="reelsEmptySubtitle reelsInstallGateSubtitle">GULI MARKET’ni oching</p>
+          <button type="button" className="reelsInstallIconButton" onClick={() => void handleInstallApp()} aria-label="GULI MARKET’ni o‘rnatish" disabled={isInstallingApp}>
+            {isInstallingApp ? (
+              <span className="reelsInstallSpinner" aria-hidden="true" />
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v4h14v-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   if (reels.length === 0 && isLoadingReels) {
     return (
       <main className="reelsContainer reelsEmptyView" aria-busy="true">
         <div className="reelsEmptyContent">
           <div className="reelsEmptyIcon">🎬</div>
           <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
-          <p className="reelsEmptySubtitle">Videolar tayyorlanmoqda, biroz kuting.</p>
         </div>
       </main>
     );
