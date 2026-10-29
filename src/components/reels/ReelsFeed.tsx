@@ -9,6 +9,7 @@ import {
 } from "../../utils/reelsEngine";
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
+import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
 
 interface ReelsFeedProps {
@@ -135,6 +136,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         videoEl.pause();
       }
     });
+
+    if (currentReel && isInstagramUrl(currentReel.videoUrl)) {
+      // Instagram's own embed player controls playback; it is not an HTML5 MP4.
+      setIsLoadingVideo(false);
+      setIsPlaying(true);
+      return;
+    }
 
     if (currentReel) {
       const activeVideo = videoRefs.current.get(currentReel.id);
@@ -385,16 +393,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
-  // Error loading video
+  // Never replace a failed reel with an unrelated sample video.
   const handleVideoError = (id: string) => {
-    const videoEl = videoRefs.current.get(id);
-    const fallbackUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-    if (videoEl && videoEl.src !== fallbackUrl) {
-      videoEl.src = fallbackUrl;
-      videoEl.load();
-      videoEl.play().catch(() => {});
-      return;
-    }
     setVideoError((prev) => ({ ...prev, [id]: true }));
     setIsLoadingVideo(false);
   };
@@ -519,7 +519,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                 {/* Media area */}
                 <div
                   className="reelsMediaWrap"
-                  onClick={isActive ? handleVideoTap : () => goToReel(index)}
+                  onClick={isActive ? (isInstagramUrl(reel.videoUrl) ? undefined : handleVideoTap) : () => goToReel(index)}
                 >
                   {/* Poster Image */}
                   <img
@@ -536,29 +536,39 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
                   {/* HTML5 Video Player: Preload metadata for active + next 2 reels */}
                   {isPreloaded && !hasError && reel.videoUrl && (
-                    <video
-                      ref={(el) => {
-                        if (el) {
-                          videoRefs.current.set(reel.id, el);
-                          if (isActive && el.paused && isPlaying) {
-                            el.play().catch(() => {});
+                    isInstagramUrl(reel.videoUrl) ? (
+                      <iframe
+                        src={"https://www.instagram.com/reel/" + extractInstagramShortcode(reel.videoUrl) + "/embed/"}
+                        title={"Instagram Reels: " + reel.caption}
+                        className="reelsVideoElement"
+                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                        allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        style={{ width: "100%", height: "100%", border: 0, background: "#000" }}
+                      />
+                    ) : (
+                      <video
+                        ref={(el) => {
+                          if (el) {
+                            videoRefs.current.set(reel.id, el);
+                            if (isActive && el.paused && isPlaying) el.play().catch(() => {});
+                          } else {
+                            videoRefs.current.delete(reel.id);
                           }
-                        } else {
-                          videoRefs.current.delete(reel.id);
-                        }
-                      }}
-                      src={reel.videoUrl}
-                      poster={reel.posterUrl}
-                      className="reelsVideoElement"
-                      playsInline
-                      loop
-                      muted={isMuted}
-                      preload="metadata"
-                      onTimeUpdate={isActive ? handleTimeUpdate : undefined}
-                      onWaiting={isActive ? () => setIsLoadingVideo(true) : undefined}
-                      onPlaying={isActive ? () => setIsLoadingVideo(false) : undefined}
-                      onError={() => handleVideoError(reel.id)}
-                    />
+                        }}
+                        src={reel.videoUrl}
+                        poster={reel.posterUrl}
+                        className="reelsVideoElement"
+                        playsInline
+                        loop
+                        muted={isMuted}
+                        preload="metadata"
+                        onTimeUpdate={isActive ? handleTimeUpdate : undefined}
+                        onWaiting={isActive ? () => setIsLoadingVideo(true) : undefined}
+                        onPlaying={isActive ? () => setIsLoadingVideo(false) : undefined}
+                        onError={() => handleVideoError(reel.id)}
+                      />
+                    )
                   )}
 
                   {/* Loading Spinner for active reel */}

@@ -235,8 +235,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
             posterUrl: data.posterUrl,
             caption: prev.caption.trim() ? prev.caption : data.caption,
           }));
-          setInstaFetchStatus(`✓ Instagram Reels yuklandi! (Kod: ${data.shortcode})`);
-          notify(`✓ Instagram Reels ma’lumotlari va videosi avtomatik yuklandi! ✨`);
+          setInstaFetchStatus(`✓ Instagram Reels embed uchun tayyor (Kod: ${data.shortcode}). Saqlang va Instagram player orqali ko‘ring.`);
+          notify("✓ Instagram havolasi va muqova tayyor. Video Instagram player orqali ko‘rsatiladi.");
         } else {
           setInstaFetchStatus("⚠️ Instagram manzilidan ma’lumot olinmadi");
         }
@@ -1001,18 +1001,27 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
 
                 {/* Live Video Preview Box */}
                 {formData.videoUrl && (
-                  <div style={{ marginTop: "10px", borderRadius: "12px", overflow: "hidden", border: "1px solid #ebd4db", background: "#000", maxHeight: "180px", display: "flex", justifyContent: "center", alignItems: "center" }}>
-                    <video
-                      key={formData.videoUrl}
-                      src={formData.videoUrl}
-                      controls
-                      muted
-                      onError={() => {
-                        // Never overwrite the administrator's URL with a demo URL on playback failure.
-                        notify("⚠️ Video ochilmadi. URL manzilini tekshiring yoki faylni qayta yuklang.");
-                      }}
-                      style={{ maxHeight: "180px", width: "100%", objectFit: "contain" }}
-                    />
+                  <div style={{ marginTop: "10px", borderRadius: "12px", overflow: "hidden", border: "1px solid #ebd4db", background: "#000", height: "220px", display: "flex", justifyContent: "center", alignItems: "center" }}>
+                    {isInstagramUrl(formData.videoUrl) ? (
+                      <iframe
+                        key={formData.videoUrl}
+                        src={"https://www.instagram.com/reel/" + extractInstagramShortcode(formData.videoUrl) + "/embed/"}
+                        title="Instagram Reels ko‘rish"
+                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                        allowFullScreen
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        style={{ width: "100%", height: "100%", border: 0, background: "#000" }}
+                      />
+                    ) : (
+                      <video
+                        key={formData.videoUrl}
+                        src={formData.videoUrl}
+                        controls
+                        muted
+                        onError={() => notify("⚠️ Video ochilmadi. URL manzilini tekshiring yoki faylni qayta yuklang.")}
+                        style={{ maxHeight: "220px", width: "100%", objectFit: "contain" }}
+                      />
+                    )}
                   </div>
                 )}
 
@@ -1327,15 +1336,26 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
             {/* Video or Poster */}
             <div style={{ position: "absolute", inset: 0, background: "#000" }}>
               {previewReel.videoUrl ? (
-                <video
-                  src={previewReel.videoUrl}
-                  poster={previewReel.posterUrl}
-                  controls
-                  autoPlay
-                  loop
-                  muted
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
+                isInstagramUrl(previewReel.videoUrl) ? (
+                  <iframe
+                    src={"https://www.instagram.com/reel/" + extractInstagramShortcode(previewReel.videoUrl) + "/embed/"}
+                    title="Instagram Reels ko‘rish"
+                    allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                    allowFullScreen
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    style={{ width: "100%", height: "100%", border: 0 }}
+                  />
+                ) : (
+                  <video
+                    src={previewReel.videoUrl}
+                    poster={previewReel.posterUrl}
+                    controls
+                    autoPlay
+                    loop
+                    muted
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                )
               ) : (
                 <img
                   src={previewReel.posterUrl}
