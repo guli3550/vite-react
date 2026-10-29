@@ -101,7 +101,7 @@ async function loadCustomerProfile(telegramId) {
   const customer = {};
   let latestOrder = null;
   try {
-    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrder: latestOrderRow }] = await Promise.all([
+    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrderRow }] = await Promise.all([
       supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("users").select("telegram_id,phone_number,full_name,telegram_username,telegram_photo_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("customers").select("telegram_id,phone,full_name,avatar_url").eq("telegram_id", telegramId).maybeSingle(),
