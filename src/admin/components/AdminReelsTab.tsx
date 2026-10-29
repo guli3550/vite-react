@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import type { ReelItem, ReelStatus } from "../../types/reels";
 import { loadReelsFromStorage, saveReelsToStorage, INITIAL_DEMO_REELS } from "../../data/demoReels";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -20,6 +20,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isSavingReel, setIsSavingReel] = useState(false);
+  const saveLockRef = useRef(false);
   const [editingReel, setEditingReel] = useState<ReelItem | null>(null);
   const [previewReel, setPreviewReel] = useState<ReelItem | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<ReelItem | null>(null);
@@ -251,6 +253,11 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
   // Save new/edit reel on the backend.
   const handleSaveReel = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Block rapid repeat taps while the network request is pending.
+    if (saveLockRef.current || isVideoUploading || isCoverUploading) {
+      if (isVideoUploading || isCoverUploading) notify("Avval media fayli yuklanishi tugashini kuting.");
+      return;
+    }
     const errors: Record<string, string> = {};
     if (!formData.caption.trim()) errors.caption = "Tavsif yoki caption kiritish shart";
     if (!formData.videoUrl.trim()) errors.videoUrl = "Video URL manzili yoki fayli kiritilishi shart";
@@ -286,6 +293,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       isLiked: false, status: formData.status, createdAt: new Date().toISOString(), comments: [],
     };
 
+    saveLockRef.current = true;
+    setIsSavingReel(true);
     try {
       const saved = await saveServerReel(base, Boolean(editingReel));
       const updated = editingReel
@@ -298,6 +307,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     } catch (error) {
       console.error("[Admin Reels] Save error:", error);
       notify(error instanceof Error ? `❌ ${error.message}` : "❌ Reels serverga saqlanmadi");
+    } finally {
+      saveLockRef.current = false;
+      setIsSavingReel(false);
     }
   };
 
@@ -1234,6 +1246,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSavingReel || isVideoUploading || isCoverUploading}
                   style={{
                     padding: "10px 22px",
                     background: "linear-gradient(135deg, #b6536b 0%, #9f1239 100%)",
@@ -1246,7 +1259,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                     boxShadow: "0 4px 14px rgba(182, 83, 107, 0.35)",
                   }}
                 >
-                  {editingReel ? "O‘zgarishlarni saqlash" : "Reelsni saqlash"}
+                  {isSavingReel ? "Saqlanmoqda..." : isVideoUploading || isCoverUploading ? "Fayl yuklanmoqda..." : editingReel ? "O‘zgarishlarni saqlash" : "Reelsni saqlash"}
                 </button>
               </div>
             </form>
