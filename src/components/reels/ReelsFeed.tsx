@@ -9,6 +9,7 @@ import {
 } from "../../utils/reelsEngine";
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
+import { ReelsInstallGate } from "./ReelsInstallGate";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
 
@@ -478,6 +479,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       videoEl.play().catch(() => {});
     }
   };
+
+  const isInstalledGuliApp = typeof window !== "undefined" && (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
+  );
+  const isTelegramMiniApp = typeof window !== "undefined" && Boolean(window.Telegram?.WebApp?.initData);
+  if (!isInstalledGuliApp && !isTelegramMiniApp) return <ReelsInstallGate />;
 
   if (reels.length === 0 && isLoadingReels) {
     return (
