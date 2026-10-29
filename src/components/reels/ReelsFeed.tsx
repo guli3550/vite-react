@@ -10,14 +10,10 @@ import {
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
+import { getGuliInstallPrompt, promptGuliInstall, subscribeGuliInstallPrompt, type GuliBeforeInstallPromptEvent } from "../../utils/pwaInstall";
 import "./Reels.css";
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
 
@@ -106,7 +102,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [showBrowserInstallGate, setShowBrowserInstallGate] = useState(false);
-  const [installPromptEvent, setInstallPromptEvent] = useState<InstallPromptEvent | null>(null);
+  const [installPromptEvent, setInstallPromptEvent] = useState<GuliBeforeInstallPromptEvent | null>(() => getGuliInstallPrompt());
   const [isInstallingApp, setIsInstallingApp] = useState(false);
 
   // Big popping heart on double-tap
@@ -142,35 +138,30 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     const isTelegramMiniApp = Boolean((window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData);
     setShowBrowserInstallGate(!isStandalone && !isTelegramMiniApp);
 
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPromptEvent(event as InstallPromptEvent);
-    };
+    const unsubscribeInstallPrompt = subscribeGuliInstallPrompt(setInstallPromptEvent);
     const handleAppInstalled = () => {
       setIsInstallingApp(false);
       setShowBrowserInstallGate(false);
-      // Refresh the entry route after installation; browsers that support it open the installed app themselves.
+      // Let the browser launch the installed PWA when supported, and return to the storefront route.
       window.location.assign("/");
     };
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      unsubscribeInstallPrompt();
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
 
   const handleInstallApp = useCallback(async () => {
     if (!installPromptEvent) {
-      window.alert("Chrome menyusini (⋮) ochib, ‘Ilovani o‘rnatish’ yoki ‘Bosh ekranga qo‘shish’ bandini tanlang.");
+      window.alert("Bu brauzer hozir avtomatik o‘rnatish oynasini bermadi. Chrome menyusi (⋮) → ‘Ilovani o‘rnatish’ yoki ‘Bosh ekranga qo‘shish’ni tanlang.");
       return;
     }
     try {
       setIsInstallingApp(true);
-      await installPromptEvent.prompt();
-      const choice = await installPromptEvent.userChoice;
+      const outcome = await promptGuliInstall();
       setInstallPromptEvent(null);
-      if (choice.outcome === "dismissed") setIsInstallingApp(false);
+      if (outcome !== "accepted") setIsInstallingApp(false);
       // On acceptance, keep the spinner until appinstalled fires.
     } catch {
       setIsInstallingApp(false);
