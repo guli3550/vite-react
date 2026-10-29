@@ -29,14 +29,7 @@ export function extractInstagramShortcode(url: string): string | null {
   return match ? match[2] : null;
 }
 
-/**
- * Sample playable high-definition MP4 streams for Instagram reels fallback
- */
-export const INSTAGRAM_FALLBACK_VIDEOS = [
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-];
+/** Instagram page URLs are not direct video files; never substitute unrelated demo videos. */
 
 /**
  * Fetches and processes Instagram Reel media, poster image, and post caption automatically
@@ -77,9 +70,10 @@ export async function fetchInstagramReelData(url: string): Promise<InstagramReel
     rawPosterUrl
   )}&default=https://images.unsplash.com/photo-1518049362265-d5b2a6467637?auto=format%26fit=crop%26w=900%26q=80`;
 
-  // Select a deterministic playable MP4 video stream based on Instagram shortcode
-  const shortcodeHash = shortcode.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const videoUrl = INSTAGRAM_FALLBACK_VIDEOS[shortcodeHash % INSTAGRAM_FALLBACK_VIDEOS.length];
+  // Instagram oEmbed provides metadata/poster only. It does not provide the actual MP4.
+  // Do not silently substitute a sample video: the admin must upload the real file
+  // or supply a direct, publicly playable video URL.
+  const videoUrl = "";
 
   return {
     shortcode,

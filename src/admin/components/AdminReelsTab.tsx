@@ -231,12 +231,19 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
         if (data) {
           setFormData((prev) => ({
             ...prev,
-            videoUrl: data.videoUrl,
+            // Instagram URL is a webpage, not a playable MP4. Keep the video field
+            // empty until the actual media file/direct video URL is supplied.
+            videoUrl: data.videoUrl || "",
             posterUrl: data.posterUrl,
             caption: prev.caption.trim() ? prev.caption : data.caption,
           }));
-          setInstaFetchStatus(`✓ Instagram Reels yuklandi! (Kod: ${data.shortcode})`);
-          notify(`✓ Instagram Reels ma’lumotlari va videosi avtomatik yuklandi! ✨`);
+          if (data.videoUrl) {
+            setInstaFetchStatus(`✓ Video manzili olindi (Kod: ${data.shortcode})`);
+            notify("✓ Instagram ma’lumotlari olindi.");
+          } else {
+            setInstaFetchStatus("ℹ️ Muqova va matn olindi, lekin Instagram video faylini bevosita bermadi. Haqiqiy videoni qurilmadan yuklang yoki to‘g‘ridan-to‘g‘ri MP4 URL kiriting.");
+            notify("ℹ️ Instagram havolasi video fayl emas. Reelsni saqlash uchun haqiqiy video faylini yuklang yoki MP4 URL kiriting.");
+          }
         } else {
           setInstaFetchStatus("⚠️ Instagram manzilidan ma’lumot olinmadi");
         }
