@@ -175,7 +175,9 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         }
       }
     }
-  }, [currentIndex, currentReel, isMuted]);
+  // Depend on the reel identity, not the whole object: view-count updates must
+  // not restart playback from time zero.
+  }, [currentIndex, currentReel?.id]);
 
   // Navigate between reels
   const goToReel = useCallback(
