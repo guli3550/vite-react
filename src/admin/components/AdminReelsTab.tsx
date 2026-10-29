@@ -181,12 +181,14 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       return;
     }
     setIsVideoUploading(true);
-    setVideoFileName(file.name);
+    setVideoFileName("");
     try {
       const url = await uploadReelMedia(file);
       setFormData((prev) => ({ ...prev, videoUrl: url }));
+      setVideoFileName(file.name);
       notify(`✓ "${file.name}" video serverga yuklandi`);
     } catch (error) {
+      setVideoFileName("");
       console.error("[Admin Reels] Video upload error:", error);
       notify(error instanceof Error ? `❌ ${error.message}` : "❌ Video serverga yuklanmadi");
     } finally {
