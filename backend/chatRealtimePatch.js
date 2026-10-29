@@ -56,6 +56,9 @@ function deliverToClients(message) { for (const c of clients) { if (c.admin || N
 function telegramMiniAppOnline(telegramId) { const id = Number(telegramId); return Number.isFinite(id) && [...clients].some(c => c.telegramMiniApp && Number(c.chatId) === id); }
 globalThis.__GULI_TELEGRAM_MINIAPP_ONLINE = telegramMiniAppOnline;
 const customerProfileCache = new Map();
+// Coalesce concurrent history loads: a chat history can contain many messages
+// from the same customer, and each message enrichment must share one profile lookup.
+const customerProfileInflight = new Map();
 
 function extractTelegramPhotoFileId(value) {
   try {
@@ -78,15 +81,33 @@ async function getCachedCustomerProfile(telegramId) {
   const key = String(telegramId);
   const cached = customerProfileCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.customer;
+  const pending = customerProfileInflight.get(key);
+  if (pending) return pending;
+
+  const lookup = loadCustomerProfile(telegramId);
+  customerProfileInflight.set(key, lookup);
+  try {
+    return await lookup;
+  } finally {
+    if (customerProfileInflight.get(key) === lookup) customerProfileInflight.delete(key);
+  }
+}
+
+async function loadCustomerProfile(telegramId) {
+  const key = String(telegramId);
+  const cached = customerProfileCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.customer;
 
   const customer = {};
+  let latestOrder = null;
   try {
-    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrder }] = await Promise.all([
+    const [{ data: user }, { data: canonicalUser }, { data: customerRow }, { data: latestOrderRow }] = await Promise.all([
       supabase?.from("telegram_users").select("telegram_id,username,first_name,last_name,telegram_phone,profile_photos").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("users").select("telegram_id,phone_number,full_name,telegram_username,telegram_photo_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("customers").select("telegram_id,phone,full_name,avatar_url").eq("telegram_id", telegramId).maybeSingle(),
       supabase?.from("orders").select("order_number,username,first_name,phone,telegram_phone,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle()
     ]);
+    latestOrder = latestOrderRow;
 
     if (user) Object.assign(customer, user);
     if (canonicalUser) {
@@ -178,7 +199,6 @@ async function getCachedCustomerProfile(telegramId) {
   try {
     const { count } = await supabase.from("orders").select("id", { count: "exact", head: true }).eq("telegram_id", telegramId);
     customer.orderCount = Number(count || 0);
-    const { data: latestOrder } = await supabase.from("orders").select("order_number,status,total,created_at").eq("telegram_id", telegramId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (latestOrder) {
       customer.lastOrderNumber = latestOrder.order_number || null;
       customer.lastOrderStatus = latestOrder.status || null;
