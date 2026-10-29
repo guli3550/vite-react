@@ -565,7 +565,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         <div className="reelsEmptyContent">
           <div className="reelsEmptyIcon">🎬</div>
           <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
-          <p className="reelsEmptySubtitle">Videolar tayyorlanmoqda, biroz kuting.</p>
         </div>
       </main>
     );
