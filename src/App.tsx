@@ -18,6 +18,7 @@ import {
   User3DIcon,
 } from "./components/Nav3DIcons";
 import { ReelsFeed } from "./components/reels/ReelsFeed";
+import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
   ProductImageGallery,
@@ -4327,6 +4328,7 @@ export default function App() {
 
   return (
     <div className={`appShell ${page === "chat" ? "chatPageActive" : ""} ${page === "reels" ? "reelsPageActive" : ""}`}>
+      <PwaInstallPrompt hidden={page === "reels"} />
       {page !== "chat" && page !== "reels" && (
       <header className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
