@@ -29,14 +29,7 @@ export function extractInstagramShortcode(url: string): string | null {
   return match ? match[2] : null;
 }
 
-/**
- * Sample playable high-definition MP4 streams for Instagram reels fallback
- */
-export const INSTAGRAM_FALLBACK_VIDEOS = [
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
-  "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-];
+/** Instagram pages are embedded through Instagram's own player, never replaced by unrelated sample videos. */
 
 /**
  * Fetches and processes Instagram Reel media, poster image, and post caption automatically
@@ -77,9 +70,9 @@ export async function fetchInstagramReelData(url: string): Promise<InstagramReel
     rawPosterUrl
   )}&default=https://images.unsplash.com/photo-1518049362265-d5b2a6467637?auto=format%26fit=crop%26w=900%26q=80`;
 
-  // Select a deterministic playable MP4 video stream based on Instagram shortcode
-  const shortcodeHash = shortcode.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const videoUrl = INSTAGRAM_FALLBACK_VIDEOS[shortcodeHash % INSTAGRAM_FALLBACK_VIDEOS.length];
+  // Store the original public post URL; the UI uses Instagram's official embed player.
+  // Instagram page URLs are not direct MP4 files.
+  const videoUrl = `https://www.instagram.com/reel/${shortcode}/`;
 
   return {
     shortcode,
