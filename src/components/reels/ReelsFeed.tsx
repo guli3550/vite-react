@@ -12,6 +12,72 @@ import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
 
+const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
+
+type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
+
+function readReelsCycleState(): ReelsCycleState {
+  try {
+    const raw = localStorage.getItem(REELS_CYCLE_STORAGE_KEY);
+    if (!raw) return { seenIds: [], orderIds: [] };
+    const parsed = JSON.parse(raw) as Partial<ReelsCycleState>;
+    return {
+      seenIds: Array.isArray(parsed.seenIds) ? parsed.seenIds.filter((id): id is string => typeof id === "string") : [],
+      orderIds: Array.isArray(parsed.orderIds) ? parsed.orderIds.filter((id): id is string => typeof id === "string") : [],
+    };
+  } catch {
+    return { seenIds: [], orderIds: [] };
+  }
+}
+
+function saveReelsCycleState(state: ReelsCycleState): void {
+  try { localStorage.setItem(REELS_CYCLE_STORAGE_KEY, JSON.stringify(state)); } catch { /* storage may be unavailable */ }
+}
+
+function shuffledIds(ids: string[]): string[] {
+  const result = [...ids];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function prepareReelsCycle(active: ReelItem[]): { reels: ReelItem[]; startIndex: number } {
+  const byId = new Map(active.map((reel) => [reel.id, reel]));
+  const activeIds = active.map((reel) => reel.id);
+  let state = readReelsCycleState();
+  let seenIds = state.seenIds.filter((id) => byId.has(id));
+  const seen = new Set(seenIds);
+  let orderIds = state.orderIds.filter((id) => byId.has(id));
+  const orderedSet = new Set(orderIds);
+  const newIds = activeIds.filter((id) => !orderedSet.has(id));
+  orderIds = [...orderIds, ...shuffledIds(newIds)];
+
+  // Start a fresh shuffled cycle only after every currently active Reel was seen.
+  if (activeIds.length > 0 && activeIds.every((id) => seen.has(id))) {
+    seenIds = [];
+    orderIds = shuffledIds(activeIds);
+  }
+
+  // Recover gracefully if saved ordering was empty or stale.
+  if (orderIds.length !== activeIds.length) orderIds = [...orderIds, ...shuffledIds(activeIds.filter((id) => !orderIds.includes(id)))];
+  state = { seenIds, orderIds };
+  saveReelsCycleState(state);
+
+  const orderedReels = orderIds.map((id) => byId.get(id)).filter((reel): reel is ReelItem => Boolean(reel));
+  const firstUnseen = orderedReels.findIndex((reel) => !new Set(seenIds).has(reel.id));
+  return { reels: orderedReels, startIndex: firstUnseen >= 0 ? firstUnseen : 0 };
+}
+
+function markReelSeen(reelId: string): void {
+  const state = readReelsCycleState();
+  if (!state.seenIds.includes(reelId)) {
+    state.seenIds.push(reelId);
+    saveReelsCycleState(state);
+  }
+}
+
 interface ReelsFeedProps {
   onBack?: () => void;
   onOpenProduct?: (productId: string | number) => void;
@@ -60,13 +126,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Video element references map
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
-  // Load active reels
+  // Load active reels in a persisted randomized cycle, resuming at the first unseen Reel.
   const reloadReels = useCallback(async () => {
     try {
       const active = await fetchPublicReels();
-      setReels(active);
+      const cycle = prepareReelsCycle(active);
+      setReels(cycle.reels);
+      setCurrentIndex(cycle.startIndex);
       setReelsLoadError(null);
-      if (active.length > 0 && currentIndex >= active.length) setCurrentIndex(0);
     } catch (error) {
       console.error("[Reels] Server lentasini yuklab bo'lmadi:", error);
       const message = error instanceof Error ? error.message : "Server bilan aloqa yo‘q";
@@ -75,12 +142,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
       const isDeployedSite = host === "gulii.uz" || host === "www.gulii.uz" || host.endsWith(".vercel.app");
       const fallback = isDeployedSite ? [] : loadReelsFromStorage().filter((r) => r.status === "active");
-      setReels(fallback);
-      if (fallback.length > 0 && currentIndex >= fallback.length) setCurrentIndex(0);
+      const cycle = prepareReelsCycle(fallback);
+      setReels(cycle.reels);
+      setCurrentIndex(cycle.startIndex);
     } finally {
       setIsLoadingReels(false);
     }
-  }, [currentIndex]);
+  }, []);
 
   useEffect(() => {
     reloadReels();
@@ -103,6 +171,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   useEffect(() => {
     if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
     viewedReelIdsRef.current.add(currentReel.id);
+    markReelSeen(currentReel.id);
     recordServerReelView(currentReel.id).then(({ viewsCount }) => {
       setReels((previous) => previous.map((r) => r.id === currentReel.id ? { ...r, viewsCount } : r));
     }).catch((error) => console.warn("[Reels] Ko'rish statistikasi saqlanmadi:", error));
