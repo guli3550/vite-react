@@ -254,7 +254,6 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     const errors: Record<string, string> = {};
     if (!formData.caption.trim()) errors.caption = "Tavsif yoki caption kiritish shart";
     if (!formData.videoUrl.trim()) errors.videoUrl = "Video URL manzili yoki fayli kiritilishi shart";
-    if (!formData.posterUrl.trim()) errors.posterUrl = "Poster / Cover rasmi kiritilishi shart";
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
@@ -1029,7 +1028,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
               {/* Poster / Cover Upload & URL */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  🖼️ Cover / Muqova rasmi yuklash yoki URL *
+                  🖼️ Cover / Muqova rasmi (ixtiyoriy)
                 </label>
 
                 <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
@@ -1047,7 +1046,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
 
                 <input
                   type="text"
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="Ixtiyoriy: rasm URL manzili yoki qurilmadan yuklang"
                   value={formData.posterUrl}
                   onChange={(e) => setFormData({ ...formData, posterUrl: e.target.value })}
                   style={{
