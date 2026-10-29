@@ -1,5 +1,5 @@
 import type { ReelItem } from "../types/reels";
-import { BACKEND_API_URL } from "./supabaseClient";
+import { buildApiUrl } from "./apiOrigin";
 
 type ApiResponse<T> = { success?: boolean; data?: T; message?: string };
 
@@ -11,7 +11,7 @@ async function request<T>(path: string, init: RequestInit = {}, admin = false): 
     const token = sessionStorage.getItem("guli_admin_token") || "";
     if (token) headers.set("Authorization", `Bearer ${token}`);
   }
-  const response = await fetch(`${BACKEND_API_URL}${path}`, { ...init, headers });
+  const response = await fetch(buildApiUrl(path), { ...init, headers });
   const payload = await response.json().catch(() => ({})) as ApiResponse<T>;
   if (!response.ok || payload.success === false) {
     throw new Error(payload.message || `Server xatosi (${response.status})`);
@@ -95,7 +95,7 @@ export async function uploadReelMedia(file: File): Promise<string> {
   const headers = new Headers({ "Content-Type": contentType, Accept: "application/json" });
   const token = typeof window !== "undefined" ? sessionStorage.getItem("guli_admin_token") || "" : "";
   if (token) headers.set("Authorization", "Bearer " + token);
-  const response = await fetch(BACKEND_API_URL + "/api/admin/reels/upload", { method: "POST", headers, body: file });
+  const response = await fetch(buildApiUrl("/api/admin/reels/upload"), { method: "POST", headers, body: file });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.success === false || !payload?.data?.publicUrl) {
     throw new Error(payload?.message || ("Fayl serverga yuklanmadi (HTTP " + response.status + ")"));
