@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { ReelItem, ReelStatus } from "../../types/reels";
 import { loadReelsFromStorage, saveReelsToStorage, INITIAL_DEMO_REELS } from "../../data/demoReels";
-import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
+import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { fetchAdminReels, saveServerReel, deleteServerReel, uploadReelMedia } from "../../lib/reelsApi";
 import {
   isInstagramUrl,
@@ -144,43 +144,32 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
   const [videoFileName, setVideoFileName] = useState("");
   const [isCoverUploading, setIsCoverUploading] = useState(false);
 
-  // Get all inventory products combining localStorage "guli_products" and DEFAULT_PRODUCTS
-  const inventoryProducts = useMemo(() => {
-    let localProds: any[] = [];
-    try {
-      const raw = localStorage.getItem("guli_products");
-      if (raw) localProds = JSON.parse(raw);
-    } catch {}
-
-    const map = new Map<string | number, any>();
-
-    DEFAULT_PRODUCTS.forEach((p) => {
-      map.set(String(p.id), {
-        id: p.id,
-        product_code: p.product_code || `GL-${p.id}`,
-        name: p.name,
-        price: p.price,
-        stock: p.stock ?? 10,
-        image: p.image,
-      });
-    });
-
-    if (Array.isArray(localProds)) {
-      localProds.forEach((p) => {
-        if (p.id) {
-          map.set(String(p.id), {
-            id: p.id,
-            product_code: p.product_code || `GL-${p.id}`,
-            name: p.name,
-            price: p.price,
-            stock: p.stock ?? 10,
-            image: p.image,
-          });
-        }
-      });
-    }
-
-    return Array.from(map.values());
+  // Load the live inventory from the canonical backend API, not a stale localStorage snapshot.
+  const [inventoryProducts, setInventoryProducts] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadInventory = async () => {
+      try {
+        const response = await fetch(getApiBaseUrl() + "/api/products?limit=1000", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(payload?.data)) throw new Error(payload?.message || "Invalid inventory API response");
+        const products = payload.data.map((p: any) => ({
+          id: p.id ?? p.product_id,
+          product_code: p.product_code ?? p.code ?? ("GL-" + (p.id ?? p.product_id)),
+          name: p.name ?? p.product_name ?? p.title ?? "Nomsiz mahsulot",
+          price: Number(p.price ?? p.product_price ?? 0),
+          stock: Number(p.stock ?? p.quantity ?? p.stock_quantity ?? 0),
+          image: p.image ?? p.image_url ?? p.product_image ?? p.photo_url ?? "",
+        })).filter((p: any) => p.id != null);
+        if (!cancelled) setInventoryProducts(products);
+      } catch (error) {
+        console.error("[Admin Reels] Inventory load error:", error);
+        if (!cancelled) setInventoryProducts([]);
+        notify("⚠️ Ombor mahsulotlari serverdan yuklanmadi. /api/products endpointini tekshiring.");
+      }
+    };
+    void loadInventory();
+    return () => { cancelled = true; };
   }, []);
 
   // Upload the file to the server-managed Supabase Storage bucket (never persist a base64 video in the DB).
@@ -925,15 +914,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   onChange={(e) => {
                     const val = e.target.value;
                     setFormData((prev) => ({ ...prev, videoUrl: val }));
-                    if (isInstagramUrl(val) && !isAutoFetchingInsta) {
-                      handleInstagramAutoFetch(val);
-                    }
-                  }}
-                  onPaste={(e) => {
-                    const pasted = e.clipboardData.getData("text");
-                    if (isInstagramUrl(pasted)) {
-                      setTimeout(() => handleInstagramAutoFetch(pasted), 100);
-                    }
+                    // Keep the exact URL entered by the administrator. Instagram import is manual only.
+                    setInstaFetchStatus(null);
                   }}
                   style={{
                     width: "100%",
@@ -1008,12 +990,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       src={formData.videoUrl}
                       controls
                       muted
-                      onError={(e) => {
-                        const videoEl = e.currentTarget;
-                        if (sampleVideoPresets.length > 0 && videoEl.src !== sampleVideoPresets[0].url) {
-                          videoEl.src = sampleVideoPresets[0].url;
-                          setFormData((prev) => ({ ...prev, videoUrl: sampleVideoPresets[0].url }));
-                        }
+                      onError={() => {
+                        // Never overwrite the administrator's URL with a demo URL on playback failure.
+                        notify("⚠️ Video ochilmadi. URL manzilini tekshiring yoki faylni qayta yuklang.");
                       }}
                       style={{ maxHeight: "180px", width: "100%", objectFit: "contain" }}
                     />
