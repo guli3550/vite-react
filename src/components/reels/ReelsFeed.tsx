@@ -10,14 +10,11 @@ import {
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
+import { Reels3DIcon } from "../Nav3DIcons";
+import { getGuliInstallPrompt, isGuliStandalone, promptGuliInstall, subscribeToGuliInstallPrompt, type GuliInstallPromptEvent } from "../../lib/pwaInstall";
 import "./Reels.css";
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
-
-type InstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
 
@@ -106,7 +103,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [showBrowserInstallGate, setShowBrowserInstallGate] = useState(false);
-  const [installPromptEvent, setInstallPromptEvent] = useState<InstallPromptEvent | null>(null);
+  const [installPromptEvent, setInstallPromptEvent] = useState<GuliInstallPromptEvent | null>(getGuliInstallPrompt());
   const [isInstallingApp, setIsInstallingApp] = useState(false);
 
   // Big popping heart on double-tap
@@ -137,45 +134,41 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Require browser visitors to install the GULI MARKET PWA before viewing Reels.
   // Installed standalone app and Telegram Mini App users bypass this gate.
   useEffect(() => {
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
-      || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
     const isTelegramMiniApp = Boolean((window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData);
-    setShowBrowserInstallGate(!isStandalone && !isTelegramMiniApp);
+    setShowBrowserInstallGate(!isGuliStandalone() && !isTelegramMiniApp);
 
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPromptEvent(event as InstallPromptEvent);
-    };
+    const unsubscribeInstallPrompt = subscribeToGuliInstallPrompt(() => {
+      setInstallPromptEvent(getGuliInstallPrompt());
+    });
     const handleAppInstalled = () => {
       setIsInstallingApp(false);
       setShowBrowserInstallGate(false);
-      // Refresh the entry route after installation; browsers that support it open the installed app themselves.
-      window.location.assign("/");
+      // Keep the site on its app start URL. Whether Chrome immediately switches
+      // into the newly installed PWA is controlled by the browser.
+      window.location.replace("/");
     };
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      unsubscribeInstallPrompt();
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
 
   const handleInstallApp = useCallback(async () => {
     if (!installPromptEvent) {
-      window.alert("Chrome menyusini (⋮) ochib, ‘Ilovani o‘rnatish’ yoki ‘Bosh ekranga qo‘shish’ bandini tanlang.");
+      window.alert("Bu brauzer hozir tezkor o‘rnatish oynasini bermadi. Chrome yangilanganini tekshirib, sahifani qayta oching.");
       return;
     }
-    try {
-      setIsInstallingApp(true);
-      await installPromptEvent.prompt();
-      const choice = await installPromptEvent.userChoice;
-      setInstallPromptEvent(null);
-      if (choice.outcome === "dismissed") setIsInstallingApp(false);
-      // On acceptance, keep the spinner until appinstalled fires.
-    } catch {
+    setIsInstallingApp(true);
+    const outcome = await promptGuliInstall();
+    if (outcome === "dismissed" || outcome === "unavailable") {
       setIsInstallingApp(false);
       setInstallPromptEvent(null);
+      if (outcome === "unavailable") {
+        window.alert("O‘rnatish oynasi ochilmadi. Gulii.uz sahifasini Chrome’da qayta ochib, yana urinib ko‘ring.");
+      }
     }
+    // On acceptance, keep the spinner until the browser fires appinstalled.
   }, [installPromptEvent]);
 
   // Load active reels in a persisted randomized cycle, resuming at the first unseen Reel.
@@ -536,12 +529,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       <main className="reelsContainer reelsEmptyView reelsInstallGate">
         <div className="reelsEmptyContent reelsInstallGateContent">
           <div className="reelsInstallBrandIcon" aria-hidden="true">
-            <svg viewBox="0 0 64 64" role="img">
-              <rect x="7" y="15" width="50" height="43" rx="10" fill="#ff4d79" />
-              <path d="M10 15h44l7-10H17z" fill="#fff" stroke="#fff" strokeWidth="2" strokeLinejoin="round" />
-              <path d="M23 27v19l17-9.5z" fill="#fff" />
-              <path d="M21 7l7 8M34 6l7 9M47 6l5 8" stroke="#1f2937" strokeWidth="4" />
-            </svg>
+            <Reels3DIcon active width={120} height={120} />
           </div>
           <h2 className="reelsEmptyTitle reelsInstallGateTitle">Reels ko‘rish uchun</h2>
           <p className="reelsEmptySubtitle reelsInstallGateSubtitle">GULI MARKET’ni oching</p>
