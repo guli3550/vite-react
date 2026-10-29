@@ -1,15 +1,5 @@
 import { useEffect, useState } from "react";
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-}
-
-declare global {
-  interface WindowEventMap {
-    beforeinstallprompt: BeforeInstallPromptEvent;
-  }
-}
+import { promptGuliInstall, subscribeGuliInstallPrompt, type GuliBeforeInstallPromptEvent } from "../utils/pwaInstall";
 
 const DISMISS_KEY = "guli_pwa_install_dismissed_until";
 const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -22,7 +12,7 @@ function isStandalone() {
 }
 
 export function PwaInstallPrompt() {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installEvent, setInstallEvent] = useState<GuliBeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -35,22 +25,19 @@ export function PwaInstallPrompt() {
       if (until > Date.now()) return;
     } catch {}
 
-    const onBeforeInstall = (event: BeforeInstallPromptEvent) => {
-      event.preventDefault();
+    const unsubscribeInstallPrompt = subscribeGuliInstallPrompt((event) => {
       setInstallEvent(event);
-      window.setTimeout(() => setVisible(true), 1800);
-    };
+      if (event) window.setTimeout(() => setVisible(true), 1800);
+    });
 
     const onInstalled = () => {
       setVisible(false);
       setInstallEvent(null);
     };
 
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
-
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      unsubscribeInstallPrompt();
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
@@ -61,12 +48,10 @@ export function PwaInstallPrompt() {
     if (busy) return;
     setBusy(true);
     try {
-      await installEvent.prompt();
-      const choice = await installEvent.userChoice;
-      if (choice.outcome === "accepted") {
-        setVisible(false);
-      } else {
-        setVisible(false);
+      const outcome = await promptGuliInstall();
+      setInstallEvent(null);
+      setVisible(false);
+      if (outcome !== "accepted") {
         try {
           localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_MS));
         } catch {}
