@@ -1,5 +1,5 @@
 import type { ReelItem } from "../types/reels";
-import { BACKEND_API_URL, getSupabase } from "./supabaseClient";
+import { BACKEND_API_URL } from "./supabaseClient";
 
 type ApiResponse<T> = { success?: boolean; data?: T; message?: string };
 
