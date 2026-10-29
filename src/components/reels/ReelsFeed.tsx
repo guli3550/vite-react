@@ -708,9 +708,9 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       </span>
                     </div>
                     <span className="reelsActionCount">
-                      {reel.likesCount.toLocaleString("uz-UZ")}
+                      {(reel.likesCount + (reel.displayLikesCount || 0)).toLocaleString("uz-UZ")}
                     </span>
-                    {(reel.displayLikesCount || 0) > 0 && <span className="reelsActionCount" style={{ fontSize: "10px", opacity: 0.9 }}>(demo: {(reel.displayLikesCount || 0).toLocaleString("uz-UZ")})</span>}
+
                   </button>
 
                   {/* Comments Button */}
