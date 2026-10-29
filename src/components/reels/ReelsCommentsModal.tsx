@@ -5,6 +5,28 @@ import {
   type CommentsSheetHeight,
 } from "../../utils/reelsEngine";
 
+function formatCommentDateTime(value: string): string {
+  if (!value || value === "Hozirgina") return value;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+  const dateText = `${part("year")}-${part("month")}-${part("day")}`;
+  const timeText = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Tashkent",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+  return `${dateText} ${timeText}`;
+}
+
 interface ReelsCommentsModalProps {
   reel: ReelItem;
   isOpen: boolean;
@@ -253,7 +275,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
                       )}
                       {comment.createdAt && (
                         <span className="reelsCommentTime">
-                          {comment.createdAt}
+                          {formatCommentDateTime(comment.createdAt)}
                         </span>
                       )}
                     </div>
