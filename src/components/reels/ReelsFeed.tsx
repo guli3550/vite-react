@@ -23,6 +23,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onNavigateToCatalog,
 }) => {
   const [reels, setReels] = useState<ReelItem[]>([]);
+  const [isLoadingReels, setIsLoadingReels] = useState(true);
+  const [reelsLoadError, setReelsLoadError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [videoProgress, setVideoProgress] = useState(0);
@@ -62,12 +64,20 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     try {
       const active = await fetchPublicReels();
       setReels(active);
+      setReelsLoadError(null);
       if (active.length > 0 && currentIndex >= active.length) setCurrentIndex(0);
     } catch (error) {
       console.error("[Reels] Server lentasini yuklab bo'lmadi:", error);
-      const fallback = loadReelsFromStorage().filter((r) => r.status === "active");
+      const message = error instanceof Error ? error.message : "Server bilan aloqa yo‘q";
+      setReelsLoadError(message);
+      // Do not mask a failed server request with local demo videos on deployed sites.
+      const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+      const isDeployedSite = host === "gulii.uz" || host === "www.gulii.uz" || host.endsWith(".vercel.app");
+      const fallback = isDeployedSite ? [] : loadReelsFromStorage().filter((r) => r.status === "active");
       setReels(fallback);
       if (fallback.length > 0 && currentIndex >= fallback.length) setCurrentIndex(0);
+    } finally {
+      setIsLoadingReels(false);
     }
   }, [currentIndex]);
 
@@ -397,6 +407,37 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       videoEl.play().catch(() => {});
     }
   };
+
+  if (reels.length === 0 && isLoadingReels) {
+    return (
+      <main className="reelsContainer reelsEmptyView" aria-busy="true">
+        <div className="reelsEmptyContent">
+          <div className="reelsEmptyIcon">🎬</div>
+          <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
+          <p className="reelsEmptySubtitle">Videolar tayyorlanmoqda, biroz kuting.</p>
+        </div>
+      </main>
+    );
+  }
+
+  // Distinguish a server failure from a successfully loaded empty feed.
+  if (reels.length === 0 && reelsLoadError) {
+    return (
+      <main className="reelsContainer reelsEmptyView" role="alert">
+        <div className="reelsEmptyContent">
+          <div className="reelsEmptyIcon">⚠️</div>
+          <h2 className="reelsEmptyTitle">Reels serveriga ulanib bo‘lmadi</h2>
+          <p className="reelsEmptySubtitle">Demo videolar ko‘rsatilmayapti. Internet yoki server aloqasini tekshirib, qayta urinib ko‘ring.</p>
+          <div className="reelsEmptyActions">
+            <button type="button" className="reelsBtnPrimary" onClick={() => { setIsLoadingReels(true); void reloadReels(); }}>
+              🔄 Qayta urinish
+            </button>
+            {onBack && <button type="button" className="reelsBtnSecondary" onClick={onBack}>🏠 Bosh sahifaga qaytish</button>}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   // Empty State View
   if (reels.length === 0) {
