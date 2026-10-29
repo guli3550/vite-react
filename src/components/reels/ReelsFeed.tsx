@@ -23,6 +23,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onNavigateToCatalog,
 }) => {
   const [reels, setReels] = useState<ReelItem[]>([]);
+  const [isLoadingReels, setIsLoadingReels] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [videoProgress, setVideoProgress] = useState(0);
@@ -68,6 +69,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       const fallback = loadReelsFromStorage().filter((r) => r.status === "active");
       setReels(fallback);
       if (fallback.length > 0 && currentIndex >= fallback.length) setCurrentIndex(0);
+    } finally {
+      setIsLoadingReels(false);
     }
   }, [currentIndex]);
 
@@ -165,7 +168,9 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         }
       }
     }
-  }, [currentIndex, currentReel, isMuted]);
+  // Depend on the reel identity, not the whole reel object: view-count updates
+  // replace the object and must not restart playback from time zero.
+  }, [currentIndex, currentReel?.id]);
 
   // Navigate between reels
   const goToReel = useCallback(
@@ -397,6 +402,19 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       videoEl.play().catch(() => {});
     }
   };
+
+  // Avoid briefly showing the empty state while the server feed is still loading.
+  if (reels.length === 0 && isLoadingReels) {
+    return (
+      <main className="reelsContainer reelsEmptyView" aria-busy="true">
+        <div className="reelsEmptyContent">
+          <div className="reelsEmptyIcon">🎬</div>
+          <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
+          <p className="reelsEmptySubtitle">Videolar tayyorlanmoqda, biroz kuting.</p>
+        </div>
+      </main>
+    );
+  }
 
   // Empty State View
   if (reels.length === 0) {
