@@ -11,6 +11,22 @@ import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+declare global {
+  interface WindowEventMap {
+    beforeinstallprompt: BeforeInstallPromptEvent;
+  }
+}
+
+function isGuliInstalled(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+}
+
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
 
@@ -89,6 +105,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onOpenProduct,
   onNavigateToCatalog,
 }) => {
+  const [mustInstallForReels, setMustInstallForReels] = useState(() =>
+    typeof window !== "undefined" &&
+    !isGuliInstalled() &&
+    !window.Telegram?.WebApp?.initData
+  );
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstallInstructions, setShowInstallInstructions] = useState(false);
+  const [installingGuli, setInstallingGuli] = useState(false);
   const [reels, setReels] = useState<ReelItem[]>([]);
   const [isLoadingReels, setIsLoadingReels] = useState(true);
   const [reelsLoadError, setReelsLoadError] = useState<string | null>(null);
@@ -149,6 +173,54 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       setIsLoadingReels(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (window.Telegram?.WebApp?.initData) {
+      setMustInstallForReels(false);
+      return;
+    }
+
+    const syncInstalledState = () => setMustInstallForReels(!isGuliInstalled());
+    const onBeforeInstall = (event: BeforeInstallPromptEvent) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+    const onInstalled = () => {
+      setMustInstallForReels(false);
+      setInstallPromptEvent(null);
+      setShowInstallInstructions(false);
+    };
+
+    syncInstalledState();
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    document.addEventListener("visibilitychange", syncInstalledState);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+      document.removeEventListener("visibilitychange", syncInstalledState);
+    };
+  }, []);
+
+  const handleInstallGuliForReels = async () => {
+    if (!installPromptEvent) {
+      setShowInstallInstructions(true);
+      return;
+    }
+
+    setInstallingGuli(true);
+    try {
+      await installPromptEvent.prompt();
+      const choice = await installPromptEvent.userChoice;
+      if (choice.outcome === "accepted") setShowInstallInstructions(true);
+      setInstallPromptEvent(null);
+    } catch {
+      setShowInstallInstructions(true);
+    } finally {
+      setInstallingGuli(false);
+    }
+  };
 
   useEffect(() => {
     reloadReels();
@@ -479,13 +551,46 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
+  if (mustInstallForReels) {
+    return (
+      <main className="reelsContainer reelsEmptyView" role="region" aria-label="GULI MARKET ilovasini o‘rnatish">
+        <div className="reelsEmptyContent" style={{ maxWidth: 380, padding: "28px 24px" }}>
+          <div className="reelsEmptyIcon" style={{ fontSize: 58 }}>📲</div>
+          <h2 className="reelsEmptyTitle">Reels ko‘rish uchun GULI MARKET’ni o‘rnating</h2>
+          <p className="reelsEmptySubtitle">
+            Brauzerda Reels ko‘rish uchun avval GULI MARKET’ni qurilmangizga o‘rnating. O‘rnatilgach, ilovani bosh ekrandagi belgidan oching.
+          </p>
+          <div className="reelsEmptyActions" style={{ width: "100%" }}>
+            <button type="button" className="reelsBtnPrimary" onClick={() => void handleInstallGuliForReels()} disabled={installingGuli} style={{ width: "100%" }}>
+              {installingGuli ? "O‘rnatish oynasi ochilmoqda…" : "⬇️ GULI MARKET’ni o‘rnatish"}
+            </button>
+          </div>
+          {showInstallInstructions && (
+            <div style={{ marginTop: 18, color: "rgba(255,255,255,.88)", fontSize: 14, lineHeight: 1.55, textAlign: "left" }}>
+              <strong>O‘rnatish menyusi ko‘rinmasa:</strong>
+              <p style={{ margin: "8px 0 0" }}>Android/Chrome: yuqoridagi ⋮ menyu → “Ilovani o‘rnatish” yoki “Bosh ekranga qo‘shish”.</p>
+              <p style={{ margin: "6px 0 0" }}>iPhone/Safari: “Ulashish” → “Add to Home Screen” (“Bosh ekranga qo‘shish”).</p>
+              <button type="button" className="reelsBtnSecondary" style={{ marginTop: 12, width: "100%" }} onClick={() => {
+                if (isGuliInstalled()) {
+                  setMustInstallForReels(false);
+                  setShowInstallInstructions(false);
+                } else {
+                  setShowInstallInstructions(false);
+                }
+              }}>Tekshirish</button>
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   if (reels.length === 0 && isLoadingReels) {
     return (
       <main className="reelsContainer reelsEmptyView" aria-busy="true">
         <div className="reelsEmptyContent">
           <div className="reelsEmptyIcon">🎬</div>
           <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
-          <p className="reelsEmptySubtitle">Videolar tayyorlanmoqda, biroz kuting.</p>
         </div>
       </main>
     );
