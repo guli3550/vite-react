@@ -925,15 +925,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   onChange={(e) => {
                     const val = e.target.value;
                     setFormData((prev) => ({ ...prev, videoUrl: val }));
-                    if (isInstagramUrl(val) && !isAutoFetchingInsta) {
-                      handleInstagramAutoFetch(val);
-                    }
-                  }}
-                  onPaste={(e) => {
-                    const pasted = e.clipboardData.getData("text");
-                    if (isInstagramUrl(pasted)) {
-                      setTimeout(() => handleInstagramAutoFetch(pasted), 100);
-                    }
+                    // Keep the exact URL entered by the administrator. Instagram import is manual only.
+                    setInstaFetchStatus(null);
                   }}
                   style={{
                     width: "100%",
@@ -1008,12 +1001,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       src={formData.videoUrl}
                       controls
                       muted
-                      onError={(e) => {
-                        const videoEl = e.currentTarget;
-                        if (sampleVideoPresets.length > 0 && videoEl.src !== sampleVideoPresets[0].url) {
-                          videoEl.src = sampleVideoPresets[0].url;
-                          setFormData((prev) => ({ ...prev, videoUrl: sampleVideoPresets[0].url }));
-                        }
+                      onError={() => {
+                        // Never overwrite the administrator's URL with a demo URL on playback failure.
+                        notify("⚠️ Video ochilmadi. URL manzilini tekshiring yoki faylni qayta yuklang.");
                       }}
                       style={{ maxHeight: "180px", width: "100%", objectFit: "contain" }}
                     />
