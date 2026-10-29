@@ -38,6 +38,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     musicTitle: "",
     productId: "",
     status: "active" as ReelStatus,
+    displayLikesCount: "100",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -91,7 +92,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     const active = reels.filter((r) => r.status === "active").length;
     const drafts = reels.filter((r) => r.status === "draft").length;
     const totalViews = reels.reduce((acc, r) => acc + (r.viewsCount || 0), 0);
-    const totalLikes = reels.reduce((acc, r) => acc + (r.likesCount || 0), 0);
+    const totalLikes = reels.reduce((acc, r) => acc + (r.likesCount || 0) + (r.displayLikesCount || 0), 0);
     return { total, active, drafts, totalViews, totalLikes };
   }, [reels]);
 
@@ -105,6 +106,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       musicTitle: "",
       productId: "",
       status: "active",
+      displayLikesCount: "100",
     });
     setFormErrors({});
     setVideoFileName("");
@@ -122,6 +124,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       musicTitle: reel.musicTitle || "Guli Market — Original Audio",
       productId: reel.productId ? String(reel.productId) : "",
       status: reel.status,
+      displayLikesCount: String(reel.displayLikesCount ?? 100),
     });
     setFormErrors({});
     setIsFormModalOpen(true);
@@ -273,6 +276,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       videoUrl: formData.videoUrl.trim(),
       posterUrl: formData.posterUrl.trim(),
       musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
+      displayLikesCount: Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100)),
       productId: selectedProduct ? selectedProduct.id : undefined,
       productName: selectedProduct ? selectedProduct.name : undefined,
       productPrice: selectedProduct ? selectedProduct.price : undefined,
@@ -284,6 +288,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       videoUrl: formData.videoUrl.trim(),
       posterUrl: formData.posterUrl.trim(),
       musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
+      displayLikesCount: Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100)),
       author: { name: "Guli Market Official", username: "gulii.uz", avatar: "/guli-logo.png", verified: true },
       productId: selectedProduct ? selectedProduct.id : undefined,
       productName: selectedProduct ? selectedProduct.name : undefined,
@@ -443,7 +448,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
           <div style={{ fontSize: "24px", fontWeight: 900, color: "#2563eb", marginTop: "4px" }}>{stats.totalViews.toLocaleString("uz-UZ")}</div>
         </div>
         <div style={{ background: "#ffffff", padding: "16px", borderRadius: "14px", border: "1px solid #f0dfe3" }}>
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "#e11d48", textTransform: "uppercase" }}>Jami Like</span>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#e11d48", textTransform: "uppercase" }}>Jami Like (haqiqiy + demo)</span>
           <div style={{ fontSize: "24px", fontWeight: 900, color: "#e11d48", marginTop: "4px" }}>{stats.totalLikes.toLocaleString("uz-UZ")}</div>
         </div>
       </div>
@@ -712,7 +717,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: "12px", color: "#6e5d64", fontSize: "12px" }}>
                           <span title="Ko‘rishlar soni">👁️ {(reel.viewsCount || 0).toLocaleString("uz-UZ")}</span>
-                          <span title="Like soni">❤️ {reel.likesCount}</span>
+                          <span title="Haqiqiy like va demo ko‘rsatkich">❤️ {reel.likesCount + (reel.displayLikesCount || 0)} <small>(demo: {reel.displayLikesCount || 0})</small></span>
                           <span title="Izohlar soni">💬 {reel.comments.length || reel.commentsCount}</span>
                         </div>
                       </td>
@@ -1233,6 +1238,25 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                     boxSizing: "border-box",
                   }}
                 />
+              </div>
+
+              {/* Clearly labeled demo popularity count, separate from real user likes */}
+              <div>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
+                  ❤️ Namoyish like ko‘rsatkichi (demo)
+                </label>
+                <input
+                  type="number"
+                  min={100}
+                  max={5000}
+                  step={1}
+                  value={formData.displayLikesCount}
+                  onChange={(e) => setFormData({ ...formData, displayLikesCount: e.target.value })}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "12px", border: "1px solid #ebd4db", background: "#fdf5f7", fontSize: "13px", boxSizing: "border-box" }}
+                />
+                <p style={{ margin: "5px 0 0", fontSize: "11px", color: "#806f75" }}>
+                  100–5000 oralig‘ida. Bu haqiqiy foydalanuvchi like’lari emas; Reels oynasida namoyish ko‘rsatkichi sifatida belgilanadi.
+                </p>
               </div>
 
               {/* Action Buttons */}
