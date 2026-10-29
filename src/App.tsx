@@ -4383,22 +4383,6 @@ export default function App() {
         </div>
         <div className="headerActions">
           <button
-            className="iconButton adminNavBtn"
-            id="topbar-admin-btn"
-            onClick={() => {
-              try {
-                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
-              } catch {}
-              window.location.href = "/admin";
-            }}
-            aria-label="Admin panel"
-            title="Admin paneliga o'tish"
-          >
-            <span style={{ fontSize: "16px", display: "inline-flex", alignItems: "center" }}>
-              🛡️
-            </span>
-          </button>
-          <button
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"
             onClick={() => {
