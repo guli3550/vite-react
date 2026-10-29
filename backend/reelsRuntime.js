@@ -173,6 +173,24 @@ install("post", "/api/admin/reels/upload-url", requireAdmin, async (req, res) =>
   } catch (error) { return fail(res, error); }
 });
 
+// Direct binary upload avoids dependence on a browser Supabase anon key.
+install("post", "/api/admin/reels/upload", requireAdmin, require("express").raw({ type: () => true, limit: "100mb" }), async (req, res) => {
+  try {
+    const contentType = String(req.headers["content-type"] || "").toLowerCase().split(";")[0].trim();
+    const allowed = new Set(["video/mp4", "video/webm", "video/quicktime", "image/jpeg", "image/png", "image/webp", "image/avif"]);
+    if (!allowed.has(contentType)) return fail(res, new Error("Unsupported media type"), 400);
+    if (!Buffer.isBuffer(req.body) || !req.body.length) return fail(res, new Error("Uploaded file is empty"), 400);
+    const isVideo = contentType.startsWith("video/");
+    const extensionByType = { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif" };
+    const path = (isVideo ? "videos/" : "posters/") + require("crypto").randomUUID() + "." + extensionByType[contentType];
+    const bucket = "reels-media";
+    const { data, error } = await db().storage.from(bucket).upload(path, req.body, { contentType, upsert: false });
+    if (error) throw error;
+    const publicUrl = db().storage.from(bucket).getPublicUrl(data.path || path).data.publicUrl;
+    return res.status(201).json({ success: true, data: { path: data.path || path, publicUrl, bucket } });
+  } catch (error) { return fail(res, error, error?.statusCode === 413 ? 413 : 500); }
+});
+
 // Admin endpoints all require the same signed admin session as the existing panel.
 install("get", "/api/admin/reels", requireAdmin, async (_req, res) => {
   try { return res.json({ success: true, data: await fetchReels(null) }); }
