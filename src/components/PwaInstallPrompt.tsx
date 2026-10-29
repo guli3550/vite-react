@@ -1,33 +1,17 @@
 import { useEffect, useState } from "react";
+import { getGuliInstallPrompt, isGuliStandalone, promptGuliInstall, subscribeToGuliInstallPrompt, type GuliInstallPromptEvent } from "../lib/pwaInstall";
+import "./PwaInstallPrompt.css";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-}
+const DISMISS_KEY = "guli_pwa_install_dismissed_until_v2";
+const DISMISS_MS = 24 * 60 * 60 * 1000;
 
-declare global {
-  interface WindowEventMap {
-    beforeinstallprompt: BeforeInstallPromptEvent;
-  }
-}
-
-const DISMISS_KEY = "guli_pwa_install_dismissed_until";
-const DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
-
-function isStandalone() {
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone)
-  );
-}
-
-export function PwaInstallPrompt() {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+export function PwaInstallPrompt({ hidden = false }: { hidden?: boolean }) {
+  const [installEvent, setInstallEvent] = useState<GuliInstallPromptEvent | null>(getGuliInstallPrompt());
   const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (isStandalone()) return;
+    if (isGuliStandalone()) return;
     if (window.Telegram?.WebApp?.initData) return;
 
     try {
@@ -35,54 +19,44 @@ export function PwaInstallPrompt() {
       if (until > Date.now()) return;
     } catch {}
 
-    const onBeforeInstall = (event: BeforeInstallPromptEvent) => {
-      event.preventDefault();
-      setInstallEvent(event);
-      window.setTimeout(() => setVisible(true), 1800);
-    };
-
+    const unsubscribe = subscribeToGuliInstallPrompt(() => {
+      const available = getGuliInstallPrompt();
+      setInstallEvent(available);
+      if (available) window.setTimeout(() => setVisible(true), 350);
+    });
     const onInstalled = () => {
       setVisible(false);
       setInstallEvent(null);
+      setBusy(false);
     };
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      unsubscribe();
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
-  if (!visible || !installEvent) return null;
+  if (hidden || !visible || !installEvent || isGuliStandalone()) return null;
 
   const install = async () => {
     if (busy) return;
     setBusy(true);
-    try {
-      await installEvent.prompt();
-      const choice = await installEvent.userChoice;
-      if (choice.outcome === "accepted") {
-        setVisible(false);
-      } else {
-        setVisible(false);
-        try {
-          localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_MS));
-        } catch {}
-      }
-    } catch {
+    const outcome = await promptGuliInstall();
+    if (outcome === "accepted") {
       setVisible(false);
-    } finally {
+    } else {
       setBusy(false);
+      if (outcome === "dismissed") {
+        setVisible(false);
+        try { localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_MS)); } catch {}
+      }
     }
   };
 
   const later = () => {
     setVisible(false);
-    try {
-      localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_MS));
-    } catch {}
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now() + DISMISS_MS)); } catch {}
   };
 
   return (
@@ -94,22 +68,10 @@ export function PwaInstallPrompt() {
         <strong>GULI MARKET'ni o‘rnating</strong>
         <span>Sevimli do‘koningiz har doim yoningizda — tez, qulay va bir zumda!</span>
       </div>
-      <button
-        type="button"
-        className="guliPwaInstallButton"
-        onClick={() => void install()}
-        disabled={busy}
-      >
-        {busy ? "..." : "O‘rnatish"}
+      <button type="button" className="guliPwaInstallButton" onClick={() => void install()} disabled={busy}>
+        {busy ? <span className="guliPwaInstallSpinner" aria-label="O‘rnatilmoqda" /> : "O‘rnatish"}
       </button>
-      <button
-        type="button"
-        className="guliPwaInstallClose"
-        onClick={later}
-        aria-label="Keyinroq"
-      >
-        ×
-      </button>
+      <button type="button" className="guliPwaInstallClose" onClick={later} aria-label="Keyinroq">×</button>
     </aside>
   );
 }
