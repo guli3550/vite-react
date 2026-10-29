@@ -92,7 +92,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     const active = reels.filter((r) => r.status === "active").length;
     const drafts = reels.filter((r) => r.status === "draft").length;
     const totalViews = reels.reduce((acc, r) => acc + (r.viewsCount || 0), 0);
-    const totalLikes = reels.reduce((acc, r) => acc + (r.likesCount || 0) + (r.displayLikesCount || 0), 0);
+    const totalLikes = reels.reduce((acc, r) => acc + (r.likesCount || 0), 0);
     return { total, active, drafts, totalViews, totalLikes };
   }, [reels]);
 
@@ -448,7 +448,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
           <div style={{ fontSize: "24px", fontWeight: 900, color: "#2563eb", marginTop: "4px" }}>{stats.totalViews.toLocaleString("uz-UZ")}</div>
         </div>
         <div style={{ background: "#ffffff", padding: "16px", borderRadius: "14px", border: "1px solid #f0dfe3" }}>
-          <span style={{ fontSize: "11px", fontWeight: 700, color: "#e11d48", textTransform: "uppercase" }}>Jami Like (haqiqiy + demo)</span>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#e11d48", textTransform: "uppercase" }}>Haqiqiy like</span>
           <div style={{ fontSize: "24px", fontWeight: 900, color: "#e11d48", marginTop: "4px" }}>{stats.totalLikes.toLocaleString("uz-UZ")}</div>
         </div>
       </div>
@@ -717,7 +717,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: "12px", color: "#6e5d64", fontSize: "12px" }}>
                           <span title="Ko‘rishlar soni">👁️ {(reel.viewsCount || 0).toLocaleString("uz-UZ")}</span>
-                          <span title="Haqiqiy like va demo ko‘rsatkich">❤️ {reel.likesCount + (reel.displayLikesCount || 0)} <small>(demo: {reel.displayLikesCount || 0})</small></span>
+                          <span title="Haqiqiy foydalanuvchi like’lari">❤️ {reel.likesCount} (haqiqiy)</span>
+                          <small style={{ marginLeft: "6px", color: "#9f1239" }}>(demo: {reel.displayLikesCount || 0})</small>
                           <span title="Izohlar soni">💬 {reel.comments.length || reel.commentsCount}</span>
                         </div>
                       </td>
