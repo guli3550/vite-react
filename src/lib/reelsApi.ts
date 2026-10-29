@@ -34,6 +34,7 @@ export async function saveServerReel(reel: ReelItem, isEditing: boolean): Promis
     videoUrl: reel.videoUrl,
     posterUrl: reel.posterUrl,
     musicTitle: reel.musicTitle,
+    displayLikesCount: reel.displayLikesCount ?? 100,
     author: reel.author,
     productId: reel.productId,
     productName: reel.productName,
