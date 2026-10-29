@@ -876,7 +876,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
               {/* Video Upload & URL */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  🎬 Video yuklash yoki URL manzili *
+                  🎬 Video: qurilmadan yuklash YOKI URL *
                 </label>
 
                 {/* Direct File Upload Dropzone / Button */}
@@ -907,10 +907,14 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   )}
                 </div>
 
+                <p style={{ margin: "0 0 8px", fontSize: "11px", color: "#806f75" }}>
+                  Video faylini yuklasangiz, URL kiritish shart emas. URL orqali qo‘shsangiz, fayl yuklash shart emas. Kamida bittasini tanlang.
+                </p>
+
                 {/* URL Input */}
                 <input
                   type="text"
-                  placeholder="https://www.instagram.com/reel/... yoki fayl URL"
+                  placeholder="Ixtiyoriy: video fayl yuklamasangiz URL kiriting"
                   value={formData.videoUrl}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -1028,9 +1032,12 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
               {/* Poster / Cover Upload & URL */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  🖼️ Cover / Muqova rasmi (ixtiyoriy)
+                  🖼️ Cover / Muqova rasmi — ixtiyoriy
                 </label>
 
+                <p style={{ margin: "0 0 8px", fontSize: "11px", color: "#806f75" }}>
+                  Xohlasangiz rasm yuklang yoki URL kiriting. Ikkalasini ham bo‘sh qoldirsangiz bo‘ladi — video o‘zi saqlanadi.
+                </p>
                 <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
                   <label style={{ flex: 1, cursor: "pointer", padding: "8px 12px", background: "#fdf5f7", border: "1px dashed #ebd4db", borderRadius: "10px", fontSize: "12px", fontWeight: 700, color: "#b6536b", textAlign: "center" }}>
                     📷 Muqova rasmini yuklash
