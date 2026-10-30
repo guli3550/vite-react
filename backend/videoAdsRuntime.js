@@ -284,7 +284,7 @@ install("post", "/api/admin/video-ads", requireAdmin, async (req, res) => {
     if (posterUrl && !isValidUrl(posterUrl)) {
       return res.status(400).json({ success: false, message: "Poster URL formati noto‘g‘ri" });
     }
-    if (destinationUrl && !isValidUrl(destinationUrl)) {
+    if (destinationUrl && !isValidDestinationUrl(destinationUrl)) {
       return res.status(400).json({ success: false, message: "Manzil URL formati noto‘g‘ri (xavfli protokollar taqiqlangan)" });
     }
 
@@ -347,7 +347,7 @@ install("put", "/api/admin/video-ads/:id", requireAdmin, async (req, res) => {
     if (!title) return res.status(400).json({ success: false, message: "Reklama nomi talab qilinadi" });
     if (!videoUrl || !isValidUrl(videoUrl)) return res.status(400).json({ success: false, message: "Yaroqli video URL manzili kiriting" });
     if (posterUrl && !isValidUrl(posterUrl)) return res.status(400).json({ success: false, message: "Poster URL formati noto‘g‘ri" });
-    if (destinationUrl && !isValidUrl(destinationUrl)) return res.status(400).json({ success: false, message: "Manzil URL formati noto‘g‘ri" });
+    if (destinationUrl && !isValidDestinationUrl(destinationUrl)) return res.status(400).json({ success: false, message: "Manzil URL formati noto‘g‘ri" });
 
     const payload = {
       title,
@@ -597,18 +597,6 @@ function isValidUrl(value) {
   const input = String(value || "").trim();
   if (!input || /[\\u0000-\\u001f\\u007f\\\\]/.test(input)) return false;
 
-  // Allow same-site absolute paths (for example /catalog or /catalog?category=...),
-  // but reject protocol-relative URLs such as //evil.example.
-  if (input.startsWith("/")) {
-    if (input.startsWith("//")) return false;
-    try {
-      const parsed = new URL(input, "https://gulii.uz");
-      return parsed.origin === "https://gulii.uz";
-    } catch {
-      return false;
-    }
-  }
-
   try {
     const parsed = new URL(input);
     return (parsed.protocol === "https:" || parsed.protocol === "http:") &&
@@ -620,6 +608,24 @@ function isValidUrl(value) {
   }
 }
 
+// Destination links may be same-site routes or safe absolute HTTP(S) URLs.
+// Keep media URLs absolute-only so a relative path can never be used as a video source.
+function isValidDestinationUrl(value) {
+  const input = String(value || "").trim();
+  if (!input || /[\\u0000-\\u001f\\u007f\\\\]/.test(input)) return false;
+
+  if (input.startsWith("/")) {
+    if (input.startsWith("//")) return false;
+    try {
+      return new URL(input, "https://gulii.uz").origin === "https://gulii.uz";
+    } catch {
+      return false;
+    }
+  }
+
+  return isValidUrl(input);
+}
+
 function calculateCtr(clicks, impressions) {
   const totalImpressions = Number(impressions) || 0;
   const totalClicks = Number(clicks) || 0;
@@ -628,5 +634,6 @@ function calculateCtr(clicks, impressions) {
 
 module.exports = {
   isValidUrl,
+  isValidDestinationUrl,
   calculateCtr,
 };
