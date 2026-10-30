@@ -166,6 +166,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
     if (Math.abs(dy) > 85 && Math.abs(dy) > Math.abs(dx) * 1.15) {
       suppressClick.current = true;
+      window.setTimeout(() => { suppressClick.current = false; }, 450);
       if (dy > 0) {
         // Pulling the story down dismisses it with a shrinking slide animation.
         setIsDismissing(true);
@@ -180,6 +181,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
     if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.25) {
       suppressClick.current = true;
+      window.setTimeout(() => { suppressClick.current = false; }, 450);
       if (dx < 0) next();
       else previous();
     }
