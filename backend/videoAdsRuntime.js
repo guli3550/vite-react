@@ -594,9 +594,27 @@ install("post", "/api/admin/video-ads/upload", requireAdmin, async (req, res) =>
 
 // Shared validation helpers used by the video-ad API routes.
 function isValidUrl(value) {
+  const input = String(value || "").trim();
+  if (!input || /[\\u0000-\\u001f\\u007f\\\\]/.test(input)) return false;
+
+  // Allow same-site absolute paths (for example /catalog or /catalog?category=...),
+  // but reject protocol-relative URLs such as //evil.example.
+  if (input.startsWith("/")) {
+    if (input.startsWith("//")) return false;
+    try {
+      const parsed = new URL(input, "https://gulii.uz");
+      return parsed.origin === "https://gulii.uz";
+    } catch {
+      return false;
+    }
+  }
+
   try {
-    const parsed = new URL(String(value || "").trim());
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    const parsed = new URL(input);
+    return (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      Boolean(parsed.hostname) &&
+      !parsed.username &&
+      !parsed.password;
   } catch {
     return false;
   }
