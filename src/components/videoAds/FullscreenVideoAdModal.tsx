@@ -48,6 +48,31 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const retryCountRef = useRef(0);
   const endedWhileInfoOpenRef = useRef(false);
 
+  // Warm every active story video when the viewer opens. Detached media elements
+  // let the browser populate its normal HTTP media cache before the user swipes.
+  useEffect(() => {
+    if (!isOpen) return;
+    const warmPlayers: HTMLVideoElement[] = [];
+    const urls = Array.from(new Set(gallery.map((item) => item.video_url).filter(Boolean)));
+    urls.forEach((url) => {
+      const warmPlayer = document.createElement("video");
+      warmPlayer.preload = "auto";
+      warmPlayer.muted = true;
+      warmPlayer.playsInline = true;
+      warmPlayer.setAttribute("playsinline", "");
+      warmPlayer.src = url;
+      warmPlayers.push(warmPlayer);
+      warmPlayer.load();
+    });
+    return () => {
+      warmPlayers.forEach((player) => {
+        player.pause();
+        player.removeAttribute("src");
+        player.load();
+      });
+    };
+  }, [isOpen, gallery]);
+
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
     try {
       const apiBase = getApiBaseUrl();
