@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
 import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
+import "./RotatingCategorySection.css";
 
 export type { CategoryInfo };
 
