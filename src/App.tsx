@@ -838,11 +838,6 @@ export default function App() {
   const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(false);
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
 
-  // Any navigation path (including Android/browser Back) that returns to Home
-  // starts the home ad panel fresh for the new visit.
-  useEffect(() => {
-    if (page === "home") setHomeVideoAdsDismissed(false);
-  }, [page]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -2419,6 +2414,7 @@ export default function App() {
     if (page === "product" || selectedProduct) {
       setSelectedProduct(null);
       const target = previousPage && previousPage !== "product" ? previousPage : "home";
+      if (target === "home") setHomeVideoAdsDismissed(false);
       setPage(target);
       return true;
     }
@@ -2428,6 +2424,7 @@ export default function App() {
       setSelectedCategory("Barchasi");
       setSearch("");
       if (page !== "home") {
+        setHomeVideoAdsDismissed(false);
         setPage("home");
         setPageHistory(["home"]);
       }
@@ -2440,12 +2437,14 @@ export default function App() {
       nextHistory.pop(); // remove current page
       const prev = nextHistory[nextHistory.length - 1] || "home";
       setPageHistory(nextHistory);
+      if (prev === "home") setHomeVideoAdsDismissed(false);
       setPage(prev);
       return true;
     }
 
     // 5. If not on home, return to Home
     if (page !== "home") {
+      setHomeVideoAdsDismissed(false);
       setPage("home");
       setPageHistory(["home"]);
       return true;
