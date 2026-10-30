@@ -1,25 +1,33 @@
 export interface GuliInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform?: string }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
 let deferredPrompt: GuliInstallPromptEvent | null = null;
-const subscribers = new Set<() => void>();
-
-function notifySubscribers() {
-  subscribers.forEach((subscriber) => subscriber());
-}
+const listeners = new Set<() => void>();
 
 if (typeof window !== "undefined") {
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredPrompt = event as GuliInstallPromptEvent;
-    notifySubscribers();
+  window.addEventListener("beforeinstallprompt", (e: Event) => {
+    e.preventDefault();
+    deferredPrompt = e as GuliInstallPromptEvent;
+    listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (err) {
+        console.error("Install prompt listener error:", err);
+      }
+    });
   });
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
-    notifySubscribers();
+    listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (err) {
+        console.error("App installed listener error:", err);
+      }
+    });
   });
 }
 
@@ -27,31 +35,32 @@ export function getGuliInstallPrompt(): GuliInstallPromptEvent | null {
   return deferredPrompt;
 }
 
-export function subscribeToGuliInstallPrompt(subscriber: () => void): () => void {
-  subscribers.add(subscriber);
-  subscriber();
-  return () => subscribers.delete(subscriber);
+export function isGuliStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  const isDisplayStandalone = window.matchMedia("(display-mode: standalone)").matches;
+  const isIosStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  return isDisplayStandalone || isIosStandalone;
 }
 
 export async function promptGuliInstall(): Promise<"accepted" | "dismissed" | "unavailable"> {
-  const event = deferredPrompt;
-  if (!event) return "unavailable";
-
+  if (!deferredPrompt) return "unavailable";
   try {
-    await event.prompt();
-    const choice = await event.userChoice;
-    deferredPrompt = null;
-    notifySubscribers();
-    return choice.outcome;
-  } catch {
-    deferredPrompt = null;
-    notifySubscribers();
+    await deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      deferredPrompt = null;
+      return "accepted";
+    }
+    return "dismissed";
+  } catch (err) {
+    console.error("Error invoking PWA install prompt:", err);
     return "unavailable";
   }
 }
 
-export function isGuliStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(display-mode: standalone)").matches ||
-    Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+export function subscribeToGuliInstallPrompt(callback: () => void): () => void {
+  listeners.add(callback);
+  return () => {
+    listeners.delete(callback);
+  };
 }

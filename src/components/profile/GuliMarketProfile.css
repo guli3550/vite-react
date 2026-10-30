@@ -1,0 +1,672 @@
+/* Guli Market Instagram-Style Brand Profile Styles */
+
+.brandProfileContainer {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: #ffffff;
+  color: var(--text-main, #1e1b1d);
+  padding-bottom: 90px;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-theme="dark"] .brandProfileContainer {
+  background: #0f0f11;
+  color: #f3f4f6;
+}
+
+/* Sticky Instagram Top Bar */
+.brandProfileTopBar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 52px;
+}
+
+[data-theme="dark"] .brandProfileTopBar {
+  background: rgba(15, 15, 17, 0.92);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.brandProfileBackBtn,
+.brandProfileShareBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+  padding: 0;
+}
+
+.brandProfileBackBtn:active,
+.brandProfileShareBtn:active {
+  transform: scale(0.92);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .brandProfileBackBtn:active,
+[data-theme="dark"] .brandProfileShareBtn:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brandProfileTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brandProfileHandle {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: inherit;
+}
+
+.brandProfileVerifiedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #0284c7;
+}
+
+.brandProfileVerifiedBadge svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Header Info Section */
+.brandProfileHeader {
+  padding: 16px 16px 12px 16px;
+}
+
+.brandProfileTopRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Profile Picture with Story Ring */
+.brandProfileAvatarWrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(220, 39, 67, 0.22);
+}
+
+.brandProfileAvatarInner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #ffffff;
+  padding: 2px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-theme="dark"] .brandProfileAvatarInner {
+  background: #18181b;
+}
+
+.brandProfileAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Stats Row */
+.brandProfileStats {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.brandProfileStatItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 8px;
+  transition: opacity 0.15s ease;
+}
+
+.brandProfileStatItem:active {
+  opacity: 0.65;
+}
+
+.brandProfileStatNumber {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: inherit;
+}
+
+.brandProfileStatLabel {
+  font-size: 12.5px;
+  color: var(--text-muted, #71717a);
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .brandProfileStatLabel {
+  color: #a1a1aa;
+}
+
+/* Bio Section */
+.brandProfileBio {
+  margin-top: 14px;
+}
+
+.brandProfileDisplayName {
+  font-size: 15px;
+  font-weight: 700;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.brandProfileCategoryTag {
+  font-size: 12px;
+  color: var(--text-muted, #8b5e68);
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+[data-theme="dark"] .brandProfileCategoryTag {
+  color: #fda4af;
+}
+
+.brandProfileBioText {
+  font-size: 13.5px;
+  line-height: 1.45;
+  margin-top: 6px;
+  color: inherit;
+  white-space: pre-line;
+}
+
+.brandProfileLinksList {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brandProfileLinkItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0284c7;
+  text-decoration: none;
+  width: fit-content;
+}
+
+[data-theme="dark"] .brandProfileLinkItem {
+  color: #38bdf8;
+}
+
+.brandProfileLinkItem:hover {
+  text-decoration: underline;
+}
+
+/* Action Buttons */
+.brandProfileActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.brandProfileFollowBtn {
+  flex: 1.2;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+  background: #e11d48;
+  color: #ffffff;
+}
+
+.brandProfileFollowBtn.following {
+  background: rgba(0, 0, 0, 0.07);
+  color: inherit;
+}
+
+[data-theme="dark"] .brandProfileFollowBtn.following {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f3f4f6;
+}
+
+.brandProfileFollowBtn:active {
+  transform: scale(0.97);
+}
+
+.brandProfileActionBtn {
+  flex: 1;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.04);
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+[data-theme="dark"] .brandProfileActionBtn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.brandProfileActionBtn:active {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+/* Highlights Section - Circular Ad Marquee Container */
+.brandProfileHighlights {
+  padding: 8px 0;
+  width: 100%;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+}
+
+[data-theme="dark"] .brandProfileHighlights {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Instagram Content Tabs Bar */
+.brandProfileTabsBar {
+  display: flex;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 52px;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .brandProfileTabsBar {
+  background: rgba(15, 15, 17, 0.95);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.brandProfileTabBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted, #71717a);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme="dark"] .brandProfileTabBtn {
+  color: #71717a;
+}
+
+.brandProfileTabBtn.active {
+  color: #e11d48;
+  border-bottom-color: #e11d48;
+}
+
+[data-theme="dark"] .brandProfileTabBtn.active {
+  color: #fb7185;
+  border-bottom-color: #fb7185;
+}
+
+.brandProfileTabIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brandProfileTabCount {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+
+[data-theme="dark"] .brandProfileTabCount {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.brandProfileTabBtn.active .brandProfileTabCount {
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
+}
+
+[data-theme="dark"] .brandProfileTabBtn.active .brandProfileTabCount {
+  background: rgba(251, 113, 133, 0.2);
+  color: #fecdd3;
+}
+
+/* Grid Sections: 3-column Instagram Grid */
+.brandProfileGridWrap {
+  padding: 3px;
+}
+
+.brandProfileProductGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+
+.brandProfileProductTile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: #f1f1f3;
+  overflow: hidden;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+[data-theme="dark"] .brandProfileProductTile {
+  background: #1c1c20;
+}
+
+.brandProfileProductTile:active {
+  opacity: 0.85;
+}
+
+.brandProfileProductImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.brandProfileProductTile:hover .brandProfileProductImg {
+  transform: scale(1.04);
+}
+
+.brandProfileProductBadge {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  right: 5px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* Reels Tab: 3-column Vertical (9:16) Grid */
+.brandProfileReelsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+}
+
+.brandProfileReelTile {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  background: #18181b;
+  overflow: hidden;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+.brandProfileReelTile:active {
+  opacity: 0.85;
+}
+
+.brandProfileReelPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.brandProfileReelTile:hover .brandProfileReelPoster {
+  transform: scale(1.04);
+}
+
+.brandProfileReelOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, transparent 40%, rgba(0, 0, 0, 0.75) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px 6px;
+}
+
+.brandProfileReelTopIcon {
+  align-self: flex-end;
+  color: #ffffff;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.brandProfileReelViews {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+.brandProfileReelViews svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Ads Tab: 3-column Vertical Grid with Ad Tag */
+.brandProfileAdTile {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  background: #18181b;
+  overflow: hidden;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  display: block;
+  width: 100%;
+}
+
+.brandProfileAdTile:active {
+  opacity: 0.85;
+}
+
+.brandProfileAdPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.brandProfileAdBadge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 6px;
+  background: rgba(225, 29, 72, 0.9);
+  color: #ffffff;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.brandProfileAdCaption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 6px;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 100%);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty State */
+.brandProfileEmptyState {
+  padding: 60px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.brandProfileEmptyIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  opacity: 0.4;
+}
+
+.brandProfileEmptyTitle {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+}
+
+.brandProfileEmptyDesc {
+  font-size: 13.5px;
+  color: var(--text-muted, #71717a);
+  max-width: 280px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Load More Button */
+.brandProfileLoadMoreWrap {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.brandProfileLoadMoreBtn {
+  padding: 9px 22px;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-theme="dark"] .brandProfileLoadMoreBtn {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.brandProfileLoadMoreBtn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Responsive tweaks for narrow mobile screens (360px) */
+@media (max-width: 380px) {
+  .brandProfileAvatarWrap {
+    width: 72px;
+    height: 72px;
+  }
+  .brandProfileTopRow {
+    gap: 12px;
+  }
+  .brandProfileStatNumber {
+    font-size: 15px;
+  }
+  .brandProfileStatLabel {
+    font-size: 11px;
+  }
+  .brandProfileActions {
+    flex-wrap: wrap;
+  }
+  .brandProfileFollowBtn {
+    flex-basis: 100%;
+  }
+}

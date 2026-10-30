@@ -159,10 +159,10 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
     : "Telegram orqali kirish";
 
   const defaultSubtitle = isRu
-    ? "Ваш номер телефона будет безопасно подтвержден через Telegram. Вводить OTP вручную не требуется."
+    ? "Ваш номер телефона будет безопасно подтвержден через Telegram."
     : isEn
-    ? "Your phone number will be securely verified via Telegram. No manual OTP entry required."
-    : "Telefon raqamingiz Telegram orqali xavfsiz tasdiqlanadi. OTP kodni qo‘lda kiritish shart emas.";
+    ? "Your phone number will be securely verified via Telegram."
+    : "Telefon raqamingiz Telegram orqali xavfsiz tasdiqlanadi.";
 
   const title = customTitle || defaultTitle;
   const subtitle = customSubtitle || defaultSubtitle;
@@ -221,33 +221,70 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({
         }}
       >
         {/* GULI brand header */}
-        <div style={{ textAlign: "center", marginBottom: 18 }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <div
             style={{
-              width: 52,
-              height: 52,
-              margin: "0 auto 10px auto",
+              width: 62,
+              height: 62,
+              margin: "0 auto 12px auto",
               borderRadius: "50%",
-              overflow: "hidden",
-              background: "var(--bg-card-sub, #faf1f3)",
-              border: "1px solid var(--border-color, #f0dfe3)",
-              boxShadow: "0 8px 22px rgba(189,82,106,.18)",
-              display: "grid",
-              placeItems: "center",
+              padding: 3,
+              background: "linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)",
+              boxShadow: "0 8px 24px rgba(225, 29, 72, 0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <img
-              src={GULI_LOGO_BASE64}
-              alt="GULI"
-              draggable={false}
-              style={{ width: "100%", height: "100%", objectFit: "contain", padding: 5, boxSizing: "border-box" }}
-            />
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: "50%",
+                background: "#ffffff",
+                padding: 3,
+                display: "grid",
+                placeItems: "center",
+                overflow: "hidden",
+                boxSizing: "border-box",
+              }}
+            >
+              <img
+                src={GULI_LOGO_BASE64}
+                alt="GULI Market"
+                draggable={false}
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
+            </div>
           </div>
-          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: "var(--text-main, #21191c)" }}>
+
+          <div
+            style={{
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontSize: 18,
+              fontWeight: 800,
+              letterSpacing: "4px",
+              background: "linear-gradient(135deg, #9f1239 0%, #e11d48 50%, #8f2945 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              filter: "drop-shadow(0 2px 4px rgba(159, 18, 57, 0.12))",
+              textTransform: "uppercase",
+            }}
+          >
             GULI MARKET
           </div>
-          <div style={{ fontSize: 10.5, color: "var(--text-muted, #8b787e)", marginTop: 2 }}>
-            {isRu ? "Красота всегда с вами" : isEn ? "Beauty is always with you" : "Go‘zallik har doim siz bilan"}
+
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: "1px",
+              color: "var(--primary, #e11d48)",
+              marginTop: 4,
+              opacity: 0.85,
+            }}
+          >
+            ✨ RASMIY BREND DO‘KONI ✨
           </div>
         </div>
 

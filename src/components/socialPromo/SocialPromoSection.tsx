@@ -7,6 +7,8 @@ import type { Language } from "../../utils/translations";
 interface SocialPromoSectionProps {
   language?: Language;
   isDark?: boolean;
+  variant?: "pill" | "highlight";
+  maxRows?: number;
 }
 
 const ROWS: ReadonlyArray<1 | 2 | 3> = [1, 2, 3];
@@ -19,6 +21,8 @@ const FALLBACK_SETTINGS: SocialPromoRowSetting[] = [
 export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
   language = "uz",
   isDark = false,
+  variant = "pill",
+  maxRows,
 }) => {
   const isRu = language === "ru";
   const isEn = language === "en";
@@ -60,20 +64,27 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
     };
   }, [load]);
 
+  const effectiveMaxRows = maxRows || (variant === "highlight" ? 1 : 3);
+
   const visibleRows = ROWS.map((rowNumber) => {
     const setting = settings.find((entry) => entry.row_number === rowNumber);
+    // If highlight variant, fallback items to all items if row items empty
+    const rowItems = items.filter((item) => item.row_number === rowNumber);
+    const finalItems = (variant === "highlight" && rowItems.length === 0 && rowNumber === 1) ? items : rowItems;
     return {
       rowNumber,
-      items: items.filter((item) => item.row_number === rowNumber),
+      items: finalItems,
       setting,
     };
-  }).filter(({ items: rowItems, setting }) => rowItems.length > 0 && setting?.is_enabled !== false);
+  })
+    .filter(({ items: rowItems, setting }) => rowItems.length > 0 && setting?.is_enabled !== false)
+    .slice(0, effectiveMaxRows);
 
   if (!isLoading && visibleRows.length === 0) return null;
 
   return (
     <section
-      className="guli-social-promo-section"
+      className={`guli-social-promo-section ${variant === "highlight" ? "is-highlight-mode" : ""}`}
       aria-label={isRu ? "Социальные сети GULI" : isEn ? "GULI social media" : "GULI ijtimoiy tarmoqlari"}
       style={{
         width: "100%",
@@ -91,7 +102,7 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: "10px",
+          gap: variant === "highlight" ? "6px" : "10px",
           width: "100%",
           minWidth: 0,
           opacity: isLoading && items.length === 0 ? 0.6 : 1,
@@ -105,6 +116,7 @@ export const SocialPromoSection: React.FC<SocialPromoSectionProps> = ({
             items={rowItems}
             setting={setting}
             isDark={isDark}
+            variant={variant}
           />
         ))}
       </div>

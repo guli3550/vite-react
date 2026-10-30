@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
-import { loadReelsFromStorage } from "../../data/demoReels";
-import { fetchPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
+import { loadReelsFromStorage, saveReelsToStorage } from "../../data/demoReels";
 import {
   isIndexPreloaded,
   evaluateSwipeGesture,
@@ -10,8 +9,6 @@ import {
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
-import { Reels3DIcon } from "../Nav3DIcons";
-import { getGuliInstallPrompt, isGuliStandalone, promptGuliInstall, subscribeToGuliInstallPrompt, type GuliInstallPromptEvent } from "../../lib/pwaInstall";
 import "./Reels.css";
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
@@ -84,16 +81,22 @@ interface ReelsFeedProps {
   onBack?: () => void;
   onOpenProduct?: (productId: string | number) => void;
   onNavigateToCatalog?: () => void;
+  onOpenBrandProfile?: () => void;
+  initialReelId?: string;
+  initialIndex?: number;
+  onActiveIndexChange?: (index: number) => void;
 }
 
 export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onBack,
   onOpenProduct,
   onNavigateToCatalog,
+  onOpenBrandProfile,
+  initialReelId,
+  initialIndex,
+  onActiveIndexChange,
 }) => {
   const [reels, setReels] = useState<ReelItem[]>([]);
-  const [isLoadingReels, setIsLoadingReels] = useState(true);
-  const [reelsLoadError, setReelsLoadError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [videoProgress, setVideoProgress] = useState(0);
@@ -102,9 +105,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [showBrowserInstallGate, setShowBrowserInstallGate] = useState(false);
-  const [installPromptEvent, setInstallPromptEvent] = useState<GuliInstallPromptEvent | null>(getGuliInstallPrompt());
-  const [isInstallingApp, setIsInstallingApp] = useState(false);
 
   // Big popping heart on double-tap
   const [showHeartAnim, setShowHeartAnim] = useState(false);
@@ -131,69 +131,37 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Video element references map
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
-  // Require browser visitors to install the GULI MARKET PWA before viewing Reels.
-  // Installed standalone app and Telegram Mini App users bypass this gate.
-  useEffect(() => {
-    const isTelegramMiniApp = Boolean((window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData);
-    setShowBrowserInstallGate(!isGuliStandalone() && !isTelegramMiniApp);
-
-    const unsubscribeInstallPrompt = subscribeToGuliInstallPrompt(() => {
-      setInstallPromptEvent(getGuliInstallPrompt());
-    });
-    const handleAppInstalled = () => {
-      setIsInstallingApp(false);
-      setShowBrowserInstallGate(false);
-      // Keep the site on its app start URL. Whether Chrome immediately switches
-      // into the newly installed PWA is controlled by the browser.
-      window.location.replace("/");
-    };
-    window.addEventListener("appinstalled", handleAppInstalled);
-    return () => {
-      unsubscribeInstallPrompt();
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
-  }, []);
-
-  const handleInstallApp = useCallback(async () => {
-    if (!installPromptEvent) {
-      window.alert("Bu brauzer hozir tezkor o‘rnatish oynasini bermadi. Chrome yangilanganini tekshirib, sahifani qayta oching.");
-      return;
-    }
-    setIsInstallingApp(true);
-    const outcome = await promptGuliInstall();
-    if (outcome === "dismissed" || outcome === "unavailable") {
-      setIsInstallingApp(false);
-      setInstallPromptEvent(null);
-      if (outcome === "unavailable") {
-        window.alert("O‘rnatish oynasi ochilmadi. Gulii.uz sahifasini Chrome’da qayta ochib, yana urinib ko‘ring.");
-      }
-    }
-    // On acceptance, keep the spinner until the browser fires appinstalled.
-  }, [installPromptEvent]);
-
   // Load active reels in a persisted randomized cycle, resuming at the first unseen Reel.
-  const reloadReels = useCallback(async () => {
+  const reloadReels = useCallback(() => {
+    let list: ReelItem[] = [];
+    let startIdx = 0;
     try {
-      const active = await fetchPublicReels();
+      const all = loadReelsFromStorage();
+      const active = all.filter((r) => r.status === "active");
       const cycle = prepareReelsCycle(active);
-      setReels(cycle.reels);
-      setCurrentIndex(cycle.startIndex);
-      setReelsLoadError(null);
-    } catch (error) {
-      console.error("[Reels] Server lentasini yuklab bo'lmadi:", error);
-      const message = error instanceof Error ? error.message : "Server bilan aloqa yo‘q";
-      setReelsLoadError(message);
-      // Do not mask a failed server request with local demo videos on deployed sites.
-      const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
-      const isDeployedSite = host === "gulii.uz" || host === "www.gulii.uz" || host.endsWith(".vercel.app");
-      const fallback = isDeployedSite ? [] : loadReelsFromStorage().filter((r) => r.status === "active");
-      const cycle = prepareReelsCycle(fallback);
-      setReels(cycle.reels);
-      setCurrentIndex(cycle.startIndex);
-    } finally {
-      setIsLoadingReels(false);
+      list = cycle.reels;
+      startIdx = cycle.startIndex;
+    } catch {
+      const all = loadReelsFromStorage();
+      const active = all.filter((r) => r.status === "active");
+      list = active;
+      startIdx = 0;
     }
-  }, []);
+
+    if (initialReelId) {
+      const found = list.findIndex((r) => r.id === initialReelId);
+      if (found !== -1) startIdx = found;
+    } else if (typeof initialIndex === "number" && initialIndex >= 0 && initialIndex < list.length) {
+      startIdx = initialIndex;
+    }
+
+    setReels(list);
+    setCurrentIndex(startIdx);
+  }, [initialReelId, initialIndex]);
+
+  useEffect(() => {
+    onActiveIndexChange?.(currentIndex);
+  }, [currentIndex, onActiveIndexChange]);
 
   useEffect(() => {
     reloadReels();
@@ -217,9 +185,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
     viewedReelIdsRef.current.add(currentReel.id);
     markReelSeen(currentReel.id);
-    recordServerReelView(currentReel.id).then(({ viewsCount }) => {
-      setReels((previous) => previous.map((r) => r.id === currentReel.id ? { ...r, viewsCount } : r));
-    }).catch((error) => console.warn("[Reels] Ko'rish statistikasi saqlanmadi:", error));
+    const all = loadReelsFromStorage();
+    const updated = all.map((r) => {
+      if (r.id === currentReel.id) {
+        return { ...r, viewsCount: (r.viewsCount || 0) + 1 };
+      }
+      return r;
+    });
+    saveReelsToStorage(updated);
   }, [currentReel?.id]);
 
   const showToast = useCallback((msg: string) => {
@@ -455,17 +428,38 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   };
 
   // Like Reel handler
-  const handleToggleLike = useCallback(async () => {
+  const handleToggleLike = useCallback(() => {
     if (!currentReel) return;
-    try {
-      const result = await toggleServerReelLike(currentReel.id);
-      setReels((previous) => previous.map((r) => r.id === currentReel.id
-        ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount }
-        : r));
-      if (result.isLiked) showToast("❤️ Sizga yoqdi");
-    } catch (error) {
-      console.error("[Reels] Like saqlanmadi:", error);
-      showToast("Like saqlanmadi. Server aloqasini tekshiring.");
+    const all = loadReelsFromStorage();
+    const updated = all.map((r) => {
+      if (r.id === currentReel.id) {
+        const nextLiked = !r.isLiked;
+        return {
+          ...r,
+          isLiked: nextLiked,
+          likesCount: nextLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
+        };
+      }
+      return r;
+    });
+
+    saveReelsToStorage(updated);
+    setReels((prev) =>
+      prev.map((r) => {
+        if (r.id === currentReel.id) {
+          const nextLiked = !r.isLiked;
+          return {
+            ...r,
+            isLiked: nextLiked,
+            likesCount: nextLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
+          };
+        }
+        return r;
+      })
+    );
+
+    if (!currentReel.isLiked) {
+      showToast("❤️ Sizga yoqdi");
     }
   }, [currentReel, showToast]);
 
@@ -494,17 +488,33 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   };
 
   // Add Comment handler
-  const handleAddComment = async (reelId: string, newComment: ReelComment) => {
-    try {
-      const saved = await addServerReelComment(reelId, newComment.text);
-      setReels((previous) => previous.map((r) => r.id === reelId
-        ? { ...r, commentsCount: r.commentsCount + 1, comments: [saved, ...r.comments] }
-        : r));
-      showToast("✓ Izoh serverda saqlandi!");
-    } catch (error) {
-      console.error("[Reels] Izoh saqlanmadi:", error);
-      showToast("Izoh yuborilmadi. Server aloqasini tekshiring.");
-    }
+  const handleAddComment = (reelId: string, newComment: ReelComment) => {
+    const all = loadReelsFromStorage();
+    const updated = all.map((r) => {
+      if (r.id === reelId) {
+        return {
+          ...r,
+          commentsCount: (r.commentsCount || 0) + 1,
+          comments: [newComment, ...(r.comments || [])],
+        };
+      }
+      return r;
+    });
+
+    saveReelsToStorage(updated);
+    setReels((prev) =>
+      prev.map((r) => {
+        if (r.id === reelId) {
+          return {
+            ...r,
+            commentsCount: (r.commentsCount || 0) + 1,
+            comments: [newComment, ...(r.comments || [])],
+          };
+        }
+        return r;
+      })
+    );
+    showToast("✓ Izohingiz qoldirildi!");
   };
 
   // Never replace a failed reel with an unrelated sample video.
@@ -523,59 +533,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       videoEl.play().catch(() => {});
     }
   };
-
-  if (showBrowserInstallGate) {
-    return (
-      <main className="reelsContainer reelsEmptyView reelsInstallGate">
-        <div className="reelsEmptyContent reelsInstallGateContent">
-          <div className="reelsInstallBrandIcon" aria-hidden="true">
-            <Reels3DIcon active width={120} height={120} />
-          </div>
-          <h2 className="reelsEmptyTitle reelsInstallGateTitle">Reels ko‘rish uchun</h2>
-          <p className="reelsEmptySubtitle reelsInstallGateSubtitle">GULI MARKET’ni oching</p>
-          <button type="button" className="reelsInstallIconButton" onClick={() => void handleInstallApp()} aria-label="GULI MARKET’ni o‘rnatish" disabled={isInstallingApp}>
-            {isInstallingApp ? (
-              <span className="reelsInstallSpinner" aria-hidden="true" />
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 16v4h14v-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (reels.length === 0 && isLoadingReels) {
-    return (
-      <main className="reelsContainer reelsEmptyView" aria-busy="true">
-        <div className="reelsEmptyContent">
-          <div className="reelsEmptyIcon">🎬</div>
-          <h2 className="reelsEmptyTitle">Reels yuklanmoqda…</h2>
-        </div>
-      </main>
-    );
-  }
-
-  // Distinguish a server failure from a successfully loaded empty feed.
-  if (reels.length === 0 && reelsLoadError) {
-    return (
-      <main className="reelsContainer reelsEmptyView" role="alert">
-        <div className="reelsEmptyContent">
-          <div className="reelsEmptyIcon">⚠️</div>
-          <h2 className="reelsEmptyTitle">Reels serveriga ulanib bo‘lmadi</h2>
-          <p className="reelsEmptySubtitle">Demo videolar ko‘rsatilmayapti. Internet yoki server aloqasini tekshirib, qayta urinib ko‘ring.</p>
-          <div className="reelsEmptyActions">
-            <button type="button" className="reelsBtnPrimary" onClick={() => { setIsLoadingReels(true); void reloadReels(); }}>
-              🔄 Qayta urinish
-            </button>
-            {onBack && <button type="button" className="reelsBtnSecondary" onClick={onBack}>🏠 Bosh sahifaga qaytish</button>}
-          </div>
-        </div>
-      </main>
-    );
-  }
 
   // Empty State View
   if (reels.length === 0) {
@@ -637,7 +594,58 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
       {/* Main Viewport */}
       <div className="reelsViewport">
+        {/* Top Bar Overlay */}
+        <header className="reelsTopBar">
+          <button
+            type="button"
+            className="reelsTopBrandBadge"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenBrandProfile?.();
+            }}
+            aria-label="Guli Market profil sahifasini ochish"
+            title="Guli Market rasmiy profili"
+          >
+            <div className="reelsTopBrandLogoWrap">
+              <img
+                src="/guli-logo.png"
+                alt="Guli Market"
+                className="reelsTopBrandLogo"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp";
+                }}
+              />
+            </div>
+            <span className="reelsTopBrandTitle">Guli Market</span>
+            <svg
+              viewBox="0 0 24 24"
+              width="13"
+              height="13"
+              fill="#0095f6"
+              style={{ flexShrink: 0 }}
+              aria-hidden="true"
+            >
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.2 14.8-4.2-4.2 1.41-1.41 2.79 2.79 6.29-6.29 1.41 1.41-7.7 7.7z" />
+            </svg>
+          </button>
 
+          <div className="reelsTopControls">
+            {onBack && (
+              <button
+                type="button"
+                className="reelsTopIconBtn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBack();
+                }}
+                aria-label="Orqaga qaytish"
+                title="Orqaga"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </header>
 
         {/* Vertical Sliding Reel Track for Continuous Instagram-Style Gestures */}
         <div className="reelsTrack" style={trackTranslateStyle}>
@@ -886,7 +894,16 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                   )}
 
                   {/* Standardized Author Row: [Logo] Guli Market [Verified Badge] */}
-                  <div className="reelsAuthorRow">
+                  <div
+                    className="reelsAuthorRow reelsAuthorRowClickable"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenBrandProfile?.();
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Guli Market brend profili sahifasini ochish"
+                  >
                     <div className="reelsAuthorLogoWrap">
                       <img
                         src="/guli-logo.png"

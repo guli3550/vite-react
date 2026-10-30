@@ -6,12 +6,14 @@ interface SocialPromoButtonProps {
   item: SocialPromoItem;
   className?: string;
   isDark?: boolean;
+  variant?: "pill" | "highlight";
 }
 
 export const SocialPromoButton: React.FC<SocialPromoButtonProps> = ({
   item,
   className = "",
   isDark = false,
+  variant = "pill",
 }) => {
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     const url = item.target_url;
@@ -39,6 +41,84 @@ export const SocialPromoButton: React.FC<SocialPromoButtonProps> = ({
       }
     }
   };
+
+  if (variant === "highlight") {
+    return (
+      <a
+        href={item.target_url || "#"}
+        target={item.open_in_new_tab ? "_blank" : "_self"}
+        rel="noopener noreferrer"
+        onClick={handleClick}
+        className={`guli-social-promo-highlight ${className}`}
+        title={item.title || item.label}
+        style={{
+          display: "inline-flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          textDecoration: "none",
+          color: "inherit",
+          flexShrink: 0,
+          width: "66px",
+          cursor: "pointer",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          WebkitTapHighlightColor: "transparent",
+          transition: "transform 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
+      >
+        <div
+          className="guli-social-highlight-ring"
+          style={{
+            width: "58px",
+            height: "58px",
+            borderRadius: "50%",
+            padding: "2px",
+            background: isDark
+              ? "linear-gradient(45deg, #f43f5e 0%, #ec4899 50%, #d946ef 100%)"
+              : "linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(225, 29, 72, 0.18)",
+            flexShrink: 0,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              borderRadius: "50%",
+              backgroundColor: isDark ? "#18181b" : "#ffffff",
+              padding: "2px",
+              display: "grid",
+              placeItems: "center",
+              overflow: "hidden",
+            }}
+          >
+            <PlatformLogoRenderer platform={item.platform} logoUrl={item.logo_url} size={28} />
+          </div>
+        </div>
+
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 600,
+            lineHeight: 1.2,
+            marginTop: "5px",
+            textAlign: "center",
+            maxWidth: "66px",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: isDark ? "#e4e4e7" : "#27272a",
+          }}
+        >
+          {item.label}
+        </span>
+      </a>
+    );
+  }
 
   return (
     <a
@@ -112,3 +192,4 @@ export const SocialPromoButton: React.FC<SocialPromoButtonProps> = ({
     </a>
   );
 };
+

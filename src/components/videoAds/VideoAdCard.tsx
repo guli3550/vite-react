@@ -44,6 +44,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const impressionRecordedRef = useRef(false);
 
   // Check if ad was previously dismissed in this session
@@ -91,10 +92,11 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
       video.muted = true;
       video.play()
         .then(() => {
+          setIsPaused(false);
           sendEvent("video_start");
         })
         .catch(() => {
-          // Autoplay policy or media loading in progress
+          setIsPaused(true);
         });
     };
 
@@ -270,19 +272,33 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
                       videoRef.current.play().catch(() => {});
                     }
                   }}
-                  onPlaying={() => setIsBuffering(false)}
+                  onPlaying={() => {
+                    setIsBuffering(false);
+                    setIsPaused(false);
+                  }}
                   onPause={(e) => {
-                    // Auto-resume if browser or OS pauses inline video unexpectedly
                     const v = e.currentTarget;
                     if (v.paused && !isDismissed && !isFullscreen) {
-                      v.play().catch(() => {});
+                      v.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
+                    } else {
+                      setIsPaused(true);
                     }
                   }}
                   onError={() => {
                     setIsBuffering(false);
+                    setIsPaused(true);
                     setHasError(true);
                   }}
                 />
+                {isPaused && !isBuffering && (
+                  <div className="guli-video-card-play-overlay" aria-hidden="true">
+                    <div className="guli-video-card-play-circle">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff" style={{ marginLeft: "2px" }}>
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
                 {isBuffering && (
                   <div
                     className="absolute inset-0 flex items-center justify-center bg-black/25 pointer-events-none transition-opacity"

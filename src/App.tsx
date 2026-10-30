@@ -18,6 +18,7 @@ import {
   User3DIcon,
 } from "./components/Nav3DIcons";
 import { ReelsFeed } from "./components/reels/ReelsFeed";
+import { GuliMarketProfile } from "./components/profile/GuliMarketProfile";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
@@ -25,6 +26,7 @@ import {
   type Product,
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
+import { SocialPromoSection } from "./components/socialPromo/SocialPromoSection";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
 import { getApiBaseUrl } from "./lib/apiOrigin";
@@ -70,7 +72,6 @@ import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { VideoAdCard } from "./components/videoAds/VideoAdCard";
-import { VideoAdStoriesRow } from "./components/videoAds/VideoAdStoriesRow";
 import { getAdsForPlacement, isAdActiveAndVisible, type VideoAd } from "./types/videoAd";
 
 declare global {
@@ -190,7 +191,8 @@ type Page =
   | "orders"
   | "addresses"
   | "product"
-  | "chat";
+  | "chat"
+  | "brand_profile";
 const MAIN_TABS: Page[] = ["home", "catalog", "reels", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
@@ -816,9 +818,21 @@ export default function App() {
     ? String(telegramUser.id)
     : authUser?.id || "guest-user";
 
-  const [page, setPage] = useState<Page>("home");
+  const [page, setPage] = useState<Page>(() => {
+    try {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path.includes("/profile/guli-market") || hash.includes("/profile/guli-market")) {
+        return "brand_profile";
+      }
+    } catch {}
+    return "home";
+  });
   const [previousPage, setPreviousPage] = useState<Page>("home");
   const [pageHistory, setPageHistory] = useState<Page[]>(["home"]);
+  const [reelsActiveIndex, setReelsActiveIndex] = useState<number>(0);
+  const [targetReelId, setTargetReelId] = useState<string | undefined>(undefined);
+  const [brandProfileInitialTab, setBrandProfileInitialTab] = useState<"tovarlar" | "reels" | "reklamalar">("tovarlar");
   const PRODUCTS_PAGE_SIZE = 40;
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -841,7 +855,6 @@ export default function App() {
     catch { return false; }
   });
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
-  const [allActiveVideoAds, setAllActiveVideoAds] = useState<VideoAd[]>([]);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1189,7 +1202,6 @@ export default function App() {
         if (json.success && Array.isArray(json.data)) {
           // The public API returns complete VideoAd records; narrow the untyped JSON boundary here.
           const ads = (json.data as VideoAd[]).filter((item) => isAdActiveAndVisible(item));
-          setAllActiveVideoAds(ads);
           const home = getAdsForPlacement(ads, "home");
           const feed = getAdsForPlacement(ads, "product_feed");
           setHomeVideoAds(home);
@@ -1306,14 +1318,18 @@ export default function App() {
   // (Supabase Auth and Google Auth blocks removed for canonical Telegram-only auth)
 
 
-  // Expose global trigger for auth bridge
+  // Expose global trigger for auth bridge and brand profile navigation
   useEffect(() => {
     (window as any).openGuliCustomerAuthModal = (tab: "signin" | "signup" = "signin") => {
       setAuthInitialTab(tab);
       setIsCustomerAuthOpen(true);
     };
+    (window as any).openGuliBrandProfile = () => {
+      go("brand_profile");
+    };
     return () => {
       delete (window as any).openGuliCustomerAuthModal;
+      delete (window as any).openGuliBrandProfile;
     };
   }, []);
 
@@ -2339,7 +2355,8 @@ export default function App() {
       setPreviousPage(page);
       setPageHistory((prev) => [...prev, next]);
       try {
-        window.history.pushState({ guliPage: next }, "", "");
+        const targetUrl = next === "brand_profile" ? "/profile/guli-market" : window.location.pathname === "/profile/guli-market" ? "/" : window.location.pathname;
+        window.history.pushState({ guliPage: next }, "", targetUrl);
       } catch {}
 
       // Buyurtma rasmiylashtirish sahifasiga o'tganda profil ma'lumotlarini avtomatik tekshirib to'ldirish
@@ -2420,8 +2437,23 @@ export default function App() {
     if (page === "product" || selectedProduct) {
       setSelectedProduct(null);
       const target = previousPage && previousPage !== "product" ? previousPage : "home";
-      if (target === "home")
       setPage(target);
+      return true;
+    }
+
+    // 2a. Reels view -> if came from brand_profile, return to brand_profile
+    if (page === "reels" && previousPage === "brand_profile") {
+      setPage("brand_profile");
+      return true;
+    }
+
+    // 2b. Brand profile -> return to reels or previous page
+    if (page === "brand_profile") {
+      const target = previousPage && previousPage !== "brand_profile" ? previousPage : "reels";
+      setPage(target);
+      try {
+        window.history.pushState({ guliPage: target }, "", "/");
+      } catch {}
       return true;
     }
 
@@ -4346,14 +4378,18 @@ export default function App() {
   return (
     <div className={`appShell ${page === "chat" ? "chatPageActive" : ""} ${page === "reels" ? "reelsPageActive" : ""}`}>
       <PwaInstallPrompt hidden={page === "reels"} />
-      {page !== "chat" && page !== "reels" && (
+      {page !== "chat" && page !== "reels" && page !== "brand_profile" && (
       <header className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
           <button
             className="brand"
-            onClick={() => go("home")}
+            onClick={() => {
+              setBrandProfileInitialTab("tovarlar");
+              go("brand_profile");
+            }}
             type="button"
-            aria-label="GULI Home"
+            aria-label="Guli Market profil sahifasiga o‘tish"
+            title="Guli Market rasmiy profili"
           >
             <span
               className="brandIcon guli-brand-circle-logo"
@@ -4371,6 +4407,7 @@ export default function App() {
                 overflow: "hidden",
                 display: "grid",
                 placeItems: "center",
+                cursor: "pointer",
               }}
             >
               <img
@@ -4536,6 +4573,8 @@ export default function App() {
 
             </section>
 
+            <SocialPromoSection language={language} isDark={theme === "dark"} />
+
             <RotatingCategoriesSection
               categories={allCategories}
               products={products}
@@ -4633,28 +4672,6 @@ export default function App() {
             }}
           >
             <main className="page">
-              <VideoAdStoriesRow
-                ads={allActiveVideoAds}
-                onOpenProduct={(prodId) => {
-                  const found = products.find(
-                    (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
-                  );
-                  if (found) openProduct(found, "catalog");
-                }}
-                onNavigateUrl={(url) => {
-                  if (url.startsWith("/")) {
-                    if (url.includes("category=")) {
-                      const match = url.match(/category=([^&]+)/);
-                      if (match) setSelectedCategory(decodeURIComponent(match[1]));
-                    }
-                    go("catalog");
-                  } else {
-                    const tg = (window as any).Telegram?.WebApp;
-                    if (tg?.openLink) tg.openLink(url);
-                    else window.open(url, "_blank", "noopener,noreferrer");
-                  }
-                }}
-              />
               <div className="searchBox">
                 ⌕
                 <input
@@ -5129,7 +5146,18 @@ export default function App() {
         )}
         {page === "reels" && (
           <ReelsFeed
-            onBack={() => go("home")}
+            initialReelId={targetReelId}
+            initialIndex={reelsActiveIndex}
+            onActiveIndexChange={(idx) => setReelsActiveIndex(idx)}
+            onOpenBrandProfile={() => {
+              setBrandProfileInitialTab("tovarlar");
+              setTargetReelId(undefined);
+              go("brand_profile");
+            }}
+            onBack={() => {
+              const target = previousPage === "brand_profile" ? "brand_profile" : "home";
+              go(target);
+            }}
             onOpenProduct={(prodId) => {
               const targetProd =
                 products.find((p) => p.id === Number(prodId)) ||
@@ -5141,6 +5169,33 @@ export default function App() {
               }
             }}
             onNavigateToCatalog={() => go("catalog")}
+          />
+        )}
+        {page === "brand_profile" && (
+          <GuliMarketProfile
+            onBack={() => {
+              const target = previousPage && previousPage !== "brand_profile" ? previousPage : "reels";
+              go(target);
+            }}
+            products={products}
+            onOpenProduct={(prod) => openProduct(prod, "brand_profile")}
+            onNavigateToCatalog={(cat) => {
+              if (cat) setSelectedCategory(cat);
+              go("catalog");
+            }}
+            onSelectReel={(reelId) => {
+              setPreviousPage("brand_profile");
+              setTargetReelId(reelId);
+              go("reels");
+            }}
+            onOpenChat={() => go("chat")}
+            onShowToast={showToast}
+            initialTab={brandProfileInitialTab}
+            isUserAuthenticated={isCustomerAuthenticated}
+            onOpenAuthModal={() => {
+              setAuthInitialTab("signup");
+              setIsCustomerAuthOpen(true);
+            }}
           />
         )}
         {page === "wishlist" && (

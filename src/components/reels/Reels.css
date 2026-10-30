@@ -12,7 +12,7 @@
   height: 100vh;
   height: 100dvh;
   min-height: 100%;
-  background: #000000;
+  background: #ffffff;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
@@ -32,7 +32,7 @@
   box-shadow: none !important;
   border: none !important;
   overflow: hidden;
-  background: #000000;
+  background: #ffffff;
   margin: 0 !important;
   padding: 0 !important;
 }
@@ -251,9 +251,60 @@
   padding: max(14px, env(safe-area-inset-top, 14px)) 16px 14px 16px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   z-index: 15;
   pointer-events: none;
+}
+
+.reelsTopBrandBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.reelsTopBrandBadge:hover,
+.reelsTopBrandBadge:active {
+  background: rgba(0, 0, 0, 0.75);
+  transform: scale(0.97);
+}
+
+.reelsTopBrandLogoWrap {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1.5px solid #ff4d79;
+}
+
+.reelsTopBrandLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reelsTopBrandTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #ffffff;
+  white-space: nowrap;
 }
 
 .reelsTopControls {
@@ -462,6 +513,23 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.reelsAuthorRowClickable {
+  cursor: pointer;
+  width: fit-content;
+  border-radius: 20px;
+  padding: 2px 6px 2px 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.reelsAuthorRowClickable:active {
+  transform: scale(0.96);
+  opacity: 0.88;
+}
+
+.reelsAuthorRowClickable:hover .reelsAuthorName {
+  text-decoration: underline;
 }
 
 .reelsAuthorLogoWrap {

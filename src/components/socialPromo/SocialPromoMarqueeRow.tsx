@@ -16,6 +16,7 @@ interface SocialPromoMarqueeRowProps {
   isDark?: boolean;
   /** External pause (e.g. the expandable panel is closed). */
   paused?: boolean;
+  variant?: "pill" | "highlight";
 }
 
 function readViewportWidth(): number {
@@ -46,6 +47,7 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
   setting,
   isDark = false,
   paused = false,
+  variant = "pill",
 }) => {
   const [isPaused, setIsPaused] = useState(false);
   const viewportWidth = useViewportWidth();
@@ -61,14 +63,17 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
 
   if (!items?.length || !resolved.isEnabled) return null;
 
-  // Keep each configured row on one horizontal track. The marquee remains active
-  // across mobile WebViews as requested; it must never wrap into extra visual rows.
-
   const isRunning = !paused && !isPaused;
+  const itemGap = variant === "highlight" ? "14px" : "12px";
 
   const renderCards = (suffix: string) =>
     displayList.map((item, idx) => (
-      <SocialPromoButton key={`r${rowNumber}-${suffix}-${item.id}-${idx}`} item={item} isDark={isDark} />
+      <SocialPromoButton
+        key={`r${rowNumber}-${suffix}-${item.id}-${idx}`}
+        item={item}
+        isDark={isDark}
+        variant={variant}
+      />
     ));
 
   // Hover pause is for real mice only: touch emulates mouseenter and would leave the row paused.
@@ -99,10 +104,10 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
         width: "100%",
         overflow: "hidden",
         position: "relative",
-        padding: "4px 0",
+        padding: variant === "highlight" ? "2px 0" : "4px 0",
         touchAction: "pan-y",
-        WebkitMaskImage: "linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%)",
-        maskImage: "linear-gradient(90deg, transparent 0%, black 5%, black 95%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%)",
+        maskImage: "linear-gradient(90deg, transparent 0%, black 4%, black 96%, transparent 100%)",
       }}
     >
       <style>{`
@@ -114,11 +119,11 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
           from { transform: translate3d(-50%, 0, 0); }
           to { transform: translate3d(0, 0, 0); }
         }
-        .guli-social-promo-pill:hover { transform: translateY(-2px) scale(1.03); }
-        .guli-social-promo-pill:active { transform: scale(0.96); }
+        .guli-social-promo-pill:hover,
+        .guli-social-promo-highlight:hover { transform: translateY(-2px) scale(1.03); }
+        .guli-social-promo-pill:active,
+        .guli-social-promo-highlight:active { transform: scale(0.95); }
 
-        /* Keep this explicitly configured storefront marquee moving even when
-           the global reduced-motion rule would otherwise freeze it at 0.01ms. */
         @media (prefers-reduced-motion: reduce) {
           .guli-social-marquee-track-${rowNumber} {
             animation-duration: ${resolved.durationSeconds}s !important;
@@ -144,14 +149,14 @@ export const SocialPromoMarqueeRow: React.FC<SocialPromoMarqueeRowProps> = ({
       >
         <div
           className="guli-social-marquee-group"
-          style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}
+          style={{ display: "flex", flex: "0 0 auto", gap: itemGap, paddingRight: itemGap }}
         >
           {renderCards("a")}
         </div>
         <div
           className="guli-social-marquee-group"
           aria-hidden="true"
-          style={{ display: "flex", flex: "0 0 auto", gap: "12px", paddingRight: "12px" }}
+          style={{ display: "flex", flex: "0 0 auto", gap: itemGap, paddingRight: itemGap }}
         >
           {renderCards("b")}
         </div>

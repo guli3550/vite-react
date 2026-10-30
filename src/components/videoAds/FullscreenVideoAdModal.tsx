@@ -5,6 +5,7 @@ import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { detectPlatform } from "../../utils/platformAdapter";
+import { GULI_LOGO_BASE64 } from "../../utils/guliLogoBase64";
 import "./FullscreenVideoAdModal.css";
 
 interface FullscreenVideoAdModalProps {
@@ -14,6 +15,7 @@ interface FullscreenVideoAdModalProps {
   onClose: () => void;
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
+  onOpenBrandProfile?: () => void;
 }
 
 function getSessionId(): string {
@@ -30,7 +32,7 @@ function getSessionId(): string {
 }
 
 export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
-  isOpen, ad, ads, onClose, onOpenProduct, onNavigateUrl,
+  isOpen, ad, ads, onClose, onOpenProduct, onNavigateUrl, onOpenBrandProfile,
 }) => {
   const gallery = ads?.length ? ads : [ad];
   const requestedIndex = Math.max(0, gallery.findIndex((item) => item.id === ad.id));
@@ -69,6 +71,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showPlayIndicator, setShowPlayIndicator] = useState(false);
+  const playIndicatorTimerRef = useRef<number | null>(null);
   const hasStartedRef = useRef(false);
   const retryCountRef = useRef(0);
   const endedWhileInfoOpenRef = useRef(false);
@@ -76,10 +81,24 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   // pausing the media element while it is buffering or changing visibility.
   const userPausedRef = useRef(false);
 
-  // Do not preload every gallery video in parallel on mobile. Competing media
-  // requests can starve the active fullscreen video and make playback stall
-  // before the end. The visible <video preload="auto"> owns its own buffering;
-  // the next ad is loaded only after the current ad completes or the user swipes.
+  const handleProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    videoRef.current?.pause();
+    onClose();
+    if (onOpenBrandProfile) {
+      onOpenBrandProfile();
+    } else if (onNavigateUrl) {
+      onNavigateUrl("/profile/guli-market");
+    } else {
+      const globalNav = (window as any).openGuliBrandProfile;
+      if (typeof globalNav === "function") {
+        globalNav();
+      } else {
+        window.location.href = "/profile/guli-market";
+      }
+    }
+  };
 
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAdId = activeAd.id) => {
     try {
@@ -96,6 +115,8 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const goTo = useCallback((nextIndex: number) => {
     if (nextIndex < 0 || nextIndex >= gallery.length) return;
     userPausedRef.current = false;
+    setIsPaused(false);
+    setShowPlayIndicator(false);
     stopProgressLoop();
     videoRef.current?.pause();
     setCurrentIndex(nextIndex);
@@ -128,6 +149,25 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight" && !isInfoExpanded) next();
       if (e.key === "ArrowLeft") previous();
+      if (e.key === " ") {
+        e.preventDefault();
+        const video = videoRef.current;
+        if (video) {
+          if (playIndicatorTimerRef.current) clearTimeout(playIndicatorTimerRef.current);
+          if (video.paused) {
+            userPausedRef.current = false;
+            video.play().then(() => setIsPaused(false)).catch(() => {});
+            setIsPaused(false);
+            setShowPlayIndicator(true);
+            playIndicatorTimerRef.current = window.setTimeout(() => setShowPlayIndicator(false), 600);
+          } else {
+            userPausedRef.current = true;
+            video.pause();
+            setIsPaused(true);
+            setShowPlayIndicator(false);
+          }
+        }
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
@@ -136,6 +176,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       window.removeEventListener("keydown", handleKeyDown);
       stopProgressLoop();
       videoRef.current?.pause();
+      if (playIndicatorTimerRef.current) clearTimeout(playIndicatorTimerRef.current);
     };
   }, [isOpen, onClose, next, previous, stopProgressLoop]);
 
@@ -146,12 +187,14 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     const video = videoRef.current;
     if (!video) return;
     userPausedRef.current = false;
+    setIsPaused(false);
     video.muted = false;
     let active = true;
     video.play()
       .then(() => {
         if (!active) { video.pause(); return; }
         setIsBuffering(false);
+        setIsPaused(false);
         if (!hasStartedRef.current) {
           hasStartedRef.current = true;
           sendEvent("video_start", activeAd.id);
@@ -165,6 +208,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             .then(() => {
               if (!active) { video.pause(); return; }
               setIsBuffering(false);
+              setIsPaused(false);
               const unmute = () => {
                 if (videoRef.current) videoRef.current.muted = false;
                 window.removeEventListener("touchstart", unmute);
@@ -201,21 +245,33 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     const bounds = e.currentTarget.getBoundingClientRect();
     const relativeX = e.clientX - bounds.left;
     const zone = relativeX / Math.max(bounds.width, 1);
-    if (zone < 0.33) {
+    if (zone < 0.28) {
       previous();
       return;
     }
-    if (zone > 0.67) {
+    if (zone > 0.72) {
       if (!isInfoExpanded) next();
       return;
     }
-    // Center tap: Never pause the video! Ensure continuous playback
+
+    // Center zone: Toggle Play / Pause!
     const video = videoRef.current;
     if (video) {
-      userPausedRef.current = false;
+      if (playIndicatorTimerRef.current) clearTimeout(playIndicatorTimerRef.current);
       if (video.paused) {
+        userPausedRef.current = false;
         video.muted = false;
-        video.play().catch(() => {});
+        video.play().then(() => setIsPaused(false)).catch(() => {});
+        setIsPaused(false);
+        setShowPlayIndicator(true);
+        playIndicatorTimerRef.current = window.setTimeout(() => {
+          setShowPlayIndicator(false);
+        }, 600);
+      } else {
+        userPausedRef.current = true;
+        video.pause();
+        setIsPaused(true);
+        setShowPlayIndicator(false);
       }
     }
   };
@@ -327,9 +383,20 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           ))}
         </div>
         <div className="guli-fullscreen-header-row">
-          <div className="guli-story-account">
+          <div
+            className="guli-story-account"
+            onClick={handleProfileClick}
+            style={{ cursor: "pointer" }}
+            title="Guli Market profil sahifasiga o'tish"
+          >
             <div className="guli-story-avatar">
-              <img src="/guli-logo.webp" alt="Guli Market" />
+              <img
+                src="/guli-logo.png"
+                alt="Guli Market"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = GULI_LOGO_BASE64;
+                }}
+              />
             </div>
             <div className="guli-story-account-copy">
               <strong>Guli Market</strong>
@@ -353,37 +420,48 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           webkit-playsinline="true"
           preload="auto"
           autoPlay
-          loop
           onTimeUpdate={handleTimeUpdate}
           onWaiting={() => {
             setIsBuffering(true);
-            if (videoRef.current?.paused) {
+            if (!userPausedRef.current && videoRef.current?.paused) {
               videoRef.current.play().catch(() => {});
             }
           }}
           onCanPlay={() => {
             setIsBuffering(false);
-            if (videoRef.current?.paused) {
+            if (!userPausedRef.current && videoRef.current?.paused) {
               videoRef.current.play().catch(() => {});
             }
           }}
           onPlaying={() => {
             setIsBuffering(false);
+            setIsPaused(false);
             startProgressLoop();
           }}
           onPause={(e) => {
-            // Auto-resume watchdog: if browser or OS pauses the video unexpectedly, immediately resume
             const v = e.currentTarget;
-            if (isOpen && v.paused) {
+            if (!userPausedRef.current && isOpen && v.paused) {
               v.play().catch(() => {});
+            } else {
+              setIsPaused(true);
             }
           }}
           onEnded={() => {
             sendEvent("video_complete", activeAd.id);
-            // Continuous infinite loop for the active ad video
-            if (videoRef.current) {
-              videoRef.current.currentTime = 0;
-              videoRef.current.play().catch(() => {});
+            if (!userPausedRef.current) {
+              if (!isInfoExpanded && gallery.length > 1) {
+                // Auto-advance to the next ad video when 2+ videos exist and bio is not expanded
+                const nextIndex = (currentIndex + 1) % gallery.length;
+                goTo(nextIndex);
+              } else {
+                if (isInfoExpanded) {
+                  endedWhileInfoOpenRef.current = true;
+                }
+                if (videoRef.current) {
+                  videoRef.current.currentTime = 0;
+                  videoRef.current.play().catch(() => {});
+                }
+              }
             }
           }}
           onError={() => {
@@ -391,6 +469,18 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             setIsBuffering(false);
           }}
         />
+        {(showPlayIndicator || isPaused) && (
+          <div
+            className={`guli-fullscreen-play-indicator${!isPaused && showPlayIndicator ? " guli-play-flash" : ""}`}
+            aria-hidden="true"
+          >
+            <div className="guli-fullscreen-play-circle">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="#ffffff" style={{ marginLeft: "3px" }}>
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+            </div>
+          </div>
+        )}
         {isBuffering && <div className="guli-fullscreen-buffering" aria-label="Video yuklanmoqda"><span /></div>}
       </div>
 

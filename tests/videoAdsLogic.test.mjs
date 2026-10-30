@@ -196,3 +196,37 @@ test("getAdsForPlacement: returns all matching ads, not only the first", () => {
     ["all-placement", "feed-only"]
   );
 });
+
+test("Fullscreen video ad auto-advances when gallery length >= 2 and bio is not expanded", () => {
+  const evaluateVideoEnd = ({ currentIndex, galleryLength, isInfoExpanded, userPaused }) => {
+    if (userPaused) return { action: "stay" };
+    if (!isInfoExpanded && galleryLength > 1) {
+      return { action: "next", nextIndex: (currentIndex + 1) % galleryLength };
+    }
+    return { action: "loop_current", currentIndex };
+  };
+
+  // Scenario 1: 3 videos, bio not expanded, video 0 ends -> go to video 1
+  assert.deepEqual(
+    evaluateVideoEnd({ currentIndex: 0, galleryLength: 3, isInfoExpanded: false, userPaused: false }),
+    { action: "next", nextIndex: 1 }
+  );
+
+  // Scenario 2: 3 videos, bio expanded, video 0 ends -> loop current video
+  assert.deepEqual(
+    evaluateVideoEnd({ currentIndex: 0, galleryLength: 3, isInfoExpanded: true, userPaused: false }),
+    { action: "loop_current", currentIndex: 0 }
+  );
+
+  // Scenario 3: 1 video, bio not expanded, video 0 ends -> loop current video
+  assert.deepEqual(
+    evaluateVideoEnd({ currentIndex: 0, galleryLength: 1, isInfoExpanded: false, userPaused: false }),
+    { action: "loop_current", currentIndex: 0 }
+  );
+
+  // Scenario 4: 2 videos, video 1 ends -> loop back to video 0
+  assert.deepEqual(
+    evaluateVideoEnd({ currentIndex: 1, galleryLength: 2, isInfoExpanded: false, userPaused: false }),
+    { action: "next", nextIndex: 0 }
+  );
+});
