@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { ReelItem, ReelStatus } from "../../types/reels";
-import { loadReelsFromStorage, saveReelsToStorage, INITIAL_DEMO_REELS } from "../../data/demoReels";
+import { loadReelsFromStorage, saveReelsToStorage } from "../../data/demoReels";
 import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
 import { fetchAdminReels, saveServerReel, deleteServerReel, uploadReelMedia } from "../../lib/reelsApi";
 import {
