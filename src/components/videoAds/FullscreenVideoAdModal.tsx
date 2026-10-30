@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Play, ArrowRight } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
@@ -6,6 +6,7 @@ import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { detectPlatform } from "../../utils/platformAdapter";
 import "./FullscreenVideoAdModal.css";
+import "./FullscreenVideoAdPlayer.css";
 
 interface FullscreenVideoAdModalProps {
   isOpen: boolean;
@@ -15,6 +16,13 @@ interface FullscreenVideoAdModalProps {
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
 }
+
+type PlayResult = "ok" | "blocked" | "aborted";
+
+const HAVE_FUTURE_DATA = 3;
+const SPINNER_DELAY_MS = 250;
+const STALL_RECOVERY_MS = 8000;
+const MAX_RECOVERIES = 2;
 
 function getSessionId(): string {
   try {
@@ -29,74 +37,154 @@ function getSessionId(): string {
   }
 }
 
+function playSafely(video: HTMLVideoElement): Promise<PlayResult> {
+  try {
+    const promise = video.play();
+    if (!promise || typeof promise.then !== "function") return Promise.resolve("ok");
+    return promise.then(
+      () => "ok" as PlayResult,
+      (err: unknown) => ((err as { name?: string })?.name === "AbortError" ? "aborted" : "blocked") as PlayResult,
+    );
+  } catch {
+    return Promise.resolve("blocked");
+  }
+}
+
 export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   isOpen, ad, ads, onClose, onOpenProduct, onNavigateUrl,
 }) => {
-  const gallery = ads?.length ? ads : [ad];
-  const requestedIndex = Math.max(0, gallery.findIndex((item) => item.id === ad.id));
-  const [currentIndex, setCurrentIndex] = useState(requestedIndex);
+  const gallery = useMemo(() => (ads?.length ? ads : [ad]), [ads, ad]);
+  const [currentIndex, setCurrentIndex] = useState(() =>
+    Math.max(0, gallery.findIndex((item) => item.id === ad.id)),
+  );
   const activeAd = gallery[Math.min(currentIndex, gallery.length - 1)] || ad;
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const suppressClick = useRef(false);
+
   const [isPaused, setIsPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
+
+  // One persistent <video>; only the active ad's source is ever attached to it.
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Progress fills are updated directly on the DOM: no React state, no re-render.
+  const segmentRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const rafRef = useRef(0);
+  const lastRatioRef = useRef(0);
+  const currentIndexRef = useRef(currentIndex);
+  const activeAdRef = useRef(activeAd);
+  activeAdRef.current = activeAd;
+
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const userPausedRef = useRef(false);
   const hasStartedRef = useRef(false);
-  const retryCountRef = useRef(0);
+  const bufferingRef = useRef(true);
+  const recoverCountRef = useRef(0);
+  const resumeAtRef = useRef(0);
+  const spinnerTimerRef = useRef(0);
+  const stallTimerRef = useRef(0);
   const endedWhileInfoOpenRef = useRef(false);
 
-  // Warm every active story video when the viewer opens. Detached media elements
-  // let the browser populate its normal HTTP media cache before the user swipes.
-  useEffect(() => {
-    if (!isOpen) return;
-    const warmPlayers: HTMLVideoElement[] = [];
-    const urls = Array.from(new Set(gallery.map((item) => item.video_url).filter(Boolean)));
-    urls.forEach((url) => {
-      const warmPlayer = document.createElement("video");
-      warmPlayer.preload = "auto";
-      warmPlayer.muted = true;
-      warmPlayer.playsInline = true;
-      warmPlayer.setAttribute("playsinline", "");
-      warmPlayer.src = url;
-      warmPlayers.push(warmPlayer);
-      warmPlayer.load();
-    });
-    return () => {
-      warmPlayers.forEach((player) => {
-        player.pause();
-        player.removeAttribute("src");
-        player.load();
-      });
-    };
-  }, [isOpen, gallery]);
+  const setBuffering = useCallback((value: boolean) => {
+    bufferingRef.current = value;
+    setIsBuffering(value);
+  }, []);
 
-  const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
+  const clearBufferTimers = useCallback(() => {
+    if (spinnerTimerRef.current) { window.clearTimeout(spinnerTimerRef.current); spinnerTimerRef.current = 0; }
+    if (stallTimerRef.current) { window.clearTimeout(stallTimerRef.current); stallTimerRef.current = 0; }
+  }, []);
+
+  // ---- Progress: the fill is a pure function of video.currentTime / duration ----
+  const writeProgress = useCallback((force = false) => {
+    const video = videoRef.current;
+    const fill = segmentRefs.current[currentIndexRef.current];
+    if (!video || !fill) return;
+    const duration = video.duration;
+    const ratio = Number.isFinite(duration) && duration > 0
+      ? Math.min(1, Math.max(0, video.currentTime / duration))
+      : 0;
+    if (!force && Math.abs(ratio - lastRatioRef.current) < 0.0002) return;
+    lastRatioRef.current = ratio;
+    fill.style.transform = `scaleX(${ratio})`;
+  }, []);
+
+  const startProgressLoop = useCallback(() => {
+    if (rafRef.current) return;
+    const tick = () => {
+      writeProgress();
+      rafRef.current = window.requestAnimationFrame(tick);
+    };
+    rafRef.current = window.requestAnimationFrame(tick);
+  }, [writeProgress]);
+
+  const stopProgressLoop = useCallback(() => {
+    if (rafRef.current) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+  }, []);
+
+  // Reset every segment before paint whenever the active ad changes.
+  useLayoutEffect(() => {
+    currentIndexRef.current = currentIndex;
+    lastRatioRef.current = 0;
+    segmentRefs.current.forEach((el, i) => {
+      if (el) el.style.transform = i < currentIndex ? "scaleX(1)" : "scaleX(0)";
+    });
+  }, [currentIndex, gallery.length]);
+
+  const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd?: VideoAd) => {
+    const target = targetAd || activeAdRef.current;
     try {
       const apiBase = getApiBaseUrl();
       const platform = detectPlatform().isTelegram ? "telegram" : "web";
-      fetch(`${apiBase}/api/video-ads/${targetAd.id}/events`, {
+      fetch(`${apiBase}/api/video-ads/${target.id}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_type: eventType, session_id: getSessionId(), platform }),
       }).catch(() => {});
     } catch {}
-  }, [activeAd]);
+  }, []);
+
+  // ---- Recovery: reload the same source and resume from the last good time ----
+  const recover = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !video.getAttribute("src")) return;
+    clearBufferTimers();
+    if (recoverCountRef.current >= MAX_RECOVERIES) {
+      setBuffering(false);
+      userPausedRef.current = true;
+      setIsPaused(true);
+      return;
+    }
+    recoverCountRef.current += 1;
+    resumeAtRef.current = video.currentTime || 0;
+    setBuffering(true);
+    video.load();
+    void playSafely(video);
+  }, [clearBufferTimers, setBuffering]);
 
   const goTo = useCallback((nextIndex: number) => {
     if (nextIndex < 0 || nextIndex >= gallery.length) return;
-    videoRef.current?.pause();
+    const video = videoRef.current;
+    if (nextIndex === currentIndexRef.current) {
+      // Same story tapped again: restart it (state would not change, so the effect would not run).
+      if (video) {
+        video.currentTime = 0;
+        userPausedRef.current = false;
+        setIsPaused(false);
+        void playSafely(video);
+      }
+      return;
+    }
+    video?.pause();
     setCurrentIndex(nextIndex);
-    setProgress(0);
     setIsPaused(false);
     setIsInfoExpanded(false);
-    setIsBuffering(true);
-    retryCountRef.current = 0;
+    setBuffering(true);
     endedWhileInfoOpenRef.current = false;
-    hasStartedRef.current = false;
-  }, [gallery.length]);
+  }, [gallery.length, setBuffering]);
 
   const next = useCallback(() => {
     if (currentIndex < gallery.length - 1) goTo(currentIndex + 1);
@@ -123,63 +211,193 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       document.body.style.overflow = originalOverflow;
       document.body.style.overscrollBehavior = originalOverscroll;
       window.removeEventListener("keydown", handleKeyDown);
-      videoRef.current?.pause();
     };
-  }, [isOpen, onClose, next, previous]);
+  }, [isOpen, isInfoExpanded, onClose, next, previous]);
 
-  // Each selected ad starts automatically with sound. Navigation is triggered by
-  // an explicit swipe or by the previous video ending after the initial user tap.
+  // Attach ONLY the active ad's source. Re-runs only when the ad itself changes
+  // (not on parent re-renders), so playback is never restarted by React.
   useEffect(() => {
     if (!isOpen) return;
     const video = videoRef.current;
     if (!video) return;
+    let cancelled = false;
+    hasStartedRef.current = false;
+    recoverCountRef.current = 0;
+    resumeAtRef.current = 0;
+    userPausedRef.current = false;
+    lastRatioRef.current = 0;
+    clearBufferTimers();
+    stopProgressLoop();
+    setBuffering(true);
+    setIsPaused(false);
     video.muted = false;
-    setIsBuffering(video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
-    let active = true;
-    video.play().then(() => {
-      if (!active) { video.pause(); return; }
-      setIsPaused(false);
-      setIsBuffering(false);
-      if (!hasStartedRef.current) {
-        hasStartedRef.current = true;
-        sendEvent("video_start", activeAd);
+    video.src = activeAd.video_url;
+    playSafely(video).then((result) => {
+      if (cancelled) return;
+      if (result === "blocked") {
+        userPausedRef.current = true;
+        setBuffering(false);
+        setIsPaused(true);
       }
-    }).catch(() => {
-      if (active) { setIsPaused(true); setIsBuffering(false); }
     });
     return () => {
-      active = false;
+      cancelled = true;
+      clearBufferTimers();
+      stopProgressLoop();
       video.pause();
     };
-  }, [isOpen, currentIndex, activeAd.id, sendEvent]);
+  }, [isOpen, activeAd.id, activeAd.video_url, clearBufferTimers, stopProgressLoop, setBuffering]);
+
+  // Release the decoder and the network connection when the viewer closes.
+  useEffect(() => {
+    const video = videoRef.current;
+    return () => {
+      if (!video) return;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [isOpen]);
+
+  // Pause when the app goes to background (Android Chrome tab hidden / Telegram deactivated).
+  useEffect(() => {
+    if (!isOpen) return;
+    let resume = false;
+    const hide = () => {
+      const video = videoRef.current;
+      if (!video || video.paused) return;
+      resume = !userPausedRef.current;
+      video.pause();
+    };
+    const show = () => {
+      const video = videoRef.current;
+      if (!video || !resume) return;
+      resume = false;
+      void playSafely(video);
+    };
+    const onVisibility = () => (document.hidden ? hide() : show());
+    document.addEventListener("visibilitychange", onVisibility);
+    const tg = (window as any).Telegram?.WebApp;
+    tg?.onEvent?.("deactivated", hide);
+    tg?.onEvent?.("activated", show);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      tg?.offEvent?.("deactivated", hide);
+      tg?.offEvent?.("activated", show);
+    };
+  }, [isOpen]);
+
+  // ---- <video> event handlers (state is only set on real transitions) ----
+  const handleLoadStart = () => setBuffering(true);
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (resumeAtRef.current > 0) {
+      try { video.currentTime = resumeAtRef.current; } catch {}
+      resumeAtRef.current = 0;
+    }
+    writeProgress(true);
+  };
+
+  const handleCanPlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!video.paused) {
+      clearBufferTimers();
+      setBuffering(false);
+    } else if (!userPausedRef.current && !video.ended) {
+      void playSafely(video);
+    }
+  };
+
+  const handlePlaying = () => {
+    clearBufferTimers();
+    setBuffering(false);
+    setIsPaused(false);
+    startProgressLoop();
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true;
+      sendEvent("video_start");
+    }
+  };
+
+  const beginBufferingWatch = () => {
+    const video = videoRef.current;
+    if (!video || video.paused || video.ended) return;
+    // Short hiccups never flash a spinner; real stalls do, and get recovered.
+    if (!spinnerTimerRef.current) {
+      spinnerTimerRef.current = window.setTimeout(() => {
+        spinnerTimerRef.current = 0;
+        setBuffering(true);
+      }, SPINNER_DELAY_MS);
+    }
+    if (!stallTimerRef.current) {
+      stallTimerRef.current = window.setTimeout(() => {
+        stallTimerRef.current = 0;
+        const current = videoRef.current;
+        if (current && !current.paused && current.readyState < HAVE_FUTURE_DATA) recover();
+      }, STALL_RECOVERY_MS);
+    }
+  };
+
+  const handleStalled = () => {
+    const video = videoRef.current;
+    if (video && video.readyState < HAVE_FUTURE_DATA) beginBufferingWatch();
+  };
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
-    if (!video || !video.duration) return;
-    setProgress(Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100)));
+    if (!video) return;
+    writeProgress();
+    if (bufferingRef.current && !video.paused && video.readyState >= HAVE_FUTURE_DATA) {
+      clearBufferTimers();
+      setBuffering(false);
+    }
+  };
+
+  const handlePause = () => {
+    clearBufferTimers();
+    stopProgressLoop();
+    writeProgress(true);
+  };
+
+  const handleEnded = () => {
+    clearBufferTimers();
+    stopProgressLoop();
+    writeProgress(true);
+    setBuffering(false);
+    sendEvent("video_complete");
+    if (isInfoExpanded) endedWhileInfoOpenRef.current = true;
+    else next();
+  };
+
+  const handleError = () => {
+    const video = videoRef.current;
+    if (!video || !video.getAttribute("src")) return;
+    recover();
   };
 
   const handleStageTap = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (suppressClick.current) { suppressClick.current = false; return; }
     const bounds = e.currentTarget.getBoundingClientRect();
-    const relativeX = e.clientX - bounds.left;
-    const zone = relativeX / Math.max(bounds.width, 1);
-    if (zone < 0.33) {
-      previous();
-      return;
-    }
-    if (zone > 0.67) {
-      if (!isInfoExpanded) next();
-      return;
-    }
+    const zone = (e.clientX - bounds.left) / Math.max(bounds.width, 1);
+    if (zone < 0.33) { previous(); return; }
+    if (zone > 0.67) { if (!isInfoExpanded) next(); return; }
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
+      userPausedRef.current = false;
       video.muted = false;
-      video.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
+      setIsPaused(false);
+      playSafely(video).then((result) => {
+        if (result === "blocked") { userPausedRef.current = true; setIsPaused(true); }
+      });
     } else {
+      userPausedRef.current = true;
       video.pause();
+      setBuffering(false);
       setIsPaused(true);
     }
   };
@@ -209,7 +427,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             const video = videoRef.current;
             if (video) {
               video.currentTime = 0;
-              video.play().then(() => { setIsPaused(false); setIsBuffering(false); }).catch(() => setIsPaused(true));
+              userPausedRef.current = false;
+              setIsPaused(false);
+              void playSafely(video);
             }
           }
         } else {
@@ -280,7 +500,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
               disabled={isInfoExpanded && index > currentIndex}
               aria-label={`${index + 1}-reklamaga o'tish`}
             >
-              <span style={{ width: index < currentIndex ? "100%" : index === currentIndex ? `${progress}%` : "0%" }} />
+              <span ref={(el) => { segmentRefs.current[index] = el; }} />
             </button>
           ))}
         </div>
@@ -302,35 +522,27 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
       <div className="guli-fullscreen-video-stage" onClick={handleStageTap}>
         <video
-          key={activeAd.id}
           ref={videoRef}
-          src={activeAd.video_url}
           poster={activeAd.poster_url || undefined}
           className="guli-fullscreen-video-element"
           playsInline
           webkit-playsinline="true"
           preload="auto"
+          disablePictureInPicture
+          disableRemotePlayback
+          onLoadStart={handleLoadStart}
+          onLoadedMetadata={handleLoadedMetadata}
+          onDurationChange={() => writeProgress(true)}
+          onSeeked={() => writeProgress(true)}
+          onCanPlay={handleCanPlay}
+          onPlaying={handlePlaying}
+          onWaiting={beginBufferingWatch}
+          onStalled={handleStalled}
           onTimeUpdate={handleTimeUpdate}
-          onLoadStart={() => setIsBuffering(true)}
-          onLoadedData={() => setIsBuffering(false)}
-          onCanPlay={() => setIsBuffering(false)}
-          onWaiting={() => setIsBuffering(true)}
-          onPlaying={() => { setIsBuffering(false); setIsPaused(false); }}
-          onError={() => {
-            const video = videoRef.current;
-            if (!video) return;
-            if (retryCountRef.current < 1) {
-              retryCountRef.current += 1;
-              setIsBuffering(true);
-              video.load();
-              video.play().then(() => setIsPaused(false)).catch(() => { setIsBuffering(false); setIsPaused(true); });
-            } else setIsBuffering(false);
-          }}
-          onEnded={() => {
-            sendEvent("video_complete", activeAd);
-            if (isInfoExpanded) endedWhileInfoOpenRef.current = true;
-            else next();
-          }}
+          onPause={handlePause}
+          onEmptied={stopProgressLoop}
+          onError={handleError}
+          onEnded={handleEnded}
         />
         {isBuffering && !isPaused && <div className="guli-fullscreen-buffering" aria-label="Video yuklanmoqda"><span /></div>}
         {isPaused && (

@@ -1,0 +1,38 @@
+/* ==========================================================================
+   GULI MARKET: video ad player performance + progress overrides
+   Loaded AFTER FullscreenVideoAdModal.css so it wins the cascade.
+   ========================================================================== */
+
+/* Progress fill: compositor-only transform driven by requestAnimationFrame.
+   No width transition: the fill must mirror video.currentTime exactly. */
+.guli-fullscreen-gallery-segment span {
+  width: 100% !important;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: none !important;
+  will-change: transform;
+}
+
+/* Blur layers on top of a playing video are re-rasterised every frame and are the
+   main source of micro-stutter on mid/low-end Android. Use solid translucent fills. */
+.guli-fullscreen-card-inner,
+.guli-fullscreen-close-btn,
+.guli-fullscreen-sound-pill,
+.guli-fullscreen-play-circle {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.guli-fullscreen-card-inner {
+  background: rgba(13, 18, 32, 0.9);
+}
+.guli-fullscreen-close-btn,
+.guli-fullscreen-play-circle {
+  background: rgba(15, 23, 42, 0.82);
+}
+
+/* Keep the video on its own compositing layer and out of layout work. */
+.guli-fullscreen-video-element {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
