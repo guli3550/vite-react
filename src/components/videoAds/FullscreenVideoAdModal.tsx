@@ -41,6 +41,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const progressFillRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const lastProgressPaintRef = useRef(0);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -74,8 +75,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     videoRef.current?.pause();
     setCurrentIndex(nextIndex);
     progressFillRefs.current.forEach((fill, index) => {
-      if (fill) fill.style.width = index < nextIndex ? "100%" : "0%";
+      if (fill) fill.style.transform = `scaleX(${index < nextIndex ? 1 : 0})`;
     });
+    lastProgressPaintRef.current = 0;
     setIsPaused(false);
     setIsInfoExpanded(false);
     setIsBuffering(true);
@@ -143,10 +145,14 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video || !video.duration) return;
+    // Paint story progress on the compositor, not by changing layout width.
+    const now = performance.now();
+    if (now - lastProgressPaintRef.current < 200 && video.currentTime < video.duration) return;
+    lastProgressPaintRef.current = now;
     const fill = progressFillRefs.current[currentIndex];
     if (fill) {
-      const percent = Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100));
-      fill.style.width = `${percent}%`;
+      const scale = Math.min(1, Math.max(0, video.currentTime / video.duration));
+      fill.style.transform = `scaleX(${scale})`;
     }
   };
 
