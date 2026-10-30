@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
-import { loadReelsFromStorage, saveReelsToStorage } from "../../data/demoReels";
+import { loadReelsFromStorage } from "../../data/demoReels";
+import { fetchPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
   isIndexPreloaded,
   evaluateSwipeGesture,
@@ -97,6 +98,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onActiveIndexChange,
 }) => {
   const [reels, setReels] = useState<ReelItem[]>([]);
+  const [isFeedLoading, setIsFeedLoading] = useState(true);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [videoProgress, setVideoProgress] = useState(0);
@@ -131,32 +134,40 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Video element references map
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
-  // Load active reels in a persisted randomized cycle, resuming at the first unseen Reel.
-  const reloadReels = useCallback(() => {
-    let list: ReelItem[] = [];
-    let startIdx = 0;
+  // Load published Reels from the shared server source; local demo data is development-only.
+  const reloadReels = useCallback(async () => {
+    setIsFeedLoading(true);
+    setFeedError(null);
     try {
-      const all = loadReelsFromStorage();
-      const active = all.filter((r) => r.status === "active");
+      const all = await fetchPublicReels();
+      const active = all.filter((r) => r.status === "active" && Boolean(r.videoUrl));
       const cycle = prepareReelsCycle(active);
-      list = cycle.reels;
-      startIdx = cycle.startIndex;
-    } catch {
-      const all = loadReelsFromStorage();
-      const active = all.filter((r) => r.status === "active");
-      list = active;
-      startIdx = 0;
-    }
+      let list = cycle.reels;
+      let startIdx = cycle.startIndex;
 
-    if (initialReelId) {
-      const found = list.findIndex((r) => r.id === initialReelId);
-      if (found !== -1) startIdx = found;
-    } else if (typeof initialIndex === "number" && initialIndex >= 0 && initialIndex < list.length) {
-      startIdx = initialIndex;
-    }
+      if (initialReelId) {
+        const found = list.findIndex((r) => r.id === initialReelId);
+        if (found !== -1) startIdx = found;
+      } else if (typeof initialIndex === "number" && initialIndex >= 0 && initialIndex < list.length) {
+        startIdx = initialIndex;
+      }
 
-    setReels(list);
-    setCurrentIndex(startIdx);
+      setReels(list);
+      setCurrentIndex(startIdx);
+    } catch (error) {
+      console.error("[Reels] Published server feed could not be loaded:", error);
+      if (!import.meta.env.PROD) {
+        const active = loadReelsFromStorage().filter((r) => r.status === "active");
+        const cycle = prepareReelsCycle(active);
+        setReels(cycle.reels);
+        setCurrentIndex(cycle.startIndex);
+      } else {
+        setReels([]);
+        setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
+      }
+    } finally {
+      setIsFeedLoading(false);
+    }
   }, [initialReelId, initialIndex]);
 
   useEffect(() => {
@@ -185,14 +196,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
     viewedReelIdsRef.current.add(currentReel.id);
     markReelSeen(currentReel.id);
-    const all = loadReelsFromStorage();
-    const updated = all.map((r) => {
-      if (r.id === currentReel.id) {
-        return { ...r, viewsCount: (r.viewsCount || 0) + 1 };
-      }
-      return r;
-    });
-    saveReelsToStorage(updated);
+    recordServerReelView(currentReel.id)
+      .then(({ viewsCount }) => {
+        setReels((previous) => previous.map((r) => r.id === currentReel.id ? { ...r, viewsCount } : r));
+      })
+      .catch((error) => console.warn("[Reels] View count was not saved:", error));
   }, [currentReel?.id]);
 
   const showToast = useCallback((msg: string) => {
@@ -427,39 +435,18 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
-  // Like Reel handler
-  const handleToggleLike = useCallback(() => {
+  // Persist likes against the shared Reels record.
+  const handleToggleLike = useCallback(async () => {
     if (!currentReel) return;
-    const all = loadReelsFromStorage();
-    const updated = all.map((r) => {
-      if (r.id === currentReel.id) {
-        const nextLiked = !r.isLiked;
-        return {
-          ...r,
-          isLiked: nextLiked,
-          likesCount: nextLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
-        };
-      }
-      return r;
-    });
-
-    saveReelsToStorage(updated);
-    setReels((prev) =>
-      prev.map((r) => {
-        if (r.id === currentReel.id) {
-          const nextLiked = !r.isLiked;
-          return {
-            ...r,
-            isLiked: nextLiked,
-            likesCount: nextLiked ? r.likesCount + 1 : Math.max(0, r.likesCount - 1),
-          };
-        }
-        return r;
-      })
-    );
-
-    if (!currentReel.isLiked) {
-      showToast("❤️ Sizga yoqdi");
+    try {
+      const result = await toggleServerReelLike(currentReel.id);
+      setReels((previous) => previous.map((r) => r.id === currentReel.id
+        ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount }
+        : r));
+      if (result.isLiked) showToast("❤️ Sizga yoqdi");
+    } catch (error) {
+      console.error("[Reels] Like was not saved:", error);
+      showToast("Like saqlanmadi. Server aloqasini tekshiring.");
     }
   }, [currentReel, showToast]);
 
@@ -487,34 +474,18 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
-  // Add Comment handler
-  const handleAddComment = (reelId: string, newComment: ReelComment) => {
-    const all = loadReelsFromStorage();
-    const updated = all.map((r) => {
-      if (r.id === reelId) {
-        return {
-          ...r,
-          commentsCount: (r.commentsCount || 0) + 1,
-          comments: [newComment, ...(r.comments || [])],
-        };
-      }
-      return r;
-    });
-
-    saveReelsToStorage(updated);
-    setReels((prev) =>
-      prev.map((r) => {
-        if (r.id === reelId) {
-          return {
-            ...r,
-            commentsCount: (r.commentsCount || 0) + 1,
-            comments: [newComment, ...(r.comments || [])],
-          };
-        }
-        return r;
-      })
-    );
-    showToast("✓ Izohingiz qoldirildi!");
+  // Save comments to the shared Reels database.
+  const handleAddComment = async (reelId: string, newComment: ReelComment) => {
+    try {
+      const saved = await addServerReelComment(reelId, newComment.text);
+      setReels((previous) => previous.map((r) => r.id === reelId
+        ? { ...r, commentsCount: r.commentsCount + 1, comments: [saved, ...(r.comments || [])] }
+        : r));
+      showToast("✓ Izoh serverda saqlandi!");
+    } catch (error) {
+      console.error("[Reels] Comment was not saved:", error);
+      showToast("Izoh yuborilmadi. Server aloqasini tekshiring.");
+    }
   };
 
   // Never replace a failed reel with an unrelated sample video.
@@ -965,6 +936,18 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
           })}
         </div>
       </div>
+
+      {isFeedLoading && reels.length === 0 && (
+        <div role="status" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#fff", zIndex: 30 }}>
+          Reels yuklanmoqda…
+        </div>
+      )}
+      {feedError && reels.length === 0 && (
+        <div role="alert" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "14px", padding: "28px", color: "#fff", textAlign: "center", zIndex: 30 }}>
+          <span>{feedError}</span>
+          <button type="button" onClick={() => void reloadReels()} style={{ border: 0, borderRadius: "999px", padding: "10px 20px", fontWeight: 700 }}>Qayta urinish</button>
+        </div>
+      )}
 
       {/* Comments Sheet Modal */}
       {currentReel && (
