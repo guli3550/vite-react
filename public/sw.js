@@ -63,7 +63,7 @@ self.addEventListener("fetch", (event) => {
         return cached;
       }
       const response = await fetch(request);
-      if (response.ok && (response.type === "cors" || response.type === "basic")) {
+      if (response.ok && (response.type === "cors" || response.type === "basic") && (response.headers.get("content-type") || "").startsWith("image/")) {
         await cache.put(request, response.clone());
       }
       return response;
