@@ -1179,8 +1179,10 @@ export default function App() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
-          const home = getAdsForPlacement(json.data, "home");
-          const feed = getAdsForPlacement(json.data, "product_feed");
+          // The public API returns complete VideoAd records; narrow the untyped JSON boundary here.
+          const ads = json.data as VideoAd[];
+          const home = getAdsForPlacement(ads, "home");
+          const feed = getAdsForPlacement(ads, "product_feed");
           setHomeVideoAds(home);
           setFeedVideoAds(feed);
         }
