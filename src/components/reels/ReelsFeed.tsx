@@ -3,7 +3,6 @@ import type { ReelItem, ReelComment } from "../../types/reels";
 import { loadReelsFromStorage } from "../../data/demoReels";
 import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
-  isIndexPreloaded,
   evaluateSwipeGesture,
   calculateVideoProgress,
 } from "../../utils/reelsEngine";
@@ -131,8 +130,52 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const isSwipingVertically = useRef<boolean | null>(null);
   const wheelLockRef = useRef<boolean>(false);
 
-  // Video element references map
+  // Video element references map. Stable callbacks prevent React from detaching
+  // and reattaching refs on every render (which can interrupt mobile playback).
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const videoRefCallbacks = useRef<Map<string, (el: HTMLVideoElement | null) => void>>(new Map());
+  const playbackGenerationRef = useRef(0);
+
+  const getVideoRef = useCallback((reelId: string) => {
+    let callback = videoRefCallbacks.current.get(reelId);
+    if (!callback) {
+      callback = (el) => {
+        if (el) {
+          videoRefs.current.set(reelId, el);
+        } else {
+          const previous = videoRefs.current.get(reelId);
+          // A slide leaving the preload window must never keep playing off-screen.
+          previous?.pause();
+          videoRefs.current.delete(reelId);
+        }
+      };
+      videoRefCallbacks.current.set(reelId, callback);
+    }
+    return callback;
+  }, []);
+
+  // Stop every media element when Reels is left or the app is backgrounded.
+  useEffect(() => {
+    const stopAllVideos = () => {
+      playbackGenerationRef.current += 1;
+      videoRefs.current.forEach((video) => {
+        video.pause();
+        video.muted = true;
+      });
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) stopAllVideos();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", stopAllVideos);
+    return () => {
+      stopAllVideos();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", stopAllVideos);
+      videoRefs.current.clear();
+      videoRefCallbacks.current.clear();
+    };
+  }, []);
 
   // Load published Reels from the shared server source; local demo data is development-only.
   const reloadReels = useCallback(async () => {
@@ -227,68 +270,79 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     showToast(nextMuted ? "🔇 Ovoz o‘chirildi" : "🔊 Ovoz yoqildi");
   }, [currentReel, showToast]);
 
-  // Manage video playback when currentIndex changes
+  // Manage exactly one active player. Ignore late play() resolutions after a
+  // swipe, route change, or component unmount.
   useEffect(() => {
+    const generation = ++playbackGenerationRef.current;
+    let cancelled = false;
+    let activeVideo: HTMLVideoElement | undefined;
+
     setIsLoadingVideo(true);
     setVideoProgress(0);
     setIsPlaying(true);
     setCaptionExpanded(false);
 
-    // Pause all other videos
     videoRefs.current.forEach((videoEl, id) => {
-      if (!currentReel || id !== currentReel.id) {
-        videoEl.pause();
-      }
+      if (!currentReel || id !== currentReel.id) videoEl.pause();
     });
 
     if (currentReel && isInstagramUrl(currentReel.videoUrl)) {
-      // Instagram's own embed player controls playback; it is not an HTML5 MP4.
       setIsLoadingVideo(false);
       setIsPlaying(true);
-      return;
+      return () => {
+        cancelled = true;
+        if (playbackGenerationRef.current === generation) playbackGenerationRef.current += 1;
+      };
     }
 
     if (currentReel) {
-      const activeVideo = videoRefs.current.get(currentReel.id);
+      activeVideo = videoRefs.current.get(currentReel.id);
       if (activeVideo) {
         activeVideo.currentTime = 0;
-        // User requested: reels ga kirish bilan video avtomatik ovozli rejimda bo'lsin
         activeVideo.muted = isMuted;
-        const playPromise = activeVideo.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
+
+        const stillCurrent = () => !cancelled && playbackGenerationRef.current === generation;
+        const startPlayback = async () => {
+          try {
+            await activeVideo!.play();
+            if (!stillCurrent()) {
+              activeVideo!.pause();
+              return;
+            }
+            setIsLoadingVideo(false);
+            setIsPlaying(true);
+          } catch {
+            if (!stillCurrent()) return;
+            // Android/Chrome may reject autoplay with sound. Start muted and
+            // let the user's explicit sound control unmute this one player.
+            activeVideo!.muted = true;
+            setIsMuted(true);
+            try {
+              await activeVideo!.play();
+              if (!stillCurrent()) {
+                activeVideo!.pause();
+                return;
+              }
               setIsLoadingVideo(false);
               setIsPlaying(true);
-            })
-            .catch(() => {
-              // Browser autoplay policy might restrict unmuted audio before user interaction
-              // Fallback to muted playback so video runs, then unmute on first gesture
-              activeVideo.muted = true;
-              activeVideo
-                .play()
-                .then(() => {
-                  setIsLoadingVideo(false);
-                  setIsPlaying(true);
-                  const unmuteOnInteraction = () => {
-                    activeVideo.muted = false;
-                    setIsMuted(false);
-                    window.removeEventListener("touchstart", unmuteOnInteraction);
-                    window.removeEventListener("click", unmuteOnInteraction);
-                  };
-                  window.addEventListener("touchstart", unmuteOnInteraction, { once: true });
-                  window.addEventListener("click", unmuteOnInteraction, { once: true });
-                })
-                .catch(() => {
-                  setIsPlaying(false);
-                  setIsLoadingVideo(false);
-                });
-            });
-        }
+            } catch {
+              if (!stillCurrent()) return;
+              setIsPlaying(false);
+              setIsLoadingVideo(false);
+            }
+          }
+        };
+        void startPlayback();
       }
     }
-  // Depend on the reel identity, not the whole object: view-count updates must
-  // not restart playback from time zero.
+
+    return () => {
+      cancelled = true;
+      if (playbackGenerationRef.current === generation) playbackGenerationRef.current += 1;
+      activeVideo?.pause();
+    };
+  // Deliberately exclude the reel object and isMuted: engagement updates and
+  // mute toggles must not restart the video from the beginning.
   }, [currentIndex, currentReel?.id]);
 
   // Navigate between reels
@@ -549,8 +603,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     );
   }
 
-  // Preload window calculation: active index + next 2 reels (and prev 1 if available)
-  // All other videos are unmounted or render poster only to conserve mobile data.
+  // Mount only the active video. Keeping adjacent video elements mounted can
+  // exhaust Android Chrome media decoders and leave the next Reel buffering forever.
   const trackTranslateStyle = {
     transform: `translate3d(0, calc(-${currentIndex * 100}% + ${dragOffsetY}px), 0)`,
     transition: isDragging ? "none" : "transform 0.36s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -631,7 +685,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         <div className="reelsTrack" style={trackTranslateStyle}>
           {reels.map((reel, index) => {
             const isActive = index === currentIndex;
-            const isPreloaded = isIndexPreloaded(index, currentIndex, reels.length, 2, 1);
+            const isPreloaded = isActive;
             const hasError = videoError[reel.id];
 
             return (
@@ -672,23 +726,21 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       />
                     ) : (
                       <video
-                        ref={(el) => {
-                          if (el) {
-                            videoRefs.current.set(reel.id, el);
-                            if (isActive && el.paused && isPlaying) el.play().catch(() => {});
-                          } else {
-                            videoRefs.current.delete(reel.id);
-                          }
-                        }}
+                        ref={getVideoRef(reel.id)}
                         src={reel.videoUrl}
                         poster={reel.posterUrl}
                         className="reelsVideoElement"
                         playsInline
                         loop
                         muted={isMuted}
-                        preload="metadata"
+                        preload="auto"
                         onTimeUpdate={isActive ? handleTimeUpdate : undefined}
                         onWaiting={isActive ? () => setIsLoadingVideo(true) : undefined}
+                        onCanPlay={isActive ? () => {
+                          setIsLoadingVideo(false);
+                          const video = videoRefs.current.get(reel.id);
+                          if (video && video.paused && isPlaying) video.play().catch(() => {});
+                        } : undefined}
                         onPlaying={isActive ? () => setIsLoadingVideo(false) : undefined}
                         onError={() => handleVideoError(reel.id)}
                       />
