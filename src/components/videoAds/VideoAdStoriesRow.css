@@ -14,9 +14,14 @@
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  touch-action: pan-x pan-y;
+  cursor: grab;
 }
+.guli-ad-stories-track:active { cursor: grabbing; }
 .guli-ad-stories-track::-webkit-scrollbar { display: none; }
 .guli-ad-story {
+  scroll-snap-align: start;
   flex: 0 0 82px;
   width: 82px;
   min-width: 82px;
