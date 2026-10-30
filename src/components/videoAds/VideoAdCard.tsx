@@ -41,7 +41,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenInitialTime, setFullscreenInitialTime] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [impressionRecorded, setImpressionRecorded] = useState(false);
@@ -142,7 +141,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
     const video = videoRef.current;
     if (video) {
-      setFullscreenInitialTime(video.currentTime || 0);
       video.pause();
     }
     setIsFullscreen(true);
@@ -311,7 +309,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           isOpen={isFullscreen}
           ad={ad}
           ads={galleryAds}
-          initialTime={fullscreenInitialTime}
           onClose={handleCloseFullscreen}
           onOpenProduct={onOpenProduct}
           onNavigateUrl={onNavigateUrl}
