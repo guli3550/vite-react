@@ -837,6 +837,12 @@ export default function App() {
   // Hide the single home ad slot until the customer leaves and re-enters Home.
   const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(false);
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
+
+  // Any navigation path (including Android/browser Back) that returns to Home
+  // starts the home ad panel fresh for the new visit.
+  useEffect(() => {
+    if (page === "home") setHomeVideoAdsDismissed(false);
+  }, [page]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
