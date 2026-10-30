@@ -173,8 +173,46 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const isSwipingVertically = useRef<boolean | null>(null);
   const wheelLockRef = useRef<boolean>(false);
 
-  // Video element references map
+  // Keep callback refs stable: inline ref callbacks detach/reattach on every render.
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const videoRefCallbacks = useRef<Map<string, (el: HTMLVideoElement | null) => void>>(new Map());
+
+  const getVideoRefCallback = (reelId: string) => {
+    let callback = videoRefCallbacks.current.get(reelId);
+    if (!callback) {
+      callback = (el) => {
+        if (el) {
+          videoRefs.current.set(reelId, el);
+        } else {
+          const previousVideo = videoRefs.current.get(reelId);
+          if (previousVideo) {
+            try { previousVideo.pause(); } catch { /* media may already be detached */ }
+          }
+          videoRefs.current.delete(reelId);
+        }
+      };
+      videoRefCallbacks.current.set(reelId, callback);
+    }
+    return callback;
+  };
+
+  const stopAllReelMedia = useCallback(() => {
+    const active = currentReelRef.current;
+    videoRefs.current.forEach((videoEl, reelId) => {
+      try {
+        if (active?.id === reelId && Number.isFinite(videoEl.currentTime)) {
+          localStorage.setItem(REELS_POSITION_STORAGE_KEY, JSON.stringify({
+            reelId,
+            currentTime: Math.max(0, videoEl.currentTime),
+          }));
+        }
+        videoEl.pause();
+      } catch { /* detached or unavailable media */ }
+    });
+  }, []);
+
+  const currentReelRef = useRef<ReelItem | undefined>(undefined);
+  currentReelRef.current = reels[currentIndex];
 
   // Require browser visitors to install the GULI MARKET PWA before viewing Reels.
   // Installed standalone app and Telegram Mini App users bypass this gate.
@@ -250,15 +288,26 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     const handleStorageChange = () => {
       reloadReels();
     };
+    const stopWhenPageIsHidden = () => {
+      if (document.visibilityState === "hidden") stopAllReelMedia();
+    };
 
     window.addEventListener("storage", handleStorageChange as EventListener);
     window.addEventListener("guli_reels_updated", handleStorageChange as EventListener);
+    window.addEventListener("pagehide", stopAllReelMedia);
+    document.addEventListener("visibilitychange", stopWhenPageIsHidden);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange as EventListener);
       window.removeEventListener("guli_reels_updated", handleStorageChange as EventListener);
+      window.removeEventListener("pagehide", stopAllReelMedia);
+      document.removeEventListener("visibilitychange", stopWhenPageIsHidden);
+      // Route exit/unmount must stop every active or preloaded video immediately.
+      stopAllReelMedia();
+      videoRefs.current.clear();
+      videoRefCallbacks.current.clear();
     };
-  }, [reloadReels]);
+  }, [reloadReels, stopAllReelMedia]);
 
   const currentReel = reels[currentIndex];
   const lastPositionWriteRef = useRef(0);
@@ -293,6 +342,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Manage video playback when currentIndex changes
   useEffect(() => {
+    let effectIsCurrent = true;
     setIsLoadingVideo(true);
     setVideoProgress(0);
     setIsPlaying(true);
@@ -331,16 +381,25 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
+              if (!effectIsCurrent) {
+                activeVideo.pause();
+                return;
+              }
               setIsLoadingVideo(false);
               setIsPlaying(true);
             })
             .catch(() => {
+              if (!effectIsCurrent) return;
               // Browser autoplay policy might restrict unmuted audio before user interaction
               // Fallback to muted playback so video runs, then unmute on first gesture
               activeVideo.muted = true;
               activeVideo
                 .play()
                 .then(() => {
+                  if (!effectIsCurrent) {
+                    activeVideo.pause();
+                    return;
+                  }
                   setIsLoadingVideo(false);
                   setIsPlaying(true);
                   const unmuteOnInteraction = () => {
@@ -362,6 +421,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   // Depend on the reel identity, not the whole object: view-count updates must
   // not restart playback from time zero.
+    return () => {
+      effectIsCurrent = false;
+      // If this playback effect is replaced, don't leave its video audible.
+      if (currentReel) {
+        const previousVideo = videoRefs.current.get(currentReel.id);
+        previousVideo?.pause();
+      }
+    };
   }, [currentIndex, currentReel?.id]);
 
   // Navigate between reels
@@ -754,14 +821,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       />
                     ) : (
                       <video
-                        ref={(el) => {
-                          if (el) {
-                            videoRefs.current.set(reel.id, el);
-                            if (isActive && el.paused && isPlaying) el.play().catch(() => {});
-                          } else {
-                            videoRefs.current.delete(reel.id);
-                          }
-                        }}
+                        ref={getVideoRefCallback(reel.id)}
                         src={reel.videoUrl}
                         poster={reel.posterUrl}
                         className="reelsVideoElement"
