@@ -48,30 +48,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const retryCountRef = useRef(0);
   const endedWhileInfoOpenRef = useRef(false);
 
-  // Warm every active story video when the viewer opens. Detached media elements
-  // let the browser populate its normal HTTP media cache before the user swipes.
-  useEffect(() => {
-    if (!isOpen) return;
-    const warmPlayers: HTMLVideoElement[] = [];
-    const urls = Array.from(new Set(gallery.map((item) => item.video_url).filter(Boolean)));
-    urls.forEach((url) => {
-      const warmPlayer = document.createElement("video");
-      warmPlayer.preload = "auto";
-      warmPlayer.muted = true;
-      warmPlayer.playsInline = true;
-      warmPlayer.setAttribute("playsinline", "");
-      warmPlayer.src = url;
-      warmPlayers.push(warmPlayer);
-      warmPlayer.load();
-    });
-    return () => {
-      warmPlayers.forEach((player) => {
-        player.pause();
-        player.removeAttribute("src");
-        player.load();
-      });
-    };
-  }, [isOpen, gallery]);
+  // Do not preload every gallery video in parallel on mobile. Competing media
+  // requests can starve the active fullscreen video and make playback stall
+  // before the end. The visible <video preload="auto"> owns its own buffering;
+  // the next ad is loaded only after the current ad completes or the user swipes.
 
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
     try {
