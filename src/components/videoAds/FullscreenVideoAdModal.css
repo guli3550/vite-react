@@ -551,3 +551,78 @@
     max-height: 32vh;
   }
 }
+
+
+/* Story details sheet: keep the video visible and playing behind it. */
+.guli-fullscreen-bottom-card.guli-story-info-expanded {
+  z-index: 45;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: none;
+  padding: 1.25rem .8rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(0deg, rgba(0,0,0,.98) 0%, rgba(0,0,0,.92) 82%, rgba(0,0,0,.12) 100%);
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-inner {
+  width: 100%;
+  max-height: min(48dvh, 430px);
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 1.25rem;
+  background: rgba(12,17,31,.96);
+  box-shadow: 0 16px 44px rgba(0,0,0,.42);
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-thumb,
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-thumb-placeholder {
+  width: 44px;
+  height: 44px;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-info {
+  max-height: min(40dvh, 350px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: .55rem;
+  padding: .1rem .15rem .35rem 0;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-title {
+  font-size: 1rem;
+  line-height: 1.35;
+  white-space: normal;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-desc {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  color: #e2e8f0;
+  font-size: .88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-cta-btn {
+  align-self: flex-start;
+  padding: .58rem .8rem;
+}
+.guli-fullscreen-gallery-segment:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+/* A lightweight buffering indicator appears only while the media is waiting. */
+.guli-fullscreen-buffering {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  margin: -21px 0 0 -21px;
+  border: 3px solid rgba(255,255,255,.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: guliVideoBufferSpin .8s linear infinite;
+  pointer-events: none;
+}
+.guli-fullscreen-buffering span { display: none; }
+@keyframes guliVideoBufferSpin { to { transform: rotate(360deg); } }
