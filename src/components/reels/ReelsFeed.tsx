@@ -196,6 +196,9 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     return callback;
   };
 
+  const currentReelRef = useRef<ReelItem | undefined>(undefined);
+  currentReelRef.current = reels[currentIndex];
+
   const stopAllReelMedia = useCallback(() => {
     const active = currentReelRef.current;
     videoRefs.current.forEach((videoEl, reelId) => {
@@ -210,9 +213,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       } catch { /* detached or unavailable media */ }
     });
   }, []);
-
-  const currentReelRef = useRef<ReelItem | undefined>(undefined);
-  currentReelRef.current = reels[currentIndex];
 
   // Require browser visitors to install the GULI MARKET PWA before viewing Reels.
   // Installed standalone app and Telegram Mini App users bypass this gate.
