@@ -18,6 +18,7 @@ import {
   User3DIcon,
 } from "./components/Nav3DIcons";
 import { ReelsFeed } from "./components/reels/ReelsFeed";
+import { prefetchPublicReels } from "./lib/reelsApi";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import { DEFAULT_PRODUCTS } from "./utils/defaultProducts";
 import {
@@ -775,6 +776,12 @@ function LocationPicker({
 }
 
 export default function App() {
+  // Warm the Reels cache after the storefront's first paint, before the customer opens the tab.
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void prefetchPublicReels(); }, 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const isTelegramWebapp = useMemo(() => detectPlatform().isTelegram, []);
   const telegramUser = tg()?.initDataUnsafe?.user;
 
