@@ -111,3 +111,15 @@ export function isAdActiveAndVisible(ad: VideoAd, now = new Date()): boolean {
   }
   return true;
 }
+
+
+/**
+ * Returns every ad eligible for a given storefront placement, preserving
+ * the API's priority/newest ordering. Do not collapse this list to its first item.
+ */
+export function getAdsForPlacement<T extends Pick<VideoAd, "placement">>(
+  ads: T[],
+  placement: "home" | "product_feed"
+): T[] {
+  return ads.filter((ad) => ad.placement === placement || ad.placement === "all");
+}
