@@ -3,7 +3,6 @@ import type { ReelItem, ReelComment } from "../../types/reels";
 import { loadReelsFromStorage } from "../../data/demoReels";
 import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
-  isIndexPreloaded,
   evaluateSwipeGesture,
   calculateVideoProgress,
 } from "../../utils/reelsEngine";
@@ -604,8 +603,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     );
   }
 
-  // Preload window calculation: active index + next 2 reels (and prev 1 if available)
-  // All other videos are unmounted or render poster only to conserve mobile data.
+  // Mount only the active video. Keeping adjacent video elements mounted can
+  // exhaust Android Chrome media decoders and leave the next Reel buffering forever.
   const trackTranslateStyle = {
     transform: `translate3d(0, calc(-${currentIndex * 100}% + ${dragOffsetY}px), 0)`,
     transition: isDragging ? "none" : "transform 0.36s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -686,7 +685,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
         <div className="reelsTrack" style={trackTranslateStyle}>
           {reels.map((reel, index) => {
             const isActive = index === currentIndex;
-            const isPreloaded = isIndexPreloaded(index, currentIndex, reels.length, 2, 1);
+            const isPreloaded = isActive;
             const hasError = videoError[reel.id];
 
             return (
@@ -734,7 +733,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                         playsInline
                         loop
                         muted={isMuted}
-                        preload="metadata"
+                        preload="auto"
                         onTimeUpdate={isActive ? handleTimeUpdate : undefined}
                         onWaiting={isActive ? () => setIsLoadingVideo(true) : undefined}
                         onCanPlay={isActive ? () => {
