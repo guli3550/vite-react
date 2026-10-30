@@ -373,7 +373,7 @@
   transition: width 0.12s linear;
 }
 .guli-fullscreen-video-stage {
-  touch-action: pan-y;
+  touch-action: none;
 }
 
 
@@ -488,7 +488,7 @@
 .guli-fullscreen-ad-overlay {
   transition: transform 260ms cubic-bezier(.2,.75,.25,1), opacity 260ms ease;
   transform-origin: center center;
-  touch-action: pan-y;
+  touch-action: none;
 }
 .guli-fullscreen-ad-overlay.guli-story-dismissing {
   transform: translate3d(0, 105%, 0) scale(.78);
