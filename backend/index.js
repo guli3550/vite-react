@@ -11,7 +11,7 @@ try {
 const { listProducts, getProduct } = require("./catalog");
 const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
 const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
-require("./socialPromoRuntime");
+// Social Promo API intentionally unmounted; profile links are served from a local snapshot.
 require("./videoAdsRuntime");
 require("./reelsRuntime");
 

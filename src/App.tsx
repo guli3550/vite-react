@@ -26,7 +26,7 @@ import {
   type Product,
 } from "./components/ProductImageGallery";
 import { RotatingCategoriesSection } from "./components/RotatingCategorySection";
-import { SocialPromoSection } from "./components/socialPromo/SocialPromoSection";
+import { VideoAdHighlights } from "./components/videoAds/VideoAdHighlights";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
 import { getApiBaseUrl } from "./lib/apiOrigin";
@@ -849,11 +849,6 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
-  // Keep the Home ad dismissed for this browser/app session.
-  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(() => {
-    try { return sessionStorage.getItem("guli_home_video_ad_dismissed") === "1"; }
-    catch { return false; }
-  });
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
 
   const [search, setSearch] = useState("");
@@ -4584,7 +4579,29 @@ export default function App() {
 
             </section>
 
-            <SocialPromoSection language={language} isDark={theme === "dark"} />
+            <VideoAdHighlights
+              ads={homeVideoAds}
+              onOpenProduct={(prodId) => {
+                const p = products.find(
+                  (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
+                );
+                if (p) openProduct(p, "home");
+                else go("catalog");
+              }}
+              onNavigateUrl={(url) => {
+                if (url.startsWith("/")) {
+                  if (url.includes("category=")) {
+                    const match = url.match(/category=([^&]+)/);
+                    if (match) setSelectedCategory(decodeURIComponent(match[1]));
+                  }
+                  go("catalog");
+                } else {
+                  const tg = (window as any).Telegram?.WebApp;
+                  if (tg?.openLink) tg.openLink(url);
+                  else window.open(url, "_blank", "noopener,noreferrer");
+                }
+              }}
+            />
 
             <RotatingCategoriesSection
               categories={allCategories}
@@ -4599,41 +4616,11 @@ export default function App() {
                 go("catalog");
               }}
             />
-            {!homeVideoAdsDismissed && homeVideoAds.length > 0 && (
-              <VideoAdCard
-                key={homeVideoAds[0].id}
-                ad={homeVideoAds[0]}
-                galleryAds={homeVideoAds}
-                placement="home"
-                onOpenProduct={(prodId) => {
-                  const p = products.find(
-                    (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
-                  );
-                  if (p) openProduct(p, "home");
-                  else go("catalog");
-                }}
-                onNavigateUrl={(url) => {
-                  if (url.startsWith("/")) {
-                    if (url.includes("category=")) {
-                      const match = url.match(/category=([^&]+)/);
-                      if (match) setSelectedCategory(decodeURIComponent(match[1]));
-                    }
-                    go("catalog");
-                  } else {
-                    const tg = (window as any).Telegram?.WebApp;
-                    if (tg?.openLink) tg.openLink(url);
-                    else window.open(url, "_blank", "noopener,noreferrer");
-                  }
-                }}
-                onDismiss={() => {
-                  try { sessionStorage.setItem("guli_home_video_ad_dismissed", "1"); } catch {}
-                  setHomeVideoAdsDismissed(true);
-                }}
-              />
-            )}
-            <section className="section">
-              <div className="sectionTitle">
-                <h2>{t("featured_title")}</h2>
+            <section className="section featuredProductsSection">
+              <div className="sectionTitle featuredProductsHeader">
+                <div>
+                  <h2 className="featuredProductsTitle">{t("featured_title")}</h2>
+                </div>
                 <button onClick={() => go("catalog")}>{t("see_all")}</button>
               </div>
               {productsLoading ? (

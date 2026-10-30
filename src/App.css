@@ -5325,3 +5325,35 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
   font-size: 12px;
   letter-spacing: .15px;
 }
+
+
+/* Refined title treatment for the featured products section. */
+.featuredProductsHeader {
+  align-items: center;
+  margin-bottom: 12px;
+}
+.featuredProductsHeader h2.featuredProductsTitle {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  padding: 0 0 7px;
+  color: var(--text-main);
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.45px;
+}
+.featuredProductsHeader h2.featuredProductsTitle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 34px;
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--primary), #f3a5b9);
+}
+.featuredProductsHeader > button {
+  align-self: center;
+  margin: 0;
+}

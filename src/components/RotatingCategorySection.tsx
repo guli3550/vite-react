@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
 import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
+import "./RotatingCategorySection.css";
 
 export type { CategoryInfo };
 
@@ -200,12 +201,9 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
   }, [categories]);
 
   return (
-    <section className="section homeCategoriesSection" aria-label="Kategoriyalar">
-      <div className="sectionTitle">
-        <div>
-          <span className="categorySectionEyebrow">MAHSULOT TOIFALARI</span>
-          <h2>Kategoriyalar</h2>
-        </div>
+    <section className="section homeCategoriesSection" aria-label="Mahsulot toifalari">
+      <div className="homeCategoriesCompactAction">
+        <span className="categorySectionEyebrow">MAHSULOT TOIFALARI</span>
         <button
           className="sectionSeeAllBtn"
           onClick={onViewAll}
