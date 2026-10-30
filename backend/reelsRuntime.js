@@ -189,7 +189,7 @@ install("get", "/api/admin/reels", requireAdmin, async (_req, res) => {
 install("post", "/api/admin/reels", requireAdmin, async (req, res) => {
   try {
     const row = toRow(req.body || {});
-    if (!row.id || !row.video_url || !row.caption || !row.poster_url) return fail(res, new Error("Caption, video URL va poster URL majburiy"), 400);
+    if (!row.id || !row.video_url || !row.caption) return fail(res, new Error("Caption va video URL majburiy"), 400);
     const { data, error } = await db().from("reels").insert(row).select("*").single();
     if (error) throw error;
     return res.status(201).json({ success: true, data: normalizeReel(data) });
@@ -201,7 +201,7 @@ install("put", "/api/admin/reels/:id", requireAdmin, async (req, res) => {
     if (current.error) throw current.error;
     if (!current.data) return fail(res, new Error("Reels topilmadi"), 404);
     const row = toRow({ ...(req.body || {}), id: String(req.params.id) }, current.data);
-    if (!row.video_url || !row.caption || !row.poster_url) return fail(res, new Error("Caption, video URL va poster URL majburiy"), 400);
+    if (!row.video_url || !row.caption) return fail(res, new Error("Caption va video URL majburiy"), 400);
     const { data, error } = await db().from("reels").update(row).eq("id", row.id).select("*").single();
     if (error) throw error;
     return res.json({ success: true, data: normalizeReel(data) });
