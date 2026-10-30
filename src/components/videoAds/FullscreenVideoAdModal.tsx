@@ -43,14 +43,14 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const progressFillRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const progressRafRef = useRef<number | null>(null);
 
-  const stopProgressLoop = () => {
+  const stopProgressLoop = useCallback(() => {
     if (progressRafRef.current !== null) {
       cancelAnimationFrame(progressRafRef.current);
       progressRafRef.current = null;
     }
-  };
+  }, []);
 
-  const startProgressLoop = () => {
+  const startProgressLoop = useCallback(() => {
     stopProgressLoop();
     const paint = () => {
       const video = videoRef.current;
@@ -66,7 +66,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       progressRafRef.current = requestAnimationFrame(paint);
     };
     progressRafRef.current = requestAnimationFrame(paint);
-  };
+  }, [currentIndex, stopProgressLoop]);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -109,7 +109,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     retryCountRef.current = 0;
     endedWhileInfoOpenRef.current = false;
     hasStartedRef.current = false;
-  }, [gallery.length]);
+  }, [gallery.length, stopProgressLoop]);
 
   const next = useCallback(() => {
     if (currentIndex < gallery.length - 1) goTo(currentIndex + 1);
@@ -136,9 +136,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       document.body.style.overflow = originalOverflow;
       document.body.style.overscrollBehavior = originalOverscroll;
       window.removeEventListener("keydown", handleKeyDown);
+      stopProgressLoop();
       videoRef.current?.pause();
     };
-  }, [isOpen, onClose, next, previous]);
+  }, [isOpen, onClose, next, previous, stopProgressLoop]);
 
   // Each selected ad starts automatically with sound. Navigation is triggered by
   // an explicit swipe or by the previous video ending after the initial user tap.
