@@ -90,7 +90,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     document.body.style.overscrollBehavior = "contain";
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowRight" && !isInfoExpanded) next();
       if (e.key === "ArrowLeft") previous();
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -252,6 +252,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
               key={item.id}
               className="guli-fullscreen-gallery-segment"
               onClick={() => goTo(index)}
+              disabled={isInfoExpanded && index > currentIndex}
               aria-label={`${index + 1}-reklamaga o'tish`}
             >
               <span style={{ width: index < currentIndex ? "100%" : index === currentIndex ? `${progress}%` : "0%" }} />
