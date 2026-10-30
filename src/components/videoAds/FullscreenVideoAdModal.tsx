@@ -11,7 +11,6 @@ interface FullscreenVideoAdModalProps {
   isOpen: boolean;
   ad: VideoAd;
   ads?: VideoAd[];
-  initialTime?: number;
   onClose: () => void;
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
@@ -31,7 +30,7 @@ function getSessionId(): string {
 }
 
 export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
-  isOpen, ad, ads, initialTime = 0, onClose, onOpenProduct, onNavigateUrl,
+  isOpen, ad, ads, onClose, onOpenProduct, onNavigateUrl,
 }) => {
   const gallery = ads?.length ? ads : [ad];
   const requestedIndex = Math.max(0, gallery.findIndex((item) => item.id === ad.id));
@@ -101,13 +100,6 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     const video = videoRef.current;
     if (!video) return;
     video.muted = false;
-    if (currentIndex === requestedIndex && initialTime > 0) {
-      const restore = () => {
-        if (Number.isFinite(video.duration) && initialTime < video.duration - 1) video.currentTime = initialTime;
-      };
-      if (video.readyState >= 1) restore();
-      else video.addEventListener("loadedmetadata", restore, { once: true });
-    }
     let active = true;
     video.play().then(() => {
       if (!active) { video.pause(); return; }
@@ -123,7 +115,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       active = false;
       video.pause();
     };
-  }, [isOpen, currentIndex, requestedIndex, initialTime, activeAd.id, sendEvent]);
+  }, [isOpen, currentIndex, activeAd.id, sendEvent]);
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
@@ -131,9 +123,20 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     setProgress(Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100)));
   };
 
-  const handleTogglePlayPause = (e: React.MouseEvent) => {
+  const handleStageTap = (e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();
     if (suppressClick.current) { suppressClick.current = false; return; }
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const relativeX = e.clientX - bounds.left;
+    const zone = relativeX / Math.max(bounds.width, 1);
+    if (zone < 0.33) {
+      previous();
+      return;
+    }
+    if (zone > 0.67) {
+      next();
+      return;
+    }
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
@@ -234,7 +237,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         </div>
       </div>
 
-      <div className="guli-fullscreen-video-stage" onClick={handleTogglePlayPause} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div className="guli-fullscreen-video-stage" onClick={handleStageTap} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <video
           key={activeAd.id}
           ref={videoRef}
