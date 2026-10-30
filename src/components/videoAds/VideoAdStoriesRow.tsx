@@ -22,7 +22,13 @@ export const VideoAdStoriesRow: React.FC<VideoAdStoriesRowProps> = ({
   return (
     <>
       <section className="guli-ad-stories" aria-label="Faol reklamalar">
-        <div className="guli-ad-stories-track">
+        <div
+          className="guli-ad-stories-track"
+          onTouchStart={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
+          onTouchEnd={(event) => event.stopPropagation()}
+          onTouchCancel={(event) => event.stopPropagation()}
+        >
           {ads.map((ad) => (
             <button
               key={ad.id}
