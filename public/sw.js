@@ -1,4 +1,3 @@
-const SHELL_CACHE_NAME = "guli-shell-v2";
 const HOME_BANNER_CACHE_NAME = "guli-home-banners-v1";
 const MAX_CACHED_HOME_BANNERS = 24;
 
@@ -22,7 +21,7 @@ function isGuliBannerImage(url) {
 async function cacheBannerImage(url, cache) {
   try {
     const response = await fetch(url, { mode: "cors", credentials: "omit", cache: "reload" });
-    if (response.ok && (response.type === "cors" || response.type === "basic")) {
+    if (response.ok && (response.type === "cors" || response.type === "basic") && (response.headers.get("content-type") || "").startsWith("image/")) {
       await cache.put(url, response.clone());
       return true;
     }
@@ -60,7 +59,7 @@ self.addEventListener("fetch", (event) => {
       const cache = await caches.open(HOME_BANNER_CACHE_NAME);
       const cached = await cache.match(request, { ignoreVary: true });
       if (cached) {
-        event.waitUntil(cacheBannerImage(request.url, cache));
+        // Banner URLs are immutable; the fresh manifest sends new URLs when an admin replaces an image.
         return cached;
       }
       const response = await fetch(request);
