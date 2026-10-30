@@ -834,6 +834,8 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
+  // Hide the single home ad slot until the customer leaves and re-enters Home.
+  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(false);
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1540,6 +1542,7 @@ export default function App() {
     if (!MAIN_TABS.includes(page)) return;
     const target = e.target as HTMLElement;
     if (
+      target.closest(".guli-fullscreen-ad-overlay") ||
       target.closest(".hero") ||
       target.closest(".heroSlideTrack") ||
       target.closest(".heroSlideItem") ||
@@ -2322,6 +2325,9 @@ export default function App() {
     try {
       tg()?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
+    if (next === "home" && page !== "home") {
+      setHomeVideoAdsDismissed(false);
+    }
     if (next !== page) {
       setPreviousPage(page);
       setPageHistory((prev) => [...prev, next]);
@@ -4534,7 +4540,7 @@ export default function App() {
                 go("catalog");
               }}
             />
-            {homeVideoAds.length > 0 && (
+            {!homeVideoAdsDismissed && homeVideoAds.length > 0 && (
               <VideoAdCard
                 key={homeVideoAds[0].id}
                 ad={homeVideoAds[0]}
@@ -4560,8 +4566,8 @@ export default function App() {
                     else window.open(url, "_blank", "noopener,noreferrer");
                   }
                 }}
-                onDismiss={(adId) => {
-                  setHomeVideoAds((prev) => prev.filter((item) => item.id !== adId));
+                onDismiss={() => {
+                  setHomeVideoAdsDismissed(true);
                 }}
               />
             )}
