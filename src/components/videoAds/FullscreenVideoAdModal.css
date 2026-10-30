@@ -482,3 +482,72 @@
   object-fit: cover;
   border-radius: 50%;
 }
+
+
+/* Instagram Stories vertical gestures */
+.guli-fullscreen-ad-overlay {
+  transition: transform 260ms cubic-bezier(.2,.75,.25,1), opacity 260ms ease;
+  transform-origin: center center;
+  touch-action: pan-y;
+}
+.guli-fullscreen-ad-overlay.guli-story-dismissing {
+  transform: translate3d(0, 105%, 0) scale(.78);
+  opacity: 0;
+  pointer-events: none;
+}
+.guli-fullscreen-video-stage {
+  touch-action: pan-y;
+}
+.guli-fullscreen-bottom-card {
+  transition: transform 280ms cubic-bezier(.2,.75,.25,1), padding 280ms ease;
+}
+.guli-fullscreen-card-inner {
+  transition: align-items 220ms ease, padding 220ms ease, border-radius 220ms ease;
+}
+.guli-fullscreen-card-info {
+  transition: max-height 260ms ease, gap 220ms ease;
+}
+.guli-fullscreen-card-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.guli-fullscreen-card-desc {
+  transition: opacity 220ms ease, max-height 260ms ease;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded {
+  transform: translate3d(0, -12vh, 0);
+  padding-bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(0deg, rgba(0,0,0,.98) 0%, rgba(0,0,0,.88) 75%, transparent 100%);
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-inner {
+  align-items: flex-start;
+  padding: 1rem;
+  background: rgba(13,18,32,.94);
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-info {
+  gap: .45rem;
+  max-height: min(42vh, 320px);
+  overflow-y: auto;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-title {
+  white-space: normal;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+.guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-desc {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  white-space: pre-wrap;
+  font-size: .86rem;
+  line-height: 1.5;
+}
+@media (max-height: 650px) {
+  .guli-fullscreen-bottom-card.guli-story-info-expanded {
+    transform: translate3d(0, -7vh, 0);
+  }
+  .guli-fullscreen-bottom-card.guli-story-info-expanded .guli-fullscreen-card-info {
+    max-height: 32vh;
+  }
+}
