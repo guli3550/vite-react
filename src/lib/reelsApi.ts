@@ -19,8 +19,29 @@ async function request<T>(path: string, init: RequestInit = {}, admin = false): 
   return payload.data as T;
 }
 
+let publicReelsRequest: Promise<ReelItem[]> | null = null;
+
 export async function fetchPublicReels(): Promise<ReelItem[]> {
-  return request<ReelItem[]>("/api/reels");
+  if (!publicReelsRequest) {
+    const pending = request<ReelItem[]>("/api/reels");
+    publicReelsRequest = pending;
+    try {
+      return await pending;
+    } finally {
+      if (publicReelsRequest === pending) publicReelsRequest = null;
+    }
+  }
+  return publicReelsRequest;
+}
+
+export async function prefetchPublicReels(): Promise<void> {
+  try {
+    const reels = await fetchPublicReels();
+    const activeReels = reels.filter((reel) => reel.status === "active");
+    localStorage.setItem("guli_public_reels_cache_v1", JSON.stringify({ savedAt: Date.now(), reels: activeReels }));
+  } catch (error) {
+    console.warn("[Reels] Fon rejimida oldindan yuklash bajarilmadi:", error);
+  }
 }
 
 export async function fetchAdminReels(): Promise<ReelItem[]> {
