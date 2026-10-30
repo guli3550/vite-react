@@ -1555,6 +1555,7 @@ export default function App() {
       target.closest(".categoryScroll") ||
       target.closest(".orderFilterTabs") ||
       target.closest(".categoryTabs") ||
+      target.closest(".guli-ad-stories") ||
       target.closest("input") ||
       target.closest("textarea") ||
       target.closest("button") ||
