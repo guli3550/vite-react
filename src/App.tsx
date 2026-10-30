@@ -218,15 +218,11 @@ const persistHomeBanners = (banners: Banner[]) => {
 
 const warmHomeBannerImages = (banners: Banner[], extraImageUrl = "") => {
   const urls = [...new Set([...banners.map((banner) => banner.imageUrl), extraImageUrl].filter((url): url is string => typeof url === "string" && /^https:\/\//i.test(url)))];
-  if (!urls.length || !("serviceWorker" in navigator)) return;
-  const sendWarmup = (worker?: ServiceWorker | null) => {
-    worker?.postMessage({ type: "GULI_CACHE_HOME_BANNERS", urls });
-  };
-  if (navigator.serviceWorker.controller) {
-    sendWarmup(navigator.serviceWorker.controller);
-  } else {
-    navigator.serviceWorker.ready.then((registration) => sendWarmup(registration.active)).catch(() => {});
-  }
+  if (!("serviceWorker" in navigator)) return;
+  // Wait for the newly activated worker so an older controller cannot drop the cache message.
+  navigator.serviceWorker.ready
+    .then((registration) => registration.active?.postMessage({ type: "GULI_CACHE_HOME_BANNERS", urls }))
+    .catch(() => {});
 };
 
 const persistOrdersSafely = (orders: Order[]) => {
