@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import type { ReelItem, ReelStatus } from "../../types/reels";
 import { loadReelsFromStorage, saveReelsToStorage, INITIAL_DEMO_REELS } from "../../data/demoReels";
 import { DEFAULT_PRODUCTS } from "../../utils/defaultProducts";
+import { fetchAdminReels, saveServerReel, deleteServerReel, uploadReelMedia } from "../../lib/reelsApi";
 import {
   isInstagramUrl,
   extractInstagramShortcode,
@@ -40,10 +41,17 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Load from local storage
-  const loadData = () => {
-    const data = loadReelsFromStorage();
-    setReels(data);
+  // The server database is the canonical source shared by admin and customer Reels.
+  const loadData = async () => {
+    try {
+      const data = await fetchAdminReels();
+      setReels(data);
+      saveReelsToStorage(data);
+    } catch (error) {
+      console.error("[Admin Reels] Serverdan yuklash xatosi:", error);
+      if (!import.meta.env.PROD) setReels(loadReelsFromStorage());
+      notify(error instanceof Error ? `⚠️ Reels serveriga ulanib bo‘lmadi: ${error.message}` : "⚠️ Reels serveriga ulanib bo‘lmadi");
+    }
   };
 
   useEffect(() => {
@@ -121,13 +129,18 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     setIsFormModalOpen(true);
   };
 
-  // Toggle Status
-  const handleToggleStatus = (reel: ReelItem) => {
+  // Persist publish/unpublish state to the shared server.
+  const handleToggleStatus = async (reel: ReelItem) => {
     const nextStatus: ReelStatus = reel.status === "active" ? "inactive" : "active";
-    const updated = reels.map((r) => (r.id === reel.id ? { ...r, status: nextStatus } : r));
-    saveReelsToStorage(updated);
-    setReels(updated);
-    notify(nextStatus === "active" ? `✓ “${reel.caption.slice(0, 25)}...” faollashtirildi` : `“${reel.caption.slice(0, 25)}...” faol emas qilindi`);
+    try {
+      const saved = await saveServerReel({ ...reel, status: nextStatus }, true);
+      const updated = reels.map((r) => r.id === reel.id ? { ...r, ...saved } : r);
+      saveReelsToStorage(updated);
+      setReels(updated);
+      notify(nextStatus === "active" ? `✓ “${reel.caption.slice(0, 25)}...” faollashtirildi` : `“${reel.caption.slice(0, 25)}...” faol emas qilindi`);
+    } catch (error) {
+      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Reels holati serverda saqlanmadi");
+    }
   };
 
   // Video & Cover File Upload state
@@ -174,56 +187,45 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     return Array.from(map.values());
   }, []);
 
-  // Handle Video File Upload from device
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload selected media to the shared Supabase Storage bucket through a signed server URL.
+  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (file.size > 100 * 1024 * 1024) {
       notify("⚠️ Video hajmi 100MB dan oshmasligi kerak");
+      e.target.value = "";
       return;
     }
-
     setIsVideoUploading(true);
     setVideoFileName(file.name);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setFormData((prev) => ({ ...prev, videoUrl: result }));
-        notify(`✓ "${file.name}" video fayli muvaffaqiyatli yuklandi`);
-      }
+    try {
+      const url = await uploadReelMedia(file);
+      setFormData((prev) => ({ ...prev, videoUrl: url }));
+      notify(`✓ "${file.name}" video Storage’ga yuklandi`);
+    } catch (error) {
+      console.error("[Admin Reels] Video upload error:", error);
+      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Video yuklanmadi");
+    } finally {
       setIsVideoUploading(false);
-    };
-    reader.onerror = () => {
-      notify("❌ Videoni o‘qishda xatolik yuz berdi");
-      setIsVideoUploading(false);
-    };
-    reader.readAsDataURL(file);
+      e.target.value = "";
+    }
   };
 
-  // Handle Cover / Poster Image File Upload from device
-  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsCoverUploading(true);
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setFormData((prev) => ({ ...prev, posterUrl: result }));
-        notify(`✓ "${file.name}" muqova rasmi yuklandi`);
-      }
+    try {
+      const url = await uploadReelMedia(file);
+      setFormData((prev) => ({ ...prev, posterUrl: url }));
+      notify(`✓ "${file.name}" muqova Storage’ga yuklandi`);
+    } catch (error) {
+      console.error("[Admin Reels] Cover upload error:", error);
+      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Muqova yuklanmadi");
+    } finally {
       setIsCoverUploading(false);
-    };
-    reader.onerror = () => {
-      notify("❌ Rasmni o‘qishda xatolik yuz berdi");
-      setIsCoverUploading(false);
-    };
-    reader.readAsDataURL(file);
+      e.target.value = "";
+    }
   };
 
   // Auto-fetch video, poster, and caption from Instagram link
@@ -259,10 +261,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     [formData.videoUrl, notify]
   );
 
-  // Save Reel (Create or Edit)
-  const handleSaveReel = (e: React.FormEvent) => {
+  // Save new and edited Reels to the canonical server database.
+  const handleSaveReel = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (isVideoUploading || isCoverUploading) {
       notify("Avval media fayli yuklanishi tugashini kuting.");
       return;
@@ -277,89 +278,71 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     }
 
     const selectedProduct = inventoryProducts.find((p) => String(p.id) === String(formData.productId));
+    const displayLikesCount = Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100));
+    const base: ReelItem = editingReel ? {
+      ...editingReel,
+      caption: formData.caption.trim(),
+      videoUrl: formData.videoUrl.trim(),
+      posterUrl: formData.posterUrl.trim(),
+      musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
+      displayLikesCount,
+      productId: selectedProduct ? selectedProduct.id : undefined,
+      productName: selectedProduct ? selectedProduct.name : undefined,
+      productPrice: selectedProduct ? selectedProduct.price : undefined,
+      productImage: selectedProduct ? selectedProduct.image : undefined,
+      status: formData.status,
+    } : {
+      id: `reel-${Date.now()}`,
+      caption: formData.caption.trim(),
+      videoUrl: formData.videoUrl.trim(),
+      posterUrl: formData.posterUrl.trim(),
+      musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
+      displayLikesCount,
+      author: { name: "Guli Market", username: "gulii.uz", avatar: "/guli-logo.png", verified: true },
+      productId: selectedProduct ? selectedProduct.id : undefined,
+      productName: selectedProduct ? selectedProduct.name : undefined,
+      productPrice: selectedProduct ? selectedProduct.price : undefined,
+      productImage: selectedProduct ? selectedProduct.image : undefined,
+      likesCount: 0, commentsCount: 0, sharesCount: 0, viewsCount: 0,
+      isLiked: false, status: formData.status, createdAt: new Date().toISOString(), comments: [],
+    };
 
     setIsSavingReel(true);
     try {
-      if (editingReel) {
-        // Edit existing
-        const updated = reels.map((r) => {
-          if (r.id === editingReel.id) {
-            return {
-              ...r,
-              caption: formData.caption.trim(),
-              videoUrl: formData.videoUrl.trim(),
-              posterUrl: formData.posterUrl.trim(),
-              musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
-              displayLikesCount: Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100)),
-              productId: selectedProduct ? selectedProduct.id : undefined,
-              productName: selectedProduct ? selectedProduct.name : undefined,
-              productPrice: selectedProduct ? selectedProduct.price : undefined,
-              productImage: selectedProduct ? selectedProduct.image : undefined,
-              status: formData.status,
-            };
-          }
-          return r;
-        });
-
-        saveReelsToStorage(updated);
-        setReels(updated);
-        notify("✓ Reels muvaffaqiyatli yangilandi");
-      } else {
-        // Create new
-        const newReel: ReelItem = {
-          id: `reel-${Date.now()}`,
-          caption: formData.caption.trim(),
-          videoUrl: formData.videoUrl.trim(),
-          posterUrl: formData.posterUrl.trim(),
-          musicTitle: formData.musicTitle.trim() || "Guli Market — Original Audio",
-          displayLikesCount: Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100)),
-          author: {
-            name: "Guli Market Official",
-            username: "gulii.uz",
-            avatar: "/guli-logo.png",
-            verified: true,
-          },
-          productId: selectedProduct ? selectedProduct.id : undefined,
-          productName: selectedProduct ? selectedProduct.name : undefined,
-          productPrice: selectedProduct ? selectedProduct.price : undefined,
-          productImage: selectedProduct ? selectedProduct.image : undefined,
-          likesCount: 0,
-          commentsCount: 0,
-          sharesCount: 0,
-          viewsCount: 1,
-          isLiked: false,
-          status: formData.status,
-          createdAt: new Date().toISOString(),
-          comments: [],
-        };
-
-        const updated = [newReel, ...reels];
-        saveReelsToStorage(updated);
-        setReels(updated);
-        notify("✓ Yangi Reels qo‘shildi");
-      }
-
+      const saved = await saveServerReel(base, Boolean(editingReel));
+      const updated = editingReel
+        ? reels.map((r) => r.id === saved.id ? { ...r, ...saved, comments: r.comments } : r)
+        : [saved, ...reels];
+      saveReelsToStorage(updated);
+      setReels(updated);
       setIsFormModalOpen(false);
+      notify(editingReel ? "✓ Reels serverda yangilandi" : "✓ Yangi Reels serverga saqlandi");
+    } catch (error) {
+      console.error("[Admin Reels] Save error:", error);
+      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Reels serverga saqlanmadi");
     } finally {
       setIsSavingReel(false);
     }
   };
 
-  // Delete Reel
-  const handleDeleteConfirm = () => {
+  // Delete from the canonical server database.
+  const handleDeleteConfirm = async () => {
     if (!deleteCandidate) return;
-    const updated = reels.filter((r) => r.id !== deleteCandidate.id);
-    saveReelsToStorage(updated);
-    setReels(updated);
-    notify("✓ Reels o‘chirildi");
-    setDeleteCandidate(null);
+    try {
+      await deleteServerReel(deleteCandidate.id);
+      const updated = reels.filter((r) => r.id !== deleteCandidate.id);
+      saveReelsToStorage(updated);
+      setReels(updated);
+      notify("✓ Reels serverdan o‘chirildi");
+      setDeleteCandidate(null);
+    } catch (error) {
+      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Reels serverdan o‘chirilmadi");
+    }
   };
 
-  // Reset to initial demo data
+  // Demo fixtures must never overwrite the published production feed.
   const handleResetDemoData = () => {
-    saveReelsToStorage(INITIAL_DEMO_REELS);
-    setReels(INITIAL_DEMO_REELS);
-    notify("✓ Boshlang‘ich demo Reels ma’lumotlari tiklandi");
+    notify("Demo Reels serverdagi saqlangan videolarga ta’sir qilmaydi.");
   };
 
   return (
