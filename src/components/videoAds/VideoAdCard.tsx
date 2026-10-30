@@ -58,7 +58,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
   // Video Autoplay (Always Muted on Main Page) & Intersection Observer
   useEffect(() => {
-    if (isDismissed || hasError || !ad.video_url) return;
+    if (isDismissed || isFullscreen || hasError || !ad.video_url) return;
 
     const video = videoRef.current;
     const container = containerRef.current;
@@ -126,7 +126,13 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
       observer.disconnect();
       if (dwellTimer) clearTimeout(dwellTimer);
     };
-  }, [ad.id, ad.video_url, hasError, isDismissed, impressionRecorded]);
+    return () => {
+      observer.disconnect();
+      if (dwellTimer) clearTimeout(dwellTimer);
+      // Never leave the muted card player running behind its fullscreen gallery.
+      video.pause();
+    };
+  }, [ad.id, ad.video_url, hasError, isDismissed, isFullscreen, impressionRecorded]);
 
   // Open Tolstoy-style Fullscreen Modal on User Tap
   const handleOpenFullscreen = (e: React.MouseEvent) => {
@@ -145,12 +151,9 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
   // Close Fullscreen Modal and restore muted playback on main card
   const handleCloseFullscreen = () => {
+    // The visibility observer resumes the muted card only after the gallery closes.
+    videoRef.current?.pause();
     setIsFullscreen(false);
-    const video = videoRef.current;
-    if (video) {
-      video.muted = true;
-      video.play().catch(() => {});
-    }
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
