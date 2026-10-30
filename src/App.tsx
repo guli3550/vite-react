@@ -4538,6 +4538,7 @@ export default function App() {
               <VideoAdCard
                 key={ad.id}
                 ad={ad}
+                galleryAds={homeVideoAds}
                 placement="home"
                 onOpenProduct={(prodId) => {
                   const p = products.find(
@@ -4658,6 +4659,7 @@ export default function App() {
                           <VideoAdCard
                             key={ad.id}
                             ad={ad}
+                            galleryAds={feedVideoAds}
                             placement="product_feed"
                             onOpenProduct={(prodId) => {
                               const found = products.find(
