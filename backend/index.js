@@ -13,7 +13,7 @@ const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculateP
 const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
 // Social Promo API intentionally unmounted; profile links are served from a local snapshot.
 require("./videoAdsRuntime");
-require("./reelsRuntime");
+// Optional Reels runtime is not present in this backend package; avoid crashing API startup.
 
 const app = express();
 
