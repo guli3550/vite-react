@@ -343,3 +343,35 @@
     font-size: 0.825rem;
   }
 }
+
+
+/* Multi-ad story gallery progress */
+.guli-fullscreen-gallery-progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  pointer-events: auto;
+}
+.guli-fullscreen-gallery-segment {
+  appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+  cursor: pointer;
+}
+.guli-fullscreen-gallery-segment span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #fff;
+  transition: width 0.12s linear;
+}
+.guli-fullscreen-video-stage {
+  touch-action: pan-y;
+}
