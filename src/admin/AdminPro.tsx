@@ -16,7 +16,6 @@ import { AdminAnalyticsTab } from "./components/AdminAnalyticsTab";
 import { AdminCallCenterTab } from "./components/AdminCallCenterTab";
 import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
-import { AdminSocialPromosTab } from "./components/AdminSocialPromosTab";
 import { VideoAdsAdminTab } from "./components/VideoAdsAdminTab";
 import { AdminReelsTab } from "./components/AdminReelsTab";
 import ReviewsAdmin from "./ReviewsAdmin";
@@ -298,7 +297,7 @@ export default function AdminPro() {
   const [busy, setBusy] = useState(false);
 
   const [tab, setTab] = useState<NavTabKey>("dashboard");
-  const [marketingSubTab, setMarketingSubTab] = useState<"video_ads" | "reels" | "social_promos">("reels");
+  const [marketingSubTab, setMarketingSubTab] = useState<"video_ads" | "reels">("reels");
   const [tabHistory, setTabHistory] = useState<NavTabKey[]>(["dashboard"]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -1880,31 +1879,12 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
               >
                 🎬 Video reklamalar
               </button>
-              <button
-                type="button"
-                onClick={() => setMarketingSubTab("social_promos")}
-                style={{
-                  border: 0,
-                  background: marketingSubTab === "social_promos" ? "var(--rose, #b6536b)" : "transparent",
-                  color: marketingSubTab === "social_promos" ? "#ffffff" : "#6e5d64",
-                  fontWeight: 700,
-                  fontSize: "12px",
-                  padding: "7px 14px",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  boxShadow: marketingSubTab === "social_promos" ? "0 4px 12px rgba(182, 83, 107, 0.25)" : "none",
-                }}
-              >
-                📣 Ijtimoiy tarmoqlar aksiyalari
-              </button>
+
             </div>
             {marketingSubTab === "reels" ? (
               <AdminReelsTab notify={notify} />
-            ) : marketingSubTab === "video_ads" ? (
-              <VideoAdsAdminTab notify={notify} />
             ) : (
-              <AdminSocialPromosTab notify={notify} />
+              <VideoAdsAdminTab notify={notify} />
             )}
           </div>
         )}
