@@ -41,7 +41,32 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const progressFillRefs = useRef<Array<HTMLSpanElement | null>>([]);
-  const lastProgressPaintRef = useRef(0);
+  const progressRafRef = useRef<number | null>(null);
+
+  const stopProgressLoop = () => {
+    if (progressRafRef.current !== null) {
+      cancelAnimationFrame(progressRafRef.current);
+      progressRafRef.current = null;
+    }
+  };
+
+  const startProgressLoop = () => {
+    stopProgressLoop();
+    const paint = () => {
+      const video = videoRef.current;
+      if (!video || video.paused || video.ended || !Number.isFinite(video.duration) || video.duration <= 0) {
+        progressRafRef.current = null;
+        return;
+      }
+      const fill = progressFillRefs.current[currentIndex];
+      if (fill) {
+        const scale = Math.min(1, Math.max(0, video.currentTime / video.duration));
+        fill.style.transform = `scaleX(${scale})`;
+      }
+      progressRafRef.current = requestAnimationFrame(paint);
+    };
+    progressRafRef.current = requestAnimationFrame(paint);
+  };
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -72,12 +97,12 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const goTo = useCallback((nextIndex: number) => {
     if (nextIndex < 0 || nextIndex >= gallery.length) return;
     userPausedRef.current = false;
+    stopProgressLoop();
     videoRef.current?.pause();
     setCurrentIndex(nextIndex);
     progressFillRefs.current.forEach((fill, index) => {
       if (fill) fill.style.transform = `scaleX(${index < nextIndex ? 1 : 0})`;
     });
-    lastProgressPaintRef.current = 0;
     setIsPaused(false);
     setIsInfoExpanded(false);
     setIsBuffering(true);
@@ -144,11 +169,8 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
-    if (!video || !video.duration) return;
-    // Paint story progress on the compositor, not by changing layout width.
-    const now = performance.now();
-    if (now - lastProgressPaintRef.current < 200 && video.currentTime < video.duration) return;
-    lastProgressPaintRef.current = now;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    // Keep a final exact update for seeks/ended events; RAF paints smoothly while playing.
     const fill = progressFillRefs.current[currentIndex];
     if (fill) {
       const scale = Math.min(1, Math.max(0, video.currentTime / video.duration));
@@ -325,9 +347,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
               video.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
             }
           }}
-          onWaiting={() => setIsBuffering(true)}
-          onStalled={() => setIsBuffering(true)}
+          onWaiting={() => { stopProgressLoop(); setIsBuffering(true); }}
+          onStalled={() => { stopProgressLoop(); setIsBuffering(true); }}
           onPause={(event) => {
+            stopProgressLoop();
             const pausedVideo = event.currentTarget;
             const pausedAdId = activeAd.id;
             if (!isOpen || userPausedRef.current || pausedVideo.ended) return;
@@ -347,8 +370,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
               }
             }, 350);
           }}
-          onPlaying={() => { setIsBuffering(false); setIsPaused(false); }}
+          onPlaying={() => { setIsBuffering(false); setIsPaused(false); startProgressLoop(); }}
           onError={() => {
+            stopProgressLoop();
             const video = videoRef.current;
             if (!video) return;
             if (retryCountRef.current < 1) {
@@ -359,6 +383,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             } else setIsBuffering(false);
           }}
           onEnded={() => {
+            stopProgressLoop();
             sendEvent("video_complete", activeAd.id);
             if (isInfoExpanded) endedWhileInfoOpenRef.current = true;
             else next();
