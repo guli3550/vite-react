@@ -1,0 +1,18 @@
+/* Compact home category strip directly beneath the circular video-ad lane. */
+.homeCategoriesSection {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.homeCategoriesCompactAction {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 18px;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.homeCategoriesCompactAction .sectionSeeAllBtn {
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
