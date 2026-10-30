@@ -281,7 +281,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             >
               <span
                 ref={(element) => { progressFillRefs.current[index] = element; }}
-                style={{ width: index < currentIndex ? "100%" : "0%" }}
+                style={{ width: "100%", transform: index < currentIndex ? "scaleX(1)" : "scaleX(0)" }}
               />
             </button>
           ))}
