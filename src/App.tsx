@@ -4619,7 +4619,6 @@ export default function App() {
             <section className="section">
               <div className="sectionTitle">
                 <div>
-                  <span className="categorySectionEyebrow">MAHSULOT TOIFALARI</span>
                   <h2>{t("featured_title")}</h2>
                 </div>
                 <button onClick={() => go("catalog")}>{t("see_all")}</button>
