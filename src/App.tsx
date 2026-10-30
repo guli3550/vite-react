@@ -849,11 +849,6 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
-  // Keep the Home ad dismissed for this browser/app session.
-  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(() => {
-    try { return sessionStorage.getItem("guli_home_video_ad_dismissed") === "1"; }
-    catch { return false; }
-  });
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
 
   const [search, setSearch] = useState("");
@@ -4585,7 +4580,7 @@ export default function App() {
             </section>
 
             <VideoAdHighlights
-              ads={homeVideoAdsDismissed ? [] : homeVideoAds}
+              ads={homeVideoAds}
               onOpenProduct={(prodId) => {
                 const p = products.find(
                   (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
