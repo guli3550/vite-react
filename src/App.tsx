@@ -193,6 +193,42 @@ type Page =
 const MAIN_TABS: Page[] = ["home", "catalog", "reels", "cart", "profile"];
 const API_URL = getApiBaseUrl();
 
+const HOME_BANNER_CACHE_KEY = "guli_home_banners_cache_v1";
+const HOME_PROMO_IMAGE_CACHE_KEY = "guli_home_promo_image_cache_v1";
+
+const readCachedHomeBanners = (): Banner[] => {
+  try {
+    const raw = localStorage.getItem(HOME_BANNER_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((banner) => banner && banner.active !== false && typeof banner.imageUrl === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+const persistHomeBanners = (banners: Banner[]) => {
+  try {
+    localStorage.setItem(HOME_BANNER_CACHE_KEY, JSON.stringify(banners));
+  } catch (error) {
+    // Banner metadata is a convenience cache; storage quota must never break the storefront.
+    console.warn("[GULI] Home banner metadata cache skipped:", error);
+  }
+};
+
+const warmHomeBannerImages = (banners: Banner[], extraImageUrl = "") => {
+  const urls = [...new Set([...banners.map((banner) => banner.imageUrl), extraImageUrl].filter((url): url is string => typeof url === "string" && /^https:\/\//i.test(url)))];
+  if (!urls.length || !("serviceWorker" in navigator)) return;
+  const sendWarmup = (worker?: ServiceWorker | null) => {
+    worker?.postMessage({ type: "GULI_CACHE_HOME_BANNERS", urls });
+  };
+  if (navigator.serviceWorker.controller) {
+    sendWarmup(navigator.serviceWorker.controller);
+  } else {
+    navigator.serviceWorker.ready.then((registration) => sendWarmup(registration.active)).catch(() => {});
+  }
+};
+
 const persistOrdersSafely = (orders: Order[]) => {
   // Receipts can be large data URLs. They must never be persisted in localStorage
   // together with the complete order list; that can exhaust the Web Storage quota
@@ -966,7 +1002,9 @@ export default function App() {
     return saved === "false" ? false : true;
   });
 
-  const [promoBannerUrl, setPromoBannerUrl] = useState<string>("");
+  const [promoBannerUrl, setPromoBannerUrl] = useState<string>(() => {
+    try { return localStorage.getItem(HOME_PROMO_IMAGE_CACHE_KEY) || ""; } catch { return ""; }
+  });
 
   const [appLogo, setAppLogo] = useState<string>(() => {
     const saved = localStorage.getItem("guli_custom_logo");
@@ -990,7 +1028,7 @@ export default function App() {
     };
   }, []);
 
-  const [heroBanners, setHeroBanners] = useState<Banner[]>([]);
+  const [heroBanners, setHeroBanners] = useState<Banner[]>(readCachedHomeBanners);
 
   const [activeBannerIdx, setActiveBannerIdx] = useState<number>(0);
   const [heroDragOffset, setHeroDragOffset] = useState<number>(0);
@@ -1131,13 +1169,15 @@ export default function App() {
         if (json.success !== true || !Array.isArray(json.data)) {
           throw new Error(json?.message || "Banner API noto‘g‘ri javob qaytardi");
         }
-        const active = json.data.filter((b: Banner) => b.active !== false);
+        const active = json.data.filter((b: Banner) => b.active !== false && typeof b.imageUrl === "string" && b.imageUrl.length > 0);
+        persistHomeBanners(active);
         setHeroBanners(active);
         setActiveBannerIdx(0);
+        warmHomeBannerImages(active);
       } catch (error) {
-        console.warn("[GULI] Production banner load failed", error);
-        setHeroBanners([]);
-        setActiveBannerIdx(0);
+        console.warn("[GULI] Production banner load failed; keeping cached banners", error);
+        // Keep the last known-good banner list so the home screen remains usable offline.
+        setHeroBanners((current) => current.length ? current : readCachedHomeBanners());
       }
     };
 
@@ -1150,7 +1190,13 @@ export default function App() {
         const res = await fetch(`${API_URL}/api/settings/banner`, { cache: "no-store" });
         if (!res.ok) return;
         const json = await res.json().catch(() => null);
-        setPromoBannerUrl(json?.success === true && typeof json.url === "string" ? json.url : "");
+        const nextUrl = json?.success === true && typeof json.url === "string" ? json.url : "";
+        setPromoBannerUrl(nextUrl);
+        try {
+          if (nextUrl) localStorage.setItem(HOME_PROMO_IMAGE_CACHE_KEY, nextUrl);
+          else localStorage.removeItem(HOME_PROMO_IMAGE_CACHE_KEY);
+        } catch { /* optional offline fallback */ }
+        warmHomeBannerImages([], nextUrl);
       } catch {
         setPromoBannerUrl("");
       }
