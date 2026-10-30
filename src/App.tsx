@@ -70,7 +70,8 @@ import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { VideoAdCard } from "./components/videoAds/VideoAdCard";
-import { getAdsForPlacement, type VideoAd } from "./types/videoAd";
+import { VideoAdStoriesRow } from "./components/videoAds/VideoAdStoriesRow";
+import { getAdsForPlacement, isAdActiveAndVisible, type VideoAd } from "./types/videoAd";
 
 declare global {
   interface Window {
@@ -837,6 +838,7 @@ export default function App() {
   // Hide the single home ad slot until the customer leaves and re-enters Home.
   const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(false);
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
+  const [allActiveVideoAds, setAllActiveVideoAds] = useState<VideoAd[]>([]);
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1183,7 +1185,8 @@ export default function App() {
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
           // The public API returns complete VideoAd records; narrow the untyped JSON boundary here.
-          const ads = json.data as VideoAd[];
+          const ads = (json.data as VideoAd[]).filter((item) => isAdActiveAndVisible(item));
+          setAllActiveVideoAds(ads);
           const home = getAdsForPlacement(ads, "home");
           const feed = getAdsForPlacement(ads, "product_feed");
           setHomeVideoAds(home);
@@ -4628,11 +4631,28 @@ export default function App() {
             }}
           >
             <main className="page">
-              <div className="pageHeader">
-                <span>GULI {t("brand_sub")}</span>
-                <h1>{t("catalog_title")}</h1>
-                <p>{t("catalog_sub")}</p>
-              </div>
+              <VideoAdStoriesRow
+                ads={allActiveVideoAds}
+                onOpenProduct={(prodId) => {
+                  const found = products.find(
+                    (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
+                  );
+                  if (found) openProduct(found, "catalog");
+                }}
+                onNavigateUrl={(url) => {
+                  if (url.startsWith("/")) {
+                    if (url.includes("category=")) {
+                      const match = url.match(/category=([^&]+)/);
+                      if (match) setSelectedCategory(decodeURIComponent(match[1]));
+                    }
+                    go("catalog");
+                  } else {
+                    const tg = (window as any).Telegram?.WebApp;
+                    if (tg?.openLink) tg.openLink(url);
+                    else window.open(url, "_blank", "noopener,noreferrer");
+                  }
+                }}
+              />
               <div className="searchBox">
                 ⌕
                 <input
