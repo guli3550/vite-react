@@ -47,26 +47,30 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const hasStartedRef = useRef(false);
   const retryCountRef = useRef(0);
   const endedWhileInfoOpenRef = useRef(false);
+  // Distinguish a customer's deliberate pause from a mobile browser/WebView
+  // pausing the media element while it is buffering or changing visibility.
+  const userPausedRef = useRef(false);
 
   // Do not preload every gallery video in parallel on mobile. Competing media
   // requests can starve the active fullscreen video and make playback stall
   // before the end. The visible <video preload="auto"> owns its own buffering;
   // the next ad is loaded only after the current ad completes or the user swipes.
 
-  const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
+  const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAdId = activeAd.id) => {
     try {
       const apiBase = getApiBaseUrl();
       const platform = detectPlatform().isTelegram ? "telegram" : "web";
-      fetch(`${apiBase}/api/video-ads/${targetAd.id}/events`, {
+      fetch(`${apiBase}/api/video-ads/${targetAdId}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ event_type: eventType, session_id: getSessionId(), platform }),
       }).catch(() => {});
     } catch {}
-  }, [activeAd]);
+  }, [activeAd.id]);
 
   const goTo = useCallback((nextIndex: number) => {
     if (nextIndex < 0 || nextIndex >= gallery.length) return;
+    userPausedRef.current = false;
     videoRef.current?.pause();
     setCurrentIndex(nextIndex);
     setProgress(0);
@@ -113,6 +117,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     if (!isOpen) return;
     const video = videoRef.current;
     if (!video) return;
+    userPausedRef.current = false;
     video.muted = false;
     setIsBuffering(video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
     let active = true;
@@ -122,7 +127,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       setIsBuffering(false);
       if (!hasStartedRef.current) {
         hasStartedRef.current = true;
-        sendEvent("video_start", activeAd);
+        sendEvent("video_start", activeAd.id);
       }
     }).catch(() => {
       if (active) { setIsPaused(true); setIsBuffering(false); }
@@ -156,9 +161,11 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
+      userPausedRef.current = false;
       video.muted = false;
       video.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
     } else {
+      userPausedRef.current = true;
       video.pause();
       setIsPaused(true);
     }
@@ -214,7 +221,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const handleCtaClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    sendEvent("click", activeAd);
+    sendEvent("click", activeAd.id);
     videoRef.current?.pause();
     onClose();
     if (activeAd.product_id && onOpenProduct) {
@@ -290,11 +297,41 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           playsInline
           webkit-playsinline="true"
           preload="auto"
+          autoPlay
           onTimeUpdate={handleTimeUpdate}
           onLoadStart={() => setIsBuffering(true)}
           onLoadedData={() => setIsBuffering(false)}
-          onCanPlay={() => setIsBuffering(false)}
+          onCanPlay={() => {
+            setIsBuffering(false);
+            const video = videoRef.current;
+            // Some Android browsers pause after a stalled network read without
+            // reliably resuming when data becomes available again.
+            if (video && isOpen && !userPausedRef.current && video.paused && !video.ended) {
+              video.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
+            }
+          }}
           onWaiting={() => setIsBuffering(true)}
+          onStalled={() => setIsBuffering(true)}
+          onPause={(event) => {
+            const pausedVideo = event.currentTarget;
+            const pausedAdId = activeAd.id;
+            if (!isOpen || userPausedRef.current || pausedVideo.ended) return;
+            // Retry only if this same story is still active; navigation/close
+            // deliberately pauses the old element and must never restart it.
+            window.setTimeout(() => {
+              if (
+                isOpen &&
+                !userPausedRef.current &&
+                videoRef.current === pausedVideo &&
+                activeAd.id === pausedAdId &&
+                pausedVideo.paused &&
+                !pausedVideo.ended &&
+                pausedVideo.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+              ) {
+                pausedVideo.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
+              }
+            }, 350);
+          }}
           onPlaying={() => { setIsBuffering(false); setIsPaused(false); }}
           onError={() => {
             const video = videoRef.current;
@@ -307,7 +344,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
             } else setIsBuffering(false);
           }}
           onEnded={() => {
-            sendEvent("video_complete", activeAd);
+            sendEvent("video_complete", activeAd.id);
             if (isInfoExpanded) endedWhileInfoOpenRef.current = true;
             else next();
           }}
