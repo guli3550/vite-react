@@ -1,5 +1,4 @@
 import React from "react";
-import type { SocialPromoRowSetting } from "../../types/socialPromo";
 import { SOCIAL_PROMO_ITEMS, SOCIAL_PROMO_SETTINGS } from "../../data/socialPromoSnapshot";
 import { SocialPromoMarqueeRow } from "./SocialPromoMarqueeRow";
 import type { Language } from "../../utils/translations";
