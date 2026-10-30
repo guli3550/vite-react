@@ -203,7 +203,7 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
   return (
     <section className="section homeCategoriesSection" aria-label="Mahsulot toifalari">
       <div className="homeCategoriesCompactAction">
-        <span className="categorySectionEyebrow">MAHSULOT TOIFALARI</span>
+        <span className="categorySectionEyebrow">KOLLEKSIYALAR</span>
         <button
           className="sectionSeeAllBtn"
           onClick={onViewAll}

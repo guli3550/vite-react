@@ -3,6 +3,7 @@ import type { Product } from "../ProductImageGallery";
 import type { ReelItem } from "../../types/reels";
 import type { VideoAd } from "../../types/videoAd";
 import { loadReelsFromStorage } from "../../data/demoReels";
+import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels } from "../../lib/reelsApi";
 import { getSocialLinks } from "../../utils/socialLinks";
 import { GULI_LOGO_BASE64 } from "../../utils/guliLogoBase64";
 import { copyToClipboard } from "../../utils/clipboard";
@@ -30,7 +31,6 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
   onBack,
   products,
   onOpenProduct,
-  onNavigateToCatalog,
   onSelectReel,
   onOpenChat,
   onShowToast,
@@ -104,15 +104,40 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
 
   const socialLinks = useMemo(() => getSocialLinks(), []);
 
-  // Load active reels
+  // Load active real published reels from cache & public API
   useEffect(() => {
+    let isMounted = true;
+
+    // 1. Initial cached or stored reels display
     try {
-      const all = loadReelsFromStorage();
-      const active = all.filter((r) => r.status === "active");
-      setReels(active);
+      const cached = loadCachedPublicReels();
+      if (cached.length > 0) {
+        setReels(cached);
+      } else {
+        const demo = loadReelsFromStorage().filter((r) => r.status === "active");
+        setReels(demo);
+      }
     } catch (e) {
-      console.warn("[GuliProfile] Error loading reels:", e);
+      console.warn("[GuliProfile] Error loading cached reels:", e);
     }
+
+    // 2. Fetch fresh real public reels from server/API
+    fetchPublicReels()
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data) && data.length > 0) {
+          const active = data.filter((r) => r && r.status === "active");
+          setReels(active);
+          saveCachedPublicReels(active);
+        }
+      })
+      .catch((err) => {
+        console.warn("[GuliProfile] Error fetching fresh public reels:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Load video ads from local cache or API
@@ -398,40 +423,9 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
           <button
             type="button"
             className="brandProfileActionBtn"
-            onClick={() => onNavigateToCatalog()}
-          >
-            🛍️ Do‘kon
-          </button>
-
-          <button
-            type="button"
-            className="brandProfileActionBtn"
             onClick={onOpenChat}
           >
             💬 Xabar
-          </button>
-
-          <button
-            type="button"
-            className="brandProfileActionBtn"
-            style={{ flex: "0 0 42px", padding: 0 }}
-            onClick={handleShareProfile}
-            title="Ulashish"
-            aria-label="Ulashish"
-          >
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
           </button>
         </div>
       </section>

@@ -75,6 +75,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .reelsVideoElement {
@@ -172,32 +175,169 @@
   }
 }
 
-/* Double tap heart animation */
-.reelsDoubleTapHeart {
+/* Centered Modern Volume Mute/Unmute Animated Overlay */
+.reelsVolumePopup {
   position: absolute;
-  pointer-events: none;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 7;
-  font-size: 92px;
-  filter: drop-shadow(0 4px 20px rgba(255, 77, 121, 0.65));
-  animation: reelsPopHeart 0.9s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  pointer-events: none;
 }
 
-@keyframes reelsPopHeart {
+.reelsVolumeBubble {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  animation: reelsVolumePop 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.reelsVolumeIcon {
+  font-size: 38px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+@keyframes reelsVolumePop {
   0% {
     opacity: 0;
-    transform: scale(0) rotate(-15deg);
+    transform: scale(0.6);
   }
-  35% {
+  28% {
     opacity: 1;
-    transform: scale(1.25) rotate(0deg);
+    transform: scale(1.12);
   }
-  75% {
-    opacity: 0.9;
-    transform: scale(1) translateY(-10px);
+  72% {
+    opacity: 0.95;
+    transform: scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(0.75) translateY(-44px);
+    transform: scale(1.18);
+  }
+}
+
+/* Animated Hearts Burst on Like */
+.reelsHeartsBurst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 140px;
+}
+
+.reelsHeartMain {
+  animation: reelsHeartPop 0.95s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes reelsHeartPop {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(-16deg);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.35) rotate(4deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(-2deg);
+  }
+  75% {
+    opacity: 0.95;
+    transform: scale(1.05) translateY(-8px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6) translateY(-40px);
+  }
+}
+
+.reelsHeartParticle {
+  position: absolute;
+  font-size: 26px;
+  pointer-events: none;
+  opacity: 0;
+  animation: reelsParticleFloat 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.reelsHeartParticle.p1 {
+  animation-delay: 0.05s;
+  --tx: -55px;
+  --ty: -65px;
+  --rot: -20deg;
+}
+
+.reelsHeartParticle.p2 {
+  animation-delay: 0.12s;
+  --tx: 50px;
+  --ty: -70px;
+  --rot: 25deg;
+}
+
+.reelsHeartParticle.p3 {
+  animation-delay: 0.18s;
+  --tx: -60px;
+  --ty: 20px;
+  --rot: -35deg;
+}
+
+.reelsHeartParticle.p4 {
+  animation-delay: 0.08s;
+  --tx: 65px;
+  --ty: 15px;
+  --rot: 30deg;
+}
+
+.reelsHeartParticle.p5 {
+  animation-delay: 0.22s;
+  --tx: -20px;
+  --ty: -85px;
+  --rot: -10deg;
+}
+
+.reelsHeartParticle.p6 {
+  animation-delay: 0.15s;
+  --tx: 25px;
+  --ty: -80px;
+  --rot: 15deg;
+}
+
+@keyframes reelsParticleFloat {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(calc(var(--tx) * 0.6), calc(var(--ty) * 0.6)) scale(1.2) rotate(var(--rot));
+  }
+  80% {
+    opacity: 0.85;
+    transform: translate(var(--tx), var(--ty)) scale(1) rotate(var(--rot));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--tx), calc(var(--ty) - 25px)) scale(0.4) rotate(var(--rot));
   }
 }
 
@@ -385,6 +525,22 @@
 
 .reelsActionBtn.liked .reelsActionIconCircle {
   background: rgba(255, 77, 121, 0.3);
+}
+
+.reelsActionHeartSvg.popLiked {
+  animation: reelsHeartPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes reelsHeartPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.38);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .reelsActionIcon {
@@ -710,7 +866,7 @@
   background: rgba(0, 0, 0, 0.68);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 2500 !important;
+  z-index: 99999 !important;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -729,17 +885,20 @@
 /* Instagram-Style Bottom Sheets */
 .reelsCommentsSheet {
   width: 100% !important;
-  max-width: 100% !important;
-  margin: 0 0 calc(68px + env(safe-area-inset-bottom, 0px)) 0 !important;
-  background: #ffffff;
-  border-radius: 24px 24px 0 0;
-  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.45);
+  max-width: 480px !important;
+  margin: 0 auto calc(68px + env(safe-area-inset-bottom, 0px)) auto !important;
+  background: #1c1c1e;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.85);
+  color: #ffffff;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   will-change: height, transform;
   transition: height 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), transform 0.25s ease;
   animation: reelsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 0;
 }
 
 .reelsCommentsSheet.collapsed {
@@ -749,21 +908,22 @@
 }
 
 .reelsCommentsSheet.expanded {
-  height: calc(92vh - 68px);
-  height: calc(92dvh - 68px);
-  max-height: calc(92dvh - 68px);
+  height: calc(90vh - 68px);
+  height: calc(90dvh - 68px);
+  max-height: calc(90dvh - 68px);
 }
 
 .reelsShareSheet {
   width: 100%;
   max-width: 480px;
-  background: #ffffff;
-  border-radius: 22px 22px 0 0;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+  background: #1c1c1e;
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
-  max-height: 72vh;
+  max-height: calc(82vh - 68px);
   animation: reelsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  margin: 0 auto calc(68px + env(safe-area-inset-bottom, 0px)) auto !important;
 }
 
 @keyframes reelsSlideUp {
@@ -778,8 +938,8 @@
 /* Header & Handle */
 .reelsSheetHeader {
   padding: 0;
-  background: #ffffff;
-  border-bottom: 1px solid #f2e4e8;
+  background: #1c1c1e;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -802,16 +962,16 @@
 }
 
 .reelsSheetHandle {
-  width: 44px;
+  width: 40px;
   height: 4.5px;
   border-radius: 999px;
-  background: #dfcfd4;
+  background: rgba(255, 255, 255, 0.3);
   transition: background 0.2s ease, width 0.2s ease;
 }
 
 .reelsSheetHandleTouchArea:hover .reelsSheetHandle {
-  background: #c6aab3;
-  width: 48px;
+  background: rgba(255, 255, 255, 0.5);
+  width: 46px;
 }
 
 .reelsSheetTitleRow {
@@ -819,7 +979,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px 10px 16px;
+  padding: 4px 18px 12px 18px;
   box-sizing: border-box;
 }
 
@@ -830,39 +990,38 @@
 }
 
 .reelsSheetTitle {
-  font-size: 15px;
-  font-weight: 850;
-  color: #21191c;
+  font-size: 16px;
+  font-weight: 750;
+  color: #ffffff;
   letter-spacing: -0.2px;
 }
 
 .reelsSheetSizeToggleBtn {
-  background: #fdf2f4;
-  border: 1px solid #f7d2db;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 10.5px;
   font-weight: 750;
-  color: #b84561;
+  color: #38bdf8;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .reelsSheetSizeToggleBtn:hover {
-  background: #fae4e9;
-  border-color: #f2bac7;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .reelsCloseBtn {
-  background: #f6eaed;
+  background: rgba(255, 255, 255, 0.12);
   border: 0;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6e5d64;
+  color: #d1d5db;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -870,8 +1029,8 @@
 }
 
 .reelsCloseBtn:hover {
-  background: #ecd4db;
-  color: #21191c;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
 }
 
 /* Comments Scrollable List */
@@ -885,6 +1044,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  background: #1c1c1e;
 }
 
 .reelsCommentItem {
@@ -899,7 +1059,8 @@
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .reelsCommentContent {
@@ -916,9 +1077,9 @@
 }
 
 .reelsCommentAuthor {
-  font-size: 14.5px;
-  font-weight: 800;
-  color: #21191c;
+  font-size: 14px;
+  font-weight: 750;
+  color: #ffffff;
 }
 
 .reelsCommentVerifiedBadge {
@@ -935,16 +1096,16 @@
 }
 
 .reelsCommentTime {
-  font-size: 11.5px;
-  color: #9b7d86;
+  font-size: 11px;
+  color: #94a3b8;
   font-weight: 500;
   margin-left: 2px;
 }
 
 .reelsCommentBody {
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: #3b2c32;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #e2e8f0;
   margin: 0;
   word-break: break-word;
 }
@@ -959,6 +1120,7 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  color: #94a3b8;
 }
 
 .reelsCommentHeartIcon {
@@ -973,7 +1135,7 @@
 
 .reelsCommentLikeCount {
   font-size: 10px;
-  color: #9b7d86;
+  color: #94a3b8;
   font-weight: 700;
 }
 
@@ -992,15 +1154,15 @@
 }
 
 .reelsEmptyText {
-  font-size: 14.5px;
-  font-weight: 800;
-  color: #21191c;
+  font-size: 15px;
+  font-weight: 750;
+  color: #ffffff;
   margin: 0 0 4px 0;
 }
 
 .reelsEmptySub {
-  font-size: 12px;
-  color: #9b7d86;
+  font-size: 12.5px;
+  color: #94a3b8;
 }
 
 /* Pinned Bottom Composer Section */
@@ -1009,18 +1171,18 @@
   position: sticky;
   bottom: 0;
   z-index: 20;
-  border-top: 1px solid #f1e4e8;
-  background: #ffffff;
-  padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #1c1c1e;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 10px));
 }
 
 .reelsEmojiBar {
   display: flex;
   align-items: center;
   justify-content: space-around;
-  padding: 6px 12px;
-  background: #fdfafb;
-  border-bottom: 1px solid #fcf0f3;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .reelsEmojiBtn {
@@ -1047,18 +1209,19 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px 6px 14px;
-  background: #ffffff;
+  background: #1c1c1e;
 }
 
 .reelsUserAvatarMini {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1px solid #ebd4db;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: grid;
   place-items: center;
+  background: #2a2a2d;
 }
 
 .reelsUserAvatarMini img {
@@ -1070,154 +1233,290 @@
 
 .reelsCommentInput {
   flex: 1;
-  background: #fdf5f7;
-  border: 1px solid #ebd4db;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 10px 16px;
-  font-size: 14.5px;
-  color: #2b2024;
+  font-size: 14px;
+  color: #ffffff;
   outline: none;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
+.reelsCommentInput::placeholder {
+  color: #94a3b8;
+}
+
 .reelsCommentInput:focus {
-  border-color: #ff4d79;
-  background: #ffffff;
+  border-color: #0095f6;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .reelsCommentSubmit {
-  background: linear-gradient(135deg, #ff4d79, #f43f5e);
+  background: #0095f6;
   color: #ffffff;
   border: 0;
   border-radius: 999px;
-  padding: 10px 18px;
-  font-size: 13.5px;
-  font-weight: 850;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 750;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 3px 10px rgba(244, 63, 94, 0.28);
+  box-shadow: 0 3px 10px rgba(0, 149, 246, 0.3);
+}
+
+.reelsCommentSubmit:hover {
+  background: #1877f2;
 }
 
 .reelsCommentSubmit:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
   box-shadow: none;
-  background: #d8c2c8;
+  background: rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
 }
 
-/* Share Sheet Elements */
-.reelsShareSummary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: #fdf5f7;
-  border-bottom: 1px solid #f1e4e8;
-}
+/* ==========================================================================
+   INSTAGRAM DIRECT STYLE SHARE SHEET
+   ========================================================================== */
 
-.reelsShareThumb {
-  width: 44px;
-  height: 60px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-.reelsShareMeta {
-  flex: 1;
-  min-width: 0;
-}
-
-.reelsShareAuthor {
-  font-size: 12px;
-  font-weight: 800;
-  color: #ff4d79;
-}
-
-.reelsShareCaption {
-  font-size: 12px;
-  color: #403238;
-  margin: 3px 0 0 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reelsShareTargetsRow {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  padding: 20px 16px 14px 16px;
-}
-
-.reelsShareTargetBtn {
+.reelsShareSheet.instagramShareSheet {
+  width: 100%;
+  max-width: 480px;
+  background: #262626;
+  background: linear-gradient(180deg, #262626 0%, #1c1c1e 100%);
+  border-radius: 26px 26px 0 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 0;
+  box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.85);
+  color: #ffffff;
+  padding-bottom: max(22px, calc(18px + env(safe-area-inset-bottom, 16px)));
+  max-height: 85vh;
+  z-index: 100000;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  gap: 6px;
+  animation: reelsSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.reelsShareTargetIconWrap {
-  width: 48px;
-  height: 48px;
+.instagramShareSheet .reelsSheetHandle {
+  width: 40px;
+  height: 4.5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 10px auto 4px auto;
+}
+
+.instagramShareSheet .reelsSheetTitleRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 18px 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.instagramShareSheet .reelsSheetTitle {
+  font-size: 16px;
+  font-weight: 750;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.instagramShareSheet .reelsCloseBtn {
+  background: rgba(255, 255, 255, 0.12);
+  color: #d1d5db;
+  border: 0;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.instagramShareSheet .reelsCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
-  font-size: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.15s ease;
 }
 
-.reelsShareTargetBtn:hover .reelsShareTargetIconWrap {
-  transform: scale(1.1);
+.instagramShareSheet .reelsShareSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 14px 16px 6px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
 }
 
-.reelsShareTargetLabel {
-  font-size: 11px;
-  font-weight: 700;
-  color: #403238;
+.reelsShareThumbWrap {
+  position: relative;
+  width: 46px;
+  height: 62px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #000000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
-.reelsCopyLinkBox {
+.instagramShareSheet .reelsShareThumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reelsSharePlayIconBadge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.32);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.reelsShareAuthorBadge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.instagramShareSheet .reelsShareAuthor {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: #ffffff;
+}
+
+.instagramShareSheet .reelsShareCaption {
+  font-size: 12px;
+  color: #a1a1aa;
+  margin: 3px 0 0 0;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.instagramShareSheet .reelsShareTargetsRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 16px 12px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.instagramShareSheet .reelsShareTargetsRow::-webkit-scrollbar {
+  display: none;
+}
+
+.instagramShareSheet .reelsShareTargetBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  min-width: 66px;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.instagramShareSheet .reelsShareTargetIconWrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
+}
+
+.instagramShareSheet .reelsShareTargetBtn:active .reelsShareTargetIconWrap,
+.instagramShareSheet .reelsShareTargetBtn:hover .reelsShareTargetIconWrap {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.instagramShareSheet .reelsShareTargetLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #e4e4e7;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.instagramShareSheet .reelsCopyLinkBox {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  background: #fdf5f7;
-  border: 1px solid #ebd4db;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  margin: 6px 16px 20px 16px;
-  padding: 8px 12px;
+  margin: 6px 16px 10px 16px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.reelsCopyLinkText {
+.instagramShareSheet .reelsCopyLinkBox:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.reelsCopyLinkLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  color: #94a3b8;
+}
+
+.instagramShareSheet .reelsCopyLinkText {
   font-size: 12px;
-  color: #6e5d64;
+  color: #cbd5e1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
 }
 
-.reelsCopyLinkBtn {
-  background: #ff4d79;
+.instagramShareSheet .reelsCopyLinkBtn {
+  background: #0095f6;
   color: #ffffff;
   border: 0;
   padding: 7px 14px;
-  border-radius: 10px;
+  border-radius: 9px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
-.reelsCopyLinkBtn.copied {
-  background: #16a34a;
+.instagramShareSheet .reelsCopyLinkBtn:hover {
+  background: #1877f2;
+}
+
+.instagramShareSheet .reelsCopyLinkBtn.copied {
+  background: #10b981;
 }
 
 /* Empty View */

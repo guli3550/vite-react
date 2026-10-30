@@ -34,6 +34,48 @@ interface ReelsCommentsModalProps {
   onAddComment: (reelId: string, newComment: ReelComment) => void;
 }
 
+function getCurrentUserProfile(): { name: string; avatar: string } {
+  if (typeof window === "undefined") {
+    return { name: "GULI mijozi", avatar: "" };
+  }
+
+  // 1. Check authenticated user profile in localStorage
+  try {
+    const raw = localStorage.getItem("guli_auth_user");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed) {
+        const name = parsed.full_name || parsed.name || parsed.email?.split("@")[0] || "";
+        const avatar = parsed.avatar_url || parsed.avatar || "";
+        if (name) return { name, avatar };
+      }
+    }
+  } catch {}
+
+  // 2. Check Telegram WebApp user
+  const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+  if (tgUser) {
+    const name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ");
+    const avatar = tgUser.photo_url || "";
+    if (name) return { name, avatar };
+  }
+
+  // 3. Check custom localStorage fields
+  const firstName = localStorage.getItem("guli_first_name") || "";
+  const lastName = localStorage.getItem("guli_last_name") || "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  const customAvatar =
+    localStorage.getItem("guli_custom_avatar") ||
+    localStorage.getItem("guli_avatar_url") ||
+    "";
+
+  if (fullName) {
+    return { name: fullName, avatar: customAvatar };
+  }
+
+  return { name: "GULI mijozi", avatar: customAvatar };
+}
+
 export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
   reel,
   isOpen,
@@ -124,10 +166,13 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
     const trimmed = inputText.trim();
     if (!trimmed) return;
 
+    const userProfile = getCurrentUserProfile();
+
     const newComment: ReelComment = {
       id: `c_${Date.now()}`,
-      authorName: "Siz (Mehmon)",
+      authorName: userProfile.name,
       authorAvatar:
+        userProfile.avatar ||
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
       text: trimmed,
       createdAt: "Hozirgina",
@@ -330,13 +375,32 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
           {/* Comment Form */}
           <form className="reelsCommentForm" onSubmit={handleSubmit}>
             <div className="reelsUserAvatarMini">
-              <img
-                src="/guli-logo.png"
-                alt="Foydalanuvchi"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = "/icons/icon-192.png";
-                }}
-              />
+              {getCurrentUserProfile().avatar ? (
+                <img
+                  src={getCurrentUserProfile().avatar}
+                  alt={getCurrentUserProfile().name}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80";
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: "50%",
+                    background: "linear-gradient(135deg, #ff4d79, #f43f5e)",
+                    color: "#ffffff",
+                    display: "grid",
+                    placeItems: "center",
+                    fontWeight: 800,
+                    fontSize: "13px",
+                  }}
+                >
+                  {(getCurrentUserProfile().name[0] || "G").toUpperCase()}
+                </div>
+              )}
             </div>
 
             <input

@@ -91,25 +91,139 @@ function getViewerKey(): string {
   }
 }
 
+const USER_LIKES_KEY = "guli_reels_user_likes_v1";
+
+function getLocalLikedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(USER_LIKES_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveLocalLikedIds(set: Set<string>): void {
+  try {
+    localStorage.setItem(USER_LIKES_KEY, JSON.stringify([...set]));
+  } catch {
+    // LocalStorage quota may be full
+  }
+}
+
+export function toggleLocalReelLike(reelId: string): { isLiked: boolean; likesCount: number } {
+  const liked = getLocalLikedIds();
+  const willBeLiked = !liked.has(reelId);
+  if (willBeLiked) {
+    liked.add(reelId);
+  } else {
+    liked.delete(reelId);
+  }
+  saveLocalLikedIds(liked);
+
+  let likesCount = willBeLiked ? 1 : 0;
+
+  // Sync into cached published reels
+  try {
+    const cached = loadCachedPublicReels();
+    const item = cached.find((r) => r.id === reelId);
+    if (item) {
+      item.isLiked = willBeLiked;
+      item.likesCount = Math.max(0, (item.likesCount || 0) + (willBeLiked ? 1 : -1));
+      likesCount = item.likesCount;
+      saveCachedPublicReels(cached);
+    }
+  } catch {
+    // Ignore cache error
+  }
+
+  // Sync into demo reels storage
+  try {
+    const raw = localStorage.getItem("guli_demo_reels_v2");
+    if (raw) {
+      const demoList = JSON.parse(raw);
+      if (Array.isArray(demoList)) {
+        const demoItem = demoList.find((r: any) => r && r.id === reelId);
+        if (demoItem) {
+          demoItem.isLiked = willBeLiked;
+          demoItem.likesCount = Math.max(0, (demoItem.likesCount || 0) + (willBeLiked ? 1 : -1));
+          likesCount = demoItem.likesCount;
+          localStorage.setItem("guli_demo_reels_v2", JSON.stringify(demoList));
+        }
+      }
+    }
+  } catch {
+    // Ignore demo storage error
+  }
+
+  return { isLiked: willBeLiked, likesCount };
+}
+
 export async function toggleServerReelLike(reelId: string): Promise<{ isLiked: boolean; likesCount: number }> {
-  return request<{ isLiked: boolean; likesCount: number }>(`/api/reels/${encodeURIComponent(reelId)}/like`, {
-    method: "POST",
-    body: JSON.stringify({ viewerKey: getViewerKey() }),
-  });
+  try {
+    return await request<{ isLiked: boolean; likesCount: number }>(`/api/reels/${encodeURIComponent(reelId)}/like`, {
+      method: "POST",
+      body: JSON.stringify({ viewerKey: getViewerKey() }),
+    });
+  } catch (error) {
+    console.warn("[Reels] Server like unreachable, using local storage fallback:", error);
+    return toggleLocalReelLike(reelId);
+  }
 }
 
 export async function addServerReelComment(reelId: string, text: string) {
-  return request<ReelItem["comments"][number]>(`/api/reels/${encodeURIComponent(reelId)}/comments`, {
-    method: "POST",
-    body: JSON.stringify({ text }),
-  });
+  try {
+    return await request<ReelItem["comments"][number]>(`/api/reels/${encodeURIComponent(reelId)}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  } catch (error) {
+    console.warn("[Reels] Server comments unreachable, saving comment locally:", error);
+    const localComment: ReelItem["comments"][number] = {
+      id: "comment_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      authorName: "Siz (Mehmon)",
+      authorAvatar: "/guli-logo.png",
+      text: text.trim(),
+      createdAt: "Hozir",
+      likesCount: 0,
+    };
+    try {
+      const cached = loadCachedPublicReels();
+      const item = cached.find((r) => r.id === reelId);
+      if (item) {
+        item.comments = [localComment, ...(item.comments || [])];
+        item.commentsCount = (item.commentsCount || 0) + 1;
+        saveCachedPublicReels(cached);
+      }
+    } catch {
+      // Ignore cache error
+    }
+    return localComment;
+  }
 }
 
 export async function recordServerReelView(reelId: string): Promise<{ viewsCount: number }> {
-  return request<{ viewsCount: number }>(`/api/reels/${encodeURIComponent(reelId)}/view`, {
-    method: "POST",
-    body: "{}",
-  });
+  try {
+    return await request<{ viewsCount: number }>(`/api/reels/${encodeURIComponent(reelId)}/view`, {
+      method: "POST",
+      body: "{}",
+    });
+  } catch {
+    let viewsCount = 1;
+    try {
+      const cached = loadCachedPublicReels();
+      const item = cached.find((r) => r.id === reelId);
+      if (item) {
+        item.viewsCount = (item.viewsCount || 0) + 1;
+        viewsCount = item.viewsCount;
+        saveCachedPublicReels(cached);
+      }
+    } catch {
+      // Ignore cache error
+    }
+    return { viewsCount };
+  }
 }
 
 export async function uploadReelMedia(file: File): Promise<string> {

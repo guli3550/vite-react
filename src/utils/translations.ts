@@ -26,7 +26,7 @@ export const translations = {
     hero_title: "Go‘zallik sizdan boshlanadi.",
     hero_desc: "Nafislik, qulaylik va o‘zingizga bo‘lgan ishonch.",
     hero_btn: "Kolleksiyani ko‘rish →",
-    featured_title: "Tanlanganlar",
+    featured_title: "Saralanganlar",
     see_all: "Barchasi",
     delivery_banner_title: "600 000 so‘mdan yuqori buyurtma — bepul yetkazib berish",
     delivery_banner_desc: "O‘zbekiston bo‘ylab qulay yetkazib berish.",
@@ -54,10 +54,10 @@ export const translations = {
     no_similar_products: "Hozircha o‘xshash mahsulot topilmadi.",
 
     // Cart Page
-    cart_title: "Savat",
+    cart_title: "Savatim",
     cart_items_selected: "ta mahsulot tanlandi",
-    cart_empty_title: "Savat bo‘sh",
-    cart_empty_desc: "Mahsulot tanlang va xaridni boshlang.",
+    cart_empty_title: "Savat hali bo‘sh",
+    cart_empty_desc: "Nafis kiyimlarimizdan tanlang va xaridni boshlang ✨",
     go_to_catalog: "Katalogga o‘tish",
     promo_placeholder: "Promo kod",
     apply: "Qo‘llash",

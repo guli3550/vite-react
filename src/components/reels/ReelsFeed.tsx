@@ -5,76 +5,26 @@ import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels, toggleS
 import {
   evaluateSwipeGesture,
   calculateVideoProgress,
+  isIndexPreloaded,
 } from "../../utils/reelsEngine";
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
 
-const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
-
-type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
-
-function readReelsCycleState(): ReelsCycleState {
-  try {
-    const raw = localStorage.getItem(REELS_CYCLE_STORAGE_KEY);
-    if (!raw) return { seenIds: [], orderIds: [] };
-    const parsed = JSON.parse(raw) as Partial<ReelsCycleState>;
-    return {
-      seenIds: Array.isArray(parsed.seenIds) ? parsed.seenIds.filter((id): id is string => typeof id === "string") : [],
-      orderIds: Array.isArray(parsed.orderIds) ? parsed.orderIds.filter((id): id is string => typeof id === "string") : [],
-    };
-  } catch {
-    return { seenIds: [], orderIds: [] };
-  }
-}
-
-function saveReelsCycleState(state: ReelsCycleState): void {
-  try { localStorage.setItem(REELS_CYCLE_STORAGE_KEY, JSON.stringify(state)); } catch { /* storage may be unavailable */ }
-}
-
-function shuffledIds(ids: string[]): string[] {
-  const result = [...ids];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 function prepareReelsCycle(active: ReelItem[]): { reels: ReelItem[]; startIndex: number } {
-  const byId = new Map(active.map((reel) => [reel.id, reel]));
-  const activeIds = active.map((reel) => reel.id);
-  let state = readReelsCycleState();
-  let seenIds = state.seenIds.filter((id) => byId.has(id));
-  const seen = new Set(seenIds);
-  let orderIds = state.orderIds.filter((id) => byId.has(id));
-  const orderedSet = new Set(orderIds);
-  const newIds = activeIds.filter((id) => !orderedSet.has(id));
-  orderIds = [...orderIds, ...shuffledIds(newIds)];
-
-  // Start a fresh shuffled cycle only after every currently active Reel was seen.
-  if (activeIds.length > 0 && activeIds.every((id) => seen.has(id))) {
-    seenIds = [];
-    orderIds = shuffledIds(activeIds);
-  }
-
-  // Recover gracefully if saved ordering was empty or stale.
-  if (orderIds.length !== activeIds.length) orderIds = [...orderIds, ...shuffledIds(activeIds.filter((id) => !orderIds.includes(id)))];
-  state = { seenIds, orderIds };
-  saveReelsCycleState(state);
-
-  const orderedReels = orderIds.map((id) => byId.get(id)).filter((reel): reel is ReelItem => Boolean(reel));
-  const firstUnseen = orderedReels.findIndex((reel) => !new Set(seenIds).has(reel.id));
-  return { reels: orderedReels, startIndex: firstUnseen >= 0 ? firstUnseen : 0 };
+  return { reels: active, startIndex: 0 };
 }
 
 function markReelSeen(reelId: string): void {
-  const state = readReelsCycleState();
-  if (!state.seenIds.includes(reelId)) {
-    state.seenIds.push(reelId);
-    saveReelsCycleState(state);
-  }
+  try {
+    const raw = localStorage.getItem("guli_seen_reels_v1");
+    const seen: string[] = raw ? JSON.parse(raw) : [];
+    if (!seen.includes(reelId)) {
+      seen.push(reelId);
+      localStorage.setItem("guli_seen_reels_v1", JSON.stringify(seen));
+    }
+  } catch {}
 }
 
 interface ReelsFeedProps {
@@ -107,10 +57,25 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
 
-  // Big popping heart on double-tap
-  const [showHeartAnim, setShowHeartAnim] = useState(false);
-  const lastTapRef = useRef<number>(0);
+  // Popping animated hearts burst on like (keyed by unique ID for 100% reliable re-render)
+  const [heartAnimId, setHeartAnimId] = useState<number | null>(null);
+  const heartCounterRef = useRef<number>(0);
+  const heartTimerRef = useRef<number | null>(null);
+  const lastTapTimeRef = useRef<number>(0);
+  const singleTapTimerRef = useRef<number | null>(null);
+
+  const triggerHeartAnimation = useCallback(() => {
+    heartCounterRef.current += 1;
+    const newId = Date.now() * 1000 + heartCounterRef.current;
+    setHeartAnimId(newId);
+    if (heartTimerRef.current) clearTimeout(heartTimerRef.current);
+    heartTimerRef.current = window.setTimeout(() => {
+      setHeartAnimId((curr) => (curr === newId ? null : curr));
+    }, 1000);
+  }, []);
 
   // Modals
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
@@ -119,6 +84,12 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Centered modern Play/Pause animated overlay
   const [playPauseIndicator, setPlayPauseIndicator] = useState<{
     type: "play" | "pause";
+    id: number;
+  } | null>(null);
+
+  // Centered modern Volume Mute/Unmute indicator overlay
+  const [volumeIndicator, setVolumeIndicator] = useState<{
+    isMuted: boolean;
     id: number;
   } | null>(null);
 
@@ -135,6 +106,56 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const videoRefCallbacks = useRef<Map<string, (el: HTMLVideoElement | null) => void>>(new Map());
   const playbackGenerationRef = useRef(0);
+  const currentReelRef = useRef<ReelItem | null>(null);
+
+  const playActiveVideo = useCallback((activeVideo: HTMLVideoElement) => {
+    if (!activeVideo) return;
+    const generation = playbackGenerationRef.current;
+    
+    activeVideo.currentTime = 0;
+    activeVideo.muted = isMutedRef.current;
+
+    const stillCurrent = () => playbackGenerationRef.current === generation;
+
+    activeVideo
+      .play()
+      .then(() => {
+        if (!stillCurrent()) {
+          activeVideo.pause();
+          return;
+        }
+        setIsLoadingVideo(false);
+        setIsPlaying(true);
+      })
+      .catch(() => {
+        if (!stillCurrent()) return;
+        // Fallback for autoplay policy: try playing muted
+        activeVideo.muted = true;
+        if (!isMutedRef.current) {
+          isMutedRef.current = true;
+          setIsMuted(true);
+        }
+        activeVideo
+          .play()
+          .then(() => {
+            if (!stillCurrent()) {
+              activeVideo.pause();
+              return;
+            }
+            setIsLoadingVideo(false);
+            setIsPlaying(true);
+          })
+          .catch(() => {
+            if (!stillCurrent()) return;
+            setIsPlaying(false);
+            setIsLoadingVideo(false);
+          });
+      });
+  }, []);
+
+  const initialReelIdRef = useRef(initialReelId);
+  const initialIndexRef = useRef(initialIndex);
+  const initialConfigAppliedRef = useRef(false);
 
   const getVideoRef = useCallback((reelId: string) => {
     let callback = videoRefCallbacks.current.get(reelId);
@@ -156,9 +177,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Stop every media element when Reels is left or the app is backgrounded.
   useEffect(() => {
+    const videoRefsMap = videoRefs.current;
+    const callbacksMap = videoRefCallbacks.current;
     const stopAllVideos = () => {
       playbackGenerationRef.current += 1;
-      videoRefs.current.forEach((video) => {
+      videoRefsMap.forEach((video) => {
         video.pause();
         video.muted = true;
       });
@@ -172,9 +195,26 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       stopAllVideos();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", stopAllVideos);
-      videoRefs.current.clear();
-      videoRefCallbacks.current.clear();
+      videoRefsMap.clear();
+      callbacksMap.clear();
+      if (heartTimerRef.current) clearTimeout(heartTimerRef.current);
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
     };
+  }, []);
+
+  const resolveInitialIndex = useCallback((list: ReelItem[]): number => {
+    if (initialReelIdRef.current) {
+      const found = list.findIndex((r) => r.id === initialReelIdRef.current);
+      if (found !== -1) return found;
+    }
+    if (
+      typeof initialIndexRef.current === "number" &&
+      initialIndexRef.current >= 0 &&
+      initialIndexRef.current < list.length
+    ) {
+      return initialIndexRef.current;
+    }
+    return 0;
   }, []);
 
   // Load published Reels from the shared server source; local demo data is development-only.
@@ -184,7 +224,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (cached.length > 0) {
       const cachedCycle = prepareReelsCycle(cached);
       setReels(cachedCycle.reels);
-      setCurrentIndex(cachedCycle.startIndex);
+      if (!initialConfigAppliedRef.current) {
+        const startIdx = resolveInitialIndex(cachedCycle.reels);
+        initialConfigAppliedRef.current = true;
+        setCurrentIndex(startIdx);
+      }
       setIsFeedLoading(false);
     } else {
       setIsFeedLoading(true);
@@ -194,37 +238,55 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       const active = all.filter((r) => r.status === "active" && Boolean(r.videoUrl));
       saveCachedPublicReels(active);
       const cycle = prepareReelsCycle(active);
-      let list = cycle.reels;
-      let startIdx = cycle.startIndex;
-
-      if (initialReelId) {
-        const found = list.findIndex((r) => r.id === initialReelId);
-        if (found !== -1) startIdx = found;
-      } else if (typeof initialIndex === "number" && initialIndex >= 0 && initialIndex < list.length) {
-        startIdx = initialIndex;
-      }
+      const list = cycle.reels;
 
       setReels(list);
-      setCurrentIndex(startIdx);
+      if (!initialConfigAppliedRef.current) {
+        const startIdx = resolveInitialIndex(list);
+        initialConfigAppliedRef.current = true;
+        setCurrentIndex(startIdx);
+      }
     } catch (error) {
       console.error("[Reels] Published server feed could not be loaded:", error);
       if (!import.meta.env.PROD) {
         const active = loadReelsFromStorage().filter((r) => r.status === "active");
         const cycle = prepareReelsCycle(active);
         setReels(cycle.reels);
-        setCurrentIndex(cycle.startIndex);
+        if (!initialConfigAppliedRef.current) {
+          const startIdx = resolveInitialIndex(cycle.reels);
+          initialConfigAppliedRef.current = true;
+          setCurrentIndex(startIdx);
+        }
       } else {
-        setReels([]);
-        setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
+        if (cached.length === 0) {
+          setReels([]);
+          setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
+        }
       }
     } finally {
       setIsFeedLoading(false);
     }
-  }, [initialReelId, initialIndex]);
+  }, [resolveInitialIndex]);
+
+  // Update position if initialReelId is provided later (e.g. user clicked a specific reel in brand profile)
+  useEffect(() => {
+    if (initialReelId && initialReelId !== initialReelIdRef.current) {
+      initialReelIdRef.current = initialReelId;
+      initialConfigAppliedRef.current = false;
+      void reloadReels();
+    }
+  }, [initialReelId, reloadReels]);
+
+  const onActiveIndexChangeRef = useRef(onActiveIndexChange);
+  onActiveIndexChangeRef.current = onActiveIndexChange;
+  const lastReportedIndexRef = useRef<number>(-1);
 
   useEffect(() => {
-    onActiveIndexChange?.(currentIndex);
-  }, [currentIndex, onActiveIndexChange]);
+    if (lastReportedIndexRef.current !== currentIndex) {
+      lastReportedIndexRef.current = currentIndex;
+      onActiveIndexChangeRef.current?.(currentIndex);
+    }
+  }, [currentIndex]);
 
   useEffect(() => {
     reloadReels();
@@ -243,6 +305,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   }, [reloadReels]);
 
   const currentReel = reels[currentIndex];
+  currentReelRef.current = currentReel;
   const viewedReelIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
@@ -260,6 +323,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     setTimeout(() => setToastMessage(null), 2500);
   }, []);
 
+  const triggerVolumeOverlay = useCallback((muted: boolean) => {
+    setVolumeIndicator({ isMuted: muted, id: Date.now() });
+    setTimeout(() => {
+      setVolumeIndicator((prev) => (prev && Date.now() - prev.id >= 600 ? null : prev));
+    }, 650);
+  }, []);
+
   const toggleMute = useCallback(() => {
     if (!currentReel) return;
     const activeVideo = videoRefs.current.get(currentReel.id);
@@ -267,14 +337,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     const nextMuted = !activeVideo.muted;
     activeVideo.muted = nextMuted;
     setIsMuted(nextMuted);
-    showToast(nextMuted ? "🔇 Ovoz o‘chirildi" : "🔊 Ovoz yoqildi");
-  }, [currentReel, showToast]);
+    triggerVolumeOverlay(nextMuted);
+  }, [currentReel, triggerVolumeOverlay]);
 
   // Manage exactly one active player. Ignore late play() resolutions after a
   // swipe, route change, or component unmount.
   useEffect(() => {
     const generation = ++playbackGenerationRef.current;
-    let cancelled = false;
     let activeVideo: HTMLVideoElement | undefined;
 
     setIsLoadingVideo(true);
@@ -290,7 +359,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       setIsLoadingVideo(false);
       setIsPlaying(true);
       return () => {
-        cancelled = true;
         if (playbackGenerationRef.current === generation) playbackGenerationRef.current += 1;
       };
     }
@@ -298,52 +366,17 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (currentReel) {
       activeVideo = videoRefs.current.get(currentReel.id);
       if (activeVideo) {
-        activeVideo.currentTime = 0;
-        activeVideo.muted = isMuted;
-
-        const stillCurrent = () => !cancelled && playbackGenerationRef.current === generation;
-        const startPlayback = async () => {
-          try {
-            await activeVideo!.play();
-            if (!stillCurrent()) {
-              activeVideo!.pause();
-              return;
-            }
-            setIsLoadingVideo(false);
-            setIsPlaying(true);
-          } catch {
-            if (!stillCurrent()) return;
-            // Android/Chrome may reject autoplay with sound. Start muted and
-            // let the user's explicit sound control unmute this one player.
-            activeVideo!.muted = true;
-            setIsMuted(true);
-            try {
-              await activeVideo!.play();
-              if (!stillCurrent()) {
-                activeVideo!.pause();
-                return;
-              }
-              setIsLoadingVideo(false);
-              setIsPlaying(true);
-            } catch {
-              if (!stillCurrent()) return;
-              setIsPlaying(false);
-              setIsLoadingVideo(false);
-            }
-          }
-        };
-        void startPlayback();
+        playActiveVideo(activeVideo);
       }
     }
 
     return () => {
-      cancelled = true;
       if (playbackGenerationRef.current === generation) playbackGenerationRef.current += 1;
       activeVideo?.pause();
     };
   // Deliberately exclude the reel object and isMuted: engagement updates and
   // mute toggles must not restart the video from the beginning.
-  }, [currentIndex, currentReel?.id]);
+  }, [currentIndex, currentReel?.id, playActiveVideo]);
 
   // Navigate between reels
   const goToReel = useCallback(
@@ -498,44 +531,87 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
   };
 
-  // Persist likes against the shared Reels record.
+  // Persist likes against the shared Reels record with instant optimistic update and center animated hearts.
   const handleToggleLike = useCallback(async () => {
-    if (!currentReel) return;
+    const reel = currentReelRef.current;
+    if (!reel) return;
+    const targetId = reel.id;
+    const prevLiked = Boolean(reel.isLiked);
+    const nextLiked = !prevLiked;
+    const nextCount = Math.max(0, (reel.likesCount || 0) + (nextLiked ? 1 : -1));
+
+    // 1. Instant optimistic feedback & animated hearts burst if turning to liked
+    setReels((previous) =>
+      previous.map((r) =>
+        r.id === targetId ? { ...r, isLiked: nextLiked, likesCount: nextCount } : r
+      )
+    );
+    if (nextLiked) {
+      triggerHeartAnimation();
+    }
+
+    // 2. Persist to server (falls back gracefully to offline/local storage)
     try {
-      const result = await toggleServerReelLike(currentReel.id);
-      setReels((previous) => previous.map((r) => r.id === currentReel.id
-        ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount }
-        : r));
-      if (result.isLiked) showToast("❤️ Sizga yoqdi");
+      const result = await toggleServerReelLike(targetId);
+      setReels((previous) =>
+        previous.map((r) =>
+          r.id === targetId ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount } : r
+        )
+      );
     } catch (error) {
-      console.error("[Reels] Like was not saved:", error);
-      showToast("Like saqlanmadi. Server aloqasini tekshiring.");
+      console.warn("[Reels] Like sync warning (optimistic like preserved):", error);
     }
-  }, [currentReel, showToast]);
+  }, [triggerHeartAnimation]);
 
-  // Video tap handler (Single tap: Play/Pause with animated overlay; Double tap: Like)
-  const handleVideoTap = () => {
+  // Video tap handler (Single tap: Play/Pause with animated overlay; Double tap: Like with heart animation)
+  const handleVideoTap = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    e?.stopPropagation?.();
     const now = Date.now();
-    const timeDiff = now - lastTapRef.current;
+    const timeSinceLast = now - lastTapTimeRef.current;
 
-    if (timeDiff < 280) {
-      // Double tap detected -> Like reel!
-      if (currentReel && !currentReel.isLiked) {
-        handleToggleLike();
+    // Double tap window: 50ms to 450ms
+    if (timeSinceLast > 50 && timeSinceLast < 450) {
+      // Double tap confirmed! Cancel pending single-tap play/pause timeout immediately
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
       }
-      setShowHeartAnim(true);
-      setTimeout(() => setShowHeartAnim(false), 900);
-      lastTapRef.current = 0;
+      lastTapTimeRef.current = 0;
+
+      // 1. Always trigger central animated hearts burst on double tap!
+      triggerHeartAnimation();
+
+      // 2. Turn heart red immediately if not already liked (Instagram behavior: double-tap always likes)
+      const reel = currentReelRef.current;
+      if (reel && !reel.isLiked) {
+        const targetId = reel.id;
+        const nextCount = (reel.likesCount || 0) + 1;
+        setReels((previous) =>
+          previous.map((r) =>
+            r.id === targetId ? { ...r, isLiked: true, likesCount: nextCount } : r
+          )
+        );
+        toggleServerReelLike(targetId)
+          .then((result) => {
+            setReels((previous) =>
+              previous.map((r) =>
+                r.id === targetId ? { ...r, isLiked: result.isLiked, likesCount: result.likesCount } : r
+              )
+            );
+          })
+          .catch((error) => console.warn("[Reels] Double-tap like sync warning:", error));
+      }
     } else {
-      lastTapRef.current = now;
-      setTimeout(() => {
-        if (Date.now() - lastTapRef.current >= 260 && lastTapRef.current !== 0) {
-          togglePlayPause();
-          lastTapRef.current = 0;
-        }
-      }, 270);
+      // First tap: register timestamp and wait 280ms for potential second tap before toggling play/pause
+      lastTapTimeRef.current = now;
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = window.setTimeout(() => {
+        togglePlayPause();
+        lastTapTimeRef.current = 0;
+        singleTapTimerRef.current = null;
+      }, 280);
     }
-  };
+  }, [togglePlayPause, triggerHeartAnimation]);
 
   // Save comments to the shared Reels database.
   const handleAddComment = async (reelId: string, newComment: ReelComment) => {
@@ -628,64 +704,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
       {/* Main Viewport */}
       <div className="reelsViewport">
-        {/* Top Bar Overlay */}
-        <header className="reelsTopBar">
-          <button
-            type="button"
-            className="reelsTopBrandBadge"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenBrandProfile?.();
-            }}
-            aria-label="Guli Market profil sahifasini ochish"
-            title="Guli Market rasmiy profili"
-          >
-            <div className="reelsTopBrandLogoWrap">
-              <img
-                src="/guli-logo.png"
-                alt="Guli Market"
-                className="reelsTopBrandLogo"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = "/guli-logo.webp";
-                }}
-              />
-            </div>
-            <span className="reelsTopBrandTitle">Guli Market</span>
-            <svg
-              viewBox="0 0 24 24"
-              width="13"
-              height="13"
-              fill="#0095f6"
-              style={{ flexShrink: 0 }}
-              aria-hidden="true"
-            >
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1.2 14.8-4.2-4.2 1.41-1.41 2.79 2.79 6.29-6.29 1.41 1.41-7.7 7.7z" />
-            </svg>
-          </button>
-
-          <div className="reelsTopControls">
-            {onBack && (
-              <button
-                type="button"
-                className="reelsTopIconBtn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onBack();
-                }}
-                aria-label="Orqaga qaytish"
-                title="Orqaga"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        </header>
-
         {/* Vertical Sliding Reel Track for Continuous Instagram-Style Gestures */}
         <div className="reelsTrack" style={trackTranslateStyle}>
           {reels.map((reel, index) => {
             const isActive = index === currentIndex;
-            const isPreloaded = isActive;
+            const isPreloaded = isIndexPreloaded(index, currentIndex, reels.length, 2, 1);
             const hasError = videoError[reel.id];
 
             return (
@@ -767,10 +790,42 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     </div>
                   )}
 
-                  {/* Big Heart on Double Tap */}
-                  {isActive && showHeartAnim && (
-                    <div className="reelsDoubleTapHeart" aria-hidden="true">
-                      <span>❤️</span>
+                  {/* Centered Modern Volume Mute/Unmute Animated Overlay */}
+                  {isActive && volumeIndicator && (
+                    <div
+                      key={volumeIndicator.id}
+                      className="reelsVolumePopup"
+                      aria-hidden="true"
+                    >
+                      <div className="reelsVolumeBubble">
+                        <span className="reelsVolumeIcon">
+                          {volumeIndicator.isMuted ? "🔇" : "🔊"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Animated Hearts Burst on Like (keyed for guaranteed animation re-trigger) */}
+                  {isActive && heartAnimId && (
+                    <div key={heartAnimId} className="reelsHeartsBurst" aria-hidden="true">
+                      <div className="reelsHeartMain">
+                        <svg viewBox="0 0 24 24" width="105" height="105" fill="url(#reelsHeartGrad)" style={{ filter: "drop-shadow(0 8px 26px rgba(255, 46, 99, 0.75))" }}>
+                          <defs>
+                            <linearGradient id="reelsHeartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                              <stop offset="0%" stopColor="#ff2e63" />
+                              <stop offset="50%" stopColor="#ff4b72" />
+                              <stop offset="100%" stopColor="#ff758c" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                      </div>
+                      <span className="reelsHeartParticle p1">💖</span>
+                      <span className="reelsHeartParticle p2">✨</span>
+                      <span className="reelsHeartParticle p3">💕</span>
+                      <span className="reelsHeartParticle p4">💗</span>
+                      <span className="reelsHeartParticle p5">🌸</span>
+                      <span className="reelsHeartParticle p6">❤️</span>
                     </div>
                   )}
 
@@ -810,11 +865,28 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     aria-label={reel.isLiked ? "Like bekor qilish" : "Like bosish"}
                   >
                     <div className="reelsActionIconCircle">
-                      <span className="reelsActionIcon">
-                        {reel.isLiked ? "❤️" : "🤍"}
-                      </span>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="26"
+                        height="26"
+                        fill={reel.isLiked ? "#ff2e63" : "none"}
+                        stroke={reel.isLiked ? "#ff2e63" : "#ffffff"}
+                        strokeWidth="2.2"
+                        className={`reelsActionHeartSvg ${reel.isLiked ? "popLiked" : ""}`}
+                        style={{
+                          filter: reel.isLiked
+                            ? "drop-shadow(0 0 8px rgba(255, 46, 99, 0.75))"
+                            : "drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6))",
+                          transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+                        }}
+                      >
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                      </svg>
                     </div>
-                    <span className="reelsActionCount">
+                    <span
+                      className="reelsActionCount"
+                      style={{ color: reel.isLiked ? "#ff4d79" : "#ffffff", fontWeight: 700 }}
+                    >
                       {(reel.likesCount + (reel.displayLikesCount || 0)).toLocaleString("uz-UZ")}
                     </span>
 

@@ -2906,7 +2906,7 @@ export default function App() {
       return;
     }
     if (!cart.length) {
-      showToast("Savat bo‘sh");
+      showToast("Savat hali bo‘sh");
       return;
     }
     if (!uploadedReceipt) {
@@ -4618,9 +4618,7 @@ export default function App() {
             />
             <section className="section featuredProductsSection">
               <div className="sectionTitle featuredProductsHeader">
-                <div>
-                  <h2 className="featuredProductsTitle">{t("featured_title")}</h2>
-                </div>
+                <span className="categorySectionEyebrow">SARALANGANLAR</span>
                 <button onClick={() => go("catalog")}>{t("see_all")}</button>
               </div>
               {productsLoading ? (
@@ -4985,15 +4983,16 @@ export default function App() {
         })()}
         {page === "cart" && (
           <main className="page">
-            <div className="pageHeader">
-              <span>BUYURTMA</span>
-              <h1>{t("cart_title")}</h1>
-              <p>
-                {cartCount
-                  ? `${cartCount} ${t("cart_items_selected")}`
-                  : t("cart_empty_title")}
-              </p>
-            </div>
+            {cart.length > 0 && (
+              <div className="cartPremiumHeader">
+                <h1 className="cartPremiumSentence">
+                  Siz tanlagan mahsulotlarning umumiy ro‘yxati
+                </h1>
+                <div className="cartCountPill">
+                  {cartCount} ta mahsulot
+                </div>
+              </div>
+            )}
             {cart.length === 0 ? (
               <div className="empty">
                 <div>🛍️</div>
@@ -5146,7 +5145,9 @@ export default function App() {
           <ReelsFeed
             initialReelId={targetReelId}
             initialIndex={reelsActiveIndex}
-            onActiveIndexChange={(idx) => setReelsActiveIndex(idx)}
+            onActiveIndexChange={(idx) => {
+              setReelsActiveIndex((prev) => (prev === idx ? prev : idx));
+            }}
             onOpenBrandProfile={() => {
               setBrandProfileInitialTab("tovarlar");
               setTargetReelId(undefined);

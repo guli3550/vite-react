@@ -229,7 +229,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       return;
     }
     if (!cart.length) {
-      showToast(isRu ? "Корзина пуста" : isEn ? "Cart is empty" : "Savat bo‘sh");
+      showToast(isRu ? "Корзина пуста" : isEn ? "Cart is empty" : "Savat hali bo‘sh");
       return;
     }
     onProceedPayment();
@@ -298,7 +298,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
       {/* Modern Page Header */}
       <div className="pageHeader" style={{ marginBottom: "16px" }}>
         <span style={{ fontSize: "11px", fontWeight: "850", letterSpacing: "1px", color: "var(--primary)" }}>
-          {isRu ? "ЭТАП ОФОРМЛЕНИЯ" : isEn ? "CHECKOUT STEP" : "BUYURTMA BOSQICHI"}
+          {isRu ? "ЭТАП ОФОРМЛЕНИЯ" : isEn ? "CHECKOUT STEP" : "XARID BOSQICHI"}
         </span>
         <h1 style={{ fontSize: "23px", fontWeight: "900", margin: "4px 0", color: "var(--text-main)" }}>
           {isRu ? "Оформление заказа" : isEn ? "Checkout Order" : "Buyurtmani rasmiylashtirish"}
