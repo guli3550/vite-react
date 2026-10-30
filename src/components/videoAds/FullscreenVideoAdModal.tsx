@@ -216,11 +216,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
 
   return createPortal(
     <div
-      className="guli-fullscreen-ad-overlay"
+      className={`guli-fullscreen-ad-overlay${isDismissing ? " guli-story-dismissing" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label={activeAd.title || "Video Reklama"}
-      className={`guli-fullscreen-ad-overlay${isDismissing ? " guli-story-dismissing" : ""}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
