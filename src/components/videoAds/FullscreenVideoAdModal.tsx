@@ -42,7 +42,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [hasStarted, setHasStarted] = useState(false);
+  const hasStartedRef = useRef(false);
 
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
     try {
@@ -62,7 +62,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     setCurrentIndex(nextIndex);
     setProgress(0);
     setIsPaused(false);
-    setHasStarted(false);
+    hasStartedRef.current = false;
   }, [gallery.length]);
 
   const next = useCallback(() => {
@@ -112,8 +112,8 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     video.play().then(() => {
       if (!active) { video.pause(); return; }
       setIsPaused(false);
-      if (!hasStarted) {
-        setHasStarted(true);
+      if (!hasStartedRef.current) {
+        hasStartedRef.current = true;
         sendEvent("video_start", activeAd);
       }
     }).catch(() => {
@@ -123,7 +123,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       active = false;
       video.pause();
     };
-  }, [isOpen, currentIndex, requestedIndex, initialTime, activeAd.id, hasStarted, sendEvent]);
+  }, [isOpen, currentIndex, requestedIndex, initialTime, activeAd.id, sendEvent]);
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
