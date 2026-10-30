@@ -1,6 +1,6 @@
 /* Compact home category strip directly beneath the circular video-ad lane. */
 .homeCategoriesSection {
-  margin-top: -12px !important;
+  margin-top: 0 !important;
   padding-top: 0 !important;
 }
 .homeCategoriesCompactAction {
