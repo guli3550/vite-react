@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -9,6 +9,7 @@ import "./VideoAdCard.css";
 
 interface VideoAdCardProps {
   ad: VideoAd;
+  galleryAds?: VideoAd[];
   placement?: "home" | "product_feed";
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
@@ -30,6 +31,7 @@ function getSessionId(): string {
 
 export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   ad,
+  galleryAds,
   placement = "home",
   onOpenProduct,
   onNavigateUrl,
@@ -39,24 +41,26 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenInitialTime, setFullscreenInitialTime] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [impressionRecorded, setImpressionRecorded] = useState(false);
 
   // Check if ad was previously dismissed in this session
   useEffect(() => {
+    // Home placement dismissal is owned by App: it hides the single slot until
+    // the customer leaves Home and enters it again. Feed ads keep session dismissal.
+    if (placement === "home") return;
     try {
       const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
       if (Array.isArray(dismissedList) && dismissedList.includes(ad.id)) {
         setIsDismissed(true);
       }
     } catch {}
-  }, [ad.id]);
+  }, [ad.id, placement]);
 
   // Video Autoplay (Always Muted on Main Page) & Intersection Observer
   useEffect(() => {
-    if (isDismissed || hasError || !ad.video_url) return;
+    if (isDismissed || isFullscreen || hasError || !ad.video_url) return;
 
     const video = videoRef.current;
     const container = containerRef.current;
@@ -123,8 +127,10 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     return () => {
       observer.disconnect();
       if (dwellTimer) clearTimeout(dwellTimer);
+      // Never leave the muted card player running behind its fullscreen gallery.
+      video.pause();
     };
-  }, [ad.id, ad.video_url, hasError, isDismissed, impressionRecorded]);
+  }, [ad.id, ad.video_url, hasError, isDismissed, isFullscreen, impressionRecorded]);
 
   // Open Tolstoy-style Fullscreen Modal on User Tap
   const handleOpenFullscreen = (e: React.MouseEvent) => {
@@ -135,7 +141,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
     const video = videoRef.current;
     if (video) {
-      setFullscreenInitialTime(video.currentTime || 0);
       video.pause();
     }
     setIsFullscreen(true);
@@ -143,24 +148,23 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
   // Close Fullscreen Modal and restore muted playback on main card
   const handleCloseFullscreen = () => {
+    // The visibility observer resumes the muted card only after the gallery closes.
+    videoRef.current?.pause();
     setIsFullscreen(false);
-    const video = videoRef.current;
-    if (video) {
-      video.muted = true;
-      video.play().catch(() => {});
-    }
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
-    try {
-      const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
-      if (!dismissedList.includes(ad.id)) {
-        dismissedList.push(ad.id);
-        sessionStorage.setItem("guli_dismissed_ads", JSON.stringify(dismissedList));
-      }
-    } catch {}
+    if (placement !== "home") {
+      try {
+        const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
+        if (!dismissedList.includes(ad.id)) {
+          dismissedList.push(ad.id);
+          sessionStorage.setItem("guli_dismissed_ads", JSON.stringify(dismissedList));
+        }
+      } catch {}
+    }
 
     if (onDismiss) onDismiss(ad.id);
   };
@@ -230,16 +234,17 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           >
             <div className="guli-video-badge">Reklama</div>
 
-            {/* Dismiss button */}
-            <button
-              type="button"
-              className="guli-video-dismiss-btn"
-              onClick={handleDismiss}
-              title="Reklamani yopish"
-              aria-label="Reklamani yopish"
-            >
-              <X size={16} strokeWidth={2.25} />
-            </button>
+            {placement === "home" ? (
+              <button
+                type="button"
+                className="guli-video-dismiss-btn"
+                onClick={handleDismiss}
+                title="Reklamani yopish"
+                aria-label="Reklamani yopish"
+              >
+                <X size={16} strokeWidth={2.25} />
+              </button>
+            ) : null}
 
             {/* Video or poster fallback */}
             {!hasError && ad.video_url && (
@@ -270,16 +275,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               </div>
             )}
 
-            {/* Icon-only fullscreen hint, positioned immediately before the close button */}
-            {!hasError && ad.video_url && (
-              <div
-                className="guli-video-fullscreen-hint"
-                aria-hidden="true"
-                title="To‘liq ekranda ochish"
-              >
-                <Maximize2 size={16} />
-              </div>
-            )}
           </div>
 
           {/* Content & Call to Action */}
@@ -304,7 +299,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
         <FullscreenVideoAdModal
           isOpen={isFullscreen}
           ad={ad}
-          initialTime={fullscreenInitialTime}
+          ads={galleryAds}
           onClose={handleCloseFullscreen}
           onOpenProduct={onOpenProduct}
           onNavigateUrl={onNavigateUrl}

@@ -70,7 +70,8 @@ import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { VideoAdCard } from "./components/videoAds/VideoAdCard";
-import type { VideoAd } from "./types/videoAd";
+import { VideoAdStoriesRow } from "./components/videoAds/VideoAdStoriesRow";
+import { getAdsForPlacement, isAdActiveAndVisible, type VideoAd } from "./types/videoAd";
 
 declare global {
   interface Window {
@@ -834,7 +835,14 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
+  // Keep the Home ad dismissed for this browser/app session.
+  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(() => {
+    try { return sessionStorage.getItem("guli_home_video_ad_dismissed") === "1"; }
+    catch { return false; }
+  });
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
+  const [allActiveVideoAds, setAllActiveVideoAds] = useState<VideoAd[]>([]);
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -1179,8 +1187,11 @@ export default function App() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
-          const home = json.data.filter((ad: VideoAd) => ad.placement === "home" || ad.placement === "all");
-          const feed = json.data.filter((ad: VideoAd) => ad.placement === "product_feed" || ad.placement === "all");
+          // The public API returns complete VideoAd records; narrow the untyped JSON boundary here.
+          const ads = (json.data as VideoAd[]).filter((item) => isAdActiveAndVisible(item));
+          setAllActiveVideoAds(ads);
+          const home = getAdsForPlacement(ads, "home");
+          const feed = getAdsForPlacement(ads, "product_feed");
           setHomeVideoAds(home);
           setFeedVideoAds(feed);
         }
@@ -1538,6 +1549,7 @@ export default function App() {
     if (!MAIN_TABS.includes(page)) return;
     const target = e.target as HTMLElement;
     if (
+      target.closest(".guli-fullscreen-ad-overlay") ||
       target.closest(".hero") ||
       target.closest(".heroSlideTrack") ||
       target.closest(".heroSlideItem") ||
@@ -1546,6 +1558,7 @@ export default function App() {
       target.closest(".categoryScroll") ||
       target.closest(".orderFilterTabs") ||
       target.closest(".categoryTabs") ||
+      target.closest(".guli-ad-stories") ||
       target.closest("input") ||
       target.closest("textarea") ||
       target.closest("button") ||
@@ -2320,6 +2333,8 @@ export default function App() {
     try {
       tg()?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
+    if (next === "home" && page !== "home") {
+    }
     if (next !== page) {
       setPreviousPage(page);
       setPageHistory((prev) => [...prev, next]);
@@ -2405,6 +2420,7 @@ export default function App() {
     if (page === "product" || selectedProduct) {
       setSelectedProduct(null);
       const target = previousPage && previousPage !== "product" ? previousPage : "home";
+      if (target === "home")
       setPage(target);
       return true;
     }
@@ -2426,6 +2442,7 @@ export default function App() {
       nextHistory.pop(); // remove current page
       const prev = nextHistory[nextHistory.length - 1] || "home";
       setPageHistory(nextHistory);
+      if (prev === "home")
       setPage(prev);
       return true;
     }
@@ -4532,9 +4549,11 @@ export default function App() {
                 go("catalog");
               }}
             />
-            {homeVideoAds.length > 0 && (
+            {!homeVideoAdsDismissed && homeVideoAds.length > 0 && (
               <VideoAdCard
+                key={homeVideoAds[0].id}
                 ad={homeVideoAds[0]}
+                galleryAds={homeVideoAds}
                 placement="home"
                 onOpenProduct={(prodId) => {
                   const p = products.find(
@@ -4557,7 +4576,8 @@ export default function App() {
                   }
                 }}
                 onDismiss={() => {
-                  setHomeVideoAds((prev) => prev.slice(1));
+                  try { sessionStorage.setItem("guli_home_video_ad_dismissed", "1"); } catch {}
+                  setHomeVideoAdsDismissed(true);
                 }}
               />
             )}
@@ -4613,11 +4633,28 @@ export default function App() {
             }}
           >
             <main className="page">
-              <div className="pageHeader">
-                <span>GULI {t("brand_sub")}</span>
-                <h1>{t("catalog_title")}</h1>
-                <p>{t("catalog_sub")}</p>
-              </div>
+              <VideoAdStoriesRow
+                ads={allActiveVideoAds}
+                onOpenProduct={(prodId) => {
+                  const found = products.find(
+                    (item) => String(item.id) === String(prodId) || item.product_code === String(prodId)
+                  );
+                  if (found) openProduct(found, "catalog");
+                }}
+                onNavigateUrl={(url) => {
+                  if (url.startsWith("/")) {
+                    if (url.includes("category=")) {
+                      const match = url.match(/category=([^&]+)/);
+                      if (match) setSelectedCategory(decodeURIComponent(match[1]));
+                    }
+                    go("catalog");
+                  } else {
+                    const tg = (window as any).Telegram?.WebApp;
+                    if (tg?.openLink) tg.openLink(url);
+                    else window.open(url, "_blank", "noopener,noreferrer");
+                  }
+                }}
+              />
               <div className="searchBox">
                 ⌕
                 <input
@@ -4651,9 +4688,11 @@ export default function App() {
                     {filtered.map((p, idx) => (
                       <Fragment key={p.id || idx}>
                         {card(p)}
-                        {idx === 3 && feedVideoAds.length > 0 && (
+                        {idx === Math.min(3, filtered.length - 1) && feedVideoAds.map((ad) => (
                           <VideoAdCard
-                            ad={feedVideoAds[0]}
+                            key={ad.id}
+                            ad={ad}
+                            galleryAds={feedVideoAds}
                             placement="product_feed"
                             onOpenProduct={(prodId) => {
                               const found = products.find(
@@ -4673,11 +4712,11 @@ export default function App() {
                                 else window.open(url, "_blank", "noopener,noreferrer");
                               }
                             }}
-                            onDismiss={() => {
-                              setFeedVideoAds((prev) => prev.slice(1));
+                            onDismiss={(adId) => {
+                              setFeedVideoAds((prev) => prev.filter((item) => item.id !== adId));
                             }}
                           />
-                        )}
+                        ))}
                       </Fragment>
                     ))}
                   </div>
