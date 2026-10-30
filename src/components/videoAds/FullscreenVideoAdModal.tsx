@@ -41,6 +41,8 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [isInfoExpanded, setIsInfoExpanded] = useState(false);
+  const [isDismissing, setIsDismissing] = useState(false);
   const hasStartedRef = useRef(false);
 
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
@@ -149,19 +151,33 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    // Keep this gesture inside the Stories viewer; never let the storefront
-    // tab-swipe handler interpret it as a category/tab navigation.
+    // Own all story gestures so the storefront's page/category swipe cannot run.
     e.stopPropagation();
     const touch = e.touches[0];
     touchStart.current = { x: touch.clientX, y: touch.clientY };
   };
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.stopPropagation();
-    if (!touchStart.current) return;
+    if (!touchStart.current || isDismissing) return;
     const touch = e.changedTouches[0];
     const dx = touch.clientX - touchStart.current.x;
     const dy = touch.clientY - touchStart.current.y;
     touchStart.current = null;
+
+    if (Math.abs(dy) > 85 && Math.abs(dy) > Math.abs(dx) * 1.15) {
+      suppressClick.current = true;
+      if (dy > 0) {
+        // Pulling the story down dismisses it with a shrinking slide animation.
+        setIsDismissing(true);
+        videoRef.current?.pause();
+        window.setTimeout(() => onClose(), 260);
+      } else {
+        // Pulling upward reveals the ad title and its full description.
+        setIsInfoExpanded(true);
+      }
+      return;
+    }
+
     if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.25) {
       suppressClick.current = true;
       if (dx < 0) next();
@@ -204,8 +220,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={activeAd.title || "Video Reklama"}
-      onTouchStart={(e) => e.stopPropagation()}
-      onTouchEnd={(e) => e.stopPropagation()}
+      className={`guli-fullscreen-ad-overlay${isDismissing ? " guli-story-dismissing" : ""}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="guli-fullscreen-ad-topbar">
         <div className="guli-fullscreen-gallery-progress" aria-label={`Reklama ${currentIndex + 1} / ${gallery.length}`}>
@@ -237,7 +254,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         </div>
       </div>
 
-      <div className="guli-fullscreen-video-stage" onClick={handleStageTap} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div className="guli-fullscreen-video-stage" onClick={handleStageTap}>
         <video
           key={activeAd.id}
           ref={videoRef}
@@ -259,7 +276,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         )}
       </div>
 
-      <div className="guli-fullscreen-bottom-card" onClick={(e) => e.stopPropagation()}>
+      <div className={`guli-fullscreen-bottom-card${isInfoExpanded ? " guli-story-info-expanded" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="guli-fullscreen-card-inner">
           {activeAd.poster_url ? (
             <img src={activeAd.poster_url} alt={activeAd.title} className="guli-fullscreen-card-thumb" referrerPolicy="no-referrer" />
