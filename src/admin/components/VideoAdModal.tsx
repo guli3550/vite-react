@@ -131,6 +131,7 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
       // Supabase Storage signed-upload endpoint expects PUT for the raw file body.
       xhr.open("PUT", signedData.signedUrl);
       xhr.setRequestHeader("Content-Type", file.type);
+      xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable && onProgress) {
           onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));

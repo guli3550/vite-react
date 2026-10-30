@@ -43,7 +43,8 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
-  const [impressionRecorded, setImpressionRecorded] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const impressionRecordedRef = useRef(false);
 
   // Check if ad was previously dismissed in this session
   useEffect(() => {
@@ -58,7 +59,9 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     } catch {}
   }, [ad.id, placement]);
 
-  // Video Autoplay (Always Muted on Main Page) & Intersection Observer
+  // Video Autoplay (Always Muted on Main Page) & Smooth Viewport Observer
+  // Uses rootMargin 300px so video starts playing early and never pauses during normal scrolling,
+  // matching Reels behavior.
   useEffect(() => {
     if (isDismissed || isFullscreen || hasError || !ad.video_url) return;
 
@@ -84,16 +87,19 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
       } catch {}
     };
 
-    const handlePlayAttempt = async () => {
-      // Main screen ad video always plays silently (muted)
+    const handlePlayAttempt = () => {
       video.muted = true;
-      try {
-        await video.play();
-        sendEvent("video_start");
-      } catch {
-        // Playback blocked or waiting for user interaction
-      }
+      video.play()
+        .then(() => {
+          sendEvent("video_start");
+        })
+        .catch(() => {
+          // Autoplay policy or media loading in progress
+        });
     };
+
+    // Play immediately on mount if already near viewport
+    handlePlayAttempt();
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -101,25 +107,21 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
         if (entry.isIntersecting) {
           handlePlayAttempt();
 
-          // Dwell timer: record impression after 1.2s visible dwell
-          if (!impressionRecorded) {
+          // Dwell timer: record impression once after 1.2s visible dwell
+          if (!impressionRecordedRef.current) {
             dwellTimer = setTimeout(() => {
-              setImpressionRecorded(true);
+              impressionRecordedRef.current = true;
               sendEvent("impression");
             }, 1200);
           }
         } else {
-          // Pause when scrolled out of view to save battery and network bandwidth
-          if (video && !video.paused) {
-            video.pause();
-          }
           if (dwellTimer) {
             clearTimeout(dwellTimer);
             dwellTimer = null;
           }
         }
       },
-      { threshold: 0.35 }
+      { rootMargin: "500px 0px", threshold: 0 }
     );
 
     observer.observe(container);
@@ -127,10 +129,8 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     return () => {
       observer.disconnect();
       if (dwellTimer) clearTimeout(dwellTimer);
-      // Never leave the muted card player running behind its fullscreen gallery.
-      video.pause();
     };
-  }, [ad.id, ad.video_url, hasError, isDismissed, isFullscreen, impressionRecorded]);
+  }, [ad.id, ad.video_url, hasError, isDismissed, isFullscreen]);
 
   // Open Tolstoy-style Fullscreen Modal on User Tap
   const handleOpenFullscreen = (e: React.MouseEvent) => {
@@ -139,18 +139,16 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
       (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
 
-    const video = videoRef.current;
-    if (video) {
-      video.pause();
-    }
     setIsFullscreen(true);
   };
 
   // Close Fullscreen Modal and restore muted playback on main card
   const handleCloseFullscreen = () => {
-    // The visibility observer resumes the muted card only after the gallery closes.
-    videoRef.current?.pause();
     setIsFullscreen(false);
+    if (videoRef.current) {
+      videoRef.current.muted = true;
+      videoRef.current.play().catch(() => {});
+    }
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -248,18 +246,52 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
             {/* Video or poster fallback */}
             {!hasError && ad.video_url && (
-              <video
-                ref={videoRef}
-                src={ad.video_url}
-                poster={ad.poster_url || undefined}
-                className="guli-video-element"
-                playsInline
-                webkit-playsinline="true"
-                muted
-                loop
-                preload="metadata"
-                onError={() => setHasError(true)}
-              />
+              <>
+                <video
+                  ref={videoRef}
+                  src={ad.video_url}
+                  poster={ad.poster_url || undefined}
+                  className="guli-video-element"
+                  playsInline
+                  webkit-playsinline="true"
+                  muted
+                  loop
+                  autoPlay
+                  preload="auto"
+                  onWaiting={() => {
+                    setIsBuffering(true);
+                    if (videoRef.current?.paused && !isDismissed && !isFullscreen) {
+                      videoRef.current.play().catch(() => {});
+                    }
+                  }}
+                  onCanPlay={() => {
+                    setIsBuffering(false);
+                    if (videoRef.current?.paused && !isDismissed && !isFullscreen) {
+                      videoRef.current.play().catch(() => {});
+                    }
+                  }}
+                  onPlaying={() => setIsBuffering(false)}
+                  onPause={(e) => {
+                    // Auto-resume if browser or OS pauses inline video unexpectedly
+                    const v = e.currentTarget;
+                    if (v.paused && !isDismissed && !isFullscreen) {
+                      v.play().catch(() => {});
+                    }
+                  }}
+                  onError={() => {
+                    setIsBuffering(false);
+                    setHasError(true);
+                  }}
+                />
+                {isBuffering && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center bg-black/25 pointer-events-none transition-opacity"
+                    aria-label="Video yuklanmoqda"
+                  >
+                    <div className="w-8 h-8 rounded-full border-2 border-white/40 border-t-rose-500 animate-spin" />
+                  </div>
+                )}
+              </>
             )}
             {(hasError || !ad.video_url) && ad.poster_url && (
               <img

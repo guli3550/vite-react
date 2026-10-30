@@ -4688,10 +4688,10 @@ export default function App() {
                     {filtered.map((p, idx) => (
                       <Fragment key={p.id || idx}>
                         {card(p)}
-                        {idx === Math.min(3, filtered.length - 1) && feedVideoAds.map((ad) => (
+                        {idx === Math.min(3, filtered.length - 1) && feedVideoAds.length > 0 && (
                           <VideoAdCard
-                            key={ad.id}
-                            ad={ad}
+                            key={feedVideoAds[0].id}
+                            ad={feedVideoAds[0]}
                             galleryAds={feedVideoAds}
                             placement="product_feed"
                             onOpenProduct={(prodId) => {
@@ -4716,7 +4716,7 @@ export default function App() {
                               setFeedVideoAds((prev) => prev.filter((item) => item.id !== adId));
                             }}
                           />
-                        ))}
+                        )}
                       </Fragment>
                     ))}
                   </div>
