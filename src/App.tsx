@@ -4534,10 +4534,10 @@ export default function App() {
                 go("catalog");
               }}
             />
-            {homeVideoAds.map((ad) => (
+            {homeVideoAds.length > 0 && (
               <VideoAdCard
-                key={ad.id}
-                ad={ad}
+                key={homeVideoAds[0].id}
+                ad={homeVideoAds[0]}
                 galleryAds={homeVideoAds}
                 placement="home"
                 onOpenProduct={(prodId) => {
@@ -4564,7 +4564,7 @@ export default function App() {
                   setHomeVideoAds((prev) => prev.filter((item) => item.id !== adId));
                 }}
               />
-            ))}
+            )}
             <section className="section">
               <div className="sectionTitle">
                 <h2>{t("featured_title")}</h2>
