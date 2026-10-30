@@ -234,16 +234,20 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           >
             <div className="guli-video-badge">Reklama</div>
 
-            {/* Dismiss button */}
-            <button
-              type="button"
-              className="guli-video-dismiss-btn"
-              onClick={handleDismiss}
-              title="Reklamani yopish"
-              aria-label="Reklamani yopish"
-            >
-              <X size={16} strokeWidth={2.25} />
-            </button>
+            {placement === "home" && (
+              {/* Dismiss button */}
+              <button
+                type="button"
+                className="guli-video-dismiss-btn"
+                onClick={handleDismiss}
+                title="Reklamani yopish"
+                aria-label="Reklamani yopish"
+              >
+                <X size={16} strokeWidth={2.25} />
+              </button>
+  
+  
+            )}
 
             {/* Video or poster fallback */}
             {!hasError && ad.video_url && (
