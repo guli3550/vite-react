@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Play, ArrowRight } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
@@ -10,6 +10,7 @@ import "./FullscreenVideoAdModal.css";
 interface FullscreenVideoAdModalProps {
   isOpen: boolean;
   ad: VideoAd;
+  ads?: VideoAd[];
   initialTime?: number;
   onClose: () => void;
   onOpenProduct?: (productId: string) => void;
@@ -30,250 +31,206 @@ function getSessionId(): string {
 }
 
 export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
-  isOpen,
-  ad,
-  initialTime = 0,
-  onClose,
-  onOpenProduct,
-  onNavigateUrl,
+  isOpen, ad, ads, initialTime = 0, onClose, onOpenProduct, onNavigateUrl,
 }) => {
+  const gallery = ads?.length ? ads : [ad];
+  const requestedIndex = Math.max(0, gallery.findIndex((item) => item.id === ad.id));
+  const [currentIndex, setCurrentIndex] = useState(requestedIndex);
+  const activeAd = gallery[Math.min(currentIndex, gallery.length - 1)] || ad;
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
 
-  // Send analytics events
-  const sendEvent = useCallback(
-    (eventType: "click" | "video_start" | "video_complete") => {
-      try {
-        const apiBase = getApiBaseUrl();
-        const platform = detectPlatform().isTelegram ? "telegram" : "web";
-        fetch(`${apiBase}/api/video-ads/${ad.id}/events`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event_type: eventType,
-            session_id: getSessionId(),
-            platform,
-          }),
-        }).catch(() => {});
-      } catch {}
-    },
-    [ad.id]
-  );
+  const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
+    try {
+      const apiBase = getApiBaseUrl();
+      const platform = detectPlatform().isTelegram ? "telegram" : "web";
+      fetch(`${apiBase}/api/video-ads/${targetAd.id}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event_type: eventType, session_id: getSessionId(), platform }),
+      }).catch(() => {});
+    } catch {}
+  }, [activeAd]);
 
-  // Lock body scroll and handle keyboard ESC
+  const goTo = useCallback((nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= gallery.length) return;
+    videoRef.current?.pause();
+    setCurrentIndex(nextIndex);
+    setProgress(0);
+    setIsPaused(false);
+    setHasStarted(false);
+  }, [gallery.length]);
+
+  const next = useCallback(() => {
+    if (currentIndex < gallery.length - 1) goTo(currentIndex + 1);
+    else onClose();
+  }, [currentIndex, gallery.length, goTo, onClose]);
+
+  const previous = useCallback(() => {
+    if (currentIndex > 0) goTo(currentIndex - 1);
+  }, [currentIndex, goTo]);
+
   useEffect(() => {
     if (!isOpen) return;
-
     const originalOverflow = document.body.style.overflow;
     const originalOverscroll = document.body.style.overscrollBehavior;
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "contain";
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") previous();
     };
     window.addEventListener("keydown", handleKeyDown);
-
     return () => {
       document.body.style.overflow = originalOverflow;
       document.body.style.overscrollBehavior = originalOverscroll;
       window.removeEventListener("keydown", handleKeyDown);
+      videoRef.current?.pause();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, next, previous]);
 
-  // Handle video playback and unmuting on modal open (triggered by user gesture)
+  // Each selected ad starts automatically with sound. Navigation is triggered by
+  // an explicit swipe or by the previous video ending after the initial user tap.
   useEffect(() => {
     if (!isOpen) return;
-
     const video = videoRef.current;
     if (!video) return;
-
-    if (initialTime > 0) {
-      try {
-        video.currentTime = initialTime;
-      } catch {}
-    }
-
-    // Direct user tap triggered full-screen -> request unmuted audio
     video.muted = false;
-
-    const playPromise = video.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          setIsPaused(false);
-          if (!hasStarted) {
-            setHasStarted(true);
-            sendEvent("video_start");
-          }
-        })
-        .catch(() => {
-          // If browser policy blocks sound despite user gesture, keep video playing muted
-          video.muted = true;
-          video
-            .play()
-            .then(() => {
-              setIsPaused(false);
-              if (!hasStarted) {
-                setHasStarted(true);
-                sendEvent("video_start");
-              }
-            })
-            .catch(() => {
-              setIsPaused(true);
-            });
-        });
+    if (currentIndex === requestedIndex && initialTime > 0) {
+      const restore = () => {
+        if (Number.isFinite(video.duration) && initialTime < video.duration - 1) video.currentTime = initialTime;
+      };
+      if (video.readyState >= 1) restore();
+      else video.addEventListener("loadedmetadata", restore, { once: true });
     }
-  }, [isOpen, initialTime, hasStarted, sendEvent]);
+    let active = true;
+    video.play().then(() => {
+      if (!active) { video.pause(); return; }
+      setIsPaused(false);
+      if (!hasStarted) {
+        setHasStarted(true);
+        sendEvent("video_start", activeAd);
+      }
+    }).catch(() => {
+      if (active) setIsPaused(true);
+    });
+    return () => {
+      active = false;
+      video.pause();
+    };
+  }, [isOpen, currentIndex, requestedIndex, initialTime, activeAd.id, hasStarted, sendEvent]);
 
-  // Video time update -> progress bar
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video || !video.duration) return;
-    const percent = Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100));
-    setProgress(percent);
+    setProgress(Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100)));
   };
 
-  // Toggle play / pause on video click
   const handleTogglePlayPause = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (suppressClick.current) { suppressClick.current = false; return; }
     const video = videoRef.current;
     if (!video) return;
-
-    // Telegram Haptic feedback
-    try {
-      (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
-    } catch {}
-
     if (video.paused) {
-      // If video was muted due to policy, try unmuting on subsequent user tap
-      if (video.muted) {
-        video.muted = false;
-      }
-      video
-        .play()
-        .then(() => setIsPaused(false))
-        .catch(() => setIsPaused(true));
+      video.muted = false;
+      video.play().then(() => setIsPaused(false)).catch(() => setIsPaused(true));
     } else {
       video.pause();
       setIsPaused(true);
     }
   };
 
-  // Close full-screen
-  const handleClose = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    try {
-      (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
-    } catch {}
-
-    if (videoRef.current) {
-      videoRef.current.pause();
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStart.current.x;
+    const dy = touch.clientY - touchStart.current.y;
+    touchStart.current = null;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+      suppressClick.current = true;
+      if (dx < 0) next();
+      else previous();
     }
-    onClose();
   };
 
-  // CTA Click
   const handleCtaClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    try {
-      (window as any).Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
-    } catch {}
-
-    sendEvent("click");
-
-    // Close modal and navigate
+    sendEvent("click", activeAd);
+    videoRef.current?.pause();
     onClose();
-
-    if (ad.product_id && onOpenProduct) {
-      onOpenProduct(ad.product_id);
+    if (activeAd.product_id && onOpenProduct) {
+      onOpenProduct(activeAd.product_id);
       return;
     }
-
-    const safeUrl = sanitizeDestinationUrl(ad.destination_url);
+    const safeUrl = sanitizeDestinationUrl(activeAd.destination_url);
     if (!safeUrl) return;
-
-    if (onNavigateUrl) {
-      onNavigateUrl(safeUrl);
-    } else if (safeUrl.startsWith("/")) {
-      window.location.href = safeUrl;
-    } else {
+    if (onNavigateUrl) onNavigateUrl(safeUrl);
+    else if (safeUrl.startsWith("/")) window.location.href = safeUrl;
+    else {
       const tg = (window as any).Telegram?.WebApp;
-      if (tg?.openLink) {
-        tg.openLink(safeUrl);
-      } else {
-        window.open(safeUrl, "_blank", "noopener,noreferrer");
-      }
+      if (tg?.openLink) tg.openLink(safeUrl);
+      else window.open(safeUrl, "_blank", "noopener,noreferrer");
     }
+  };
+
+  const handleClose = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    videoRef.current?.pause();
+    onClose();
   };
 
   if (!isOpen) return null;
 
   return createPortal(
-    <div
-      className="guli-fullscreen-ad-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label={ad.title || "Video Reklama"}
-    >
-      {/* Top Bar with Story-like Progress Bar and Close Button */}
+    <div className="guli-fullscreen-ad-overlay" role="dialog" aria-modal="true" aria-label={activeAd.title || "Video Reklama"}>
       <div className="guli-fullscreen-ad-topbar">
-        {/* Progress bar line */}
-        <div className="guli-fullscreen-progress-track">
-          <div
-            className="guli-fullscreen-progress-fill"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="guli-fullscreen-gallery-progress" aria-label={`Reklama ${currentIndex + 1} / ${gallery.length}`}>
+          {gallery.map((item, index) => (
+            <button
+              type="button"
+              key={item.id}
+              className="guli-fullscreen-gallery-segment"
+              onClick={() => goTo(index)}
+              aria-label={`${index + 1}-reklamaga o'tish`}
+            >
+              <span style={{ width: index < currentIndex ? "100%" : index === currentIndex ? `${progress}%` : "0%" }} />
+            </button>
+          ))}
         </div>
-
         <div className="guli-fullscreen-header-row">
           <div className="guli-fullscreen-badge-group">
             <span className="guli-fullscreen-badge">Reklama</span>
-            <span className="guli-fullscreen-brand">Guli Market</span>
+            <span className="guli-fullscreen-brand">Guli Market · {currentIndex + 1}/{gallery.length}</span>
           </div>
-
-          <div className="guli-fullscreen-actions">
-            {/* Close button */}
-            <button
-              type="button"
-              className="guli-fullscreen-close-btn"
-              onClick={handleClose}
-              aria-label="Yopish"
-              title="Yopish"
-            >
-              <X size={22} />
-            </button>
-          </div>
+          <button type="button" className="guli-fullscreen-close-btn" onClick={handleClose} aria-label="Yopish" title="Yopish">
+            <X size={22} />
+          </button>
         </div>
       </div>
 
-      {/* Main Video Viewport (tappable to play/pause) */}
-      <div
-        className="guli-fullscreen-video-stage"
-        onClick={handleTogglePlayPause}
-      >
+      <div className="guli-fullscreen-video-stage" onClick={handleTogglePlayPause} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <video
+          key={activeAd.id}
           ref={videoRef}
-          src={ad.video_url}
-          poster={ad.poster_url || undefined}
+          src={activeAd.video_url}
+          poster={activeAd.poster_url || undefined}
           className="guli-fullscreen-video-element"
           playsInline
           webkit-playsinline="true"
-          loop
           preload="auto"
           onTimeUpdate={handleTimeUpdate}
-          onEnded={() => {
-            sendEvent("video_complete");
-          }}
+          onEnded={() => { sendEvent("video_complete", activeAd); next(); }}
         />
-
-        {/* Play Icon Overlay shown when paused */}
         {isPaused && (
           <div className="guli-fullscreen-play-indicator" aria-hidden="true">
             <div className="guli-fullscreen-play-circle">
@@ -283,39 +240,19 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         )}
       </div>
 
-      {/* Tolstoy-style Bottom Product & Ad Card Overlay */}
       <div className="guli-fullscreen-bottom-card" onClick={(e) => e.stopPropagation()}>
         <div className="guli-fullscreen-card-inner">
-          {/* Thumbnail / Poster */}
-          {ad.poster_url ? (
-            <img
-              src={ad.poster_url}
-              alt={ad.title}
-              className="guli-fullscreen-card-thumb"
-              referrerPolicy="no-referrer"
-            />
+          {activeAd.poster_url ? (
+            <img src={activeAd.poster_url} alt={activeAd.title} className="guli-fullscreen-card-thumb" referrerPolicy="no-referrer" />
           ) : (
-            <div className="guli-fullscreen-card-thumb-placeholder">
-              <span>GULI</span>
-            </div>
+            <div className="guli-fullscreen-card-thumb-placeholder"><span>GULI</span></div>
           )}
-
-          {/* Title and Short Bio */}
           <div className="guli-fullscreen-card-info">
-            <h4 className="guli-fullscreen-card-title">{ad.title}</h4>
-            {ad.description && (
-              <p className="guli-fullscreen-card-desc">{ad.description}</p>
-            )}
+            <h4 className="guli-fullscreen-card-title">{activeAd.title}</h4>
+            {activeAd.description && <p className="guli-fullscreen-card-desc">{activeAd.description}</p>}
           </div>
-
-          {/* CTA Action Button */}
-          <button
-            type="button"
-            className="guli-fullscreen-cta-btn"
-            onClick={handleCtaClick}
-          >
-            <span>{ad.cta_text || "Batafsil"}</span>
-            <ArrowRight size={18} />
+          <button type="button" className="guli-fullscreen-cta-btn" onClick={handleCtaClick}>
+            <span>{activeAd.cta_text || "Batafsil"}</span><ArrowRight size={18} />
           </button>
         </div>
       </div>
