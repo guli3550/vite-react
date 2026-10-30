@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { sanitizeDestinationUrl } from "../../types/videoAd";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
@@ -246,15 +246,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               </button>
             ) : null}
 
-            {!hasError && ad.video_url && placement === "home" && (
-              <div
-                className="guli-video-fullscreen-hint"
-                aria-hidden="true"
-                title="To‘liq ekranda ochish"
-              >
-                <Maximize2 size={16} />
-              </div>
-            )}
             {/* Video or poster fallback */}
             {!hasError && ad.video_url && (
               <video
@@ -284,16 +275,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               </div>
             )}
 
-            {/* Icon-only fullscreen hint, positioned immediately before the close button */}
-            {!hasError && ad.video_url && (
-              <div
-                className="guli-video-fullscreen-hint"
-                aria-hidden="true"
-                title="To‘liq ekranda ochish"
-              >
-                <Maximize2 size={16} />
-              </div>
-            )}
           </div>
 
           {/* Content & Call to Action */}
