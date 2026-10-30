@@ -208,9 +208,12 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           ))}
         </div>
         <div className="guli-fullscreen-header-row">
-          <div className="guli-fullscreen-badge-group">
-            <span className="guli-fullscreen-badge">Reklama</span>
-            <span className="guli-fullscreen-brand">Guli Market · {currentIndex + 1}/{gallery.length}</span>
+          <div className="guli-story-account">
+            <div className="guli-story-avatar" aria-hidden="true">G</div>
+            <div className="guli-story-account-copy">
+              <strong>Guli Market</strong>
+              <span>Reklama · {currentIndex + 1}/{gallery.length}</span>
+            </div>
           </div>
           <button type="button" className="guli-fullscreen-close-btn" onClick={handleClose} aria-label="Yopish" title="Yopish">
             <X size={22} />
