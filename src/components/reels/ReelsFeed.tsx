@@ -17,7 +17,7 @@ import "./Reels.css";
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
 const REELS_CACHE_STORAGE_KEY = "guli_public_reels_cache_v1";
 const REELS_POSITION_STORAGE_KEY = "guli_reels_position_v1";
-const REELS_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REELS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 type SavedReelPosition = { reelId: string; currentTime: number };
 
@@ -51,9 +51,9 @@ function readCachedPublicReels(): ReelItem[] {
 
 function writeCachedPublicReels(reels: ReelItem[]): void {
   try {
-    // Keep the instant-start cache compact; comments are refreshed by the live API.
-    const compact = reels.filter((reel) => reel.status === "active").map((reel) => ({ ...reel, comments: [] }));
-    localStorage.setItem(REELS_CACHE_STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), reels: compact }));
+    // Preserve the complete public payload so cached comments remain available offline.
+    const activeReels = reels.filter((reel) => reel.status === "active");
+    localStorage.setItem(REELS_CACHE_STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), reels: activeReels }));
   } catch (error) { console.warn("[Reels] Lokal cache saqlanmadi:", error); }
 }
 
@@ -135,7 +135,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onNavigateToCatalog,
 }) => {
   // Render the last known feed synchronously; refresh it in the background.
-  const initialCycle = prepareReelsCycle(readCachedPublicReels());
+  const [initialCycle] = useState(() => prepareReelsCycle(readCachedPublicReels()));
   const [reels, setReels] = useState<ReelItem[]>(initialCycle.reels);
   const [isLoadingReels, setIsLoadingReels] = useState(initialCycle.reels.length === 0);
   const [reelsLoadError, setReelsLoadError] = useState<string | null>(null);
