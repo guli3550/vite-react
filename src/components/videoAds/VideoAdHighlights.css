@@ -3,7 +3,7 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 6px 18px 2px;
+  padding: 4px 18px 0;
   overflow: hidden;
   background: transparent;
 }
@@ -17,7 +17,7 @@
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  padding: 2px 2px 4px;
+  padding: 2px 2px 0;
 }
 .guli-video-highlights-track::-webkit-scrollbar { display: none; }
 .guli-video-highlight {
