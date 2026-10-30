@@ -234,8 +234,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
           >
             <div className="guli-video-badge">Reklama</div>
 
-            {placement === "home" && (
-              {/* Dismiss button */}
+            {placement === "home" ? (
               <button
                 type="button"
                 className="guli-video-dismiss-btn"
@@ -245,10 +244,17 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               >
                 <X size={16} strokeWidth={2.25} />
               </button>
-  
-  
-            )}
+            ) : null}
 
+            {!hasError && ad.video_url && placement === "home" && (
+              <div
+                className="guli-video-fullscreen-hint"
+                aria-hidden="true"
+                title="To‘liq ekranda ochish"
+              >
+                <Maximize2 size={16} />
+              </div>
+            )}
             {/* Video or poster fallback */}
             {!hasError && ad.video_url && (
               <video
