@@ -1,18 +1,23 @@
 /* Compact home category strip directly beneath the circular video-ad lane. */
 .homeCategoriesSection {
-  margin-top: 0 !important;
+  margin-top: -12px !important;
   padding-top: 0 !important;
 }
 .homeCategoriesCompactAction {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   min-height: 18px;
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   padding: 0;
+}
+.homeCategoriesCompactAction .categorySectionEyebrow {
+  margin: 0;
+  text-align: left;
 }
 .homeCategoriesCompactAction .sectionSeeAllBtn {
   margin: 0;
   padding: 0;
   line-height: 1.2;
+  flex: 0 0 auto;
 }
