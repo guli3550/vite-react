@@ -1,5 +1,5 @@
 const HOME_BANNER_CACHE_NAME = "guli-home-banners-v1";
-const MAX_CACHED_HOME_BANNERS = 24;
+const MAX_CACHED_HOME_BANNERS = 12;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -42,7 +42,10 @@ self.addEventListener("message", (event) => {
     const keep = new Set(urls);
     const existing = await cache.keys();
     await Promise.all(existing.filter((request) => !keep.has(request.url)).map((request) => cache.delete(request)));
-    await Promise.allSettled(urls.map((url) => cacheBannerImage(url, cache)));
+    await Promise.allSettled(urls.map(async (url) => {
+      // Immutable banner URLs need to be downloaded only once per device.
+      if (!(await cache.match(url))) await cacheBannerImage(url, cache);
+    }));
   })());
 });
 
