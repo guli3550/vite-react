@@ -40,7 +40,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const progressFillRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -73,7 +73,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     userPausedRef.current = false;
     videoRef.current?.pause();
     setCurrentIndex(nextIndex);
-    setProgress(0);
+    progressFillRefs.current.forEach((fill, index) => {
+      if (fill) fill.style.width = index < nextIndex ? "100%" : "0%";
+    });
     setIsPaused(false);
     setIsInfoExpanded(false);
     setIsBuffering(true);
@@ -141,7 +143,11 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video || !video.duration) return;
-    setProgress(Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100)));
+    const fill = progressFillRefs.current[currentIndex];
+    if (fill) {
+      const percent = Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100));
+      fill.style.width = `${percent}%`;
+    }
   };
 
   const handleStageTap = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -267,7 +273,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
               disabled={isInfoExpanded && index > currentIndex}
               aria-label={`${index + 1}-reklamaga o'tish`}
             >
-              <span style={{ width: index < currentIndex ? "100%" : index === currentIndex ? `${progress}%` : "0%" }} />
+              <span
+                ref={(element) => { progressFillRefs.current[index] = element; }}
+                style={{ width: index < currentIndex ? "100%" : "0%" }}
+              />
             </button>
           ))}
         </div>
