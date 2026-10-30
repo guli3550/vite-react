@@ -2334,7 +2334,6 @@ export default function App() {
       tg()?.HapticFeedback?.impactOccurred?.("light");
     } catch {}
     if (next === "home" && page !== "home") {
-      setHomeVideoAdsDismissed(false);
     }
     if (next !== page) {
       setPreviousPage(page);
@@ -2421,7 +2420,7 @@ export default function App() {
     if (page === "product" || selectedProduct) {
       setSelectedProduct(null);
       const target = previousPage && previousPage !== "product" ? previousPage : "home";
-      if (target === "home") setHomeVideoAdsDismissed(false);
+      if (target === "home")
       setPage(target);
       return true;
     }
@@ -2431,7 +2430,6 @@ export default function App() {
       setSelectedCategory("Barchasi");
       setSearch("");
       if (page !== "home") {
-        setHomeVideoAdsDismissed(false);
         setPage("home");
         setPageHistory(["home"]);
       }
@@ -2444,14 +2442,13 @@ export default function App() {
       nextHistory.pop(); // remove current page
       const prev = nextHistory[nextHistory.length - 1] || "home";
       setPageHistory(nextHistory);
-      if (prev === "home") setHomeVideoAdsDismissed(false);
+      if (prev === "home")
       setPage(prev);
       return true;
     }
 
     // 5. If not on home, return to Home
     if (page !== "home") {
-      setHomeVideoAdsDismissed(false);
       setPage("home");
       setPageHistory(["home"]);
       return true;
