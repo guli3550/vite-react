@@ -125,10 +125,6 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
     return () => {
       observer.disconnect();
       if (dwellTimer) clearTimeout(dwellTimer);
-    };
-    return () => {
-      observer.disconnect();
-      if (dwellTimer) clearTimeout(dwellTimer);
       // Never leave the muted card player running behind its fullscreen gallery.
       video.pause();
     };
