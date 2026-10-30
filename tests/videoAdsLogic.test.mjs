@@ -4,6 +4,7 @@ import {
   calculateCtr,
   sanitizeDestinationUrl,
   isAdActiveAndVisible,
+  getAdsForPlacement,
 } from "../src/types/videoAd.ts";
 
 test("calculateCtr: handles 0 or invalid impressions without division error", () => {
@@ -176,3 +177,22 @@ test("Fullscreen video ad: user gesture transition requests unmuted sound", () =
   assert.equal(modalState.requestedMuted, false);
 });
 
+
+
+test("getAdsForPlacement: returns all matching ads, not only the first", () => {
+  const ads = [
+    { id: "priority-home", placement: "home" },
+    { id: "all-placement", placement: "all" },
+    { id: "feed-only", placement: "product_feed" },
+    { id: "second-home", placement: "home" },
+  ];
+
+  assert.deepEqual(
+    getAdsForPlacement(ads, "home").map((ad) => ad.id),
+    ["priority-home", "all-placement", "second-home"]
+  );
+  assert.deepEqual(
+    getAdsForPlacement(ads, "product_feed").map((ad) => ad.id),
+    ["all-placement", "feed-only"]
+  );
+});
