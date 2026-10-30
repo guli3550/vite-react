@@ -15,6 +15,47 @@ import { getGuliInstallPrompt, isGuliStandalone, promptGuliInstall, subscribeToG
 import "./Reels.css";
 
 const REELS_CYCLE_STORAGE_KEY = "guli_reels_cycle_v1";
+const REELS_CACHE_STORAGE_KEY = "guli_public_reels_cache_v1";
+const REELS_POSITION_STORAGE_KEY = "guli_reels_position_v1";
+const REELS_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+type SavedReelPosition = { reelId: string; currentTime: number };
+
+function readSavedReelPosition(): SavedReelPosition | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(REELS_POSITION_STORAGE_KEY) || "null") as Partial<SavedReelPosition> | null;
+    return value && typeof value.reelId === "string"
+      ? { reelId: value.reelId, currentTime: Number.isFinite(value.currentTime) ? Math.max(0, Number(value.currentTime)) : 0 }
+      : null;
+  } catch { return null; }
+}
+
+function saveCurrentReel(reelId: string): void {
+  try {
+    const previous = readSavedReelPosition();
+    localStorage.setItem(REELS_POSITION_STORAGE_KEY, JSON.stringify({
+      reelId,
+      currentTime: previous?.reelId === reelId ? previous.currentTime : 0,
+    }));
+  } catch { /* local storage may be unavailable */ }
+}
+
+function readCachedPublicReels(): ReelItem[] {
+  try {
+    const cached = JSON.parse(localStorage.getItem(REELS_CACHE_STORAGE_KEY) || "null") as { savedAt?: number; reels?: ReelItem[] } | null;
+    if (!cached || !Array.isArray(cached.reels) || !Number.isFinite(cached.savedAt)) return [];
+    if (Date.now() - Number(cached.savedAt) > REELS_CACHE_MAX_AGE_MS) return [];
+    return cached.reels.filter((reel) => reel && reel.status === "active" && typeof reel.id === "string" && typeof reel.videoUrl === "string");
+  } catch { return []; }
+}
+
+function writeCachedPublicReels(reels: ReelItem[]): void {
+  try {
+    // Keep the instant-start cache compact; comments are refreshed by the live API.
+    const compact = reels.filter((reel) => reel.status === "active").map((reel) => ({ ...reel, comments: [] }));
+    localStorage.setItem(REELS_CACHE_STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), reels: compact }));
+  } catch (error) { console.warn("[Reels] Lokal cache saqlanmadi:", error); }
+}
 
 type ReelsCycleState = { seenIds: string[]; orderIds: string[] };
 
@@ -68,8 +109,10 @@ function prepareReelsCycle(active: ReelItem[]): { reels: ReelItem[]; startIndex:
   saveReelsCycleState(state);
 
   const orderedReels = orderIds.map((id) => byId.get(id)).filter((reel): reel is ReelItem => Boolean(reel));
+  const savedReelId = readSavedReelPosition()?.reelId;
+  const resumeIndex = savedReelId ? orderedReels.findIndex((reel) => reel.id === savedReelId) : -1;
   const firstUnseen = orderedReels.findIndex((reel) => !new Set(seenIds).has(reel.id));
-  return { reels: orderedReels, startIndex: firstUnseen >= 0 ? firstUnseen : 0 };
+  return { reels: orderedReels, startIndex: resumeIndex >= 0 ? resumeIndex : firstUnseen >= 0 ? firstUnseen : 0 };
 }
 
 function markReelSeen(reelId: string): void {
@@ -91,10 +134,12 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onOpenProduct,
   onNavigateToCatalog,
 }) => {
-  const [reels, setReels] = useState<ReelItem[]>([]);
-  const [isLoadingReels, setIsLoadingReels] = useState(true);
+  // Render the last known feed synchronously; refresh it in the background.
+  const initialCycle = prepareReelsCycle(readCachedPublicReels());
+  const [reels, setReels] = useState<ReelItem[]>(initialCycle.reels);
+  const [isLoadingReels, setIsLoadingReels] = useState(initialCycle.reels.length === 0);
   const [reelsLoadError, setReelsLoadError] = useState<string | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(initialCycle.startIndex);
   const [isPlaying, setIsPlaying] = useState(true);
   const [videoProgress, setVideoProgress] = useState(0);
   const [videoError, setVideoError] = useState<Record<string, boolean>>({});
@@ -175,6 +220,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const reloadReels = useCallback(async () => {
     try {
       const active = await fetchPublicReels();
+      writeCachedPublicReels(active);
       const cycle = prepareReelsCycle(active);
       setReels(cycle.reels);
       setCurrentIndex(cycle.startIndex);
@@ -186,7 +232,10 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       // Do not mask a failed server request with local demo videos on deployed sites.
       const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
       const isDeployedSite = host === "gulii.uz" || host === "www.gulii.uz" || host.endsWith(".vercel.app");
-      const fallback = isDeployedSite ? [] : loadReelsFromStorage().filter((r) => r.status === "active");
+      const cachedFallback = readCachedPublicReels();
+      const fallback = cachedFallback.length > 0
+        ? cachedFallback
+        : isDeployedSite ? [] : loadReelsFromStorage().filter((r) => r.status === "active");
       const cycle = prepareReelsCycle(fallback);
       setReels(cycle.reels);
       setCurrentIndex(cycle.startIndex);
@@ -212,6 +261,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   }, [reloadReels]);
 
   const currentReel = reels[currentIndex];
+  const lastPositionWriteRef = useRef(0);
+  useEffect(() => {
+    if (currentReel) saveCurrentReel(currentReel.id);
+  }, [currentReel?.id]);
+
   const viewedReelIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
@@ -261,7 +315,16 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (currentReel) {
       const activeVideo = videoRefs.current.get(currentReel.id);
       if (activeVideo) {
-        activeVideo.currentTime = 0;
+        const savedPosition = readSavedReelPosition();
+        if (savedPosition?.reelId === currentReel.id && savedPosition.currentTime > 1) {
+          const restorePlaybackPosition = () => {
+            if (Number.isFinite(activeVideo.duration) && savedPosition.currentTime < activeVideo.duration - 1) {
+              activeVideo.currentTime = savedPosition.currentTime;
+            }
+          };
+          if (activeVideo.readyState >= 1) restorePlaybackPosition();
+          else activeVideo.addEventListener("loadedmetadata", restorePlaybackPosition, { once: true });
+        }
         // User requested: reels ga kirish bilan video avtomatik ovozli rejimda bo'lsin
         activeVideo.muted = isMuted;
         const playPromise = activeVideo.play();
@@ -451,6 +514,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     if (videoEl && videoEl.duration) {
       const progress = calculateVideoProgress(videoEl.currentTime, videoEl.duration);
       setVideoProgress(progress);
+      const now = Date.now();
+      if (currentReel && now - lastPositionWriteRef.current >= 2000) {
+        lastPositionWriteRef.current = now;
+        try {
+          localStorage.setItem(REELS_POSITION_STORAGE_KEY, JSON.stringify({ reelId: currentReel.id, currentTime: videoEl.currentTime }));
+        } catch { /* local storage may be unavailable */ }
+      }
     }
   };
 
