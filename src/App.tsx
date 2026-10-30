@@ -70,7 +70,7 @@ import { ModernProfileView } from "./components/ModernProfileView";
 import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { VideoAdCard } from "./components/videoAds/VideoAdCard";
-import type { VideoAd } from "./types/videoAd";
+import { getAdsForPlacement, type VideoAd } from "./types/videoAd";
 
 declare global {
   interface Window {
@@ -1179,8 +1179,8 @@ export default function App() {
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
-          const home = json.data.filter((ad: VideoAd) => ad.placement === "home" || ad.placement === "all");
-          const feed = json.data.filter((ad: VideoAd) => ad.placement === "product_feed" || ad.placement === "all");
+          const home = getAdsForPlacement(json.data, "home");
+          const feed = getAdsForPlacement(json.data, "product_feed");
           setHomeVideoAds(home);
           setFeedVideoAds(feed);
         }
@@ -4532,9 +4532,10 @@ export default function App() {
                 go("catalog");
               }}
             />
-            {homeVideoAds.length > 0 && (
+            {homeVideoAds.map((ad) => (
               <VideoAdCard
-                ad={homeVideoAds[0]}
+                key={ad.id}
+                ad={ad}
                 placement="home"
                 onOpenProduct={(prodId) => {
                   const p = products.find(
@@ -4556,11 +4557,11 @@ export default function App() {
                     else window.open(url, "_blank", "noopener,noreferrer");
                   }
                 }}
-                onDismiss={() => {
-                  setHomeVideoAds((prev) => prev.slice(1));
+                onDismiss={(adId) => {
+                  setHomeVideoAds((prev) => prev.filter((item) => item.id !== adId));
                 }}
               />
-            )}
+            ))}
             <section className="section">
               <div className="sectionTitle">
                 <h2>{t("featured_title")}</h2>
@@ -4651,9 +4652,10 @@ export default function App() {
                     {filtered.map((p, idx) => (
                       <Fragment key={p.id || idx}>
                         {card(p)}
-                        {idx === 3 && feedVideoAds.length > 0 && (
+                        {idx === Math.min(3, filtered.length - 1) && feedVideoAds.map((ad) => (
                           <VideoAdCard
-                            ad={feedVideoAds[0]}
+                            key={ad.id}
+                            ad={ad}
                             placement="product_feed"
                             onOpenProduct={(prodId) => {
                               const found = products.find(
@@ -4673,11 +4675,11 @@ export default function App() {
                                 else window.open(url, "_blank", "noopener,noreferrer");
                               }
                             }}
-                            onDismiss={() => {
-                              setFeedVideoAds((prev) => prev.slice(1));
+                            onDismiss={(adId) => {
+                              setFeedVideoAds((prev) => prev.filter((item) => item.id !== adId));
                             }}
                           />
-                        )}
+                        ))}
                       </Fragment>
                     ))}
                   </div>
