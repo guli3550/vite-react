@@ -4,6 +4,30 @@ import { buildApiUrl } from "./apiOrigin";
 
 type ApiResponse<T> = { success?: boolean; data?: T; message?: string };
 
+const PUBLIC_REELS_CACHE_KEY = "guli_published_reels_cache_v1";
+
+export function loadCachedPublicReels(): ReelItem[] {
+  try {
+    const raw = localStorage.getItem(PUBLIC_REELS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is ReelItem => Boolean(item && item.id && item.videoUrl && item.status === "active"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedPublicReels(reels: ReelItem[]): void {
+  try {
+    const safe = reels.filter((item) => item && item.status === "active" && item.videoUrl);
+    localStorage.setItem(PUBLIC_REELS_CACHE_KEY, JSON.stringify(safe));
+  } catch {
+    // Cache is optional; server remains the source of truth.
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}, admin = false): Promise<T> {
   const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
