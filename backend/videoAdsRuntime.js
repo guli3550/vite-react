@@ -595,7 +595,7 @@ install("post", "/api/admin/video-ads/upload", requireAdmin, async (req, res) =>
 // Shared validation helpers used by the video-ad API routes.
 function isValidUrl(value) {
   const input = String(value || "").trim();
-  if (!input || /[\\u0000-\\u001f\\u007f\\\\]/.test(input)) return false;
+  if (!input || /[\u0000-\u001f\u007f\\]/.test(input)) return false;
 
   try {
     const parsed = new URL(input);
@@ -612,7 +612,7 @@ function isValidUrl(value) {
 // Keep media URLs absolute-only so a relative path can never be used as a video source.
 function isValidDestinationUrl(value) {
   const input = String(value || "").trim();
-  if (!input || /[\\u0000-\\u001f\\u007f\\\\]/.test(input)) return false;
+  if (!input || /[\u0000-\u001f\u007f\\]/.test(input)) return false;
 
   if (input.startsWith("/")) {
     if (input.startsWith("//")) return false;
