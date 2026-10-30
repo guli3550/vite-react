@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { FullscreenVideoAdModal } from "./FullscreenVideoAdModal";
 import "./VideoAdHighlights.css";
@@ -8,7 +8,6 @@ interface VideoAdHighlightsProps {
   ads: VideoAd[];
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
-  onDismiss?: () => void;
 }
 
 /** Compact circular storefront lane for admin-managed video advertisements. */
@@ -16,7 +15,6 @@ export const VideoAdHighlights: React.FC<VideoAdHighlightsProps> = ({
   ads,
   onOpenProduct,
   onNavigateUrl,
-  onDismiss,
 }) => {
   const [activeAd, setActiveAd] = useState<VideoAd | null>(null);
 
@@ -56,17 +54,6 @@ export const VideoAdHighlights: React.FC<VideoAdHighlightsProps> = ({
           </button>
         ))}
       </div>
-      {onDismiss && (
-        <button
-          type="button"
-          className="guli-video-highlights-dismiss"
-          onClick={onDismiss}
-          aria-label="Reklama lentasini yopish"
-          title="Yopish"
-        >
-          <X size={15} />
-        </button>
-      )}
       {activeAd && (
         <FullscreenVideoAdModal
           isOpen={Boolean(activeAd)}
