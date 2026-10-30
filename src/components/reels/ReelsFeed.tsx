@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
 import { loadReelsFromStorage } from "../../data/demoReels";
-import { fetchPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
+import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
 import {
   isIndexPreloaded,
   evaluateSwipeGesture,
@@ -136,11 +136,20 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Load published Reels from the shared server source; local demo data is development-only.
   const reloadReels = useCallback(async () => {
-    setIsFeedLoading(true);
     setFeedError(null);
+    const cached = loadCachedPublicReels();
+    if (cached.length > 0) {
+      const cachedCycle = prepareReelsCycle(cached);
+      setReels(cachedCycle.reels);
+      setCurrentIndex(cachedCycle.startIndex);
+      setIsFeedLoading(false);
+    } else {
+      setIsFeedLoading(true);
+    }
     try {
       const all = await fetchPublicReels();
       const active = all.filter((r) => r.status === "active" && Boolean(r.videoUrl));
+      saveCachedPublicReels(active);
       const cycle = prepareReelsCycle(active);
       let list = cycle.reels;
       let startIdx = cycle.startIndex;
