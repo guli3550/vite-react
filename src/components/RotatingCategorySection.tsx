@@ -200,12 +200,8 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
   }, [categories]);
 
   return (
-    <section className="section homeCategoriesSection" aria-label="Kategoriyalar">
-      <div className="sectionTitle">
-        <div>
-          <span className="categorySectionEyebrow">MAHSULOT TOIFALARI</span>
-          <h2>Kategoriyalar</h2>
-        </div>
+    <section className="section homeCategoriesSection" aria-label="Mahsulot toifalari">
+      <div className="homeCategoriesCompactAction">
         <button
           className="sectionSeeAllBtn"
           onClick={onViewAll}
