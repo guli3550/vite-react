@@ -469,3 +469,16 @@
 .guli-fullscreen-ad-overlay {
   background: #000;
 }
+
+
+.guli-story-avatar {
+  overflow: hidden;
+  padding: 0;
+}
+.guli-story-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
