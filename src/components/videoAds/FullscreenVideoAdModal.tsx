@@ -43,7 +43,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   const [progress, setProgress] = useState(0);
   const [isInfoExpanded, setIsInfoExpanded] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(true);
   const hasStartedRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const endedWhileInfoOpenRef = useRef(false);
 
   const sendEvent = useCallback((eventType: "click" | "video_start" | "video_complete", targetAd = activeAd) => {
     try {
@@ -63,6 +66,10 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     setCurrentIndex(nextIndex);
     setProgress(0);
     setIsPaused(false);
+    setIsInfoExpanded(false);
+    setIsBuffering(true);
+    retryCountRef.current = 0;
+    endedWhileInfoOpenRef.current = false;
     hasStartedRef.current = false;
   }, [gallery.length]);
 
@@ -102,16 +109,18 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     const video = videoRef.current;
     if (!video) return;
     video.muted = false;
+    setIsBuffering(video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA);
     let active = true;
     video.play().then(() => {
       if (!active) { video.pause(); return; }
       setIsPaused(false);
+      setIsBuffering(false);
       if (!hasStartedRef.current) {
         hasStartedRef.current = true;
         sendEvent("video_start", activeAd);
       }
     }).catch(() => {
-      if (active) setIsPaused(true);
+      if (active) { setIsPaused(true); setIsBuffering(false); }
     });
     return () => {
       active = false;
@@ -136,7 +145,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       return;
     }
     if (zone > 0.67) {
-      next();
+      if (!isInfoExpanded) next();
       return;
     }
     const video = videoRef.current;
@@ -168,12 +177,22 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       suppressClick.current = true;
       window.setTimeout(() => { suppressClick.current = false; }, 450);
       if (dy > 0) {
-        // Pulling the story down dismisses it with a shrinking slide animation.
-        setIsDismissing(true);
-        videoRef.current?.pause();
-        window.setTimeout(() => onClose(), 260);
+        if (isInfoExpanded) {
+          setIsInfoExpanded(false);
+          if (endedWhileInfoOpenRef.current) {
+            endedWhileInfoOpenRef.current = false;
+            const video = videoRef.current;
+            if (video) {
+              video.currentTime = 0;
+              video.play().then(() => { setIsPaused(false); setIsBuffering(false); }).catch(() => setIsPaused(true));
+            }
+          }
+        } else {
+          setIsDismissing(true);
+          videoRef.current?.pause();
+          window.setTimeout(() => onClose(), 260);
+        }
       } else {
-        // Pulling upward reveals the ad title and its full description.
         setIsInfoExpanded(true);
       }
       return;
@@ -182,7 +201,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
     if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.25) {
       suppressClick.current = true;
       window.setTimeout(() => { suppressClick.current = false; }, 450);
-      if (dx < 0) next();
+      if (dx < 0) { if (!isInfoExpanded) next(); }
       else previous();
     }
   };
@@ -266,8 +285,28 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
           webkit-playsinline="true"
           preload="auto"
           onTimeUpdate={handleTimeUpdate}
-          onEnded={() => { sendEvent("video_complete", activeAd); next(); }}
+          onLoadStart={() => setIsBuffering(true)}
+          onLoadedData={() => setIsBuffering(false)}
+          onCanPlay={() => setIsBuffering(false)}
+          onWaiting={() => setIsBuffering(true)}
+          onPlaying={() => { setIsBuffering(false); setIsPaused(false); }}
+          onError={() => {
+            const video = videoRef.current;
+            if (!video) return;
+            if (retryCountRef.current < 1) {
+              retryCountRef.current += 1;
+              setIsBuffering(true);
+              video.load();
+              video.play().then(() => setIsPaused(false)).catch(() => { setIsBuffering(false); setIsPaused(true); });
+            } else setIsBuffering(false);
+          }}
+          onEnded={() => {
+            sendEvent("video_complete", activeAd);
+            if (isInfoExpanded) endedWhileInfoOpenRef.current = true;
+            else next();
+          }}
         />
+        {isBuffering && !isPaused && <div className="guli-fullscreen-buffering" aria-label="Video yuklanmoqda"><span /></div>}
         {isPaused && (
           <div className="guli-fullscreen-play-indicator" aria-hidden="true">
             <div className="guli-fullscreen-play-circle">
