@@ -9,6 +9,7 @@ import "./VideoAdCard.css";
 
 interface VideoAdCardProps {
   ad: VideoAd;
+  galleryAds?: VideoAd[];
   placement?: "home" | "product_feed";
   onOpenProduct?: (productId: string) => void;
   onNavigateUrl?: (url: string) => void;
@@ -30,6 +31,7 @@ function getSessionId(): string {
 
 export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   ad,
+  galleryAds,
   placement = "home",
   onOpenProduct,
   onNavigateUrl,
@@ -304,6 +306,7 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
         <FullscreenVideoAdModal
           isOpen={isFullscreen}
           ad={ad}
+          ads={galleryAds}
           initialTime={fullscreenInitialTime}
           onClose={handleCloseFullscreen}
           onOpenProduct={onOpenProduct}
