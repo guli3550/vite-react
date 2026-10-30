@@ -1563,8 +1563,15 @@ export default function App() {
 
   const handleTabTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     if (!MAIN_TABS.includes(page)) return;
+    // Disable horizontal tab swipe navigation when entering Reels from Guli Market profile
+    if (page === "reels" && previousPage === "brand_profile") {
+      isSwipingTab.current = false;
+      return;
+    }
     const target = e.target as HTMLElement;
     if (
+      target.closest(".reelsViewport") ||
+      target.closest(".reelsContainer") ||
       target.closest(".guli-fullscreen-ad-overlay") ||
       target.closest(".hero") ||
       target.closest(".heroSlideTrack") ||
@@ -1591,6 +1598,10 @@ export default function App() {
 
   const handleTabTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
     if (!isSwipingTab.current || !MAIN_TABS.includes(page)) return;
+    if (page === "reels" && previousPage === "brand_profile") {
+      isSwipingTab.current = false;
+      return;
+    }
     isSwipingTab.current = false;
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;

@@ -81,3 +81,16 @@ test("Brand Profile: Top logo click correctly triggers navigation to brand_profi
   assert.equal(targetTab, "tovarlar");
 });
 
+test("Brand Profile: Horizontal tab swipe is disabled when viewing Reels from brand profile", () => {
+  const shouldAllowHorizontalTabSwipe = (page, previousPage) => {
+    if (page === "reels" && previousPage === "brand_profile") {
+      return false;
+    }
+    return true;
+  };
+
+  assert.equal(shouldAllowHorizontalTabSwipe("reels", "brand_profile"), false);
+  assert.equal(shouldAllowHorizontalTabSwipe("reels", "home"), true);
+  assert.equal(shouldAllowHorizontalTabSwipe("catalog", "home"), true);
+});
+
