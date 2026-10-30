@@ -4616,10 +4616,10 @@ export default function App() {
                 go("catalog");
               }}
             />
-            <section className="section">
-              <div className="sectionTitle">
+            <section className="section featuredProductsSection">
+              <div className="sectionTitle featuredProductsHeader">
                 <div>
-                  <h2>{t("featured_title")}</h2>
+                  <h2 className="featuredProductsTitle">{t("featured_title")}</h2>
                 </div>
                 <button onClick={() => go("catalog")}>{t("see_all")}</button>
               </div>
