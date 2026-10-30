@@ -835,8 +835,11 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
-  // Hide the single home ad slot until the customer leaves and re-enters Home.
-  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(false);
+  // Keep the Home ad dismissed for this browser/app session.
+  const [homeVideoAdsDismissed, setHomeVideoAdsDismissed] = useState(() => {
+    try { return sessionStorage.getItem("guli_home_video_ad_dismissed") === "1"; }
+    catch { return false; }
+  });
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
   const [allActiveVideoAds, setAllActiveVideoAds] = useState<VideoAd[]>([]);
 
@@ -4576,6 +4579,7 @@ export default function App() {
                   }
                 }}
                 onDismiss={() => {
+                  try { sessionStorage.setItem("guli_home_video_ad_dismissed", "1"); } catch {}
                   setHomeVideoAdsDismissed(true);
                 }}
               />
