@@ -4606,10 +4606,6 @@ export default function App() {
                   else window.open(url, "_blank", "noopener,noreferrer");
                 }
               }}
-              onDismiss={() => {
-                try { sessionStorage.setItem("guli_home_video_ad_dismissed", "1"); } catch {}
-                setHomeVideoAdsDismissed(true);
-              }}
             />
 
             <RotatingCategoriesSection
