@@ -48,13 +48,16 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
 
   // Check if ad was previously dismissed in this session
   useEffect(() => {
+    // Home placement dismissal is owned by App: it hides the single slot until
+    // the customer leaves Home and enters it again. Feed ads keep session dismissal.
+    if (placement === "home") return;
     try {
       const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
       if (Array.isArray(dismissedList) && dismissedList.includes(ad.id)) {
         setIsDismissed(true);
       }
     } catch {}
-  }, [ad.id]);
+  }, [ad.id, placement]);
 
   // Video Autoplay (Always Muted on Main Page) & Intersection Observer
   useEffect(() => {
@@ -155,13 +158,15 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
   const handleDismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsDismissed(true);
-    try {
-      const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
-      if (!dismissedList.includes(ad.id)) {
-        dismissedList.push(ad.id);
-        sessionStorage.setItem("guli_dismissed_ads", JSON.stringify(dismissedList));
-      }
-    } catch {}
+    if (placement !== "home") {
+      try {
+        const dismissedList = JSON.parse(sessionStorage.getItem("guli_dismissed_ads") || "[]");
+        if (!dismissedList.includes(ad.id)) {
+          dismissedList.push(ad.id);
+          sessionStorage.setItem("guli_dismissed_ads", JSON.stringify(dismissedList));
+        }
+      } catch {}
+    }
 
     if (onDismiss) onDismiss(ad.id);
   };
