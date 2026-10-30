@@ -146,10 +146,14 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    // Keep this gesture inside the Stories viewer; never let the storefront
+    // tab-swipe handler interpret it as a category/tab navigation.
+    e.stopPropagation();
     const touch = e.touches[0];
     touchStart.current = { x: touch.clientX, y: touch.clientY };
   };
   const handleTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
     if (!touchStart.current) return;
     const touch = e.changedTouches[0];
     const dx = touch.clientX - touchStart.current.x;
@@ -192,7 +196,14 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="guli-fullscreen-ad-overlay" role="dialog" aria-modal="true" aria-label={activeAd.title || "Video Reklama"}>
+    <div
+      className="guli-fullscreen-ad-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={activeAd.title || "Video Reklama"}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+    >
       <div className="guli-fullscreen-ad-topbar">
         <div className="guli-fullscreen-gallery-progress" aria-label={`Reklama ${currentIndex + 1} / ${gallery.length}`}>
           {gallery.map((item, index) => (
@@ -209,7 +220,9 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         </div>
         <div className="guli-fullscreen-header-row">
           <div className="guli-story-account">
-            <div className="guli-story-avatar" aria-hidden="true">G</div>
+            <div className="guli-story-avatar">
+              <img src="/guli-logo.webp" alt="Guli Market" />
+            </div>
             <div className="guli-story-account-copy">
               <strong>Guli Market</strong>
               <span>Reklama · {currentIndex + 1}/{gallery.length}</span>
