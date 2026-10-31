@@ -64,6 +64,9 @@ export async function saveServerReel(reel: ReelItem, isEditing: boolean): Promis
     productName: reel.productName ?? null,
     productPrice: reel.productPrice ?? null,
     productImage: reel.productImage ?? null,
+    promoImageUrl: reel.promoImageUrl ?? null,
+    promoText: reel.promoText ?? null,
+    promoUrl: reel.promoUrl ?? null,
     status: reel.status,
     displayLikesCount: reel.displayLikesCount ?? 100,
   });

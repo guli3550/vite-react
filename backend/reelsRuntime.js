@@ -34,6 +34,9 @@ function normalizeReel(row, comments = [], isLiked = false) {
     productName: row.product_name || undefined,
     productPrice: row.product_price == null ? undefined : Number(row.product_price),
     productImage: row.product_image || undefined,
+    promoImageUrl: row.promo_image_url || undefined,
+    promoText: row.promo_text || undefined,
+    promoUrl: row.promo_url || undefined,
     likesCount: Number(row.likes_count || 0),
     displayLikesCount: Number(row.display_likes_count || 0),
     commentsCount: comments.length,
@@ -66,6 +69,9 @@ function toRow(input, existing = {}) {
     product_name: Object.prototype.hasOwnProperty.call(input, "productName") ? (input.productName ?? null) : (existing.product_name ?? null),
     product_price: Object.prototype.hasOwnProperty.call(input, "productPrice") ? (input.productPrice == null ? null : Number(input.productPrice)) : (existing.product_price ?? null),
     product_image: Object.prototype.hasOwnProperty.call(input, "productImage") ? (input.productImage ?? null) : (existing.product_image ?? null),
+    promo_image_url: Object.prototype.hasOwnProperty.call(input, "promoImageUrl") ? (String(input.promoImageUrl ?? "").trim().slice(0, 2000) || null) : (existing.promo_image_url ?? null),
+    promo_text: Object.prototype.hasOwnProperty.call(input, "promoText") ? (String(input.promoText ?? "").trim().slice(0, 500) || null) : (existing.promo_text ?? null),
+    promo_url: Object.prototype.hasOwnProperty.call(input, "promoUrl") ? (String(input.promoUrl ?? "").trim().slice(0, 2000) || null) : (existing.promo_url ?? null),
     status,
     likes_count: Number(existing.likes_count || 0),
     shares_count: Number(existing.shares_count || 0),
@@ -208,7 +214,7 @@ install("get", "/api/admin/reels", requireAdmin, async (_req, res) => {
 install("post", "/api/admin/reels", requireAdmin, async (req, res) => {
   try {
     const row = toRow(req.body || {});
-    if (!row.id || !row.video_url || !row.caption) return fail(res, new Error("Caption va video URL majburiy"), 400);
+    if (!row.id || !row.video_url) return fail(res, new Error("Video URL majburiy"), 400);
     const { data, error } = await db().from("reels").insert(row).select("*").single();
     if (error) throw error;
     return res.status(201).json({ success: true, data: normalizeReel(data) });
@@ -220,7 +226,7 @@ install("put", "/api/admin/reels/:id", requireAdmin, async (req, res) => {
     if (current.error) throw current.error;
     if (!current.data) return fail(res, new Error("Reels topilmadi"), 404);
     const row = toRow({ ...(req.body || {}), id: String(req.params.id) }, current.data);
-    if (!row.video_url || !row.caption) return fail(res, new Error("Caption va video URL majburiy"), 400);
+    if (!row.video_url) return fail(res, new Error("Video URL majburiy"), 400);
     const { data, error } = await db().from("reels").update(row).eq("id", row.id).select("*").single();
     if (error) throw error;
     return res.json({ success: true, data: normalizeReel(data) });
