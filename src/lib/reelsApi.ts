@@ -172,35 +172,34 @@ export async function toggleServerReelLike(reelId: string): Promise<{ isLiked: b
   }
 }
 
-export async function addServerReelComment(reelId: string, text: string) {
+function getGuestCommentKey(): string {
+  const keyName = "guli_reels_guest_comment_key_v1";
   try {
-    return await request<ReelItem["comments"][number]>(`/api/reels/${encodeURIComponent(reelId)}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    });
-  } catch (error) {
-    console.warn("[Reels] Server comments unreachable, saving comment locally:", error);
-    const localComment: ReelItem["comments"][number] = {
-      id: "comment_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-      authorName: "Siz (Mehmon)",
-      authorAvatar: "/guli-logo.png",
-      text: text.trim(),
-      createdAt: "Hozir",
-      likesCount: 0,
-    };
-    try {
-      const cached = loadCachedPublicReels();
-      const item = cached.find((r) => r.id === reelId);
-      if (item) {
-        item.comments = [localComment, ...(item.comments || [])];
-        item.commentsCount = (item.commentsCount || 0) + 1;
-        saveCachedPublicReels(cached);
-      }
-    } catch {
-      // Ignore cache error
+    let key = localStorage.getItem(keyName) || "";
+    if (!/^guest_[a-f0-9-]{20,64}$/i.test(key)) {
+      key = "guest_" + (window.crypto?.randomUUID?.() || (Date.now() + "-" + Math.random().toString(16).slice(2) + "-" + Math.random().toString(16).slice(2)));
+      localStorage.setItem(keyName, key);
     }
-    return localComment;
+    return key;
+  } catch {
+    return "guest_" + (Date.now() + "-" + Math.random().toString(16).slice(2) + "-" + Math.random().toString(16).slice(2));
   }
+}
+
+export async function fetchServerReelComments(reelId: string): Promise<ReelItem["comments"]> {
+  return request<ReelItem["comments"]>(`/api/reels/${encodeURIComponent(reelId)}/comments`);
+}
+
+export async function addServerReelComment(reelId: string, text: string): Promise<ReelItem["comments"][number]> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("guli_access_token") || "" : "";
+  const guestKey = getGuestCommentKey();
+  const headers: Record<string, string> = { "X-Guli-Guest-Key": guestKey };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return request<ReelItem["comments"][number]>(`/api/reels/${encodeURIComponent(reelId)}/comments`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ text: text.trim(), guestKey }),
+  });
 }
 
 export async function recordServerReelView(reelId: string): Promise<{ viewsCount: number }> {
