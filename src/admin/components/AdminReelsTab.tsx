@@ -109,6 +109,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     });
     setFormErrors({});
     setVideoFileName("");
+    setVideoUploadError("");
     setInstaFetchStatus(null);
     setIsFormModalOpen(true);
   };
@@ -126,6 +127,8 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       displayLikesCount: String(reel.displayLikesCount ?? 100),
     });
     setFormErrors({});
+    setVideoFileName("");
+    setVideoUploadError("");
     setIsFormModalOpen(true);
   };
 
