@@ -63,6 +63,7 @@ try {
     pageErrors, consoleErrors, suspiciousScripts, failedRequests, serverErrors,
   }, null, 2));
 
+  assert.deepEqual(suspiciousScripts, [], `Scripts returned non-JavaScript or HTTP errors: ${JSON.stringify(suspiciousScripts)}`);
   assert.deepEqual(pageErrors, [], `Browser runtime errors: ${JSON.stringify(pageErrors)}`);
   assert.deepEqual(serverErrors, [], `HTTP 5xx responses: ${serverErrors.join("; ")}`);
 
