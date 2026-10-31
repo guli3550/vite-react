@@ -146,6 +146,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
   // Video & Cover File Upload state
   const [isVideoUploading, setIsVideoUploading] = useState(false);
   const [videoFileName, setVideoFileName] = useState("");
+  const [videoUploadError, setVideoUploadError] = useState("");
   const [isCoverUploading, setIsCoverUploading] = useState(false);
 
   // Get all inventory products combining localStorage "guli_products" and DEFAULT_PRODUCTS
@@ -196,15 +197,23 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       e.target.value = "";
       return;
     }
-    setIsVideoUploading(true);
+    setVideoUploadError("");
     setVideoFileName(file.name);
+    // A new file upload replaces any previously entered media URL. Do not allow
+    // saving until this file has actually completed its Storage upload.
+    setFormData((prev) => ({ ...prev, videoUrl: "" }));
+    setIsVideoUploading(true);
     try {
       const url = await uploadReelMedia(file);
-      setFormData((prev) => ({ ...prev, videoUrl: url }));
+      if (!url?.trim()) throw new Error("Storage video URL qaytarmadi. Qayta yuklang yoki URL kiriting.");
+      setFormData((prev) => ({ ...prev, videoUrl: url.trim() }));
+      setVideoUploadError("");
       notify(`✓ "${file.name}" video Storage’ga yuklandi`);
     } catch (error) {
       console.error("[Admin Reels] Video upload error:", error);
-      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Video yuklanmadi");
+      const message = error instanceof Error ? error.message : "Video yuklanmadi";
+      setVideoUploadError(message);
+      notify(`❌ Video yuklanmadi: ${message}`);
     } finally {
       setIsVideoUploading(false);
       e.target.value = "";
@@ -271,7 +280,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
 
     const errors: Record<string, string> = {};
     if (!formData.caption.trim()) errors.caption = "Tavsif yoki caption kiritish shart";
-    if (!formData.videoUrl.trim()) errors.videoUrl = "Video URL manzili yoki fayli kiritilishi shart";
+    if (!formData.videoUrl.trim()) errors.videoUrl = videoUploadError
+      ? `Video fayli Storage’ga yuklanmadi: ${videoUploadError}. Qayta yuklang yoki video URL kiriting.`
+      : "Video fayli hali Storage’ga yuklanmagan. Qayta yuklang yoki video URL kiriting.";
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
@@ -917,9 +928,14 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                       ⏳ Video yuklanmoqda...
                     </div>
                   )}
-                  {videoFileName && !isVideoUploading && (
+                  {videoFileName && !isVideoUploading && !videoUploadError && formData.videoUrl.trim() && (
                     <div style={{ fontSize: "12px", color: "#16a34a", marginTop: "6px", fontWeight: 700 }}>
-                      ✓ Fayl: {videoFileName}
+                      ✓ Fayl yuklandi: {videoFileName}
+                    </div>
+                  )}
+                  {videoUploadError && (
+                    <div role="alert" style={{ fontSize: "12px", color: "#dc2626", marginTop: "6px", fontWeight: 700, textAlign: "left" }}>
+                      ❌ Video yuklanmadi: {videoUploadError}
                     </div>
                   )}
                 </div>
@@ -936,6 +952,10 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   onChange={(e) => {
                     const val = e.target.value;
                     setFormData((prev) => ({ ...prev, videoUrl: val }));
+                    if (val.trim()) {
+                      setVideoUploadError("");
+                      setVideoFileName("");
+                    }
                     // Keep the exact URL entered by the administrator. Instagram import is manual only.
                     setInstaFetchStatus(null);
                   }}
