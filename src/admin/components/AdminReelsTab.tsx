@@ -38,6 +38,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     productId: "",
     status: "active" as ReelStatus,
     displayLikesCount: "100",
+    promoImageUrl: "",
+    promoText: "",
+    promoUrl: "",
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -106,6 +109,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       productId: "",
       status: "active",
       displayLikesCount: "100",
+      promoImageUrl: "",
+      promoText: "",
+      promoUrl: "",
     });
     setFormErrors({});
     setVideoFileName("");
@@ -125,6 +131,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       productId: reel.productId ? String(reel.productId) : "",
       status: reel.status,
       displayLikesCount: String(reel.displayLikesCount ?? 100),
+      promoImageUrl: reel.promoImageUrl || "",
+      promoText: reel.promoText || "",
+      promoUrl: reel.promoUrl || "",
     });
     setFormErrors({});
     setVideoFileName("");
@@ -290,6 +299,17 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       return;
     }
 
+    const promoHasAny = Boolean(formData.promoImageUrl.trim() || formData.promoText.trim() || formData.promoUrl.trim());
+    const promoComplete = Boolean(formData.promoImageUrl.trim() && formData.promoText.trim() && formData.promoUrl.trim());
+    if (promoHasAny && !promoComplete) {
+      notify("Reels reklama kartasi uchun rasm, matn va yo‘naltiruvchi URL uchalasi ham kiritilishi kerak. Bu qator ixtiyoriy.");
+      return;
+    }
+    if (promoComplete && (!/^https?:\/\//i.test(formData.promoImageUrl.trim()) || !/^https?:\/\//i.test(formData.promoUrl.trim()))) {
+      notify("Reklama rasmi va yo‘naltiruvchi URL http:// yoki https:// bilan boshlanishi kerak.");
+      return;
+    }
+
     const selectedProduct = inventoryProducts.find((p) => String(p.id) === String(formData.productId));
     const displayLikesCount = Math.max(100, Math.min(5000, Number(formData.displayLikesCount) || 100));
     const base: ReelItem = editingReel ? {
@@ -303,6 +323,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       productName: selectedProduct ? selectedProduct.name : undefined,
       productPrice: selectedProduct ? selectedProduct.price : undefined,
       productImage: selectedProduct ? selectedProduct.image : undefined,
+      promoImageUrl: formData.promoImageUrl.trim() || undefined,
+      promoText: formData.promoText.trim() || undefined,
+      promoUrl: formData.promoUrl.trim() || undefined,
       status: formData.status,
     } : {
       id: `reel-${Date.now()}`,
@@ -316,6 +339,9 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
       productName: selectedProduct ? selectedProduct.name : undefined,
       productPrice: selectedProduct ? selectedProduct.price : undefined,
       productImage: selectedProduct ? selectedProduct.image : undefined,
+      promoImageUrl: formData.promoImageUrl.trim() || undefined,
+      promoText: formData.promoText.trim() || undefined,
+      promoUrl: formData.promoUrl.trim() || undefined,
       likesCount: 0, commentsCount: 0, sharesCount: 0, viewsCount: 0,
       isLiked: false, status: formData.status, createdAt: new Date().toISOString(), comments: [],
     };
@@ -1238,6 +1264,36 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
                   );
                 })()
               )}
+
+              {/* Optional external promo card; overrides the inventory product CTA in the customer feed. */}
+              <div style={{ border: "1px solid #f1cbd5", borderRadius: "14px", padding: "14px", background: "#fff9fb", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#8f3450" }}>📣 Qo‘shimcha reklama kartasi — ixtiyoriy</div>
+                <p style={{ margin: 0, fontSize: "11px", color: "#806f75" }}>Ombordagi mahsulot o‘rniga tashqi reklama ko‘rsatish uchun rasm, matn va URL kiriting. Bo‘sh qoldirsangiz, Reels odatdagidek mahsulotga bog‘lanadi.</p>
+                <label style={{ fontSize: "12px", fontWeight: 700, color: "#403238" }}>Reklama rasmi</label>
+                <label style={{ border: "1px dashed #e8bdc9", borderRadius: "10px", padding: "10px", textAlign: "center", color: "#a34b65", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>
+                  🖼️ Qurilmadan reklama rasmini yuklash
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" style={{ display: "none" }} onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (!file.type.startsWith("image/")) { notify("Faqat rasm faylini tanlang."); e.target.value = ""; return; }
+                    if (file.size > 10 * 1024 * 1024) { notify("Reklama rasmi 10 MB dan oshmasligi kerak."); e.target.value = ""; return; }
+                    setIsCoverUploading(true);
+                    try {
+                      const url = await uploadReelMedia(file);
+                      setFormData((prev) => ({ ...prev, promoImageUrl: url }));
+                      notify("✓ Reklama rasmi yuklandi");
+                    } catch (error) {
+                      notify(error instanceof Error ? `❌ ${error.message}` : "❌ Reklama rasmi yuklanmadi");
+                    } finally { setIsCoverUploading(false); e.target.value = ""; }
+                  }} />
+                </label>
+                <input type="url" placeholder="Yoki reklama rasmi URL manzili" value={formData.promoImageUrl} onChange={(e) => setFormData({ ...formData, promoImageUrl: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #ebd4db", background: "#fff", fontSize: "13px", boxSizing: "border-box" }} />
+                {formData.promoImageUrl && <img src={formData.promoImageUrl} alt="Reklama preview" style={{ width: "88px", height: "88px", borderRadius: "10px", objectFit: "cover" }} />}
+                <label style={{ fontSize: "12px", fontWeight: 700, color: "#403238" }}>Reklama matni</label>
+                <textarea rows={2} placeholder="Reklama uchun qisqa matn" value={formData.promoText} onChange={(e) => setFormData({ ...formData, promoText: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #ebd4db", background: "#fff", fontSize: "13px", boxSizing: "border-box" }} />
+                <label style={{ fontSize: "12px", fontWeight: 700, color: "#403238" }}>Yo‘naltiruvchi URL</label>
+                <input type="url" placeholder="https://..." value={formData.promoUrl} onChange={(e) => setFormData({ ...formData, promoUrl: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1px solid #ebd4db", background: "#fff", fontSize: "13px", boxSizing: "border-box" }} />
+              </div>
 
               {/* Music Title */}
               <div>
