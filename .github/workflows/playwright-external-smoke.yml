@@ -1,6 +1,9 @@
 name: Guli Playwright External Smoke Test
 
 on:
+  push:
+    branches:
+      - test/playwright-production-smoke
   workflow_dispatch:
     inputs:
       base_url:
