@@ -956,8 +956,27 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
                 {/* Bottom Overlay: Caption, Author info, Product link */}
                 <div className="reelsBottomOverlay">
-                  {/* Attached Product Pill */}
-                  {reel.productName && (
+                  {/* Optional external promo replaces the linked inventory product CTA when configured. */}
+                  {reel.promoImageUrl && reel.promoText && reel.promoUrl ? (
+                    <a
+                      className="reelsProductPill"
+                      href={reel.promoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={reel.promoText}
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      <div className="reelsProductThumbWrap">
+                        <img src={reel.promoImageUrl} alt={reel.promoText} className="reelsProductThumb" />
+                      </div>
+                      <div className="reelsProductDetails">
+                        <span className="reelsProductTitle">{reel.promoText}</span>
+                        <span className="reelsProductPrice">Batafsil ›</span>
+                      </div>
+                      <span className="reelsProductArrow">O‘tish ↗</span>
+                    </a>
+                  ) : reel.productName ? (
                     <div
                       className="reelsProductPill"
                       onClick={(e) => {
@@ -991,7 +1010,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       </div>
                       <span className="reelsProductArrow">Ko‘rish ›</span>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Standardized Author Row: [Logo] Guli Market [Verified Badge] */}
                   <div
