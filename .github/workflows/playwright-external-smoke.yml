@@ -1,0 +1,52 @@
+name: Guli Playwright External Smoke Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Site URL to test (Production or Vercel Preview)"
+        required: true
+        default: "https://gulii.uz"
+        type: string
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playwright-external-smoke
+  cancel-in-progress: false
+
+jobs:
+  mobile-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE_URL: ${{ inputs.base_url || 'https://gulii.uz' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright package
+        run: npm install --no-save --package-lock=false playwright
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run external mobile smoke test
+        run: node tests/e2e/public-smoke.mjs
+
+      - name: Upload screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-mobile-smoke
+          path: playwright-smoke.png
+          if-no-files-found: ignore
+          retention-days: 7
