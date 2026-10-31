@@ -46,7 +46,7 @@ function getCurrentUserProfile(): { name: string; avatar: string } {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed) {
-        const name = parsed.full_name || parsed.name || parsed.email?.split("@")[0] || "";
+        const name = parsed.full_name || parsed.name || parsed.username || parsed.telegram_username || parsed.email?.split("@")[0] || "";
         const avatar = parsed.avatar_url || parsed.avatar || "";
         if (name) return { name, avatar };
       }
@@ -317,12 +317,22 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 
               return (
                 <div key={comment.id} className="reelsCommentItem">
-                  <img
-                    src={comment.authorAvatar}
-                    alt={comment.authorName}
-                    className="reelsCommentAvatar"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
+                  {comment.authorAvatar ? (
+                    <img
+                      src={comment.authorAvatar}
+                      alt={comment.authorName}
+                      className="reelsCommentAvatar"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <div
+                      className="reelsCommentAvatar"
+                      aria-label={comment.authorName}
+                      style={{ display: "grid", placeItems: "center", background: "linear-gradient(135deg, #ff4d79, #f43f5e)", color: "#fff", fontWeight: 800 }}
+                    >
+                      {(comment.authorName.trim()[0] || "G").toUpperCase()}
+                    </div>
+                  )}
                   <div className="reelsCommentContent">
                     <div className="reelsCommentAuthorRow">
                       <span className="reelsCommentAuthor">
