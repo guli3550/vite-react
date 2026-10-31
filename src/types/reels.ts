@@ -26,6 +26,9 @@ export interface ReelItem {
   productName?: string;
   productPrice?: number;
   productImage?: string;
+  promoImageUrl?: string;
+  promoText?: string;
+  promoUrl?: string;
   likesCount: number;
   /** Clearly labeled demo/popularity count; not a real user like. */
   displayLikesCount?: number;
