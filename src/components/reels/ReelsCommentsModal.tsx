@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
+import { fetchServerReelComments } from "../../lib/reelsApi";
 import {
   evaluateCommentsSheetDrag,
   type CommentsSheetHeight,
@@ -31,7 +32,7 @@ interface ReelsCommentsModalProps {
   reel: ReelItem;
   isOpen: boolean;
   onClose: () => void;
-  onAddComment: (reelId: string, newComment: ReelComment) => void;
+  onAddComment: (reelId: string, newComment: ReelComment) => Promise<ReelComment>;
 }
 
 function getCurrentUserProfile(): { name: string; avatar: string } {
@@ -83,6 +84,9 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
   onAddComment,
 }) => {
   const [inputText, setInputText] = useState("");
+  const [comments, setComments] = useState<ReelComment[]>(reel.comments || []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [likedComments, setLikedComments] = useState<Record<string, boolean>>({});
   const [heightState, setHeightState] = useState<CommentsSheetHeight>("collapsed");
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -91,6 +95,25 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
   const commentsListRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragStartYRef = useRef<number>(0);
+
+  useEffect(() => { setComments(reel.comments || []); }, [reel.id, reel.comments]);
+
+  // Pull shared comments from the server while the sheet is open.
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const latest = await fetchServerReelComments(reel.id);
+        if (active) setComments(latest);
+      } catch (error) {
+        console.warn("[Reels] Could not refresh shared comments:", error);
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 8000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [isOpen, reel.id]);
 
   // Lock background body scrolling while comments bottom sheet is open
   useEffect(() => {
@@ -161,32 +184,32 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed) return;
-
-    const userProfile = getCurrentUserProfile();
-
-    const newComment: ReelComment = {
-      id: `c_${Date.now()}`,
-      authorName: userProfile.name,
-      authorAvatar:
-        userProfile.avatar ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-      text: trimmed,
-      createdAt: "Hozirgina",
-      likesCount: 0,
-      isLiked: false,
-    };
-
-    onAddComment(reel.id, newComment);
-    setInputText("");
-
-    // Scroll to top where the newly prepended comment is displayed
-    setTimeout(() => {
-      commentsListRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    }, 80);
+    if (!trimmed || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      const userProfile = getCurrentUserProfile();
+      const pending: ReelComment = {
+        id: "pending_" + Date.now(),
+        authorName: userProfile.name,
+        authorAvatar: userProfile.avatar || "",
+        text: trimmed,
+        createdAt: "Hozirgina",
+        likesCount: 0,
+        isLiked: false,
+      };
+      const saved = await onAddComment(reel.id, pending);
+      setComments((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)]);
+      setInputText("");
+      setTimeout(() => commentsListRef.current?.scrollTo({ top: 0, behavior: "smooth" }), 80);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Izoh yuborilmadi. Qayta urinib ko‘ring.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleCommentLike = (commentId: string) => {
@@ -250,7 +273,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
           <div className="reelsSheetTitleRow">
             <div className="reelsSheetTitleLeft">
               <span className="reelsSheetTitle">
-                Izohlar ({reel.comments.length})
+                Izohlar ({comments.length})
               </span>
             </div>
 
@@ -276,7 +299,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
           onTouchMove={(e) => e.stopPropagation()}
           onTouchEnd={(e) => e.stopPropagation()}
         >
-          {reel.comments.length === 0 ? (
+          {comments.length === 0 ? (
             <div className="reelsEmptyComments">
               <span className="reelsEmptyEmoji">💬</span>
               <p className="reelsEmptyText">Hozircha izohlar yo‘q</p>
@@ -285,7 +308,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
               </small>
             </div>
           ) : (
-            reel.comments.map((comment) => {
+            comments.map((comment) => {
               const isLiked = likedComments[comment.id] || comment.isLiked;
               const likes = comment.likesCount + (likedComments[comment.id] ? 1 : 0);
               const isOfficial =
