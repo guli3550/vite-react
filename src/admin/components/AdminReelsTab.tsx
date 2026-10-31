@@ -282,7 +282,6 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
     }
 
     const errors: Record<string, string> = {};
-    if (!formData.caption.trim()) errors.caption = "Tavsif yoki caption kiritish shart";
     if (!formData.videoUrl.trim()) errors.videoUrl = videoUploadError
       ? `Video fayli Storage’ga yuklanmadi: ${videoUploadError}. Qayta yuklang yoki video URL kiriting.`
       : "Video fayli hali Storage’ga yuklanmagan. Qayta yuklang yoki video URL kiriting.";
@@ -879,7 +878,7 @@ export const AdminReelsTab: React.FC<AdminReelsTabProps> = ({ notify }) => {
               {/* Caption */}
               <div>
                 <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "#403238", marginBottom: "6px" }}>
-                  Tavsif (Caption) *
+                  Tavsif (Caption) — ixtiyoriy
                 </label>
                 <textarea
                   rows={3}
