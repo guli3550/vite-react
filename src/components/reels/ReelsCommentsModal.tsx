@@ -321,12 +321,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
                     src={comment.authorAvatar}
                     alt={comment.authorName}
                     className="reelsCommentAvatar"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        isOfficial
-                          ? "/guli-logo.png"
-                          : "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80";
-                    }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                   <div className="reelsCommentContent">
                     <div className="reelsCommentAuthorRow">
@@ -402,10 +397,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
                 <img
                   src={getCurrentUserProfile().avatar}
                   alt={getCurrentUserProfile().name}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80";
-                  }}
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               ) : (
                 <div
@@ -440,12 +432,13 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
             <button
               type="submit"
               className="reelsCommentSubmit"
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isSubmitting}
               aria-label="Yuborish"
             >
-              Yuborish
+              {isSubmitting ? "Yuborilmoqda..." : "Yuborish"}
             </button>
           </form>
+          {submitError && <div className="reelsCommentSubmitError" role="alert">{submitError}</div>}
         </div>
       </div>
     </div>
