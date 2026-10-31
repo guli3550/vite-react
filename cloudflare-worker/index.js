@@ -7,7 +7,7 @@ function backend(env) {
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin || "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Telegram-Init-Data, X-GULI-Client",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Telegram-Init-Data, X-GULI-Client, X-Guli-Guest-Token, X-Guli-Linked-Token",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Vary": "Origin",
   };
