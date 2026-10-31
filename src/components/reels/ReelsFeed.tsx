@@ -614,17 +614,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   }, [togglePlayPause, triggerHeartAnimation]);
 
   // Save comments to the shared Reels database.
-  const handleAddComment = async (reelId: string, newComment: ReelComment) => {
-    try {
-      const saved = await addServerReelComment(reelId, newComment.text);
-      setReels((previous) => previous.map((r) => r.id === reelId
-        ? { ...r, commentsCount: r.commentsCount + 1, comments: [saved, ...(r.comments || [])] }
-        : r));
-      showToast("✓ Izoh serverda saqlandi!");
-    } catch (error) {
-      console.error("[Reels] Comment was not saved:", error);
-      showToast("Izoh yuborilmadi. Server aloqasini tekshiring.");
-    }
+  const handleAddComment = async (reelId: string, newComment: ReelComment): Promise<ReelComment> => {
+    const saved = await addServerReelComment(reelId, newComment.text);
+    setReels((previous) => previous.map((r) => r.id === reelId
+      ? { ...r, commentsCount: Math.max(r.commentsCount + 1, (r.comments || []).length + 1), comments: [saved, ...(r.comments || []).filter((item) => item.id !== saved.id)] }
+      : r));
+    showToast("✓ Izoh serverda saqlandi!");
+    return saved;
   };
 
   // Never replace a failed reel with an unrelated sample video.

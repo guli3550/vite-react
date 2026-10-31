@@ -1,6 +1,7 @@
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
+const { verifyAccessToken } = require("./guliCustomAuth");
 
 let client;
 function db() {
@@ -44,7 +45,7 @@ function normalizeReel(row, comments = [], isLiked = false) {
     comments: comments.map((comment) => ({
       id: String(comment.id),
       authorName: comment.author_name || "Mehmon",
-      authorAvatar: comment.author_avatar || "/guli-logo.png",
+      authorAvatar: comment.author_avatar || "",
       text: comment.body || "",
       createdAt: comment.created_at || "",
       likesCount: Number(comment.likes_count || 0),
@@ -115,14 +116,32 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
   try {
     const reelId = String(req.params.id || "").slice(0, 120);
     const body = String(req.body?.text || "").trim().slice(0, 300);
-    if (!body) return fail(res, new Error("Izoh matni bo'sh"), 400);
+    if (!body) return fail(res, new Error("Izoh matni bo‘sh"), 400);
     const exists = await db().from("reels").select("id").eq("id", reelId).eq("status", "active").maybeSingle();
     if (exists.error) throw exists.error;
     if (!exists.data) return fail(res, new Error("Reels topilmadi"), 404);
-    const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_name: "Siz (Mehmon)", author_avatar: "/guli-logo.png", body };
+    const authHeader = String(req.headers.authorization || "");
+    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null;
+    if (authHeader.startsWith("Bearer ")) {
+      let claims = null;
+      try { claims = verifyAccessToken(authHeader.slice(7).trim()); } catch {}
+      if (!claims?.sub) return fail(res, new Error("Sessiya yaroqsiz. Qayta kiring."), 401);
+      const profile = await db().from("users").select("*").eq("id", String(claims.sub)).maybeSingle();
+      if (profile.error) throw profile.error;
+      if (!profile.data) return fail(res, new Error("Foydalanuvchi profili topilmadi"), 401);
+      const user = profile.data;
+      authorUserId = String(user.id);
+      authorName = String(user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.telegram_username || user.username || "").trim() || "GULI mijozi";
+      authorAvatar = String(user.telegram_photo_url || user.avatar_url || user.photo_url || "").trim();
+    } else {
+      guestKey = String(req.body?.guestKey || req.headers["x-guli-guest-key"] || "").trim();
+      if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
+      authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
+    }
+    const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || null, body };
     const { data, error } = await db().from("reel_comments").insert(row).select("*").single();
     if (error) throw error;
-    return res.status(201).json({ success: true, data: { id: data.id, authorName: data.author_name, authorAvatar: data.author_avatar, text: data.body, createdAt: data.created_at, likesCount: 0 } });
+    return res.status(201).json({ success: true, data: { id: data.id, authorName: data.author_name, authorAvatar: data.author_avatar || "", text: data.body, createdAt: data.created_at, likesCount: Number(data.likes_count || 0) } });
   } catch (error) { return fail(res, error); }
 });
 install("post", "/api/reels/:id/like", async (req, res) => {

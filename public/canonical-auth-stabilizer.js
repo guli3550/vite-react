@@ -64,7 +64,7 @@
   }
 
   function isCustomerApi(url) {
-    return /\/api\/(orders|customer\/|auth\/orders(?:\/|$)|auth\/payment(?:\/|$)|reviews|save-address|chat\/(?:messages|media-upload|stream)(?:\/|$)|chat\/)(?:[/?]|$)/i.test(url);
+    return /\/api\/(orders|customer\/|auth\/orders(?:\/|$)|auth\/payment(?:\/|$)|reviews|save-address|chat\/(?:messages|media-upload|stream)(?:\/|$)|chat\/|reels\/[^/]+\/comments(?:\/|$))(?:[/?]|$)/i.test(url);
   }
 
   function withAccess(input, init, token) {
