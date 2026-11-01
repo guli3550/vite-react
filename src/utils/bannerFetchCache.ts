@@ -17,13 +17,15 @@
  * 3. If the admin changed anything the manifest differs, so we store it, warm the
  *    new images and fire the existing `guli_banners_updated` event; the app then
  *    re-reads the manifest and the hero updates without a reload.
- * 4. Banner uploads are stored as -400/-800/-1600 WebP variants. We pick the
- *    variant that fits the screen and connection instead of always shipping 1600px.
+ * 4. Banner uploads are stored as -400/-800/-1600 WebP variants. A smaller variant
+ *    is used only after it has been confirmed to exist (older banners may lack it),
+ *    so an image can never break because of this optimisation.
  *
  * Requests carrying `?fresh=1` (used by the admin panel) always bypass the cache.
  */
 
 const CACHE_KEY = "guli_home_banners_v1";
+const VERIFIED_KEY = "guli_banner_variants_ok_v1";
 const UPDATED_EVENT = "guli_banners_updated";
 const CHECK_INTERVAL_MS = 20_000;
 const FETCH_TIMEOUT_MS = 25_000;
@@ -41,6 +43,7 @@ let knownUrl = "";
 let lastCheck = 0;
 let inflight: Promise<boolean> | null = null;
 let memoryEntry: CacheEntry | null = null;
+let verifiedVariants: Record<string, number> | null = null;
 
 const warmed = new Set<string>();
 const pinned: HTMLImageElement[] = [];
@@ -79,6 +82,33 @@ function writeEntry(body: string): void {
   }
 }
 
+function loadVerified(): Record<string, number> {
+  if (verifiedVariants) return verifiedVariants;
+  let map: Record<string, number> = {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(VERIFIED_KEY) || "{}") as unknown;
+    if (parsed && typeof parsed === "object") map = parsed as Record<string, number>;
+  } catch {
+    /* ignore */
+  }
+  verifiedVariants = map;
+  return map;
+}
+
+function markVerified(url: string): void {
+  const map = loadVerified();
+  map[url] = Date.now();
+  const keys = Object.keys(map);
+  if (keys.length > 60) {
+    for (const key of keys.slice(0, keys.length - 60)) delete map[key];
+  }
+  try {
+    window.localStorage.setItem(VERIFIED_KEY, JSON.stringify(map));
+  } catch {
+    /* storage unavailable: the variant is simply re-verified next session */
+  }
+}
+
 function connectionInfo(): ConnectionInfo {
   const nav = navigator as Navigator & { connection?: ConnectionInfo };
   return nav.connection || {};
@@ -100,17 +130,32 @@ function preferredWidth(): number {
   return 1600;
 }
 
-/** Rewrites banner image URLs to the best-fitting uploaded variant for this device. */
+function variantUrl(url: string, width: number): string | null {
+  const match = VARIANT_RE.exec(url);
+  return match ? `${match[1]}-${width}.webp${match[2] || ""}` : null;
+}
+
+/**
+ * Rewrites banner image URLs to a smaller uploaded variant for this device, but only
+ * for variants already confirmed to exist. Otherwise the original URL is kept.
+ */
 function forDevice(body: string): string {
   const payload = parsePayload(body);
   if (!payload) return body;
   const width = preferredWidth();
+  const ok = loadVerified();
   const data = (payload.data as BannerRow[]).map((item) => {
     const url = item && typeof item.imageUrl === "string" ? item.imageUrl : "";
-    const match = VARIANT_RE.exec(url);
-    return match ? { ...item, imageUrl: `${match[1]}-${width}.webp${match[2] || ""}` } : item;
+    const variant = url ? variantUrl(url, width) : null;
+    return variant && variant !== url && ok[variant] ? { ...item, imageUrl: variant } : item;
   });
   return JSON.stringify({ ...payload, data });
+}
+
+function activeImageUrls(payload: BannerPayload): string[] {
+  return (payload.data as BannerRow[])
+    .filter((row) => row && row.active !== false && typeof row.imageUrl === "string" && row.imageUrl)
+    .map((row) => String(row.imageUrl));
 }
 
 function addLink(rel: string, href: string, attrs: Record<string, string> = {}): HTMLLinkElement | null {
@@ -128,13 +173,36 @@ function whenIdle(task: () => void): void {
   else window.setTimeout(task, 1500);
 }
 
+/** Checks (once per URL) that the smaller variants exist, so later visits can use them. */
+function verifyVariants(body: string): void {
+  const payload = parsePayload(body);
+  if (!payload) return;
+  const width = preferredWidth();
+  const ok = loadVerified();
+  const pending: string[] = [];
+  for (const url of activeImageUrls(payload)) {
+    const variant = variantUrl(url, width);
+    if (variant && variant !== url && !ok[variant]) pending.push(variant);
+  }
+  const list = isVerySlow() ? pending.slice(0, 1) : pending;
+  if (!list.length) return;
+  whenIdle(() => {
+    for (const variant of list) {
+      const probe = new Image();
+      probe.decoding = "async";
+      probe.onload = () => markVerified(variant);
+      probe.src = variant;
+      pinned.push(probe);
+    }
+    if (pinned.length > 12) pinned.splice(0, pinned.length - 12);
+  });
+}
+
 /** Preloads the first slide at high priority, then the remaining slides when idle. */
 function warmImages(body: string): void {
   const payload = parsePayload(forDevice(body));
   if (!payload) return;
-  const urls = (payload.data as BannerRow[])
-    .filter((row) => row && row.active !== false && typeof row.imageUrl === "string" && row.imageUrl)
-    .map((row) => String(row.imageUrl));
+  const urls = activeImageUrls(payload);
   const first = urls[0];
   if (!first) return;
   const rest = urls.slice(1);
@@ -185,6 +253,11 @@ function warmImages(body: string): void {
   window.setTimeout(go, 6000);
 }
 
+function warmAll(body: string): void {
+  warmImages(body);
+  verifyVariants(body);
+}
+
 function notifyIfChanged(changed: boolean): void {
   if (changed) window.dispatchEvent(new Event(UPDATED_EVENT));
 }
@@ -212,7 +285,7 @@ function revalidate(url: string, force: boolean): Promise<boolean> {
       const previous = readEntry();
       if (previous && previous.body === body) return false;
       writeEntry(body);
-      warmImages(body);
+      warmAll(body);
       return true;
     } catch {
       return false;
@@ -262,7 +335,7 @@ export function installBannerFetchCache(): void {
   rawFetch = passThrough;
 
   const cached = readEntry();
-  if (cached) warmImages(cached.body);
+  if (cached) warmAll(cached.body);
 
   const wrapped = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const target = resolveBannerUrl(input, init);
@@ -282,7 +355,7 @@ export function installBannerFetchCache(): void {
       if (!parsePayload(body)) return res;
       writeEntry(body);
       lastCheck = Date.now();
-      warmImages(body);
+      warmAll(body);
       return jsonResponse(body);
     });
   };
