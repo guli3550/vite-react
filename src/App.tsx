@@ -1433,8 +1433,6 @@ export default function App() {
       if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
       const savedLang = localStorage.getItem("guli_lang") as Language;
       if (savedLang === "uz" || savedLang === "ru" || savedLang === "en") setLanguage(savedLang);
-      const savedBrand = localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name");
-      if (savedBrand) setBrandName(savedBrand);
     };
 
     const handleThemeEvt = (e: any) => {
@@ -1447,25 +1445,14 @@ export default function App() {
       if (l === "uz" || l === "ru" || l === "en") setLanguage(l);
     };
 
-    const handleBrandEvt = (e: any) => {
-      const b = e.detail || localStorage.getItem("guli_store_name");
-      if (!b || b.toLowerCase().includes("guli premium")) {
-        setBrandName("Guli Market");
-      } else {
-        setBrandName(b);
-      }
-    };
-
     window.addEventListener("guli_settings_updated", handleSettingsUpdate);
     window.addEventListener("guli_theme_changed", handleThemeEvt);
     window.addEventListener("guli_lang_changed", handleLangEvt);
-    window.addEventListener("guli_brand_name_updated", handleBrandEvt);
 
     return () => {
       window.removeEventListener("guli_settings_updated", handleSettingsUpdate);
       window.removeEventListener("guli_theme_changed", handleThemeEvt);
       window.removeEventListener("guli_lang_changed", handleLangEvt);
-      window.removeEventListener("guli_brand_name_updated", handleBrandEvt);
     };
   }, []);
 
