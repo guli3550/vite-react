@@ -47,6 +47,71 @@ const DEFAULT_CATEGORIES = [
   { slug: "tursik", name: "Tursik", icon: "🩲", sort_order: 5 },
 ];
 
+// ---------------------------------------------------------------------------
+// Public banner manifest (GET /api/banners)
+//
+// The manifest is built once and kept in memory for a short time so the home
+// screen does not hit the database on every visit. It is invalidated explicitly
+// whenever an admin saves banners, so edits show up immediately. The response
+// carries an ETag: clients revalidate with If-None-Match and get an empty 304
+// when nothing changed, which is what keeps repeat visits cheap on slow networks.
+// If the database is unreachable the last good manifest is served instead of an error.
+// ---------------------------------------------------------------------------
+const BANNER_CACHE_TTL_MS = 30 * 1000;
+let bannerCache = { expiresAt: 0, body: "", etag: "" };
+let bannerInflight = null;
+
+function invalidateBannerCache() {
+  bannerCache = { expiresAt: 0, body: "", etag: "" };
+}
+
+function bannerRowToPublic(item, idx) {
+  let meta = {};
+  try { meta = JSON.parse(item.name || "{}"); } catch { meta = { title: item.name }; }
+  return {
+    id: item.slug.replace(/^banner_/, "") || `banner-${idx + 1}`,
+    imageUrl: item.image_url,
+    title: meta.title || "Maxsus Taklif",
+    subtitle: meta.subtitle || "",
+    badgeText: meta.badgeText || "TOP SOTILGAN",
+    ctaText: meta.ctaText || "Xarid qilish",
+    actionType: meta.actionType || "catalog",
+    actionTarget: meta.actionTarget || "",
+    active: item.active !== false,
+    createdAt: item.updated_at,
+  };
+}
+
+async function loadBannerManifest() {
+  const now = Date.now();
+  if (bannerCache.body && bannerCache.expiresAt > now) return bannerCache;
+  if (bannerInflight) return bannerInflight;
+
+  bannerInflight = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("category_settings")
+        .select("slug,name,image_url,sort_order,active,updated_at")
+        .like("slug", "banner_%")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      const body = JSON.stringify({ success: true, data: (data || []).map(bannerRowToPublic) });
+      const etag = 'W/"' + crypto.createHash("sha1").update(body).digest("base64url") + '"';
+      bannerCache = { expiresAt: Date.now() + BANNER_CACHE_TTL_MS, body, etag };
+      return bannerCache;
+    } catch (error) {
+      // Serve the last good manifest rather than leaving the home screen without banners.
+      if (bannerCache.body) {
+        console.warn("Banner manifest refresh failed, serving stale copy:", error.message);
+        return bannerCache;
+      }
+      throw error;
+    }
+  })().finally(() => { bannerInflight = null; });
+
+  return bannerInflight;
+}
+
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
   const right = Buffer.from(String(b));
@@ -378,32 +443,16 @@ function installRoutes(app) {
     }
   });
 
-  route(app, "get", "/api/banners", async (_req, res) => {
+  route(app, "get", "/api/banners", async (req, res) => {
     try {
-      const { data, error } = await supabase
-        .from("category_settings")
-        .select("slug,name,image_url,sort_order,active,updated_at")
-        .like("slug", "banner_%")
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      res.setHeader("Cache-Control", "no-store, max-age=0");
-      const banners = (data || []).map((item, idx) => {
-        let meta = {};
-        try { meta = JSON.parse(item.name || "{}"); } catch { meta = { title: item.name }; }
-        return {
-          id: item.slug.replace(/^banner_/, "") || `banner-${idx + 1}`,
-          imageUrl: item.image_url,
-          title: meta.title || "Maxsus Taklif",
-          subtitle: meta.subtitle || "",
-          badgeText: meta.badgeText || "TOP SOTILGAN",
-          ctaText: meta.ctaText || "Xarid qilish",
-          actionType: meta.actionType || "catalog",
-          actionTarget: meta.actionTarget || "",
-          active: item.active !== false,
-          createdAt: item.updated_at,
-        };
-      });
-      res.json({ success: true, data: banners });
+      const manifest = await loadBannerManifest();
+      // `no-cache` = the browser may store it but must revalidate (ETag) before reuse.
+      res.setHeader("Cache-Control", "public, no-cache");
+      res.setHeader("ETag", manifest.etag);
+      if (req.headers["if-none-match"] === manifest.etag) {
+        return res.status(304).end();
+      }
+      res.type("application/json").send(manifest.body);
     } catch (error) {
       console.error("Get banners error:", error);
       res.status(500).json({ success: false, message: "Bannerlarni yuklashda xatolik", data: [] });
@@ -413,6 +462,7 @@ function installRoutes(app) {
   route(app, "put", "/api/admin/banners", requireAdmin, async (req, res) => {
     try {
       const banners = Array.isArray(req.body?.banners) ? req.body.banners : [];
+      const keepSlugs = new Set();
       for (let i = 0; i < banners.length; i += 1) {
         const b = banners[i] || {};
         const slug = "banner_" + (b.id || i + 1);
@@ -423,6 +473,7 @@ function installRoutes(app) {
             message: "Banner yo‘naltirish URL manzili http:// yoki https:// bilan boshlanishi kerak",
           });
         }
+        keepSlugs.add(slug);
         const meta = JSON.stringify({
           title: b.title || "",
           subtitle: b.subtitle || "",
@@ -443,8 +494,31 @@ function installRoutes(app) {
           }, { onConflict: "slug" });
         if (error) throw error;
       }
+
+      // The admin panel sends the complete list. When it says so (replaceAll), banners
+      // that are no longer in the list are removed; otherwise a deleted banner would
+      // stay in the database and keep reappearing on the home screen.
+      if (req.body?.replaceAll === true) {
+        const { data: existing, error: listError } = await supabase
+          .from("category_settings")
+          .select("slug")
+          .like("slug", "banner_%");
+        if (listError) throw listError;
+        const stale = (existing || []).map((row) => row.slug).filter((slug) => !keepSlugs.has(slug));
+        if (stale.length) {
+          const { error: deleteError } = await supabase
+            .from("category_settings")
+            .delete()
+            .in("slug", stale);
+          if (deleteError) throw deleteError;
+        }
+      }
+
+      invalidateBannerCache();
       res.json({ success: true, message: "Bannerlar muvaffaqiyatli saqlandi" });
     } catch (error) {
+      // A partial save may already have changed rows; never keep serving the old copy.
+      invalidateBannerCache();
       console.error("Save banners error:", error);
       res.status(500).json({ success: false, message: "Bannerlarni saqlashda xatolik" });
     }
