@@ -127,11 +127,41 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
     if (exists.error) throw exists.error;
     if (!exists.data) return fail(res, new Error("Reels topilmadi"), 404);
     const authHeader = String(req.headers.authorization || "");
+    const telegramInitData = String(req.headers["x-telegram-init-data"] || "");
     let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null;
+    let claims = null;
     if (authHeader.startsWith("Bearer ")) {
-      let claims = null;
       try { claims = verifyAccessToken(authHeader.slice(7).trim()); } catch {}
       if (!claims?.sub) return fail(res, new Error("Sessiya yaroqsiz. Qayta kiring."), 401);
+    } else if (telegramInitData) {
+      // Validate Telegram Mini App initData server-side; never trust initDataUnsafe/client body.
+      const botToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+      let telegramId = null;
+      try {
+        const params = new URLSearchParams(telegramInitData);
+        const hash = params.get("hash");
+        const authDate = Number(params.get("auth_date"));
+        if (botToken && hash && Number.isFinite(authDate) && Math.abs(Math.floor(Date.now() / 1000) - authDate) <= 86400) {
+          const pairs = [];
+          params.forEach((value, key) => { if (key !== "hash") pairs.push(`${key}=${value}`); });
+          pairs.sort();
+          const secret = require("crypto").createHmac("sha256", "WebAppData").update(botToken).digest();
+          const expected = require("crypto").createHmac("sha256", secret).update(pairs.join("\\n")).digest("hex");
+          const supplied = Buffer.from(hash);
+          const calculated = Buffer.from(expected);
+          if (supplied.length === calculated.length && require("crypto").timingSafeEqual(supplied, calculated)) {
+            const tgUser = JSON.parse(params.get("user") || "null");
+            if (tgUser?.id) telegramId = String(tgUser.id);
+          }
+        }
+      } catch {}
+      if (!telegramId) return fail(res, new Error("Telegram sessiyasi yaroqsiz. Mini App’ni qayta oching."), 401);
+      const profile = await db().from("users").select("*").eq("telegram_id", telegramId).maybeSingle();
+      if (profile.error) throw profile.error;
+      if (!profile.data) return fail(res, new Error("Telegram foydalanuvchi profili topilmadi"), 401);
+      claims = { sub: String(profile.data.id) };
+    }
+    if (claims?.sub) {
       const profile = await db().from("users").select("*").eq("id", String(claims.sub)).maybeSingle();
       if (profile.error) throw profile.error;
       if (!profile.data) return fail(res, new Error("Foydalanuvchi profili topilmadi"), 401);
