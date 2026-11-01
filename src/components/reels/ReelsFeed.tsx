@@ -2,30 +2,31 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ReelItem, ReelComment } from "../../types/reels";
 import { loadReelsFromStorage } from "../../data/demoReels";
 import { fetchPublicReels, loadCachedPublicReels, saveCachedPublicReels, toggleServerReelLike, addServerReelComment, recordServerReelView } from "../../lib/reelsApi";
+import { evaluateSwipeGesture, calculateVideoProgress } from "../../utils/reelsEngine";
 import {
-  evaluateSwipeGesture,
-  calculateVideoProgress,
-  isIndexPreloaded,
-} from "../../utils/reelsEngine";
+  REELS_FEED_FRESH_MS,
+  REEL_SEEN_AFTER_MS,
+  buildFeedOrder,
+  dedupeById,
+  feedAgeMs,
+  markFeedFetched,
+  markSeen,
+  mergeFeed,
+  readResume,
+  readSeen,
+  windowPositions,
+  wrapIndex,
+  writeResume,
+  writeSeen,
+} from "../../utils/reelsFeedLogic";
+import { scheduleReelsWarmup } from "../../lib/reelsPrefetch";
 import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
 
-function prepareReelsCycle(active: ReelItem[]): { reels: ReelItem[]; startIndex: number } {
-  return { reels: active, startIndex: 0 };
-}
-
-function markReelSeen(reelId: string): void {
-  try {
-    const raw = localStorage.getItem("guli_seen_reels_v1");
-    const seen: string[] = raw ? JSON.parse(raw) : [];
-    if (!seen.includes(reelId)) {
-      seen.push(reelId);
-      localStorage.setItem("guli_seen_reels_v1", JSON.stringify(seen));
-    }
-  } catch {}
-}
+// App.tsx imports this module at start-up: warm the feed while the customer is still on the home screen.
+scheduleReelsWarmup();
 
 interface ReelsFeedProps {
   onBack?: () => void;
@@ -33,6 +34,7 @@ interface ReelsFeedProps {
   onNavigateToCatalog?: () => void;
   onOpenBrandProfile?: () => void;
   initialReelId?: string;
+  /** Kept for backward compatibility. The resume position is now persisted by reel id. */
   initialIndex?: number;
   onActiveIndexChange?: (index: number) => void;
 }
@@ -43,22 +45,47 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   onNavigateToCatalog,
   onOpenBrandProfile,
   initialReelId,
-  initialIndex,
   onActiveIndexChange,
 }) => {
   const [reels, setReels] = useState<ReelItem[]>([]);
   const [isFeedLoading, setIsFeedLoading] = useState(true);
   const [feedError, setFeedError] = useState<string | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Virtual, unbounded position. The reel shown is reels[wrapIndex(pos, reels.length)],
+  // so the feed loops forever without ever animating across the whole list.
+  const [pos, setPos] = useState(0);
+  const [instant, setInstant] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [videoProgress, setVideoProgress] = useState(0);
   const [videoError, setVideoError] = useState<Record<string, boolean>>({});
+  const [retryNonce, setRetryNonce] = useState(0);
   const [isLoadingVideo, setIsLoadingVideo] = useState(true);
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
+
+  const count = reels.length;
+  const reelsRef = useRef<ReelItem[]>([]);
+  reelsRef.current = reels;
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const currentReel: ReelItem | undefined = count > 0 ? reels[wrapIndex(pos, count)] : undefined;
+  const currentReelRef = useRef<ReelItem | null>(null);
+  currentReelRef.current = currentReel ?? null;
+  const currentIdRef = useRef<string | null>(null);
+  currentIdRef.current = currentReel?.id ?? null;
+
+  // Timers are tracked so nothing fires after the feed is closed.
+  const timersRef = useRef<Set<number>>(new Set());
+  const toastTimerRef = useRef<number | null>(null);
+  const later = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timersRef.current.delete(id);
+      fn();
+    }, ms);
+    timersRef.current.add(id);
+    return id;
+  }, []);
 
   // Popping animated hearts burst on like (keyed by unique ID for 100% reliable re-render)
   const [heartAnimId, setHeartAnimId] = useState<number | null>(null);
@@ -82,16 +109,10 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const [isShareOpen, setIsShareOpen] = useState(false);
 
   // Centered modern Play/Pause animated overlay
-  const [playPauseIndicator, setPlayPauseIndicator] = useState<{
-    type: "play" | "pause";
-    id: number;
-  } | null>(null);
+  const [playPauseIndicator, setPlayPauseIndicator] = useState<{ type: "play" | "pause"; id: number } | null>(null);
 
   // Centered modern Volume Mute/Unmute indicator overlay
-  const [volumeIndicator, setVolumeIndicator] = useState<{
-    isMuted: boolean;
-    id: number;
-  } | null>(null);
+  const [volumeIndicator, setVolumeIndicator] = useState<{ isMuted: boolean; id: number } | null>(null);
 
   // Swipe / Drag state for continuous peek transition
   const [dragOffsetY, setDragOffsetY] = useState(0);
@@ -101,17 +122,18 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const isSwipingVertically = useRef<boolean | null>(null);
   const wheelLockRef = useRef<boolean>(false);
 
-  // Video element references map. Stable callbacks prevent React from detaching
-  // and reattaching refs on every render (which can interrupt mobile playback).
-  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
-  const videoRefCallbacks = useRef<Map<string, (el: HTMLVideoElement | null) => void>>(new Map());
+  // Video elements are keyed by their virtual position (the same reel can occupy two
+  // positions in a tiny feed). The progress bar is updated through a ref so the
+  // timeupdate event never re-renders the whole slide tree.
+  const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
+  const videoRefCallbacks = useRef<Map<number, (el: HTMLVideoElement | null) => void>>(new Map());
+  const progressFillRef = useRef<HTMLDivElement | null>(null);
   const playbackGenerationRef = useRef(0);
-  const currentReelRef = useRef<ReelItem | null>(null);
 
   const playActiveVideo = useCallback((activeVideo: HTMLVideoElement) => {
     if (!activeVideo) return;
     const generation = playbackGenerationRef.current;
-    
+
     activeVideo.currentTime = 0;
     activeVideo.muted = isMutedRef.current;
 
@@ -154,23 +176,24 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   }, []);
 
   const initialReelIdRef = useRef(initialReelId);
-  const initialIndexRef = useRef(initialIndex);
-  const initialConfigAppliedRef = useRef(false);
+  // The first reel of a session: a reel opened from the brand profile, otherwise the resume reel.
+  const forceFirstIdRef = useRef<string | null>(initialReelId ?? null);
+  const orderBuiltRef = useRef(false);
 
-  const getVideoRef = useCallback((reelId: string) => {
-    let callback = videoRefCallbacks.current.get(reelId);
+  const getVideoRef = useCallback((position: number) => {
+    let callback = videoRefCallbacks.current.get(position);
     if (!callback) {
       callback = (el) => {
         if (el) {
-          videoRefs.current.set(reelId, el);
+          videoRefs.current.set(position, el);
         } else {
-          const previous = videoRefs.current.get(reelId);
-          // A slide leaving the preload window must never keep playing off-screen.
-          previous?.pause();
-          videoRefs.current.delete(reelId);
+          // A slide leaving the 3-slide window must never keep playing off-screen.
+          videoRefs.current.get(position)?.pause();
+          videoRefs.current.delete(position);
+          videoRefCallbacks.current.delete(position);
         }
       };
-      videoRefCallbacks.current.set(reelId, callback);
+      videoRefCallbacks.current.set(position, callback);
     }
     return callback;
   }, []);
@@ -178,7 +201,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // Stop every media element when Reels is left or the app is backgrounded.
   useEffect(() => {
     const videoRefsMap = videoRefs.current;
-    const callbacksMap = videoRefCallbacks.current;
+    const timers = timersRef.current;
     const stopAllVideos = () => {
       playbackGenerationRef.current += 1;
       videoRefsMap.forEach((video) => {
@@ -195,84 +218,79 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       stopAllVideos();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", stopAllVideos);
-      videoRefsMap.clear();
-      callbacksMap.clear();
+      timers.forEach((id) => clearTimeout(id));
+      timers.clear();
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       if (heartTimerRef.current) clearTimeout(heartTimerRef.current);
       if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
     };
   }, []);
 
-  const resolveInitialIndex = useCallback((list: ReelItem[]): number => {
-    if (initialReelIdRef.current) {
-      const found = list.findIndex((r) => r.id === initialReelIdRef.current);
-      if (found !== -1) return found;
+  // Turns a list coming from cache / server into the visible feed.
+  // First time: build the session order (resume + unseen first). Afterwards: merge without reordering.
+  const applyIncoming = useCallback((incoming: ReelItem[]) => {
+    const fresh = dedupeById(incoming);
+    if (!orderBuiltRef.current) {
+      if (fresh.length === 0) {
+        setReels([]);
+        return;
+      }
+      orderBuiltRef.current = true;
+      setInstant(true);
+      setPos(0);
+      setReels(buildFeedOrder(fresh, readSeen(), readResume(), forceFirstIdRef.current));
+      return;
     }
-    if (
-      typeof initialIndexRef.current === "number" &&
-      initialIndexRef.current >= 0 &&
-      initialIndexRef.current < list.length
-    ) {
-      return initialIndexRef.current;
+    const currentId = currentIdRef.current;
+    const { list, idsChanged } = mergeFeed(reelsRef.current, fresh, currentId);
+    setReels(list);
+    if (idsChanged) {
+      const idx = currentId ? list.findIndex((r) => r.id === currentId) : -1;
+      setInstant(true);
+      setPos(idx >= 0 ? idx : 0);
     }
-    return 0;
   }, []);
 
-  // Load published Reels from the shared server source; local demo data is development-only.
-  const reloadReels = useCallback(async () => {
+  // Load published Reels: instant from cache, then (only if the cache is stale) from the server.
+  const reloadReels = useCallback(async (force = false) => {
     setFeedError(null);
     const cached = loadCachedPublicReels();
-    if (cached.length > 0) {
-      const cachedCycle = prepareReelsCycle(cached);
-      setReels(cachedCycle.reels);
-      if (!initialConfigAppliedRef.current) {
-        const startIdx = resolveInitialIndex(cachedCycle.reels);
-        initialConfigAppliedRef.current = true;
-        setCurrentIndex(startIdx);
+    if (!orderBuiltRef.current) {
+      if (cached.length > 0) {
+        applyIncoming(cached);
+        setIsFeedLoading(false);
+      } else {
+        setIsFeedLoading(true);
       }
+    }
+    if (!force && cached.length > 0 && feedAgeMs() < REELS_FEED_FRESH_MS) {
       setIsFeedLoading(false);
-    } else {
-      setIsFeedLoading(true);
+      return;
     }
     try {
       const all = await fetchPublicReels();
       const active = all.filter((r) => r.status === "active" && Boolean(r.videoUrl));
       saveCachedPublicReels(active);
-      const cycle = prepareReelsCycle(active);
-      const list = cycle.reels;
-
-      setReels(list);
-      if (!initialConfigAppliedRef.current) {
-        const startIdx = resolveInitialIndex(list);
-        initialConfigAppliedRef.current = true;
-        setCurrentIndex(startIdx);
-      }
+      markFeedFetched();
+      applyIncoming(active);
     } catch (error) {
       console.error("[Reels] Published server feed could not be loaded:", error);
       if (!import.meta.env.PROD) {
-        const active = loadReelsFromStorage().filter((r) => r.status === "active");
-        const cycle = prepareReelsCycle(active);
-        setReels(cycle.reels);
-        if (!initialConfigAppliedRef.current) {
-          const startIdx = resolveInitialIndex(cycle.reels);
-          initialConfigAppliedRef.current = true;
-          setCurrentIndex(startIdx);
-        }
-      } else {
-        if (cached.length === 0) {
-          setReels([]);
-          setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
-        }
+        applyIncoming(loadReelsFromStorage().filter((r) => r.status === "active"));
+      } else if (reelsRef.current.length === 0) {
+        setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
       }
     } finally {
       setIsFeedLoading(false);
     }
-  }, [resolveInitialIndex]);
+  }, [applyIncoming]);
 
-  // Update position if initialReelId is provided later (e.g. user clicked a specific reel in brand profile)
+  // A specific reel was requested later (e.g. tapped in the brand profile).
   useEffect(() => {
     if (initialReelId && initialReelId !== initialReelIdRef.current) {
       initialReelIdRef.current = initialReelId;
-      initialConfigAppliedRef.current = false;
+      forceFirstIdRef.current = initialReelId;
+      orderBuiltRef.current = false;
       void reloadReels();
     }
   }, [initialReelId, reloadReels]);
@@ -282,63 +300,83 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   const lastReportedIndexRef = useRef<number>(-1);
 
   useEffect(() => {
-    if (lastReportedIndexRef.current !== currentIndex) {
-      lastReportedIndexRef.current = currentIndex;
-      onActiveIndexChangeRef.current?.(currentIndex);
+    if (count === 0) return;
+    const index = wrapIndex(pos, count);
+    if (lastReportedIndexRef.current !== index) {
+      lastReportedIndexRef.current = index;
+      onActiveIndexChangeRef.current?.(index);
     }
-  }, [currentIndex]);
+  }, [pos, count]);
 
   useEffect(() => {
-    reloadReels();
-
-    const handleStorageChange = () => {
-      reloadReels();
-    };
-
-    window.addEventListener("storage", handleStorageChange as EventListener);
-    window.addEventListener("guli_reels_updated", handleStorageChange as EventListener);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange as EventListener);
-      window.removeEventListener("guli_reels_updated", handleStorageChange as EventListener);
-    };
+    void reloadReels();
+    // Only an explicit admin update refreshes the feed; unrelated `storage` events must not.
+    const handleReelsUpdated = () => void reloadReels(true);
+    window.addEventListener("guli_reels_updated", handleReelsUpdated);
+    return () => window.removeEventListener("guli_reels_updated", handleReelsUpdated);
   }, [reloadReels]);
 
-  const currentReel = reels[currentIndex];
-  currentReelRef.current = currentReel;
-  const viewedReelIdsRef = useRef<Set<string>>(new Set());
+  // The jump animation is skipped when the list is rebuilt.
   useEffect(() => {
-    if (!currentReel || viewedReelIdsRef.current.has(currentReel.id)) return;
-    viewedReelIdsRef.current.add(currentReel.id);
-    markReelSeen(currentReel.id);
-    recordServerReelView(currentReel.id)
-      .then(({ viewsCount }) => {
-        setReels((previous) => previous.map((r) => r.id === currentReel.id ? { ...r, viewsCount } : r));
-      })
-      .catch((error) => console.warn("[Reels] View count was not saved:", error));
-  }, [currentReel?.id]);
+    if (!instant) return;
+    const id = window.setTimeout(() => setInstant(false), 60);
+    return () => clearTimeout(id);
+  }, [instant]);
+
+  // Resume position is saved the moment a reel becomes active; "seen" + view count only after
+  // the reel stayed on screen, so quick swipe-throughs do not burn a reel or a request.
+  const viewedReelIdsRef = useRef<Set<string>>(new Set());
+  const currentReelId = currentReel?.id;
+  useEffect(() => {
+    if (!currentReelId) return;
+    writeResume(currentReelId);
+    const timer = window.setTimeout(() => {
+      writeSeen(markSeen(readSeen(), currentReelId, reelsRef.current.map((r) => r.id)));
+      if (viewedReelIdsRef.current.has(currentReelId)) return;
+      viewedReelIdsRef.current.add(currentReelId);
+      recordServerReelView(currentReelId)
+        .then(({ viewsCount }) => {
+          setReels((previous) => previous.map((r) => (r.id === currentReelId ? { ...r, viewsCount } : r)));
+        })
+        .catch((error) => console.warn("[Reels] View count was not saved:", error));
+    }, REEL_SEEN_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [currentReelId]);
+
+  // Decode the posters two and three reels ahead so the next swipes never show a blank frame.
+  useEffect(() => {
+    const list = reelsRef.current;
+    if (list.length < 3) return;
+    for (const offset of [2, 3]) {
+      const poster = list[wrapIndex(pos + offset, list.length)]?.posterUrl;
+      if (poster) {
+        const img = new Image();
+        img.decoding = "async";
+        img.src = poster;
+      }
+    }
+  }, [pos, count]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 2500);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 2500);
   }, []);
 
   const triggerVolumeOverlay = useCallback((muted: boolean) => {
-    setVolumeIndicator({ isMuted: muted, id: Date.now() });
-    setTimeout(() => {
-      setVolumeIndicator((prev) => (prev && Date.now() - prev.id >= 600 ? null : prev));
-    }, 650);
-  }, []);
+    const id = Date.now();
+    setVolumeIndicator({ isMuted: muted, id });
+    later(() => setVolumeIndicator((prev) => (prev && prev.id === id ? null : prev)), 650);
+  }, [later]);
 
   const toggleMute = useCallback(() => {
-    if (!currentReel) return;
-    const activeVideo = videoRefs.current.get(currentReel.id);
+    const activeVideo = videoRefs.current.get(posRef.current);
     if (!activeVideo) return;
     const nextMuted = !activeVideo.muted;
     activeVideo.muted = nextMuted;
     setIsMuted(nextMuted);
     triggerVolumeOverlay(nextMuted);
-  }, [currentReel, triggerVolumeOverlay]);
+  }, [triggerVolumeOverlay]);
 
   // Manage exactly one active player. Ignore late play() resolutions after a
   // swipe, route change, or component unmount.
@@ -347,27 +385,25 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     let activeVideo: HTMLVideoElement | undefined;
 
     setIsLoadingVideo(true);
-    setVideoProgress(0);
     setIsPlaying(true);
     setCaptionExpanded(false);
+    if (progressFillRef.current) progressFillRef.current.style.width = "0%";
 
-    videoRefs.current.forEach((videoEl, id) => {
-      if (!currentReel || id !== currentReel.id) videoEl.pause();
+    videoRefs.current.forEach((videoEl, position) => {
+      if (position !== pos) videoEl.pause();
     });
 
     if (currentReel && isInstagramUrl(currentReel.videoUrl)) {
       setIsLoadingVideo(false);
-      setIsPlaying(true);
       return () => {
         if (playbackGenerationRef.current === generation) playbackGenerationRef.current += 1;
       };
     }
 
     if (currentReel) {
-      activeVideo = videoRefs.current.get(currentReel.id);
-      if (activeVideo) {
-        playActiveVideo(activeVideo);
-      }
+      activeVideo = videoRefs.current.get(pos);
+      if (activeVideo) playActiveVideo(activeVideo);
+      else setIsLoadingVideo(false);
     }
 
     return () => {
@@ -376,44 +412,27 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     };
   // Deliberately exclude the reel object and isMuted: engagement updates and
   // mute toggles must not restart the video from the beginning.
-  }, [currentIndex, currentReel?.id, playActiveVideo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos, currentReelId, retryNonce, playActiveVideo]);
 
-  // Navigate between reels
-  const goToReel = useCallback(
-    (index: number) => {
-      if (index >= 0 && index < reels.length) {
-        setCurrentIndex(index);
-      }
-    },
-    [reels.length]
-  );
+  // Navigate between reels (infinite loop: the position is unbounded, the reel wraps).
+  const goToPos = useCallback((position: number) => {
+    if (reelsRef.current.length > 1) setPos(position);
+  }, []);
 
-  const goNext = useCallback(() => {
-    if (currentIndex < reels.length - 1) {
-      goToReel(currentIndex + 1);
-    } else {
-      showToast("Barcha Reels videolari ko‘rib chiqildi 💫");
-    }
-  }, [currentIndex, reels.length, goToReel, showToast]);
-
-  const goPrev = useCallback(() => {
-    if (currentIndex > 0) {
-      goToReel(currentIndex - 1);
-    }
-  }, [currentIndex, goToReel]);
+  const goNext = useCallback(() => goToPos(posRef.current + 1), [goToPos]);
+  const goPrev = useCallback(() => goToPos(posRef.current - 1), [goToPos]);
 
   // Trigger Play / Pause indicator animation
   const triggerPlayPauseOverlay = useCallback((type: "play" | "pause") => {
-    setPlayPauseIndicator({ type, id: Date.now() });
-    setTimeout(() => {
-      setPlayPauseIndicator((prev) => (prev && Date.now() - prev.id >= 450 ? null : prev));
-    }, 500);
-  }, []);
+    const id = Date.now();
+    setPlayPauseIndicator({ type, id });
+    later(() => setPlayPauseIndicator((prev) => (prev && prev.id === id ? null : prev)), 500);
+  }, [later]);
 
   // Toggle Play / Pause for the active video
   const togglePlayPause = useCallback(() => {
-    if (!currentReel) return;
-    const activeVideo = videoRefs.current.get(currentReel.id);
+    const activeVideo = videoRefs.current.get(posRef.current);
     if (!activeVideo) return;
 
     if (activeVideo.paused) {
@@ -429,10 +448,12 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       setIsPlaying(false);
       triggerPlayPauseOverlay("pause");
     }
-  }, [currentReel, triggerPlayPauseOverlay]);
+  }, [triggerPlayPauseOverlay]);
 
-  // Handle Touch gestures with live drag preview
+  // Handle Touch gestures with live drag preview. Ignored while a sheet is open so
+  // scrolling the comments never swipes the feed behind it.
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isCommentsOpen || isShareOpen) return;
     touchStartY.current = e.touches[0].clientY;
     touchStartX.current = e.touches[0].clientX;
     isSwipingVertically.current = null;
@@ -441,10 +462,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
-    const currentY = e.touches[0].clientY;
-    const currentX = e.touches[0].clientX;
-    const diffY = currentY - touchStartY.current;
-    const diffX = currentX - touchStartX.current;
+    const diffY = e.touches[0].clientY - touchStartY.current;
+    const diffX = e.touches[0].clientX - touchStartX.current;
 
     // Detect gesture direction on initial threshold
     if (isSwipingVertically.current === null) {
@@ -454,28 +473,18 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
 
     if (isSwipingVertically.current) {
-      // Resistance at boundaries
-      if (
-        (currentIndex === 0 && diffY > 0) ||
-        (currentIndex === reels.length - 1 && diffY < 0)
-      ) {
-        setDragOffsetY(diffY * 0.3);
-      } else {
-        setDragOffsetY(diffY);
-      }
+      // The feed loops, so only a single-reel feed has an edge to resist.
+      setDragOffsetY(count < 2 ? diffY * 0.3 : diffY);
     }
   };
 
   const handleTouchEnd = () => {
+    if (!isDragging) return;
     setIsDragging(false);
-    const deltaY = -dragOffsetY; // positive = dragged UP
-    const decision = evaluateSwipeGesture(deltaY, 45);
+    const decision = evaluateSwipeGesture(-dragOffsetY, 45);
 
-    if (decision === "next" && currentIndex < reels.length - 1) {
-      goNext();
-    } else if (decision === "prev" && currentIndex > 0) {
-      goPrev();
-    }
+    if (decision === "next") goNext();
+    else if (decision === "prev") goPrev();
 
     setDragOffsetY(0);
     touchStartY.current = 0;
@@ -489,17 +498,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       if (isCommentsOpen || isShareOpen || wheelLockRef.current) return;
       if (Math.abs(e.deltaY) > 35) {
         wheelLockRef.current = true;
-        if (e.deltaY > 0) {
-          goNext();
-        } else {
-          goPrev();
-        }
-        setTimeout(() => {
+        if (e.deltaY > 0) goNext();
+        else goPrev();
+        later(() => {
           wheelLockRef.current = false;
         }, 400);
       }
     },
-    [goNext, goPrev, isCommentsOpen, isShareOpen]
+    [goNext, goPrev, isCommentsOpen, isShareOpen, later]
   );
 
   // Keyboard navigation: ArrowUp, ArrowDown, Space
@@ -522,12 +528,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [goNext, goPrev, isCommentsOpen, isShareOpen, togglePlayPause]);
 
-  // Video time update for progress bar
+  // Video time update for the progress bar: written straight to the DOM (no React re-render).
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
     const videoEl = e.currentTarget;
-    if (videoEl && videoEl.duration) {
-      const progress = calculateVideoProgress(videoEl.currentTime, videoEl.duration);
-      setVideoProgress(progress);
+    if (videoEl && videoEl.duration && progressFillRef.current) {
+      progressFillRef.current.style.width = `${calculateVideoProgress(videoEl.currentTime, videoEl.duration)}%`;
     }
   };
 
@@ -629,19 +634,43 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     setIsLoadingVideo(false);
   };
 
-  // Retry loading video
+  // Retry: clear the error so the <video> mounts again, then re-run the player effect to start it.
   const handleRetryVideo = (reelId: string) => {
     setVideoError((prev) => ({ ...prev, [reelId]: false }));
     setIsLoadingVideo(true);
-    const videoEl = videoRefs.current.get(reelId);
-    if (videoEl) {
-      videoEl.load();
-      videoEl.play().catch(() => {});
-    }
+    setRetryNonce((n) => n + 1);
   };
 
-  // Empty State View
-  if (reels.length === 0) {
+  // Loading / error / empty states (previously the loading and error views were unreachable).
+  if (count === 0) {
+    if (isFeedLoading) {
+      return (
+        <main className="reelsContainer reelsEmptyView" aria-busy="true">
+          <div role="status" className="reelsEmptyContent">
+            <div className="reelsLoadingSpinner" style={{ position: "static", marginBottom: 12 }}>
+              <div className="reelsSpinnerCircle" />
+            </div>
+            <p className="reelsEmptySubtitle" style={{ margin: 0 }}>Reels yuklanmoqda…</p>
+          </div>
+        </main>
+      );
+    }
+    if (feedError) {
+      return (
+        <main className="reelsContainer reelsEmptyView">
+          <div role="alert" className="reelsEmptyContent">
+            <div className="reelsEmptyIcon">⚠️</div>
+            <p className="reelsEmptySubtitle">{feedError}</p>
+            <div className="reelsEmptyActions">
+              <button type="button" className="reelsBtnPrimary" onClick={() => void reloadReels(true)}>Qayta urinish</button>
+              {onBack && (
+                <button type="button" className="reelsBtnSecondary" onClick={onBack}>🏠 Bosh sahifaga qaytish</button>
+              )}
+            </div>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="reelsContainer reelsEmptyView">
         <div className="reelsEmptyContent">
@@ -652,20 +681,12 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
           </p>
           <div className="reelsEmptyActions">
             {onBack && (
-              <button
-                type="button"
-                className="reelsBtnSecondary"
-                onClick={onBack}
-              >
+              <button type="button" className="reelsBtnSecondary" onClick={onBack}>
                 🏠 Bosh sahifaga qaytish
               </button>
             )}
             {onNavigateToCatalog && (
-              <button
-                type="button"
-                className="reelsBtnPrimary"
-                onClick={onNavigateToCatalog}
-              >
+              <button type="button" className="reelsBtnPrimary" onClick={onNavigateToCatalog}>
                 👗 Katalogga o‘tish
               </button>
             )}
@@ -675,11 +696,11 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     );
   }
 
-  // Mount only the active video. Keeping adjacent video elements mounted can
+  // Only previous / current / next are mounted (at most 3 <video> elements). Mounting more can
   // exhaust Android Chrome media decoders and leave the next Reel buffering forever.
   const trackTranslateStyle = {
-    transform: `translate3d(0, calc(-${currentIndex * 100}% + ${dragOffsetY}px), 0)`,
-    transition: isDragging ? "none" : "transform 0.36s cubic-bezier(0.22, 1, 0.36, 1)",
+    transform: `translate3d(0, calc(-${pos * 100}% + ${dragOffsetY}px), 0)`,
+    transition: isDragging || instant ? "none" : "transform 0.36s cubic-bezier(0.22, 1, 0.36, 1)",
   };
 
   return (
@@ -688,6 +709,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       onWheel={handleWheel}
       aria-label="Guli Market Reels video lentasi"
     >
@@ -702,62 +724,67 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       <div className="reelsViewport">
         {/* Vertical Sliding Reel Track for Continuous Instagram-Style Gestures */}
         <div className="reelsTrack" style={trackTranslateStyle}>
-          {reels.map((reel, index) => {
-            const isActive = index === currentIndex;
-            const isPreloaded = isIndexPreloaded(index, currentIndex, reels.length, 2, 1);
+          {windowPositions(pos, count).map((position) => {
+            const reel = reels[wrapIndex(position, count)];
+            const isActive = position === pos;
+            const isNext = position === pos + 1;
             const hasError = videoError[reel.id];
 
             return (
               <div
-                key={reel.id}
+                key={position}
                 className={`reelsSlide ${isActive ? "active" : ""}`}
-                style={{ top: `${index * 100}%` }}
+                style={{ top: `${position * 100}%` }}
               >
                 {/* Media area */}
                 <div
                   className="reelsMediaWrap"
-                  onClick={isActive ? (isInstagramUrl(reel.videoUrl) ? undefined : handleVideoTap) : () => goToReel(index)}
+                  onClick={isActive ? (isInstagramUrl(reel.videoUrl) ? undefined : handleVideoTap) : () => goToPos(position)}
                 >
                   {/* Poster Image */}
-                  <img
-                    src={reel.posterUrl}
-                    alt={reel.caption}
-                    className={`reelsPoster ${
-                      isActive && !hasError && isPlaying ? "hiddenBehindVideo" : ""
-                    }`}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        "https://images.unsplash.com/photo-1518049362265-d5b2a6467637?auto=format&fit=crop&w=900&q=80";
-                    }}
-                  />
+                  {reel.posterUrl && (
+                    <img
+                      src={reel.posterUrl}
+                      alt={reel.caption}
+                      className={`reelsPoster ${
+                        isActive && !hasError && isPlaying && !isLoadingVideo ? "hiddenBehindVideo" : ""
+                      }`}
+                      onError={(e) => {
+                        // Never substitute an unrelated picture; just reveal the black background.
+                        e.currentTarget.style.visibility = "hidden";
+                      }}
+                    />
+                  )}
 
-                  {/* HTML5 Video Player: Preload metadata for active + next 2 reels */}
-                  {isPreloaded && !hasError && reel.videoUrl && (
+                  {/* Instagram embeds mount only when active; HTML5 videos buffer in the 3-slide window */}
+                  {!hasError && reel.videoUrl && (
                     isInstagramUrl(reel.videoUrl) ? (
-                      <iframe
-                        src={"https://www.instagram.com/reel/" + extractInstagramShortcode(reel.videoUrl) + "/embed/"}
-                        title={"Instagram Reels: " + reel.caption}
-                        className="reelsVideoElement"
-                        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                        allowFullScreen
-                        referrerPolicy="strict-origin-when-cross-origin"
-                        style={{ width: "100%", height: "100%", border: 0, background: "#000" }}
-                      />
+                      isActive && (
+                        <iframe
+                          src={"https://www.instagram.com/reel/" + extractInstagramShortcode(reel.videoUrl) + "/embed/"}
+                          title={"Instagram Reels: " + reel.caption}
+                          className="reelsVideoElement"
+                          allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                          allowFullScreen
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{ width: "100%", height: "100%", border: 0, background: "#000" }}
+                        />
+                      )
                     ) : (
                       <video
-                        ref={getVideoRef(reel.id)}
+                        ref={getVideoRef(position)}
                         src={reel.videoUrl}
-                        poster={reel.posterUrl}
+                        poster={reel.posterUrl || undefined}
                         className="reelsVideoElement"
                         playsInline
                         loop
                         muted={isMuted}
-                        preload="auto"
+                        preload={isActive || isNext ? "auto" : "metadata"}
                         onTimeUpdate={isActive ? handleTimeUpdate : undefined}
                         onWaiting={isActive ? () => setIsLoadingVideo(true) : undefined}
                         onCanPlay={isActive ? () => {
                           setIsLoadingVideo(false);
-                          const video = videoRefs.current.get(reel.id);
+                          const video = videoRefs.current.get(position);
                           if (video && video.paused && isPlaying) video.play().catch(() => {});
                         } : undefined}
                         onPlaying={isActive ? () => setIsLoadingVideo(false) : undefined}
@@ -855,7 +882,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       if (isActive) {
                         handleToggleLike();
                       } else {
-                        goToReel(index);
+                        goToPos(position);
                       }
                     }}
                     aria-label={reel.isLiked ? "Like bekor qilish" : "Like bosish"}
@@ -894,7 +921,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     className="reelsActionBtn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!isActive) goToReel(index);
+                      if (!isActive) goToPos(position);
                       setIsCommentsOpen(true);
                     }}
                     aria-label="Izohlarni ochish"
@@ -913,7 +940,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     className="reelsActionBtn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!isActive) goToReel(index);
+                      if (!isActive) goToPos(position);
                       setIsShareOpen(true);
                     }}
                     aria-label="Ulashish"
@@ -1047,14 +1074,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
                   {/* Caption with Expand toggle */}
                   <div
-                    className={`reelsCaptionBox ${captionExpanded ? "expanded" : ""}`}
+                    className={`reelsCaptionBox ${isActive && captionExpanded ? "expanded" : ""}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setCaptionExpanded((prev) => !prev);
                     }}
                   >
                     <p className="reelsCaptionText">{reel.caption}</p>
-                    {reel.caption.length > 70 && !captionExpanded && (
+                    {reel.caption.length > 70 && !(isActive && captionExpanded) && (
                       <span className="reelsMoreToggle">...</span>
                     )}
                   </div>
@@ -1070,12 +1097,13 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                   </div>
                 </div>
 
-                {/* Video Bottom Progress Bar (Active reel only) */}
+                {/* Video Bottom Progress Bar (Active reel only; width is written via ref) */}
                 {isActive && (
                   <div className="reelsProgressBarContainer">
                     <div
+                      ref={progressFillRef}
                       className="reelsProgressBarFill"
-                      style={{ width: `${videoProgress}%` }}
+                      style={{ width: "0%" }}
                     />
                   </div>
                 )}
@@ -1084,18 +1112,6 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
           })}
         </div>
       </div>
-
-      {isFeedLoading && reels.length === 0 && (
-        <div role="status" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#fff", zIndex: 30 }}>
-          Reels yuklanmoqda…
-        </div>
-      )}
-      {feedError && reels.length === 0 && (
-        <div role="alert" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "14px", padding: "28px", color: "#fff", textAlign: "center", zIndex: 30 }}>
-          <span>{feedError}</span>
-          <button type="button" onClick={() => void reloadReels()} style={{ border: 0, borderRadius: "999px", padding: "10px 20px", fontWeight: 700 }}>Qayta urinish</button>
-        </div>
-      )}
 
       {/* Comments Sheet Modal */}
       {currentReel && (
