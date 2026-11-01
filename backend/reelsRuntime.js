@@ -146,7 +146,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
           params.forEach((value, key) => { if (key !== "hash") pairs.push(`${key}=${value}`); });
           pairs.sort();
           const secret = require("crypto").createHmac("sha256", "WebAppData").update(botToken).digest();
-          const expected = require("crypto").createHmac("sha256", secret).update(pairs.join("\\n")).digest("hex");
+          const expected = require("crypto").createHmac("sha256", secret).update(pairs.join("\n")).digest("hex");
           const supplied = Buffer.from(hash);
           const calculated = Buffer.from(expected);
           if (supplied.length === calculated.length && require("crypto").timingSafeEqual(supplied, calculated)) {
