@@ -1,0 +1,36 @@
+/* Hero banner placeholder.
+   Shown only while the track has no slides yet (first ever visit, banners still
+   loading), so slow connections see a soft shimmer instead of an empty block.
+   The animation stops by itself after a few seconds, so a failed request never
+   leaves an endless spinner. */
+.hero .heroSlideTrack:empty::before {
+  content: "";
+  flex: 0 0 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    rgba(240, 223, 227, 0.55) 8%,
+    rgba(255, 249, 250, 0.95) 18%,
+    rgba(240, 223, 227, 0.55) 33%
+  );
+  background-size: 200% 100%;
+  animation: guliHeroShimmer 1.4s linear 8;
+}
+
+@keyframes guliHeroShimmer {
+  to {
+    background-position-x: -200%;
+  }
+}
+
+/* While a slide image is still downloading, show a soft brand tint behind it. */
+.heroSlideItem {
+  background-color: #f6e8ec;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero .heroSlideTrack:empty::before {
+    animation: none;
+  }
+}
