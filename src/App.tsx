@@ -4439,7 +4439,7 @@ export default function App() {
               />
             </span>
             <span>
-              <b className="brandMarketWord">{brandName && !brandName.toLowerCase().includes("guli premium") ? brandName : "Guli Market"}</b>
+              <b className="brandMarketWord">Market</b>
             </span>
           </button>
         </div>
