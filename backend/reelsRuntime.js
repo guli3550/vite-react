@@ -144,7 +144,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
     }
-    const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || null, body };
+    const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || "/guli-logo.png", body };
     const { data, error } = await db().from("reel_comments").insert(row).select("*").single();
     if (error) throw error;
     return res.status(201).json({ success: true, data: { id: data.id, authorName: data.author_name, authorAvatar: data.author_avatar || "", text: data.body, createdAt: data.created_at, likesCount: Number(data.likes_count || 0) } });
