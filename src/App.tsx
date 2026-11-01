@@ -954,13 +954,6 @@ export default function App() {
     const saved = (localStorage.getItem(`guli_lang_${currentUserId}`) || localStorage.getItem("guli_lang")) as Language;
     return saved === "uz" || saved === "ru" || saved === "en" ? saved : "uz";
   });
-  const [brandName, setBrandName] = useState<string>(() => {
-    const saved = localStorage.getItem("guli_store_name") || localStorage.getItem("guli_custom_brand_name");
-    if (!saved || saved.toLowerCase().includes("guli premium")) {
-      return "Guli Market";
-    }
-    return saved;
-  });
   const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem(`guli_currency_${currentUserId}`) as Currency;
     return saved === "UZS" || saved === "USD" || saved === "RUB" ? saved : "UZS";
