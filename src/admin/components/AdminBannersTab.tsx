@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getApiBaseUrl } from "../../lib/apiOrigin";
+import { refreshHomeBanners } from "../../utils/bannerFetchCache";
 import { EmptyState } from "./AdminUIComponents";
 
 export type Banner = {
@@ -46,6 +47,10 @@ const compressImage = (file: File, maxWidth = 1400, maxHeight = 900, quality = 0
 
 export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
   const [banners, setBanners] = useState<Banner[]>([]);
+  // True only after the current banner list was loaded from the server. Saves are
+  // sent as a full replacement (so deleted banners really disappear from the home
+  // screen) only in that case, never from a list that failed to load.
+  const loadedRef = useRef(false);
 /*
     if ((window as any).__GULI_ADMIN_BANNERS__) {
       return (window as any).__GULI_ADMIN_BANNERS__;
@@ -70,10 +75,12 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
 
   useEffect(() => {
     const apiBase = getApiBaseUrl();
-    fetch(`${apiBase}/api/banners`)
+    // `fresh=1` bypasses the storefront banner cache: the admin must always see the real list.
+    fetch(`${apiBase}/api/banners?fresh=1`, { cache: "no-store" })
       .then((res) => res.json())
       .then((json) => {
         if (json.success && Array.isArray(json.data)) {
+          loadedRef.current = true;
           setBanners(json.data);
           (window as any).__GULI_ADMIN_BANNERS__ = json.data;
           try {
@@ -94,31 +101,40 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
       console.warn("LocalStorage error:", e);
     }
 
-    window.dispatchEvent(new Event("guli_banners_updated"));
-
     const apiBase = getApiBaseUrl();
     const adminToken = sessionStorage.getItem("guli_admin_token") || "";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
 
-    fetch(`${apiBase}/api/admin/banners`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-      },
-      body: JSON.stringify({ banners: list }),
-    }).catch(() => {});
+    void (async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/admin/banners`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ banners: list, replaceAll: loadedRef.current }),
+        });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.message || "Bannerlarni saqlashda xatolik");
+        }
 
-    const active = list.find((b) => b.active);
-    if (active) {
-      fetch(`${apiBase}/api/admin/settings/banner`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-        },
-        body: JSON.stringify({ image_url: active.imageUrl }),
-      }).catch(() => {});
-    }
+        const active = list.find((b) => b.active);
+        if (active) {
+          await fetch(`${apiBase}/api/admin/settings/banner`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ image_url: active.imageUrl }),
+          }).catch(() => {});
+        }
+
+        // Saved on the server: refresh this device's cached home banners right away
+        // (other devices pick the change up on their next open / return to the app).
+        await refreshHomeBanners(apiBase);
+        window.dispatchEvent(new Event("guli_banners_updated"));
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "Bannerlarni saqlashda xatolik");
+      }
+    })();
   };
 
   const handleOpenAdd = () => {
@@ -212,7 +228,7 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
           {banners.map((b) => (
             <div key={b.id} className="bannerCardItem">
               <div className="bannerCardImgWrap">
-                <img src={b.imageUrl} alt={b.title} />
+                <img src={b.imageUrl} alt={b.title} loading="lazy" decoding="async" />
                 <span className="bannerBadgeChip">{b.badgeText}</span>
               </div>
               <div className="bannerCardBody">
@@ -372,4 +388,3 @@ export function AdminBannersTab({ notify }: { notify: (m: string) => void }) {
     </section>
   );
 }
-

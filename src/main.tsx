@@ -1,15 +1,20 @@
 import './lib/customerIdentityBridge.ts'
 import { getApiBaseUrl } from './lib/apiOrigin'
-import { StrictMode, Component, type ErrorInfo, type ReactNode } from 'react'
+import { StrictMode, Suspense, lazy, Component, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
-import Admin from './admin/AdminPro.tsx'
 import { GuliStartupSplash } from './components/GuliStartupSplash.tsx'
 import './index.css'
+import './heroBannerSkeleton.css'
 import './admin/AdminNaming.css'
 import './admin/CustomerIdentity.css'
 import './components/ModernProfileCardBg.css'
 import { GULI_LOGO_BASE64 } from './utils/guliLogoBase64'
+import { installBannerFetchCache } from './utils/bannerFetchCache'
+
+// The admin panel is large and only needed on /admin. Loading it lazily keeps it
+// out of the customer bundle, which is what slow connections download first.
+const Admin = lazy(() => import('./admin/AdminPro.tsx'))
 
 // Remove the legacy pre-React splash if an older cached index.html still
 // contains it. The React GuliStartupSplash is now the single startup overlay.
@@ -103,6 +108,11 @@ if (typeof window !== 'undefined') {
     webApp?.ready()
     webApp?.expand()
   } catch {}
+
+  // Home banners: serve the last known manifest instantly and revalidate in the
+  // background. Installed before the Telegram header wrapper below so the cached
+  // banner request never goes through it (no extra header, no CORS preflight).
+  installBannerFetchCache()
 
   const originalFetch = window.fetch.bind(window)
   const apiBase = getApiBaseUrl()
@@ -260,7 +270,11 @@ const isAdmin = typeof window !== 'undefined' && (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isAdmin ? <Admin /> : (
+    {isAdmin ? (
+      <Suspense fallback={<div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#fff9fa', color: '#806f75', fontFamily: 'system-ui, sans-serif', fontSize: 14 }}>Yuklanmoqda…</div>}>
+        <Admin />
+      </Suspense>
+    ) : (
       <StorefrontErrorBoundary>
         {/* Non-blocking branded startup overlay. App mounts and initializes
             immediately underneath; this only controls how long the visual
