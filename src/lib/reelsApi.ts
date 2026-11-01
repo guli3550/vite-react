@@ -195,9 +195,11 @@ export async function fetchServerReelComments(reelId: string): Promise<ReelItem[
 
 export async function addServerReelComment(reelId: string, text: string): Promise<ReelItem["comments"][number]> {
   const token = typeof window !== "undefined" ? localStorage.getItem("guli_access_token") || "" : "";
+  const telegramInitData = typeof window !== "undefined" ? String((window as any).Telegram?.WebApp?.initData || "") : "";
   const guestKey = getGuestCommentKey();
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (telegramInitData) headers["X-Telegram-Init-Data"] = telegramInitData;
   return request<ReelItem["comments"][number]>(`/api/reels/${encodeURIComponent(reelId)}/comments`, {
     method: "POST",
     headers,
