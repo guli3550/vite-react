@@ -2,6 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
+const { createPresignedPutUrl, publicObjectUrl } = require("./r2Storage");
 
 let client;
 function db() {
@@ -227,12 +228,10 @@ install("post", "/api/admin/reels/upload-url", requireAdmin, async (req, res) =>
     if (!allowed.has(contentType)) return fail(res, new Error("Bu fayl formati qo'llab-quvvatlanmaydi"), 400);
     const isVideo = contentType.startsWith("video/");
     const ext = (fileName.match(/\.([a-zA-Z0-9]{2,5})$/) || [])[1] || (isVideo ? "mp4" : "webp");
-    const path = `${isVideo ? "videos" : "posters"}/${require("crypto").randomUUID()}.${ext.toLowerCase()}`;
-    const bucket = "reels-media";
-    const { data, error } = await db().storage.from(bucket).createSignedUploadUrl(path);
-    if (error) throw error;
-    const publicUrl = db().storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    return res.json({ success: true, data: { path, token: data.token, publicUrl, bucket } });
+    const path = `reels/${isVideo ? "videos" : "posters"}/${require("crypto").randomUUID()}.${ext.toLowerCase()}`;
+    const signedUrl = createPresignedPutUrl(path, 600);
+    const publicUrl = publicObjectUrl(path);
+    return res.json({ success: true, data: { path, signedUrl, publicUrl, bucket: "r2" } });
   } catch (error) { return fail(res, error); }
 });
 
