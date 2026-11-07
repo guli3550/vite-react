@@ -30,7 +30,7 @@ In Cloudflare R2 > guli-market-media > Settings > CORS Policy, configure:
 - Allowed origins:
   - `https://gulii.uz`
   - `https://www.gulii.uz`
-  - `https://vite-react-seven-inky-10.vercel.app`
+  - `https://vite-react-git-feat-cloudflare-r2-media-migration-guli3550.vercel.app`
   - Add the exact Vercel Preview origin used for this PR.
 - Allowed methods: `GET`, `HEAD`, `PUT`
 - Allowed headers: `content-type`, `cache-control`
