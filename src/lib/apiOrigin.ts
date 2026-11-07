@@ -11,8 +11,21 @@
 
 export const CANONICAL_GATEWAY_URL = "https://guli-gateway.parizodabaxtiyorov.workers.dev";
 export const LEGACY_RENDER_ORIGIN = "https://guli-lingerie-api.onrender.com";
+export const R2_PREVIEW_API_ORIGIN = "https://guli-lingerie-api-r2-preview.onrender.com";
 
 export function getApiBaseUrl(): string {
+  // The isolated R2 migration Preview must talk only to its matching Render
+  // Preview backend, never to the production /api rewrite or gateway.
+  if (typeof window !== "undefined") {
+    const host = String(window.location.hostname || "").toLowerCase();
+    if (
+      host === "vite-react-git-feat-cloudflare-r2-media-migration-guli3550.vercel.app" ||
+      host === "vite-react-pa2of4cyv-guli3550.vercel.app"
+    ) {
+      return R2_PREVIEW_API_ORIGIN;
+    }
+  }
+
   // Customer-facing production traffic uses the same-origin /api proxy.
   // This avoids browser CORS/network failures when the canonical Worker is
   // healthy but unreachable from a particular browser/network path.
