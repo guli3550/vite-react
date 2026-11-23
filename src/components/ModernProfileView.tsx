@@ -2152,13 +2152,6 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         </button>
       </section>
 
-      {/* Three-row social promo feed for the customer profile. */}
-      <section
-        aria-label="GULI ijtimoiy tarmoqlari"
-        style={{ margin: "0 16px 18px", overflow: "hidden" }}
-      >
-        <SocialPromoSection language={language} variant="pill" maxRows={3} isDark={activeTheme === "dark"} />
-      </section>
 
       {/* 6. Sozlamalar va Xavfsizlik */}
       <section className="profileSection" style={{ marginBottom: "20px" }}>
@@ -2224,6 +2217,14 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             <i style={{ color: "#ef4444" }}>›</i>
           </button>
         )}
+      </section>
+
+      {/* Three-row social promo feed: below cache controls, above the profile footer/username. */}
+      <section
+        aria-label="GULI ijtimoiy tarmoqlari"
+        style={{ margin: "0 16px 18px", overflow: "hidden" }}
+      >
+        <SocialPromoSection language={language} variant="pill" maxRows={3} isDark={activeTheme === "dark"} />
       </section>
 
       {/* Watermark */}
