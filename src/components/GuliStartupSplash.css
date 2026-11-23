@@ -154,6 +154,10 @@
   gap: 12px;
 }
 
+.guliSplashStatusRowCentered {
+  justify-content: center;
+}
+
 .guliSplashStatus {
   font-size: clamp(13px, 2.8vw, 16px);
   line-height: 1.25;

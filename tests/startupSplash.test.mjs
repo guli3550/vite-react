@@ -27,6 +27,7 @@ test("startupProgress advances monotonically across boot phases to 100%", () => 
 
   const banners = markStartupPhase("banners");
   assert.equal(banners.progress, 66);
+  assert.equal(banners.label, "");
 
   const ready = markStartupPhase("products");
   assert.equal(ready.progress, 100);

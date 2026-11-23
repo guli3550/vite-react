@@ -594,8 +594,6 @@ export function OnlineChatView({
     ).then((sent) => {
       if (!sent) {
         triggerToast("❌ Xabar yuborilmadi. Fayl formati yoki ulanishni tekshiring.");
-      } else if (sent.deliveryStatus === "queued") {
-        triggerToast("⏳ Internet yo‘q: xabar navbatga qo‘yildi va tarmoq tiklanganda yuboriladi");
       }
     });
   };

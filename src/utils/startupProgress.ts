@@ -9,7 +9,7 @@ export interface StartupProgressState {
 const DEFAULT_PHASE_LABELS: Record<StartupPhase, string> = {
   boot: "Ilova ishga tushmoqda...",
   cache: "Do‘kon tayyorlanmoqda...",
-  banners: "Katalog yuklanmoqda...",
+  banners: "",
   products: "Mahsulotlar tayyorlanmoqda...",
 };
 
@@ -104,7 +104,7 @@ export function markStartupPhase(phase: StartupPhase, customLabel?: string): Sta
     computedLabel = customLabel?.trim() || DEFAULT_PHASE_LABELS.products;
   } else if (nextPhases.banners) {
     computedProgress = Math.max(computedProgress, 66);
-    computedLabel = customLabel?.trim() || DEFAULT_PHASE_LABELS.banners;
+    computedLabel = customLabel?.trim() ?? DEFAULT_PHASE_LABELS.banners;
   } else if (nextPhases.cache) {
     computedProgress = Math.max(computedProgress, 40);
     computedLabel = customLabel?.trim() || DEFAULT_PHASE_LABELS.cache;

@@ -22,7 +22,6 @@ export function GuliStartupSplash() {
   const [leaving, setLeaving] = useState(false);
   const [targetProgress, setTargetProgress] = useState(() => Math.max(15, initial.progress));
   const [progress, setProgress] = useState(() => Math.max(12, Math.min(100, initial.progress || 12)));
-  const [statusLabel, setStatusLabel] = useState(() => initial.label || "Ilova ishga tushmoqda...");
   const [mountedAt] = useState(() => Date.now());
 
   useEffect(() => {
@@ -36,22 +35,19 @@ export function GuliStartupSplash() {
       unmountTimer = window.setTimeout(() => setMounted(false), 380);
     };
 
-    const syncFromState = (nextProgress?: number, nextLabel?: string) => {
+    const syncFromState = (nextProgress?: number) => {
       if (typeof nextProgress === "number" && Number.isFinite(nextProgress)) {
         const clamped = Math.max(0, Math.min(100, nextProgress));
         setTargetProgress((prev) => Math.max(prev, clamped));
       }
-      if (typeof nextLabel === "string" && nextLabel.trim()) {
-        setStatusLabel(nextLabel.trim());
-      }
     };
 
     const latest = getStartupProgressState();
-    syncFromState(latest.progress, latest.label);
+    syncFromState(latest.progress);
 
     const onProgress = (event: Event) => {
-      const detail = (event as CustomEvent<{ progress?: number; label?: string }>).detail;
-      syncFromState(detail?.progress, detail?.label);
+      const detail = (event as CustomEvent<{ progress?: number }>).detail;
+      syncFromState(detail?.progress);
     };
 
     window.addEventListener("guli_startup_progress", onProgress);
@@ -59,7 +55,6 @@ export function GuliStartupSplash() {
     const safetyTimer = window.setTimeout(() => {
       setTargetProgress(100);
       setProgress(100);
-      setStatusLabel("Guli Market'ga xush kelibsiz!");
       triggerLeave();
     }, SAFETY_TIMEOUT_MS);
 
@@ -98,7 +93,6 @@ export function GuliStartupSplash() {
   if (!mounted) return null;
 
   const roundedProgress = Math.min(100, Math.max(0, Math.round(progress)));
-  const isReady = roundedProgress >= 100;
 
   return (
     <div
@@ -136,10 +130,7 @@ export function GuliStartupSplash() {
         </div>
 
         <div className="guliSplashFooter">
-          <div className="guliSplashStatusRow">
-            <span className="guliSplashStatus">
-              {isReady ? "Guli Market'ga xush kelibsiz!" : statusLabel}
-            </span>
+          <div className="guliSplashStatusRow guliSplashStatusRowCentered">
             <span className="guliSplashPercent">{roundedProgress}%</span>
           </div>
           <div

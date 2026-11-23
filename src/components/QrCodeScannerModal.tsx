@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import jsQR from "jsqr";
 import {
   QrCode,
@@ -400,9 +401,9 @@ export const QrCodeScannerModal: React.FC<QrCodeScannerModalProps> = ({
     typeof window !== "undefined" && (window as any).Telegram?.WebApp?.showScanQrPopup,
   );
 
-  if (!isOpen) return null;
+  if (!isOpen && !isClosing) return null;
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
@@ -644,6 +645,9 @@ export const QrCodeScannerModal: React.FC<QrCodeScannerModalProps> = ({
       />
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(modalContent, document.body);
 };
 
 export default QrCodeScannerModal;
