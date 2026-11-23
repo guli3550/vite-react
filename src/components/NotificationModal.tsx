@@ -123,6 +123,22 @@ export function NotificationModal({
       if (msg.sender !== "admin" || msg.id === "welcome-msg-1") return;
       const isStatus = isOrderStatusText(msg.text);
       const isUnread = !msg.read;
+      const mediaSnippet =
+        msg.type === "video_note"
+          ? "📹 Dumaloq video"
+          : msg.type === "video"
+          ? "🎬 Video xabar"
+          : msg.type === "audio"
+          ? "🎙️ Ovozli xabar"
+          : msg.type === "file"
+          ? `📄 ${msg.fileName || "Hujjat"}`
+          : msg.type === "location"
+          ? `📍 ${msg.location?.address || "Geolokatsiya"}`
+          : msg.type === "poll"
+          ? `📊 ${msg.pollQuestion || "So‘rovnoma"}`
+          : msg.mediaUrl
+          ? "📷 Rasm biriktirildi"
+          : "";
 
       list.push({
         id: `chat-${msg.id}`,
@@ -139,7 +155,7 @@ export function NotificationModal({
           : language === "en"
           ? "GULI Support"
           : "GULI Qo‘llab-quvvatlash",
-        text: msg.text || (msg.mediaUrl ? "📷 Rasm biriktirildi" : ""),
+        text: msg.text || mediaSnippet,
         timestamp: msg.timestamp,
         read: !isUnread,
         icon: isStatus ? "📦" : "💬",

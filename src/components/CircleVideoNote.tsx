@@ -123,6 +123,19 @@ interface TelegramCircularVideoRecorderOverlayProps {
   onShowToast?: (msg: string) => void;
 }
 
+function pickSupportedVideoMime(): string {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "video/webm";
+  }
+  const candidates = [
+    "video/webm;codecs=vp8,opus",
+    "video/webm;codecs=vp9,opus",
+    "video/webm",
+    "video/mp4",
+  ];
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "";
+}
+
 export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVideoRecorderOverlayProps> = ({
   onCancel,
   onSend,
@@ -130,15 +143,35 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<number>(0);
+  const cancelledRef = useRef<boolean>(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const chunksRef = useRef<Blob[]>([]);
 
+  const releaseStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {}
+      });
+      streamRef.current = null;
+    }
+  };
+
   useEffect(() => {
+    let mounted = true;
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: "user", width: 480, height: 480 }, audio: true })
       .then((s) => {
+        if (!mounted) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = s;
         setStream(s);
         if (videoRef.current) {
           videoRef.current.srcObject = s;
@@ -150,9 +183,14 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
       });
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
+      mounted = false;
+      cancelledRef.current = true;
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
       }
+      releaseStream();
     };
   }, []);
 
@@ -161,11 +199,12 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
     if (isRecording) {
       interval = window.setInterval(() => {
         setTimer((t) => {
+          const next = t >= 60 ? 60 : t + 1;
+          timerRef.current = next;
           if (t >= 60) {
             stopRecording();
-            return 60;
           }
-          return t + 1;
+          return next;
         });
       }, 1000);
     }
@@ -175,21 +214,34 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
   }, [isRecording]);
 
   const startRecording = () => {
-    if (!stream) return;
+    const activeStream = streamRef.current || stream;
+    if (!activeStream) return;
     chunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
+    cancelledRef.current = false;
+    timerRef.current = 0;
+    setTimer(0);
+    const mimeType = pickSupportedVideoMime();
+    const recorder = mimeType
+      ? new MediaRecorder(activeStream, { mimeType })
+      : new MediaRecorder(activeStream);
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const durationSec = Math.max(1, timerRef.current);
+      const outputMime = (mimeType || recorder.mimeType || "video/webm").split(";")[0];
+      releaseStream();
+      if (cancelledRef.current || chunksRef.current.length === 0) return;
+      const blob = new Blob(chunksRef.current, { type: outputMime });
       const reader = new FileReader();
       reader.onloadend = () => {
-        onSend(reader.result as string, timer);
+        if (typeof reader.result === "string") {
+          onSend(reader.result, durationSec);
+        }
       };
       reader.readAsDataURL(blob);
     };
-    recorder.start();
+    recorder.start(250);
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
   };
@@ -199,6 +251,17 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
+  };
+
+  const handleCancelClick = () => {
+    cancelledRef.current = true;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+    releaseStream();
+    onCancel();
   };
 
   return (
@@ -299,7 +362,7 @@ export const TelegramCircularVideoRecorderOverlay: React.FC<TelegramCircularVide
 
         <button
           type="button"
-          onClick={onCancel}
+          onClick={handleCancelClick}
           style={{
             padding: "14px 20px",
             borderRadius: "30px",

@@ -1098,19 +1098,33 @@ app.post("/api/chat/messages", async (req, res) => {
     const cleanText = String(text || "").trim();
     const mediaUrl = String(media_url || "").trim();
     const bodyMetadata = metadata && typeof metadata === "object" ? metadata : {};
-    const hasMedia = Boolean(mediaUrl || bodyMetadata.mediaUrl);
+    const hasMedia = Boolean(mediaUrl || bodyMetadata.mediaUrl || bodyMetadata.location || (Array.isArray(bodyMetadata.pollOptions) && bodyMetadata.pollOptions.length));
     if (!telegram_id || !sender || (!cleanText && !hasMedia)) {
       return res.status(400).json({ success: false, message: "Ma'lumotlar to'liq emas" });
     }
 
-    // Customer attachments may be sent without a caption. The legacy route
-    // previously required text and rejected photo-only messages.
+    const msgType = String(bodyMetadata.type || req.body?.type || "").toLowerCase();
+    const clientMsgId = String(req.body?.client_message_id || req.body?.clientMessageId || bodyMetadata.clientMessageId || bodyMetadata.client_message_id || "").trim();
+    if (clientMsgId && !bodyMetadata.clientMessageId) {
+      bodyMetadata.clientMessageId = clientMsgId;
+    }
+
     const displayText = cleanText || (
-      bodyMetadata.type === "image" || mediaUrl
+      msgType === "image"
         ? "📷 Rasm"
-        : bodyMetadata.type === "audio"
-          ? "🎙️ Ovozli xabar"
-          : "📎 Fayl"
+        : msgType === "video_note"
+          ? "📹 Dumaloq video"
+          : msgType === "video"
+            ? "🎬 Video"
+            : msgType === "audio" || msgType === "voice"
+              ? "🎙️ Ovozli xabar"
+              : msgType === "location"
+                ? `📍 ${bodyMetadata.location?.address || "Geolokatsiya"}`
+                : msgType === "poll"
+                  ? String(bodyMetadata.pollQuestion || "📊 So‘rovnoma")
+                  : mediaUrl || bodyMetadata.mediaUrl
+                    ? `📄 ${bodyMetadata.fileName || "Fayl"}`
+                    : "💬 Xabar"
     );
     // chat_messages uses metadata as the canonical attachment envelope.
     // Do not write media_url as a top-level DB column because the production

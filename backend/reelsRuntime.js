@@ -80,27 +80,46 @@ function toRow(input, existing = {}) {
     updated_at: new Date().toISOString(),
   };
 }
+function isMissingRelationError(error) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || error || "");
+  return code === "42P01" || code === "PGRST205" || /relation .* does not exist|could not find the table .* in the schema cache/i.test(msg);
+}
 async function fetchReels(status, viewerKey = "") {
   let query = db().from("reels").select("*").order("created_at", { ascending: false });
   if (status) query = query.eq("status", status);
   const { data, error } = await query.limit(100);
-  if (error) throw error;
+  if (error) {
+    if (status === "active" && isMissingRelationError(error)) {
+      console.warn("[Reels API] reels table not migrated yet; returning empty public feed.");
+      return [];
+    }
+    throw error;
+  }
   const rows = data || [];
   if (!rows.length) return [];
   const ids = rows.map((row) => row.id);
-  const result = await db().from("reel_comments").select("*").in("reel_id", ids).order("created_at", { ascending: false }).limit(2000);
-  if (result.error) throw result.error;
   const grouped = new Map();
-  for (const comment of result.data || []) {
-    const list = grouped.get(comment.reel_id) || [];
-    list.push(comment);
-    grouped.set(comment.reel_id, list);
+  const result = await db().from("reel_comments").select("*").in("reel_id", ids).order("created_at", { ascending: false }).limit(2000);
+  if (result.error) {
+    if (!isMissingRelationError(result.error)) throw result.error;
+    console.warn("[Reels API] reel_comments table not migrated yet; skipping comments.");
+  } else {
+    for (const comment of result.data || []) {
+      const list = grouped.get(comment.reel_id) || [];
+      list.push(comment);
+      grouped.set(comment.reel_id, list);
+    }
   }
   let likedIds = new Set();
   if (/^[a-zA-Z0-9_-]{12,128}$/.test(viewerKey)) {
     const likes = await db().from("reel_likes").select("reel_id").eq("viewer_key", viewerKey).in("reel_id", ids);
-    if (likes.error) throw likes.error;
-    likedIds = new Set((likes.data || []).map((item) => String(item.reel_id)));
+    if (likes.error) {
+      if (!isMissingRelationError(likes.error)) throw likes.error;
+      console.warn("[Reels API] reel_likes table not migrated yet; skipping likes.");
+    } else {
+      likedIds = new Set((likes.data || []).map((item) => String(item.reel_id)));
+    }
   }
   return rows.map((row) => normalizeReel(row, grouped.get(row.id) || [], likedIds.has(String(row.id))));
 }

@@ -20,8 +20,9 @@ test("dedupeById keeps first occurrence", () => {
   assert.deepEqual(ids(dedupeById([{ id: "a" }, { id: "b" }, { id: "a" }])), ["a", "b"]);
 });
 
-test("windowPositions mounts at most 3 slides and 1 for a single reel", () => {
-  assert.deepEqual(windowPositions(0, 5), [-1, 0, 1]);
+test("windowPositions mounts at most 3 slides, 1 for a single reel, and never mounts a previous slide at pos 0", () => {
+  assert.deepEqual(windowPositions(0, 5), [0, 1]);
+  assert.deepEqual(windowPositions(1, 5), [0, 1, 2]);
   assert.deepEqual(windowPositions(7, 2), [6, 7, 8]);
   assert.deepEqual(windowPositions(0, 1), [0]);
   assert.deepEqual(windowPositions(0, 0), []);

@@ -1,7 +1,9 @@
+/* GULI admin chat image download runtime (debounced on navigation/chat updates; no 2s polling). */
 (() => {
   'use strict';
-  const API = String(window.__GULI_API_URL || sessionStorage.getItem('guli_custom_api_url') || 'https://guli-gateway.parizodabaxtiyorov.workers.dev').replace(/\/$/, '');
+  const API = String(window.__GULI_API_URL || sessionStorage.getItem('guli_custom_api_url') || '').replace(/\/$/, '');
   const selector = `img[src*="/api/chat/"]`;
+  let scheduled = null;
 
   async function download(url, fileName) {
     const res = await fetch(url, { credentials: 'omit' });
@@ -40,7 +42,8 @@
         try {
           const src = String(img.currentSrc || img.src || '');
           const name = img.closest('[data-file-name]')?.getAttribute('data-file-name') || 'guli-chat-media';
-          await download(src.startsWith('http') ? src : `${API}${src.startsWith('/') ? '' : '/'}${src}`, name);
+          const resolved = src.startsWith('http') || src.startsWith('data:') || src.startsWith('blob:') ? src : `${API}${src.startsWith('/') ? '' : '/'}${src}`;
+          await download(resolved, name);
           button.textContent = '✓ Saqlandi';
         } catch (e) {
           console.error('[GULI chat media download]', e);
@@ -54,8 +57,19 @@
     });
   }
 
-  const observer = new MutationObserver(scan);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  setInterval(scan, 2000);
-  scan();
+  function scheduleScan() {
+    if (scheduled) return;
+    scheduled = setTimeout(() => {
+      scheduled = null;
+      scan();
+    }, 200);
+  }
+
+  window.addEventListener('guli_chat_updated', scheduleScan);
+  window.addEventListener('click', scheduleScan);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleScan, { once: true });
+  } else {
+    scheduleScan();
+  }
 })();

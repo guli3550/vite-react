@@ -17,10 +17,33 @@ function isAdmin(req) {
 }
 
 function metadataFromBody(body) {
-  const keys = ["conversationId","clientMessageId","client_message_id","type","mediaUrl","fileName","audioDuration","replyToId","replyToText","replyToSender","reactions","pollQuestion","pollOptions","userVotedOption","location","userName","userPhoto"];
+  const keys = [
+    "conversationId",
+    "clientMessageId",
+    "client_message_id",
+    "type",
+    "mediaUrl",
+    "telegramMediaUrl",
+    "mediaPath",
+    "mimeType",
+    "fileName",
+    "audioDuration",
+    "videoDuration",
+    "replyToId",
+    "replyToText",
+    "replyToSender",
+    "reactions",
+    "pollQuestion",
+    "pollOptions",
+    "userVotedOption",
+    "location",
+    "userName",
+    "userPhoto",
+  ];
   const metadata = {};
   for (const key of keys) if (body?.[key] !== undefined) metadata[key] = body[key];
   if (body?.metadata && typeof body.metadata === "object") Object.assign(metadata, body.metadata);
+  if (metadata.client_message_id && !metadata.clientMessageId) metadata.clientMessageId = metadata.client_message_id;
   return metadata;
 }
 
@@ -34,9 +57,7 @@ express.application.post = function patchedPost(path, ...handlers) {
       // This lets us finish the metadata write (and merge it into the
       // body) before anything downstream (including chatRealtimePatch's
       // own res.json interception, which drives the realtime/SSE
-      // publish) ever sees the response. See commit message for why the
-      // previous "update after res.json()" ordering was Root Cause A of
-      // browser image realtime failures.
+      // publish) ever sees the response.
       let captured;
       let captureCalled = false;
       const originalJson = res.json.bind(res);
@@ -50,9 +71,11 @@ express.application.post = function patchedPost(path, ...handlers) {
       const id = body?.data?.id;
       if (id && Object.keys(metadata).length && supabase) {
         try {
+          const existingMeta = body?.data?.metadata && typeof body.data.metadata === "object" ? body.data.metadata : {};
+          const mergedMeta = { ...existingMeta, ...metadata };
           const { data: updated, error } = await supabase
             .from("chat_messages")
-            .update({ metadata })
+            .update({ metadata: mergedMeta })
             .eq("id", id)
             .select("*")
             .single();
@@ -60,20 +83,17 @@ express.application.post = function patchedPost(path, ...handlers) {
             console.warn("[Chat persistence] metadata update skipped:", error.message);
           } else if (updated) {
             body = { ...body, data: { ...updated } };
-            // Canonical flattened fields for frontend consumers that read
-            // top-level type/mediaUrl instead of message.metadata.*.
-            if (metadata.type !== undefined) body.data.type = metadata.type;
-            if (metadata.mediaUrl !== undefined) body.data.mediaUrl = metadata.mediaUrl;
-            if (metadata.fileName !== undefined) body.data.fileName = metadata.fileName;
-            if (metadata.mimeType !== undefined) body.data.mimeType = metadata.mimeType;
+            if (mergedMeta.type !== undefined) body.data.type = mergedMeta.type;
+            if (mergedMeta.mediaUrl !== undefined) body.data.mediaUrl = mergedMeta.mediaUrl;
+            if (mergedMeta.fileName !== undefined) body.data.fileName = mergedMeta.fileName;
+            if (mergedMeta.mimeType !== undefined) body.data.mimeType = mergedMeta.mimeType;
+            if (mergedMeta.audioDuration !== undefined) body.data.audioDuration = mergedMeta.audioDuration;
+            if (mergedMeta.videoDuration !== undefined) body.data.videoDuration = mergedMeta.videoDuration;
+            if (mergedMeta.clientMessageId !== undefined) body.data.clientMessageId = mergedMeta.clientMessageId;
 
-            // The realtime wrapper publishes the base row before this outer
-            // persistence layer finishes merging attachment metadata. For
-            // media messages that first event can therefore arrive without
-            // mediaUrl/type and the admin UI misses the actual attachment.
-            // Re-publish the fully enriched row after the metadata update.
             if (
-              (metadata.mediaUrl || metadata.type === "image" || metadata.type === "file" || metadata.type === "audio") &&
+              (mergedMeta.mediaUrl ||
+                ["image", "file", "audio", "video", "video_note", "location", "poll"].includes(String(mergedMeta.type || ""))) &&
               typeof globalThis.__GULI_CHAT_PUBLISH__ === "function"
             ) {
               try {

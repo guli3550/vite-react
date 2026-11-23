@@ -43,6 +43,7 @@ export function dedupeById<T extends WithId>(list: readonly T[]): T[] {
 export function windowPositions(pos: number, length: number): number[] {
   if (length <= 0) return [];
   if (length === 1) return [pos];
+  if (pos <= 0) return [0, 1];
   return [pos - 1, pos, pos + 1];
 }
 

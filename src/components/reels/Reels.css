@@ -12,11 +12,12 @@
   height: 100vh;
   height: 100dvh;
   min-height: 100%;
-  background: #ffffff;
+  background: #000000;
   overflow: hidden;
+  overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: pan-y;
+  touch-action: none;
   padding: 0 !important;
   margin: 0 !important;
 }
@@ -32,7 +33,9 @@
   box-shadow: none !important;
   border: none !important;
   overflow: hidden;
-  background: #ffffff;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: #000000;
   margin: 0 !important;
   padding: 0 !important;
 }
@@ -75,7 +78,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  touch-action: manipulation;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -773,6 +776,7 @@
   -webkit-line-clamp: unset;
   max-height: 140px;
   overflow-y: auto;
+  touch-action: pan-y;
 }
 
 .reelsMoreToggle {
@@ -1040,6 +1044,7 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;

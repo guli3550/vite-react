@@ -159,23 +159,44 @@ async function persistTelegramMessage(message) {
   let fileId = "";
   let fileName = "";
   let msgType = "text";
+  let mimeHint = "";
+  let audioDuration;
+  let videoDuration;
   if (Array.isArray(message?.photo) && message.photo.length > 0) {
     const largest = message.photo[message.photo.length - 1];
     fileId = largest.file_id;
     fileName = "photo.jpg";
     msgType = "image";
+    mimeHint = "image/jpeg";
+  } else if (message?.video) {
+    fileId = message.video.file_id;
+    fileName = message.video.file_name || "video.mp4";
+    msgType = "video";
+    mimeHint = message.video.mime_type || "video/mp4";
+    if (Number.isFinite(Number(message.video.duration))) videoDuration = Number(message.video.duration);
+  } else if (message?.video_note) {
+    fileId = message.video_note.file_id;
+    fileName = "video_note.mp4";
+    msgType = "video_note";
+    mimeHint = "video/mp4";
+    if (Number.isFinite(Number(message.video_note.duration))) videoDuration = Number(message.video_note.duration);
   } else if (message?.document) {
     fileId = message.document.file_id;
     fileName = message.document.file_name || "document";
     msgType = "file";
+    mimeHint = message.document.mime_type || "";
   } else if (message?.audio) {
     fileId = message.audio.file_id;
     fileName = message.audio.file_name || "audio.mp3";
     msgType = "audio";
+    mimeHint = message.audio.mime_type || "audio/mpeg";
+    if (Number.isFinite(Number(message.audio.duration))) audioDuration = Number(message.audio.duration);
   } else if (message?.voice) {
     fileId = message.voice.file_id;
     fileName = "voice.ogg";
     msgType = "audio";
+    mimeHint = message.voice.mime_type || "audio/ogg";
+    if (Number.isFinite(Number(message.voice.duration))) audioDuration = Number(message.voice.duration);
   }
 
   let mediaProxyUrl = fileId ? `/api/chat/media/${encodeURIComponent(fileId)}?name=${encodeURIComponent(fileName)}` : null;
@@ -187,13 +208,15 @@ async function persistTelegramMessage(message) {
         telegramId: chatId,
         fileId,
         fileName,
-        type: msgType
+        type: msgType,
+        mimeHint
       });
       if (stored?.mediaUrl) {
         mediaProxyUrl = stored.mediaUrl;
         mediaPath = stored.mediaPath || null;
         mimeType = stored.mimeType || null;
         fileName = stored.fileName || fileName;
+        msgType = stored.type || msgType;
       }
     } catch (error) {
       console.warn("[Telegram chat bridge] canonical media storage failed; using Telegram proxy:", error.message);
@@ -201,7 +224,17 @@ async function persistTelegramMessage(message) {
   }
 
   const text = String(message?.text || message?.caption || "").trim()
-    || (msgType === "image" ? "📷 Rasm" : msgType === "audio" ? "🎙️ Ovozli xabar" : msgType === "file" ? `📁 ${fileName || "Fayl"}` : "");
+    || (msgType === "image"
+      ? "📷 Rasm"
+      : msgType === "video"
+        ? "🎬 Video"
+        : msgType === "video_note"
+          ? "📹 Dumaloq video"
+          : msgType === "audio"
+            ? "🎙️ Ovozli xabar"
+            : msgType === "file"
+              ? `📄 ${fileName || "Fayl"}`
+              : "");
   if (!text && !mediaProxyUrl) return null;
 
   const metadata = {
@@ -215,7 +248,9 @@ async function persistTelegramMessage(message) {
     mediaPath,
     mimeType,
     fileName: fileName || null,
-    file_id: fileId || null
+    file_id: fileId || null,
+    ...(audioDuration !== undefined ? { audioDuration } : {}),
+    ...(videoDuration !== undefined ? { videoDuration } : {})
   };
 
   const row = { telegram_id: chatId, sender: "customer", text };
@@ -234,6 +269,9 @@ async function persistTelegramMessage(message) {
     data.mediaUrl = mediaProxyUrl;
     data.type = msgType;
     data.fileName = fileName;
+    if (mimeType) data.mimeType = mimeType;
+    if (audioDuration !== undefined) data.audioDuration = audioDuration;
+    if (videoDuration !== undefined) data.videoDuration = videoDuration;
   }
 
   const adminText = `💬 <b>Yangi Telegram xabari</b>\n\n👤 ${from.first_name || "Mijoz"}${from.username ? ` (@${from.username})` : ""}\n📝 ${text.slice(0, 500)}${fileId ? `\n📎 ${msgType.toUpperCase()}: ${fileName}` : ""}`;

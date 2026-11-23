@@ -19,6 +19,8 @@ import {
   Truck,
   Percent,
   Reply,
+  Film,
+  WifiOff,
 } from "lucide-react";
 import { type Language } from "../utils/translations";
 import {
@@ -29,12 +31,31 @@ import {
   subscribeToChat,
   toggleBookmarkMessage,
   clearChatMessages,
+  matchesCustomerChatScope,
+  retryQueuedChatMessage,
+  flushOfflineOutbox,
+  votePollOption,
 } from "../utils/chatSync";
 import { copyToClipboard } from "../utils/clipboard";
 import { ChatGPTMessageRow } from "./ChatGPTMessageRow";
 import { TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "../admin/components/AdminGuliChat.css";
+
+const MAX_CHAT_MEDIA_BYTES = 20 * 1024 * 1024;
+
+function pickSupportedAudioMime(): string {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "audio/webm";
+  }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/mp4",
+  ];
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "";
+}
 
 const CUSTOMER_SUGGESTIONS = [
   {
@@ -153,15 +174,23 @@ export function OnlineChatView({
   // Attachments & recording
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<number | null>(null);
+  const recordSecondsRef = useRef<number>(0);
+  const voiceCancelledRef = useRef<boolean>(false);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -172,16 +201,36 @@ export function OnlineChatView({
   const triggerToast = (msgStr: string) => {
     if (onShowToast) onShowToast(msgStr);
     setActiveToast(msgStr);
-    setTimeout(() => setActiveToast(null), 2200);
+    setTimeout(() => setActiveToast(null), 2400);
   };
+
+  useEffect(() => {
+    const onOnline = () => {
+      setIsOnline(true);
+      void flushOfflineOutbox();
+    };
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+    };
+  }, []);
 
   // Subscribe to real-time chat updates
   useEffect(() => {
-    markMessagesAsRead(userId, "admin");
+    markMessagesAsRead(userId, "user");
     const unsubscribe = subscribeToChat((updatedMsgs) => {
-      const uId = String(userId);
       const filtered = updatedMsgs.filter(
-        (m) => m.id === "welcome-msg-1" || (m.userId && String(m.userId) === uId)
+        (m) => m.id === "welcome-msg-1" || matchesCustomerChatScope(m.userId, userId)
       );
       setMessages((prevMsgs) => {
         const lastMsg = filtered[filtered.length - 1];
@@ -191,7 +240,7 @@ export function OnlineChatView({
         }
         return filtered;
       });
-      markMessagesAsRead(userId, "admin");
+      markMessagesAsRead(userId, "user");
     });
     return () => unsubscribe();
   }, [userId]);
@@ -284,6 +333,12 @@ export function OnlineChatView({
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       triggerToast("Iltimos, rasm faylini tanlang (PNG, JPG, WEBP)");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      triggerToast("Rasm hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
       return;
     }
     const reader = new FileReader();
@@ -300,39 +355,94 @@ export function OnlineChatView({
     e.target.value = "";
   };
 
-  // Document attachment
-  const handleDocSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Standard video attachment
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("video/") && !/\.(mp4|webm|mov|m4v|3gp)$/i.test(file.name)) {
+      triggerToast("Iltimos, video fayl tanlang (MP4, WebM, MOV)");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      triggerToast("Video hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
+      return;
+    }
+    const replyParam = replyingToMsg
+      ? {
+          id: replyingToMsg.id,
+          sender: replyingToMsg.sender,
+          text: replyingToMsg.text || "Biriktirilgan fayl",
+        }
+      : undefined;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       if (typeof event.target?.result === "string") {
-        sendUserMessage(
-          `📄 Hujjat: ${file.name}`,
+        const sent = await sendUserMessage(
+          "",
           user,
           {
-            type: "file",
+            type: "video",
             mediaUrl: event.target.result,
             fileName: file.name,
+            mimeType: file.type || "video/mp4",
           },
-          replyingToMsg
-            ? {
-                id: replyingToMsg.id,
-                sender: replyingToMsg.sender,
-                text: replyingToMsg.text || "Biriktirilgan fayl",
-              }
-            : undefined
+          replyParam
         );
         setShowAttachMenu(false);
         setReplyingToMsg(null);
-        triggerToast("Hujjat yuborildi 📄");
+        if (!sent) triggerToast("❌ Video yuborilmadi");
+        else if (sent.deliveryStatus === "queued") triggerToast("⏳ Internet yo‘q: video navbatga qo‘yildi");
+        else triggerToast("Video yuborildi 🎬");
       }
     };
     reader.readAsDataURL(file);
     e.target.value = "";
   };
 
-  // Voice recording
+  // Document attachment (PDF, DOC, DOCX, XLS, XLSX, TXT)
+  const handleDocSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      triggerToast("Hujjat hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
+      return;
+    }
+    const replyParam = replyingToMsg
+      ? {
+          id: replyingToMsg.id,
+          sender: replyingToMsg.sender,
+          text: replyingToMsg.text || "Biriktirilgan fayl",
+        }
+      : undefined;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      if (typeof event.target?.result === "string") {
+        const sent = await sendUserMessage(
+          `📄 ${file.name}`,
+          user,
+          {
+            type: "file",
+            mediaUrl: event.target.result,
+            fileName: file.name,
+            mimeType: file.type || undefined,
+          },
+          replyParam
+        );
+        setShowAttachMenu(false);
+        setReplyingToMsg(null);
+        if (!sent) triggerToast("❌ Hujjat yuborilmadi");
+        else if (sent.deliveryStatus === "queued") triggerToast("⏳ Internet yo‘q: hujjat navbatga qo‘yildi");
+        else triggerToast("Hujjat yuborildi 📄");
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Voice recording (encoded as persistent data URL so offline queue & Supabase upload work cleanly)
   const startVoiceRecording = async () => {
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -340,9 +450,23 @@ export function OnlineChatView({
         return;
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      audioStreamRef.current = stream;
+      const mimeType = pickSupportedAudioMime();
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      voiceCancelledRef.current = false;
+      recordSecondsRef.current = 0;
+
+      const replySnapshot = replyingToMsg
+        ? {
+            id: replyingToMsg.id,
+            sender: replyingToMsg.sender,
+            text: replyingToMsg.text || "Biriktirilgan fayl",
+          }
+        : undefined;
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
@@ -350,34 +474,52 @@ export function OnlineChatView({
 
       mediaRecorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const audioUrl = URL.createObjectURL(audioBlob);
+        audioStreamRef.current = null;
+        if (voiceCancelledRef.current || audioChunksRef.current.length === 0) return;
 
-        sendUserMessage(
-          "",
-          user,
-          {
-            type: "audio",
-            mediaUrl: audioUrl,
-            audioDuration: recordSeconds,
-          },
-          replyingToMsg
-            ? {
-                id: replyingToMsg.id,
-                sender: replyingToMsg.sender,
-                text: replyingToMsg.text || "Biriktirilgan fayl",
-              }
-            : undefined
-        );
-        setReplyingToMsg(null);
+        const duration = Math.max(1, recordSecondsRef.current);
+        const outputMime = (mimeType || mediaRecorder.mimeType || "audio/webm").split(";")[0];
+        const ext = outputMime.includes("ogg") ? "ogg" : outputMime.includes("mp4") ? "m4a" : "webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: outputMime });
+
+        if (audioBlob.size > MAX_CHAT_MEDIA_BYTES) {
+          triggerToast("Ovozli xabar hajmi juda katta (maks 20 MB)");
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          if (typeof reader.result === "string") {
+            const sent = await sendUserMessage(
+              "",
+              user,
+              {
+                type: "audio",
+                mediaUrl: reader.result,
+                fileName: `voice-${Date.now()}.${ext}`,
+                mimeType: outputMime,
+                audioDuration: duration,
+              },
+              replySnapshot
+            );
+            setReplyingToMsg(null);
+            if (!sent) triggerToast("❌ Ovozli xabar yuborilmadi");
+            else if (sent.deliveryStatus === "queued") triggerToast("⏳ Internet yo‘q: ovozli xabar navbatda");
+          }
+        };
+        reader.readAsDataURL(audioBlob);
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       setIsRecording(true);
       setRecordSeconds(0);
 
       recordTimerRef.current = window.setInterval(() => {
-        setRecordSeconds((s) => s + 1);
+        setRecordSeconds((s) => {
+          const next = s + 1;
+          recordSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
     } catch {
       triggerToast("Mikrofonga ruxsat berilmadi yoki xatolik yuz berdi.");
@@ -385,7 +527,8 @@ export function OnlineChatView({
   };
 
   const stopVoiceRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    voiceCancelledRef.current = false;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (recordTimerRef.current) {
@@ -396,11 +539,21 @@ export function OnlineChatView({
   };
 
   const cancelVoiceRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
+    voiceCancelledRef.current = true;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
     }
+    mediaRecorderRef.current = null;
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
     setIsRecording(false);
+    recordSecondsRef.current = 0;
+    setRecordSeconds(0);
     if (recordTimerRef.current) {
       clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
@@ -412,38 +565,39 @@ export function OnlineChatView({
     const textToSend = overrideText !== undefined ? overrideText : inputText.trim();
     if (!textToSend && !selectedImage) return;
 
+    const imageSnapshot = selectedImage;
+    const replySnapshot = replyingToMsg
+      ? {
+          id: replyingToMsg.id,
+          sender: replyingToMsg.sender,
+          text: replyingToMsg.text || "Biriktirilgan fayl",
+        }
+      : undefined;
+
+    if (overrideText === undefined) setInputText("");
+    setSelectedImage(null);
+    setReplyingToMsg(null);
+    setShowAttachMenu(false);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
     void sendUserMessage(
       textToSend,
       user,
-      selectedImage
+      imageSnapshot
         ? {
             type: "image",
-            mediaUrl: selectedImage.url,
-            fileName: selectedImage.name,
+            mediaUrl: imageSnapshot.url,
+            fileName: imageSnapshot.name,
           }
         : undefined,
-      replyingToMsg
-        ? {
-            id: replyingToMsg.id,
-            sender: replyingToMsg.sender,
-            text: replyingToMsg.text || "Biriktirilgan fayl",
-          }
-        : undefined
+      replySnapshot
     ).then((sent) => {
       if (!sent) {
-        triggerToast("❌ Xabar yuborilmadi. Internet yoki chat sessiyasini tekshiring.");
-        return;
+        triggerToast("❌ Xabar yuborilmadi. Fayl formati yoki ulanishni tekshiring.");
+      } else if (sent.deliveryStatus === "queued") {
+        triggerToast("⏳ Internet yo‘q: xabar navbatga qo‘yildi va tarmoq tiklanganda yuboriladi");
       }
-      setInputText("");
-      setSelectedImage(null);
-      setReplyingToMsg(null);
-      setShowAttachMenu(false);
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
     });
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -487,8 +641,23 @@ export function OnlineChatView({
       />
       <input
         type="file"
+        ref={videoInputRef}
+        accept="video/mp4,video/webm,video/quicktime,video/*"
+        style={{
+          position: "fixed",
+          left: "-10000px",
+          top: "0",
+          width: "1px",
+          height: "1px",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+        onChange={handleVideoSelect}
+      />
+      <input
+        type="file"
         ref={docInputRef}
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         style={{
           position: "fixed",
           left: "-10000px",
@@ -552,8 +721,17 @@ export function OnlineChatView({
               </span>
             </div>
             <div className="chatgpt-header-online-indicator">
-              <span className="chatgpt-indicator-dot" />
-              <span>Online · Qo'llab-quvvatlash xizmati</span>
+              {isOnline ? (
+                <>
+                  <span className="chatgpt-indicator-dot" />
+                  <span>Online · Qo'llab-quvvatlash xizmati</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={12} color="#D97706" />
+                  <span style={{ color: "#B45309" }}>Offline · Xabarlar navbatda saqlanadi</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -795,9 +973,16 @@ export function OnlineChatView({
                   toggleBookmarkMessage(id);
                   triggerToast(msg.isBookmarked ? "Xatcho'p olib tashlandi" : "Xatcho'pga saqlandi ⭐");
                 }}
+                onRetry={(m) => {
+                  void retryQueuedChatMessage(m.clientMessageId || m.id).then((res) => {
+                    if (res) triggerToast("Xabar yuborildi ✓");
+                    else triggerToast("Qayta yuborish navbatga qo'yildi");
+                  });
+                }}
+                onVotePoll={(messageId, optionIndex) => votePollOption(messageId, optionIndex)}
                 playingAudioId={playingAudioId}
                 onTogglePlayAudio={togglePlayAudio}
-                onImageClick={(url) => window.open(url, "_blank")}
+                onImageClick={(url) => setLightboxImageUrl(url)}
                 senderName="GULI Support"
                 senderAvatar={GULI_LOGO_BASE64}
               />
@@ -953,8 +1138,6 @@ export function OnlineChatView({
                       type="button"
                       className="chatgpt-attach-item"
                       onClick={() => {
-                        // Keep the native file input mounted and only visually hidden.
-                        // Android Telegram WebView can ignore programmatic clicks on display:none inputs.
                         fileInputRef.current?.click();
                         setShowAttachMenu(false);
                       }}
@@ -966,12 +1149,23 @@ export function OnlineChatView({
                       type="button"
                       className="chatgpt-attach-item"
                       onClick={() => {
+                        videoInputRef.current?.click();
+                        setShowAttachMenu(false);
+                      }}
+                    >
+                      <Film size={16} className="chatgpt-attach-icon" />
+                      <span>Video fayl</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="chatgpt-attach-item"
+                      onClick={() => {
                         docInputRef.current?.click();
                         setShowAttachMenu(false);
                       }}
                     >
                       <FileText size={16} className="chatgpt-attach-icon" />
-                      <span>Hujjat / Chek</span>
+                      <span>Hujjat (PDF, DOC, XLS)</span>
                     </button>
                     <button
                       type="button"
@@ -981,8 +1175,10 @@ export function OnlineChatView({
                         if (navigator.geolocation) {
                           navigator.geolocation.getCurrentPosition(
                             (pos) => {
-                              sendUserMessage(
-                                `📍 Mening joylashuvim:\nhttps://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`,
+                              const lat = pos.coords.latitude;
+                              const lng = pos.coords.longitude;
+                              void sendUserMessage(
+                                `📍 Mening joylashuvim:\nhttps://maps.google.com/?q=${lat},${lng}`,
                                 user
                               );
                               triggerToast("Joylashuv yuborildi 📍");
@@ -1169,18 +1365,44 @@ export function OnlineChatView({
         </div>
       )}
 
+      {/* Image Lightbox Modal */}
+      {lightboxImageUrl && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.86)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 999999,
+            padding: 16,
+          }}
+          onClick={() => setLightboxImageUrl(null)}
+        >
+          <img
+            src={lightboxImageUrl}
+            alt="Rasm"
+            style={{ maxWidth: "92vw", maxHeight: "88vh", borderRadius: 12, objectFit: "contain" }}
+          />
+        </div>
+      )}
+
       {/* Telegram Circular Video Note (Selfie) Overlay */}
       {showVideoRecorder && (
         <TelegramCircularVideoRecorderOverlay
           onCancel={() => setShowVideoRecorder(false)}
-          onSend={(base64Video, durationSec) => {
+          onSend={async (base64Video, durationSec) => {
             setShowVideoRecorder(false);
-            sendUserMessage(
+            const mimeMatch = base64Video.match(/^data:([^;]+);/i);
+            const mimeType = mimeMatch?.[1] || "video/webm";
+            const sent = await sendUserMessage(
               "",
               user,
               {
                 type: "video_note",
                 mediaUrl: base64Video,
+                fileName: `video_note-${Date.now()}.webm`,
+                mimeType,
                 videoDuration: durationSec,
               },
               replyingToMsg
@@ -1192,7 +1414,9 @@ export function OnlineChatView({
                 : undefined
             );
             setReplyingToMsg(null);
-            triggerToast("Yumaloq video xabar yuborildi 📹");
+            if (!sent) triggerToast("❌ Dumaloq video yuborilmadi");
+            else if (sent.deliveryStatus === "queued") triggerToast("⏳ Internet yo‘q: video navbatga qo‘yildi");
+            else triggerToast("Yumaloq video xabar yuborildi 📹");
           }}
           onShowToast={triggerToast}
         />

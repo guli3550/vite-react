@@ -174,16 +174,29 @@ async function notifyCustomerAdminChat(message, req) {
   const mediaUrlRaw = String(message?.mediaUrl || message?.media_url || meta.mediaUrl || meta.media_url || "").trim();
   const telegramMediaUrl = String(message?.telegramMediaUrl || meta.telegramMediaUrl || meta.telegram_media_url || "").trim();
   const mediaType = String(message?.type || meta.type || "").toLowerCase();
-  if (!telegramId || (!textBody && !mediaUrlRaw)) return { sent: false, reason: "not_applicable" };
+  const mimeType = String(message?.mimeType || meta.mimeType || "").toLowerCase();
+  // Negative IDs are browser guests who have no Telegram chat_id.
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0 || (!textBody && !mediaUrlRaw)) {
+    return { sent: false, reason: "not_applicable" };
+  }
 
   const key = `customer-admin-chat:${messageId || telegramId + ":" + textBody + ":" + mediaUrlRaw + ":" + String(message?.created_at || "")}`;
   const c = await claim(key, "customer_admin_chat_notice", null);
   if (!c.claimed) return { sent: false, reason: "duplicate" };
 
+  const label =
+    mediaType === "image" ? "📷 Rasm"
+      : mediaType === "video_note" ? "📹 Dumaloq video"
+        : mediaType === "video" ? "🎬 Video"
+          : mediaType === "audio" || mediaType === "voice" ? "🎙️ Ovozli xabar"
+            : mediaType === "location" ? "📍 Geolokatsiya"
+              : mediaType === "poll" ? "📊 So‘rovnoma"
+                : "📎 Fayl";
+
   const text = [
     "💬 Guli Market — ADMIN XABARI",
     "",
-    textBody || (mediaType === "image" ? "📷 Rasm" : mediaType === "video" ? "🎬 Video" : mediaType === "audio" || mediaType === "voice" ? "🎙️ Ovozli xabar" : "📎 Fayl"),
+    textBody || label,
     "",
     "GULI Web App → Online chat bo‘limida suhbatni davom ettirishingiz mumkin.",
   ].join("\n");
@@ -191,12 +204,32 @@ async function notifyCustomerAdminChat(message, req) {
   try {
     let result;
     if (mediaUrlRaw) {
-      const method = mediaType === "image" ? "sendPhoto" : mediaType === "video" ? "sendVideo" : mediaType === "audio" || mediaType === "voice" ? "sendAudio" : "sendDocument";
-      const field = method === "sendPhoto" ? "photo" : method === "sendVideo" ? "video" : method === "sendAudio" ? "audio" : "document";
       const targetUrl = telegramMediaUrl || mediaUrlRaw;
       const absolute = /^https?:\/\//i.test(targetUrl) ? targetUrl : "";
       if (!absolute) throw new Error("Telegram uchun to‘g‘ridan-to‘g‘ri media URL mavjud emas");
-      result = await sendTelegramChatMediaByUrl(telegramId, method, field, absolute, text);
+
+      const method =
+        mediaType === "image" ? "sendPhoto"
+          : mediaType === "video" || mediaType === "video_note" ? "sendVideo"
+            : mediaType === "voice" || (mediaType === "audio" && mimeType.includes("ogg")) ? "sendVoice"
+              : mediaType === "audio" ? "sendAudio"
+                : "sendDocument";
+      const field =
+        method === "sendPhoto" ? "photo"
+          : method === "sendVideo" ? "video"
+            : method === "sendVoice" ? "voice"
+              : method === "sendAudio" ? "audio"
+                : "document";
+
+      try {
+        result = await sendTelegramChatMediaByUrl(telegramId, method, field, absolute, text);
+      } catch (mediaErr) {
+        if (method !== "sendDocument") {
+          result = await sendTelegramChatMediaByUrl(telegramId, "sendDocument", "document", absolute, text);
+        } else {
+          throw mediaErr;
+        }
+      }
     } else {
       result = await sendTelegram(telegramId, text);
     }

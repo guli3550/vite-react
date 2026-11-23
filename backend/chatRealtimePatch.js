@@ -210,44 +210,151 @@ async function loadCustomerProfile(telegramId) {
   return customer;
 }
 
+function flattenMessageRow(row) {
+  if (!row || typeof row !== "object") return row;
+  const meta = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+  const out = { ...row };
+  if (!out.type && meta.type) out.type = meta.type;
+  if (!out.mediaUrl && (meta.mediaUrl || meta.media_url)) out.mediaUrl = meta.mediaUrl || meta.media_url;
+  if (!out.fileName && (meta.fileName || meta.file_name)) out.fileName = meta.fileName || meta.file_name;
+  if (!out.mimeType && (meta.mimeType || meta.mime_type)) out.mimeType = meta.mimeType || meta.mime_type;
+  if (out.audioDuration === undefined && meta.audioDuration !== undefined) out.audioDuration = meta.audioDuration;
+  if (out.videoDuration === undefined && meta.videoDuration !== undefined) out.videoDuration = meta.videoDuration;
+  if (!out.location && meta.location) out.location = meta.location;
+  if (!out.pollOptions && meta.pollOptions) out.pollOptions = meta.pollOptions;
+  if (!out.pollQuestion && meta.pollQuestion) out.pollQuestion = meta.pollQuestion;
+  if (!out.replyToId && meta.replyToId) out.replyToId = meta.replyToId;
+  if (!out.replyToText && meta.replyToText) out.replyToText = meta.replyToText;
+  if (!out.replyToSender && meta.replyToSender) out.replyToSender = meta.replyToSender;
+  return out;
+}
+
 async function enrichCustomerMessage(message) {
-  if (!message || message.sender !== "customer") return message;
-  const telegramId = Number(message.telegram_id);
-  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return message;
+  if (!message) return message;
+  const flat = flattenMessageRow(message);
+  if (flat.sender !== "customer") return flat;
+  const telegramId = Number(flat.telegram_id);
+  if (!Number.isSafeInteger(telegramId) || telegramId === 0) return flat;
+
+  const messageMeta = flat.metadata && typeof flat.metadata === "object" ? flat.metadata : {};
+  if (telegramId < 0) {
+    const guestName = flat.userName || messageMeta.userName || `Web Mijoz #${Math.abs(telegramId).toString().slice(-4)}`;
+    return {
+      ...flat,
+      userName: guestName,
+      userPhoto: flat.userPhoto || messageMeta.userPhoto || null,
+      phone: messageMeta.phone || null,
+      telegramUsername: messageMeta.telegramUsername || null,
+      metadata: {
+        ...messageMeta,
+        source: messageMeta.source || "webapp",
+        userName: guestName,
+      },
+    };
+  }
 
   const customer = await getCachedCustomerProfile(telegramId);
   // Preserve profile data already supplied by browser/guest clients while
   // allowing durable Telegram/CRM data to fill or override missing fields.
-  const messageMeta = message?.metadata && typeof message.metadata === "object" ? message.metadata : {};
-  if (!customer.username && messageMeta.telegramUsername) customer.username = String(messageMeta.telegramUsername).replace(/^@+/, "");
-  if (!customer.phone && messageMeta.phone) customer.phone = String(messageMeta.phone);
-  if (!customer.telegram_phone && messageMeta.phone) customer.telegram_phone = String(messageMeta.phone);
-  if (!customer.photoUrl && messageMeta.userPhoto) customer.photoUrl = String(messageMeta.userPhoto);
-  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
-  const phone = customer.phone || customer.telegram_phone || null;
-  const telegramUsername = customer.username || null;
+  const enrichedCustomer = { ...customer };
+  if (!enrichedCustomer.username && messageMeta.telegramUsername) enrichedCustomer.username = String(messageMeta.telegramUsername).replace(/^@+/, "");
+  if (!enrichedCustomer.phone && messageMeta.phone) enrichedCustomer.phone = String(messageMeta.phone);
+  if (!enrichedCustomer.telegram_phone && messageMeta.phone) enrichedCustomer.telegram_phone = String(messageMeta.phone);
+  if (!enrichedCustomer.photoUrl && messageMeta.userPhoto) enrichedCustomer.photoUrl = String(messageMeta.userPhoto);
+  const fullName = [enrichedCustomer.first_name, enrichedCustomer.last_name].filter(Boolean).join(" ").trim();
+  const phone = enrichedCustomer.phone || enrichedCustomer.telegram_phone || null;
+  const telegramUsername = enrichedCustomer.username || null;
+  const resolvedName = fullName || enrichedCustomer.full_name || messageMeta.userName || telegramUsername || `Telegram #${telegramId}`;
   return {
-    ...message,
-    userName: fullName || customer.full_name || telegramUsername || `Telegram #${telegramId}`,
-    userPhoto: customer.photoUrl || null,
+    ...flat,
+    userName: resolvedName,
+    userPhoto: enrichedCustomer.photoUrl || null,
     phone,
     telegramUsername,
     metadata: {
-      ...(message.metadata || {}),
-      source: "telegram",
-      userName: fullName || customer.full_name || telegramUsername || `Telegram #${telegramId}`,
-      userPhoto: customer.photoUrl || null,
+      ...messageMeta,
+      source: messageMeta.source || "telegram",
+      userName: resolvedName,
+      userPhoto: enrichedCustomer.photoUrl || null,
       phone,
       telegramUsername,
       customer: {
-        ...customer,
+        ...enrichedCustomer,
         phone,
         telegramUsername,
-        photoUrl: customer.photoUrl || null
+        photoUrl: enrichedCustomer.photoUrl || null
       }
     }
   };
 }
+
+async function enrichCustomerMessages(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return [];
+  const uniqueTgIds = [...new Set(
+    list
+      .filter(r => r && r.sender === "customer")
+      .map(r => Number(r.telegram_id))
+      .filter(id => Number.isSafeInteger(id) && id > 0)
+  )];
+  if (uniqueTgIds.length) {
+    await Promise.all(uniqueTgIds.map(id => getCachedCustomerProfile(id).catch(() => ({}))));
+  }
+  return Promise.all(list.map(enrichCustomerMessage));
+}
+
+function currentOnlineIds() {
+  return [...new Set(
+    [...clients]
+      .filter(c => !c.admin && Number.isFinite(Number(c.chatId)))
+      .map(c => String(c.chatId))
+  )];
+}
+
+let presenceTimer = null;
+function schedulePresenceBroadcast() {
+  if (presenceTimer) return;
+  presenceTimer = setTimeout(() => {
+    presenceTimer = null;
+    const payload = { onlineTelegramIds: currentOnlineIds() };
+    for (const c of clients) {
+      if (c.admin) sseSend(c, "presence", payload);
+    }
+  }, 60);
+}
+
+function parseSinceCursor(rawSince) {
+  const raw = String(rawSince || "").trim();
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return null;
+  // 1 second overlap prevents dropping messages inserted in the same millisecond
+  return new Date(Math.max(0, ms - 1000)).toISOString();
+}
+
+function parseBoundedLimit(rawLimit, fallback = 500, max = 1500) {
+  const n = Number(rawLimit);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.floor(n), max);
+}
+
+async function findExistingByClientMessageId(telegramId, clientMessageId) {
+  const cid = String(clientMessageId || "").trim();
+  if (!supabase || !cid || !Number.isSafeInteger(Number(telegramId))) return null;
+  try {
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .select("*")
+      .eq("telegram_id", Number(telegramId))
+      .contains("metadata", { clientMessageId: cid })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data) return data;
+  } catch {}
+  return null;
+}
+
 async function publishRealtime(message) {
   if (!message) return;
   const enriched = await enrichCustomerMessage(message);
@@ -261,85 +368,196 @@ async function publishRealtime(message) {
 globalThis.__GULI_CHAT_PUBLISH__ = publishRealtime;
 async function telegramSend(chatId, text) { if (!BOT_TOKEN || !chatId) return; try { const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true }) }); const j = await r.json().catch(() => null); if (!r.ok || !j?.ok) throw new Error(j?.description || `Telegram ${r.status}`); } catch (e) { console.warn("[Chat] Telegram notification failed:", e.message); } }
 async function notifyAdmins(message) { if (!ADMIN_CHAT_IDS.length || message?.sender !== "customer") return; const id = Number(message.telegram_id); const who = id < 0 ? `Browser guest ${Math.abs(id)}` : `Telegram ${id}`; const text = `💬 <b>Yangi mijoz xabari</b>\n\n👤 ${who}\n📝 ${String(message.text || "").slice(0, 300)}`; await Promise.all(ADMIN_CHAT_IDS.map(cid => telegramSend(cid, text))); }
-async function notifyTelegramCustomerIfOffline(message) { if (!message || message.sender !== "admin") return; const id = Number(message.telegram_id); if (!Number.isSafeInteger(id) || id <= 0 || telegramMiniAppOnline(id)) return; const text = "💬 <b>Qo'llab quvvatlash markazidan yangi habar keldi</b>\n\n🔔 Ko'rish uchun Guli Premium bildirishnomalar oynasini oching."; await telegramSend(id, text); }
-function startRealtime() { if (process.env.GULI_DISABLE_ONLINE_CHAT==='true'){console.info('[GULI resource saver] online chat realtime disabled by GULI_DISABLE_ONLINE_CHAT.');return;} if (realtimeStarted || !supabase) return; realtimeStarted = true; realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } }); realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload));
+function startRealtime() {
+  if (process.env.GULI_DISABLE_ONLINE_CHAT === 'true') {
+    console.info('[GULI resource saver] online chat realtime disabled by GULI_DISABLE_ONLINE_CHAT.');
+    return;
+  }
+  if (realtimeStarted || !supabase) return;
+  realtimeStarted = true;
+  realtimeChannel = supabase.channel(REALTIME_CHANNEL, { config: { broadcast: { self: true } } });
+  realtimeChannel.on("broadcast", { event: "chat_message" }, payload => deliverToClients(payload.payload));
   realtimeChannel.on("broadcast", { event: "chat_read" }, payload => {
     const data = payload?.payload || {};
     for (const client of clients) {
-      if (Number(client.chatId) === Number(data.telegram_id)) sseSend(client, "read_receipt", data);
-    }
-  }); realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`)); }
-function patchGet() { const original = express.application.get; express.application.get = function patchedGet(routePath, ...handlers) {
-  if (routePath === "/api/admin/users/:telegramId/photo/:fileId") return original.call(this, routePath, async (req, res) => {
-    try {
-      const telegramId = Number(req.params.telegramId);
-      const fileId = String(req.params.fileId || "");
-      const expires = Number(req.query.expires);
-      const signature = String(req.query.signature || "");
-      if (!ADMIN_SECRET || !Number.isSafeInteger(telegramId) || !fileId || !Number.isFinite(expires) || expires < Math.floor(Date.now()/1000)) return res.status(403).end();
-      const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(`${telegramId}.${fileId}.${expires}`).digest("base64url");
-      if (!safeEqual(signature, expected)) return res.status(403).end();
-      const fileResult = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
-      const fileJson = await fileResult.json().catch(() => null);
-      if (!fileResult.ok || !fileJson?.ok || !fileJson.result?.file_path) return res.status(404).end();
-      const image = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fileJson.result.file_path}`);
-      if (!image.ok) return res.status(502).end();
-      res.set("Content-Type", image.headers.get("content-type") || "image/jpeg");
-      res.set("Cache-Control", "private, max-age=3600");
-      return res.send(Buffer.from(await image.arrayBuffer()));
-    } catch (error) {
-      console.warn("[Chat realtime] profile photo proxy failed:", error.message);
-      return res.status(502).end();
+      if (client.admin || Number(client.chatId) === Number(data.telegram_id)) sseSend(client, "read_receipt", data);
     }
   });
-  if (routePath === "/api/chat/guest-session/:guest_id") return original.call(this, routePath, (req, res) => { const id = Number(req.params.guest_id); if (!Number.isSafeInteger(id) || id >= 0 || id < -9007199254740991) return res.status(400).json({ success: false, message: "Noto‘g‘ri guest ID" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, guest_id: id, token: createGuestToken(id), expires_in: 2592000 }); });
-  if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, async (req, res) => { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" }); const { data, error } = await supabase.from("chat_messages").select("*").order("created_at", { ascending: true }); if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }); const enriched = await Promise.all((data || []).map(enrichCustomerMessage)); return res.json({ success: true, data: enriched }); });
-  if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, async (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); const { data, error } = await supabase.from("chat_messages").select("*").eq("telegram_id", rawId).order("created_at", { ascending: true }); if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" }); const enriched = await Promise.all((data || []).map(enrichCustomerMessage)); return res.json({ success: true, data: enriched }); });
-  if (routePath === "/api/chat/stream/:telegram_id") return original.call(this, routePath, (req, res) => { if (process.env.GULI_DISABLE_ONLINE_CHAT==="true") return res.status(410).json({ success:false, code:"ONLINE_CHAT_DISABLED", message:"Online chat vaqtincha o‘chirilgan. Qo‘llab-quvvatlash kanali orqali bog‘laning." }); const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.(); const client = { res, chatId: isAdmin ? null : Number(rawId), admin: isAdmin, telegramMiniApp: !isAdmin && Boolean(req.headers["x-telegram-init-data"]) }; clients.add(client); sseSend(client, "ready", { ok: true }); const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000); req.on("close", () => { clearInterval(heartbeat); clients.delete(client); }); });
-  return original.call(this, routePath, ...handlers);
-}; }
-const { install } = require('./routeRegistry.js');
-install("get", "/api/admin/chat/messages", async (req, res) => {
+  realtimeChannel.subscribe(status => console.log(`[Chat realtime] ${status}`));
+}
+function handleSseStream(req, res) {
+  if (process.env.GULI_DISABLE_ONLINE_CHAT === "true") {
+    return res.status(410).json({ success: false, code: "ONLINE_CHAT_DISABLED", message: "Online chat vaqtincha o‘chirilgan. Qo‘llab-quvvatlash kanali orqali bog‘laning." });
+  }
+  const rawId = String(req.params.telegram_id || "");
+  const isAdmin = rawId === "all" && verifyAdmin(req);
+  if (!isAdmin && !authorizedForUser(req, rawId)) {
+    return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
+  }
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  const client = { res, chatId: isAdmin ? null : Number(rawId), admin: isAdmin, telegramMiniApp: !isAdmin && Boolean(req.headers["x-telegram-init-data"]) };
+  clients.add(client);
+  sseSend(client, "ready", { ok: true, serverTime: new Date().toISOString() });
+  if (isAdmin) {
+    sseSend(client, "presence", { onlineTelegramIds: currentOnlineIds() });
+  } else {
+    schedulePresenceBroadcast();
+  }
+  const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    clients.delete(client);
+    if (!isAdmin) schedulePresenceBroadcast();
+  });
+}
+
+async function queryAdminHistory(req, res) {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
-  const { data, error } = await supabase.from("chat_messages").select("*").order("created_at", { ascending: true });
+  const sinceIso = parseSinceCursor(req.query?.since);
+  const limit = parseBoundedLimit(req.query?.limit, sinceIso ? 500 : 800, 2000);
+  let query = supabase.from("chat_messages").select("*");
+  if (sinceIso) {
+    query = query.gte("created_at", sinceIso).order("created_at", { ascending: true }).limit(limit);
+  } else {
+    // Load the most recent `limit` rows, then reverse to chronological ascending order
+    query = query.order("created_at", { ascending: false }).limit(limit);
+  }
+  const { data, error } = await query;
   if (error) {
     console.warn("[Chat realtime] admin history failed:", error.message);
     return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
   }
-  const enriched = await Promise.all((data || []).map(enrichCustomerMessage));
-  return res.json({ success: true, data: enriched });
-});
+  const rows = sinceIso ? (data || []) : [...(data || [])].reverse();
+  const enriched = await enrichCustomerMessages(rows);
+  return res.json({ success: true, data: enriched, meta: { serverTime: new Date().toISOString(), incremental: Boolean(sinceIso) } });
+}
+
+async function queryUserHistory(req, res) {
+  const rawId = String(req.params.telegram_id || "");
+  const isAdmin = rawId === "all" && verifyAdmin(req);
+  if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" });
+  if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
+  const sinceIso = parseSinceCursor(req.query?.since);
+  const limit = parseBoundedLimit(req.query?.limit, 400, 1000);
+  let query = supabase.from("chat_messages").select("*").eq("telegram_id", rawId);
+  if (sinceIso) {
+    query = query.gte("created_at", sinceIso).order("created_at", { ascending: true }).limit(limit);
+  } else {
+    query = query.order("created_at", { ascending: false }).limit(limit);
+  }
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ success: false, message: "Chat tarixini yuklashda xatolik" });
+  const rows = sinceIso ? (data || []) : [...(data || [])].reverse();
+  const enriched = await enrichCustomerMessages(rows);
+  return res.json({ success: true, data: enriched, meta: { serverTime: new Date().toISOString(), incremental: Boolean(sinceIso) } });
+}
+
+function patchGet() {
+  const original = express.application.get;
+  express.application.get = function patchedGet(routePath, ...handlers) {
+    if (routePath === "/api/admin/users/:telegramId/photo/:fileId") return original.call(this, routePath, async (req, res) => {
+      try {
+        const telegramId = Number(req.params.telegramId);
+        const fileId = String(req.params.fileId || "");
+        const expires = Number(req.query.expires);
+        const signature = String(req.query.signature || "");
+        if (!ADMIN_SECRET || !Number.isSafeInteger(telegramId) || !fileId || !Number.isFinite(expires) || expires < Math.floor(Date.now() / 1000)) return res.status(403).end();
+        const expected = crypto.createHmac("sha256", ADMIN_SECRET).update(`${telegramId}.${fileId}.${expires}`).digest("base64url");
+        if (!safeEqual(signature, expected)) return res.status(403).end();
+        const fileResult = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
+        const fileJson = await fileResult.json().catch(() => null);
+        if (!fileResult.ok || !fileJson?.ok || !fileJson.result?.file_path) return res.status(404).end();
+        const image = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fileJson.result.file_path}`);
+        if (!image.ok) return res.status(502).end();
+        res.set("Content-Type", image.headers.get("content-type") || "image/jpeg");
+        res.set("Cache-Control", "private, max-age=3600");
+        return res.send(Buffer.from(await image.arrayBuffer()));
+      } catch (error) {
+        console.warn("[Chat realtime] profile photo proxy failed:", error.message);
+        return res.status(502).end();
+      }
+    });
+    if (routePath === "/api/chat/guest-session/:guest_id") return original.call(this, routePath, (req, res) => { const id = Number(req.params.guest_id); if (!Number.isSafeInteger(id) || id >= 0 || id < -9007199254740991) return res.status(400).json({ success: false, message: "Noto‘g‘ri guest ID" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, guest_id: id, token: createGuestToken(id), expires_in: 2592000 }); });
+    if (routePath === "/api/admin/chat/messages") return original.call(this, routePath, queryAdminHistory);
+    if (routePath === "/api/chat/messages/:telegram_id") return original.call(this, routePath, queryUserHistory);
+    if (routePath === "/api/chat/stream/:telegram_id") return original.call(this, routePath, handleSseStream);
+    return original.call(this, routePath, ...handlers);
+  };
+}
+const { install } = require('./routeRegistry.js');
+install("get", "/api/admin/chat/messages", queryAdminHistory);
 install("get", "/api/admin/chat/presence", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
-  const onlineIds = [...clients]
-    .filter(c => !c.admin && Number.isFinite(Number(c.chatId)))
-    .map(c => String(c.chatId));
-  res.json({ success: true, data: { onlineTelegramIds: [...new Set(onlineIds)] } });
+  res.json({ success: true, data: { onlineTelegramIds: currentOnlineIds() } });
 });
 install("post", "/api/chat/read", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
   const telegramId = String(req.body?.telegram_id || "").trim();
-  if (!/^\d+$/.test(telegramId)) return res.status(400).json({ success: false, message: "Mijoz ID noto'g'ri" });
+  if (!/^-?\d+$/.test(telegramId) || Number(telegramId) === 0) {
+    return res.status(400).json({ success: false, message: "Mijoz ID noto'g'ri" });
+  }
   const { data: rows, error: readError } = await supabase.from("chat_messages")
     .select("id,metadata")
     .eq("telegram_id", Number(telegramId))
-    .eq("sender", "customer");
+    .eq("sender", "customer")
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (readError) return res.status(500).json({ success: false, message: "O'qilgan holat saqlanmadi" });
   const readAt = new Date().toISOString();
+  const unreadRows = (rows || []).filter(r => !r?.metadata?.read_at);
   const ids = [];
-  for (const row of rows || []) {
-    const metadata = { ...(row.metadata || {}), read_at: readAt, read_by: "admin" };
-    const { error } = await supabase.from("chat_messages").update({ metadata }).eq("id", row.id);
-    if (!error) ids.push(String(row.id));
+  for (let i = 0; i < unreadRows.length; i += 10) {
+    const chunk = unreadRows.slice(i, i + 10);
+    await Promise.all(chunk.map(async (row) => {
+      const metadata = { ...(row.metadata || {}), read_at: readAt, read_by: "admin" };
+      const { error } = await supabase.from("chat_messages").update({ metadata }).eq("id", row.id);
+      if (!error) ids.push(String(row.id));
+    }));
   }
   if (ids.length) {
+    const payload = { telegram_id: Number(telegramId), message_ids: ids, read_at: readAt, read_by: "admin" };
     for (const client of clients) {
-      if (Number(client.chatId) === Number(telegramId)) sseSend(client, "read_receipt", { telegram_id: Number(telegramId), message_ids: ids, read_at: readAt });
+      if (client.admin || Number(client.chatId) === Number(telegramId)) sseSend(client, "read_receipt", payload);
     }
     if (realtimeChannel) {
-      try { await realtimeChannel.send({ type: "broadcast", event: "chat_read", payload: { telegram_id: Number(telegramId), message_ids: ids, read_at: readAt } }); } catch {}
+      try { await realtimeChannel.send({ type: "broadcast", event: "chat_read", payload }); } catch {}
+    }
+  }
+  return res.json({ success: true, data: { message_ids: ids, read_at: readAt } });
+});
+install("post", "/api/chat/customer-read", async (req, res) => {
+  if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
+  const identity = resolveChatIdentity(req);
+  const telegramId = identity?.verified ? Number(identity.telegramId) : null;
+  if (!telegramId) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" });
+  const { data: rows, error: readError } = await supabase.from("chat_messages")
+    .select("id,metadata")
+    .eq("telegram_id", telegramId)
+    .eq("sender", "admin")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (readError) return res.status(500).json({ success: false, message: "O'qilgan holat saqlanmadi" });
+  const readAt = new Date().toISOString();
+  const unreadRows = (rows || []).filter(r => !r?.metadata?.read_at);
+  const ids = [];
+  for (let i = 0; i < unreadRows.length; i += 10) {
+    const chunk = unreadRows.slice(i, i + 10);
+    await Promise.all(chunk.map(async (row) => {
+      const metadata = { ...(row.metadata || {}), read_at: readAt, read_by: "customer" };
+      const { error } = await supabase.from("chat_messages").update({ metadata }).eq("id", row.id);
+      if (!error) ids.push(String(row.id));
+    }));
+  }
+  if (ids.length) {
+    const payload = { telegram_id: telegramId, message_ids: ids, read_at: readAt, read_by: "customer" };
+    for (const client of clients) {
+      if (client.admin || Number(client.chatId) === telegramId) sseSend(client, "read_receipt", payload);
     }
   }
   return res.json({ success: true, data: { message_ids: ids, read_at: readAt } });
@@ -348,11 +566,26 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
   if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
   if (!supabase) return res.status(503).json({ success: false, message: "Chat bazasi sozlanmagan" });
   const telegramId = String(req.body?.telegram_id || "").trim();
-  const text = String(req.body?.text || "").trim();
-  if (!/^\d+$/.test(telegramId) || !text) return res.status(400).json({ success: false, message: "Mijoz va xabar majburiy" });
+  if (!/^-?\d+$/.test(telegramId) || Number(telegramId) === 0) {
+    return res.status(400).json({ success: false, message: "Mijoz ID noto‘g‘ri" });
+  }
+  let text = String(req.body?.text || "").trim();
   let metadata = req.body?.metadata && typeof req.body.metadata === "object" ? { ...req.body.metadata } : {};
   let mediaUrl = String(req.body?.media_url || req.body?.mediaUrl || metadata.mediaUrl || metadata.media_url || "").trim();
   const mediaType = String(req.body?.type || metadata.type || "").toLowerCase();
+  const hasRichPayload = Boolean(mediaUrl || metadata.location || (Array.isArray(metadata.pollOptions) && metadata.pollOptions.length));
+  if (!text && !hasRichPayload) {
+    return res.status(400).json({ success: false, message: "Xabar matni yoki media birikma majburiy" });
+  }
+  const clientMsgId = String(req.body?.client_message_id || req.body?.clientMessageId || metadata.clientMessageId || metadata.client_message_id || "").trim();
+  if (clientMsgId) {
+    metadata.clientMessageId = clientMsgId;
+    const duplicate = await findExistingByClientMessageId(Number(telegramId), clientMsgId);
+    if (duplicate) {
+      return res.status(200).json({ success: true, data: flattenMessageRow(duplicate), duplicate: true });
+    }
+  }
+
   if (mediaUrl && mediaUrl.startsWith("data:") && typeof globalThis.__GULI_CHAT_PERSIST_MEDIA__ === "function") {
     try {
       const stored = await globalThis.__GULI_CHAT_PERSIST_MEDIA__({
@@ -369,12 +602,6 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
         fileName: stored.fileName || metadata.fileName,
         mimeType: stored.mimeType || metadata.mimeType,
         type: stored.type || mediaType || "file",
-        // Absolute, Telegram-reachable signed URL. Required by
-        // customerNotificationService.notifyCustomerAdminChat to relay the
-        // image/file to the Telegram customer via sendPhoto/sendDocument -
-        // the app's own /api/chat/media-file/... path is not publicly
-        // reachable by Telegram's servers. Was previously dropped here
-        // (Root Cause / Phase 6).
         telegramMediaUrl: stored.telegramMediaUrl || metadata.telegramMediaUrl
       };
     } catch (e) {
@@ -382,22 +609,77 @@ install("post", "/api/chat/admin-reply", async (req, res) => {
       return res.status(400).json({ success: false, message: e?.message || "Media faylini saqlab bo‘lmadi" });
     }
   }
+  const effectiveType = String(metadata.type || mediaType || (mediaUrl ? "file" : "text")).toLowerCase();
+  if (mediaUrl && !metadata.mediaUrl) metadata.mediaUrl = mediaUrl;
+  if (!metadata.type && effectiveType !== "text") metadata.type = effectiveType;
+  if (!text) {
+    text =
+      effectiveType === "image" ? "📷 Rasm"
+        : effectiveType === "video_note" ? "📹 Dumaloq video"
+          : effectiveType === "video" ? "🎬 Video"
+            : effectiveType === "audio" || effectiveType === "voice" ? "🎙️ Ovozli xabar"
+              : effectiveType === "location" ? `📍 ${metadata.location?.address || "Geolokatsiya"}`
+                : effectiveType === "poll" ? String(metadata.pollQuestion || "📊 So‘rovnoma")
+                  : `📄 ${metadata.fileName || "Fayl"}`;
+  }
+
   const { data, error } = await supabase.from("chat_messages")
     .insert([{ telegram_id: Number(telegramId), sender: "admin", text, metadata }])
     .select("*").single();
   if (error) return res.status(500).json({ success: false, message: "Xabar saqlanmadi" });
-  await publishRealtime(data);
+  const normalized = flattenMessageRow(data);
+  await publishRealtime(normalized);
   try {
     const { notifyCustomerAdminChat } = require("./customerNotificationService");
-    await notifyCustomerAdminChat(data, req);
+    await notifyCustomerAdminChat(normalized, req);
   } catch (e) {
     console.warn("[Chat admin reply] Telegram notification failed:", e.message);
   }
-  return res.status(201).json({ success: true, data });
+  return res.status(201).json({ success: true, data: normalized });
 });
 
-install("get", "/api/chat/stream/:telegram_id", (req, res) => { const rawId = String(req.params.telegram_id || ""); const isAdmin = rawId === "all" && verifyAdmin(req); if (!isAdmin && !authorizedForUser(req, rawId)) return res.status(401).json({ success: false, message: "Chat sessiyasi tasdiqlanmadi" }); res.status(200); res.setHeader("Content-Type", "text/event-stream"); res.setHeader("Cache-Control", "no-cache, no-transform"); res.setHeader("Connection", "keep-alive"); res.flushHeaders?.(); const client = { res, chatId: isAdmin ? null : Number(rawId), admin: isAdmin, telegramMiniApp: !isAdmin && Boolean(req.headers["x-telegram-init-data"]) }; clients.add(client); sseSend(client, "ready", { ok: true }); const heartbeat = setInterval(() => { try { res.write(`: heartbeat ${Date.now()}\n\n`); } catch {} }, 25000); req.on("close", () => { clearInterval(heartbeat); clients.delete(client); }); });
+install("get", "/api/chat/stream/:telegram_id", handleSseStream);
 install("post", "/api/chat/browser-login", async (req, res) => { const user = verifyLoginUrlPayload(req.body || {}); if (!user) return res.status(401).json({ success: false, message: "Telegram browser avtorizatsiyasi yaroqsiz yoki muddati tugagan" }); if (!ADMIN_SECRET && !BOT_TOKEN) return res.status(503).json({ success: false, message: "Chat auth secret sozlanmagan" }); return res.json({ success: true, data: { telegram_id: user.id, username: user.username, first_name: user.first_name, last_name: user.last_name, photo_url: user.photo_url, token: createLinkedToken(user.id), expires_in: 2592000 } }); });
-function patchChatPost() { const original = express.application.post; express.application.post = function patchedPost(routePath, ...handlers) { if (routePath === "/api/chat/messages" && handlers.length) { const index = handlers.length - 1; const handler = handlers[index]; handlers[index] = async function secureChatPost(req, res, next) { const sender = String(req.body?.sender || "").toLowerCase(); const id = Number(req.body?.telegram_id || 0); if (sender === "customer" || sender === "user") { const identity = resolveChatIdentity(req); if (!identity?.verified || !id || Number(identity.telegramId) !== id) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" }); req.body.sender = "customer"; req.body.telegram_id = id; } else if (sender === "admin") { if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" }); } else return res.status(400).json({ success: false, message: "Noto‘g‘ri chat jo‘natuvchisi" }); let payload = null; const originalJson = res.json.bind(res); res.json = body => { payload = body; return originalJson(body); }; const result = await handler(req, res, next); if (payload?.success && payload?.data) { await publishRealtime(payload.data); await notifyAdmins(payload.data); await notifyTelegramCustomerIfOffline(payload.data); } return result; }; } return original.call(this, routePath, ...handlers); }; }
+function patchChatPost() {
+  const original = express.application.post;
+  express.application.post = function patchedPost(routePath, ...handlers) {
+    if (routePath === "/api/chat/messages" && handlers.length) {
+      const index = handlers.length - 1;
+      const handler = handlers[index];
+      handlers[index] = async function secureChatPost(req, res, next) {
+        const sender = String(req.body?.sender || "").toLowerCase();
+        const id = Number(req.body?.telegram_id || 0);
+        if (sender === "customer" || sender === "user") {
+          const identity = resolveChatIdentity(req);
+          if (!identity?.verified || !id || Number(identity.telegramId) !== id) return res.status(401).json({ success: false, message: "Mijoz sessiyasi tasdiqlanmadi" });
+          req.body.sender = "customer";
+          req.body.telegram_id = id;
+        } else if (sender === "admin") {
+          if (!verifyAdmin(req)) return res.status(401).json({ success: false, message: "Admin sessiyasi tasdiqlanmadi" });
+        } else {
+          return res.status(400).json({ success: false, message: "Noto‘g‘ri chat jo‘natuvchisi" });
+        }
+        const clientMsgId = String(req.body?.client_message_id || req.body?.clientMessageId || req.body?.metadata?.clientMessageId || req.body?.metadata?.client_message_id || "").trim();
+        if (clientMsgId) {
+          const duplicate = await findExistingByClientMessageId(id, clientMsgId);
+          if (duplicate) {
+            return res.status(200).json({ success: true, data: flattenMessageRow(duplicate), duplicate: true });
+          }
+        }
+        let payload = null;
+        const originalJson = res.json.bind(res);
+        res.json = body => { payload = body; return originalJson(body); };
+        const result = await handler(req, res, next);
+        if (payload?.success && payload?.data) {
+          const normalized = flattenMessageRow(payload.data);
+          await publishRealtime(normalized);
+          await notifyAdmins(normalized);
+        }
+        return result;
+      };
+    }
+    return original.call(this, routePath, ...handlers);
+  };
+}
 patchGet(); patchChatPost();
 setImmediate(startRealtime);

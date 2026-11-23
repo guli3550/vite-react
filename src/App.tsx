@@ -62,6 +62,7 @@ import {
   type ChatMessage,
   getUnreadMessages,
   markMessagesAsRead,
+  matchesCustomerChatScope,
   subscribeToChat,
   getStoredChatMessages,
 } from "./utils/chatSync";
@@ -1465,7 +1466,7 @@ export default function App() {
     const handleNewAdminMsg = (e: Event) => {
       const msg = (e as CustomEvent).detail as ChatMessage;
       if (!msg) return;
-      if (!msg.userId || String(msg.userId) === String(currentUserId)) {
+      if (!msg.userId || matchesCustomerChatScope(msg.userId, currentUserId)) {
         refreshUnread();
         if (page !== "chat") {
           try {
@@ -1490,8 +1491,21 @@ export default function App() {
               osc.stop(ctx.currentTime + 0.45);
             }
           } catch {}
+          const rawSnippet =
+            msg.text ||
+            (msg.type === "video_note"
+              ? "📹 Dumaloq video"
+              : msg.type === "video"
+              ? "🎬 Video xabar"
+              : msg.type === "audio"
+              ? "🎙️ Ovozli xabar"
+              : msg.type === "file"
+              ? `📄 ${msg.fileName || "Hujjat"}`
+              : msg.type === "image"
+              ? "📷 Rasm"
+              : "Yangi xabar");
           const snippet =
-            msg.text.length > 40 ? msg.text.slice(0, 40) + "…" : msg.text;
+            rawSnippet.length > 40 ? rawSnippet.slice(0, 40) + "…" : rawSnippet;
           showToast(`💬 GULI Admin: ${snippet}`);
         }
       }

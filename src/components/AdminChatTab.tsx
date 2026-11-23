@@ -5,8 +5,9 @@ import {
   getAllConversations,
   getStoredChatMessages,
   sendAdminReply,
+  sendAdminLocation,
+  sendAdminPoll,
   subscribeToChat,
-  saveChatMessages,
   markMessagesAsRead,
   updateConversationMetadata,
   editChatMessage,
@@ -14,6 +15,9 @@ import {
   togglePinMessage,
   toggleBookmarkMessage,
   clearChatMessages,
+  retryQueuedChatMessage,
+  flushOfflineOutbox,
+  votePollOption,
 } from "../utils/chatSync";
 import { SwipeableChatBackground } from "./SwipeChatHelpers";
 import { TelegramCircularVideoRecorderOverlay } from "./CircleVideoNote";
@@ -36,9 +40,11 @@ import {
   Pin,
   ImageIcon,
   Video,
+  Film,
   FileText,
   MapPin,
   BarChart2,
+  WifiOff,
 } from "lucide-react";
 import { getApiBaseUrl } from "../lib/apiOrigin";
 import "../chat2.css";
@@ -50,82 +56,19 @@ type AdminChatTabProps = {
   onViewOrderDetails?: (orderNumber: string) => void;
 };
 
-// Seed sample chats and CRM metadata if empty
-function seedSampleChatsIfEmpty() {
-  const current = getStoredChatMessages();
-  if (current.length <= 1) {
-    const samples: ChatMessage[] = [
-      {
-        id: "msg-sample-1",
-        sender: "user",
-        text: "Assalomu alaykum! Yangi kolleksiya byustgalterlarining 75B o‘lchami bormi?",
-        timestamp: new Date(Date.now() - 3600000).toISOString(),
-        read: false,
-        userId: "998901234567",
-        userName: "Malika Rahimova",
-        userPhoto: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-      },
-      {
-        id: "msg-sample-2",
-        sender: "user",
-        text: "Salom admin, buyurtmam qachon yetkaziladi? Kod: 104291",
-        timestamp: new Date(Date.now() - 1800000).toISOString(),
-        read: false,
-        userId: "telegram-88392",
-        userName: "Dilnoza (Telegram)",
-      },
-      {
-        id: "msg-sample-3",
-        sender: "user",
-        text: "Kuryer yetib keldi, katta rahmat sizlarga! 🌷",
-        timestamp: new Date(Date.now() - 900000).toISOString(),
-        read: true,
-        userId: "998935551234",
-        userName: "Shahnoza Karimova",
-      },
-    ];
-    saveChatMessages([...current, ...samples]);
+const MAX_CHAT_MEDIA_BYTES = 20 * 1024 * 1024;
 
-    // Metadata seed
-    updateConversationMetadata("998901234567", {
-      source: "webapp",
-      phone: "+998 90 123 45 67",
-      telegramUsername: "@malika_rahimova",
-      assignedOperator: "Operator #1 (Dilnoza)",
-      status: "open",
-      notes: "75B va 80C o'lchamlarni yoqtiradi. To'lovni Click orqali qilgan.",
-      orderCount: 3,
-      lastOrderNumber: "104291",
-      lastOrderStatus: "Tayyorlanmoqda",
-      lastOrderTotal: 185000,
-    });
-
-    updateConversationMetadata("telegram-88392", {
-      source: "telegram",
-      phone: "+998 93 888 39 21",
-      telegramUsername: "@dilnoza_tg",
-      telegramId: "88392101",
-      assignedOperator: "Operator #2 (Malika)",
-      status: "pending",
-      notes: "Telegram Bot orqali buyurtma bergan. Toshkent shahar.",
-      orderCount: 1,
-      lastOrderNumber: "104291",
-      lastOrderStatus: "Yo'lda",
-      lastOrderTotal: 240000,
-    });
-
-    updateConversationMetadata("998935551234", {
-      source: "callcenter",
-      phone: "+998 93 555 12 34",
-      assignedOperator: "GULI Call Center jamoasi",
-      status: "closed",
-      notes: "Qayta qo'ng'iroq orqali zakaz qilgan. Doimiy mijoz.",
-      orderCount: 5,
-      lastOrderNumber: "103810",
-      lastOrderStatus: "Yetkazildi",
-      lastOrderTotal: 310000,
-    });
+function pickSupportedAudioMime(): string {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "audio/webm";
   }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/mp4",
+  ];
+  return candidates.find((c) => MediaRecorder.isTypeSupported(c)) || "";
 }
 
 const QUICK_REPLIES = [
@@ -194,28 +137,9 @@ export default function AdminChatTab({
 }: AdminChatTabProps) {
   void token;
 
-  useEffect(() => {
-    let alive = true;
-    const loadPresence = async () => {
-      try {
-        const api = getApiBaseUrl();
-        const adminToken = token || sessionStorage.getItem("guli_admin_token") || "";
-        const res = await fetch(`${api}/api/admin/chat/presence`, { headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : {} });
-        const json = await res.json().catch(() => null);
-        if (alive && json?.success && Array.isArray(json.data?.onlineTelegramIds)) {
-          setOnlineCustomerIds(new Set(json.data.onlineTelegramIds.map(String)));
-        }
-      } catch {}
-    };
-    void loadPresence();
-    const timer = window.setInterval(loadPresence, 5000);
-    return () => { alive = false; window.clearInterval(timer); };
-  }, [token]);
-
-  useEffect(() => {
-    seedSampleChatsIfEmpty();
-  }, []);
-
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
   const [conversations, setConversations] = useState<ConversationSummary[]>(() =>
     getAllConversations()
   );
@@ -230,6 +154,61 @@ export default function AdminChatTab({
   const [allMessages, setAllMessages] = useState<ChatMessage[]>(() =>
     getStoredChatMessages()
   );
+
+  // Presence via initial fetch + SSE push + visibility refresh (zero 5s polling)
+  useEffect(() => {
+    let alive = true;
+    const loadPresence = async () => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+      try {
+        const api = getApiBaseUrl();
+        const adminToken = token || sessionStorage.getItem("guli_admin_token") || localStorage.getItem("guli_admin_token") || "";
+        if (!adminToken) return;
+        const res = await fetch(`${api}/api/admin/chat/presence`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => null);
+        if (alive && json?.success && Array.isArray(json.data?.onlineTelegramIds)) {
+          setOnlineCustomerIds(new Set(json.data.onlineTelegramIds.map(String)));
+        }
+      } catch {}
+    };
+
+    const handleSsePresence = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && Array.isArray(detail.onlineTelegramIds)) {
+        setOnlineCustomerIds(new Set(detail.onlineTelegramIds.map(String)));
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void loadPresence();
+        void flushOfflineOutbox();
+      }
+    };
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      void loadPresence();
+      void flushOfflineOutbox();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    void loadPresence();
+    window.addEventListener("guli_chat_presence_updated", handleSsePresence);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      alive = false;
+      window.removeEventListener("guli_chat_presence_updated", handleSsePresence);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [token]);
 
   // Mobile layout state: "list" | "chat" | "crm"
   const [mobileView, setMobileView] = useState<"list" | "chat" | "crm">("list");
@@ -269,21 +248,52 @@ export default function AdminChatTab({
   // Customer Notes state
   const [customerNotesText, setCustomerNotesText] = useState("");
 
+  // Audio playback state
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
   // Voice Recording state
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const recordingSecondsRef = useRef<number>(0);
+  const voiceCancelledRef = useRef<boolean>(false);
 
-  // Separate File Input Refs: Gallery vs Camera vs Document
+  // Separate File Input Refs: Gallery vs Camera vs Video vs Document
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayerRef.current) audioPlayerRef.current.pause();
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (voiceStreamRef.current) voiceStreamRef.current.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const togglePlayAudio = (id: string, url: string) => {
+    if (playingAudioId === id) {
+      audioPlayerRef.current?.pause();
+      setPlayingAudioId(null);
+      return;
+    }
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio();
+      audioPlayerRef.current.onended = () => setPlayingAudioId(null);
+    }
+    audioPlayerRef.current.src = url;
+    audioPlayerRef.current.play().catch(() => setPlayingAudioId(null));
+    setPlayingAudioId(id);
+  };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -376,12 +386,23 @@ export default function AdminChatTab({
     return new Date(b.lastTimestamp || 0).getTime() - new Date(a.lastTimestamp || 0).getTime();
   });
 
-  // Current active chat messages
-  const rawActiveChatMessages = allMessages.filter(
-    (m) =>
-      (!m.userId || String(m.userId) === String(selectedUserId) || m.id === "welcome-msg-1") &&
-      Boolean((m.text && m.text.trim()) || m.mediaUrl || m.pollOptions || m.location)
-  );
+  // Current active chat messages (strictly scoped to selected customer)
+  const rawActiveChatMessages = selectedUserId
+    ? allMessages.filter(
+        (m) =>
+          m.id !== "welcome-msg-1" &&
+          m.userId !== undefined &&
+          m.userId !== null &&
+          String(m.userId) === String(selectedUserId) &&
+          Boolean(
+            (m.text && m.text.trim()) ||
+              m.mediaUrl ||
+              m.offlineMediaKey ||
+              m.pollOptions ||
+              m.location
+          )
+      )
+    : [];
 
   const activeChatMessages = rawActiveChatMessages.filter((m) => {
     if (!inChatSearchQuery.trim()) return true;
@@ -449,11 +470,13 @@ export default function AdminChatTab({
       type?: "image" | "file" | "audio" | "video" | "video_note";
       mediaUrl?: string;
       fileName?: string;
+      mimeType?: string;
       audioDuration?: number;
       videoDuration?: number;
     }
   ) => {
     if (e) e.preventDefault();
+    if (!selectedUserId) return;
     const textToSend = overrideText !== undefined ? overrideText : replyText;
     if (!textToSend.trim() && !media) return;
 
@@ -461,37 +484,35 @@ export default function AdminChatTab({
       ? { id: replyingToMsg.id, text: replyingToMsg.text, sender: replyingToMsg.userName || replyingToMsg.sender }
       : undefined;
 
-    playTelegramSendSound();
-    const sentMsg = await sendAdminReply(selectedUserId, textToSend, media, replyToParam);
-    if (sentMsg) {
-      setStreamingMsgId(sentMsg.id);
-    }
-
-    setReplyText("");
+    if (overrideText === undefined) setReplyText("");
     setReplyingToMsg(null);
     setEmojiPickerOpen(false);
     setAttachMenuOpen(false);
+
+    playTelegramSendSound();
+    const sentMsg = await sendAdminReply(selectedUserId, textToSend, media, replyToParam);
+    if (sentMsg) {
+      if (sentMsg.deliveryStatus === "queued") {
+        showToast("⏳ Internet yo‘q: xabar navbatga qo‘yildi");
+      } else if (!media && textToSend.trim()) {
+        setStreamingMsgId(sentMsg.id);
+      }
+    } else {
+      showToast("❌ Xabar yuborilmadi");
+    }
   };
 
-  // Send Showroom / Custom Location
-  const handleSendLocationPicker = (lat: number, lng: number, address: string) => {
+  // Send Showroom / Custom Location via persistent API + offline queue
+  const handleSendLocationPicker = async (lat: number, lng: number, address: string) => {
+    if (!selectedUserId) return;
     playTelegramSendSound();
-    const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-    const newMsg: ChatMessage = {
-      id: `msg-loc-${Date.now()}`,
-      sender: "admin",
-      text: `📍 ${address}`,
-      type: "location",
-      location: { lat, lng, address, mapUrl },
-      timestamp: new Date().toISOString(),
-      read: false,
-      userId: selectedUserId,
-      userName: "GULI Admin",
-    };
-    saveChatMessages([...allMessages, newMsg]);
     setLocationPickerOpen(false);
     setAttachMenuOpen(false);
-    showToast("📍 Geolokatsiya yuborildi!");
+    const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    const sent = await sendAdminLocation(selectedUserId, { lat, lng, address, mapUrl });
+    if (sent?.deliveryStatus === "queued") showToast("⏳ Internet yo‘q: lokatsiya navbatga qo‘yildi");
+    else if (sent) showToast("📍 Geolokatsiya yuborildi!");
+    else showToast("❌ Geolokatsiya yuborilmadi");
   };
 
   const handleFetchGPSLocation = () => {
@@ -514,8 +535,9 @@ export default function AdminChatTab({
     }
   };
 
-  // Create & Send Interactive Poll
-  const handleCreatePoll = () => {
+  // Create & Send Interactive Poll via persistent API + offline queue
+  const handleCreatePoll = async () => {
+    if (!selectedUserId) return;
     if (!pollQuestion.trim() || !pollOption1.trim() || !pollOption2.trim()) {
       showToast("Savol va kamida 2 ta variantni kiriting!");
       return;
@@ -528,41 +550,59 @@ export default function AdminChatTab({
     }));
 
     playTelegramSendSound();
-    const newMsg: ChatMessage = {
-      id: `msg-poll-${Date.now()}`,
-      sender: "admin",
-      text: pollQuestion.trim(),
-      type: "poll",
-      pollQuestion: pollQuestion.trim(),
-      pollOptions: pollOpts,
-      timestamp: new Date().toISOString(),
-      read: false,
-      userId: selectedUserId,
-      userName: "GULI Admin",
-    };
-    saveChatMessages([...allMessages, newMsg]);
-
+    const q = pollQuestion.trim();
     setPollModalOpen(false);
     setPollQuestion("");
     setPollOption1("");
     setPollOption2("");
     setPollOption3("");
     setAttachMenuOpen(false);
-    showToast("📊 Interaktiv So'rovnoma yuborildi!");
+
+    const sent = await sendAdminPoll(selectedUserId, q, pollOpts);
+    if (sent?.deliveryStatus === "queued") showToast("⏳ Internet yo‘q: so‘rovnoma navbatga qo‘yildi");
+    else if (sent) showToast("📊 Interaktiv So'rovnoma yuborildi!");
+    else showToast("❌ So'rovnoma yuborilmadi");
   };
 
-  // Image & File attachment handlers
+  // Image, Video & File attachment handlers
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      showToast("Rasm hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
-      handleSendReply(undefined, "📷 Rasm biriktirildi", {
+      void handleSendReply(undefined, "", {
         type: "image",
         mediaUrl: dataUrl,
         fileName: file.name,
+        mimeType: file.type || "image/jpeg",
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleVideoUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      showToast("Video hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      void handleSendReply(undefined, "", {
+        type: "video",
+        mediaUrl: dataUrl,
+        fileName: file.name,
+        mimeType: file.type || "video/mp4",
       });
     };
     reader.readAsDataURL(file);
@@ -572,14 +612,24 @@ export default function AdminChatTab({
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_CHAT_MEDIA_BYTES) {
+      showToast("Fayl hajmi 20 MB dan oshmasligi kerak");
+      e.target.value = "";
+      return;
+    }
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|webm|mov|m4v|3gp)$/i.test(file.name);
+    const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+    const isAudio = file.type.startsWith("audio/") || /\.(ogg|mp3|wav|m4a|aac)$/i.test(file.name);
+    const resolvedType = isVideo ? "video" : isImage ? "image" : isAudio ? "audio" : "file";
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
-      handleSendReply(undefined, `📁 ${file.name}`, {
-        type: "file",
+      void handleSendReply(undefined, resolvedType === "file" ? `📁 ${file.name}` : "", {
+        type: resolvedType,
         mediaUrl: dataUrl,
         fileName: file.name,
+        mimeType: file.type || undefined,
       });
     };
     reader.readAsDataURL(file);
@@ -587,10 +637,12 @@ export default function AdminChatTab({
   };
 
   const handleSendVideoNote = (base64Video: string, durationSec: number) => {
-    handleSendReply(undefined, "📹 Dumaloq video", {
+    const mimeMatch = base64Video.match(/^data:([^;]+);/i);
+    void handleSendReply(undefined, "", {
       type: "video_note",
       mediaUrl: base64Video,
       fileName: `video_note-${Date.now()}.webm`,
+      mimeType: mimeMatch?.[1] || "video/webm",
       videoDuration: durationSec,
     });
     setIsVideoRecordingOpen(false);
@@ -599,65 +651,91 @@ export default function AdminChatTab({
 
   // Voice recording controls
   const startVoiceRecording = async () => {
+    if (isRecordingVoice) return;
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        audioChunksRef.current = [];
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-        recorder.start();
-        mediaRecorderRef.current = recorder;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("Brauzer mikrofonni qo'llab-quvvatlamaydi");
+        return;
       }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStreamRef.current = stream;
+      const mimeType = pickSupportedAudioMime();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      voiceCancelledRef.current = false;
+      recordingSecondsRef.current = 0;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        voiceStreamRef.current = null;
+        if (voiceCancelledRef.current || audioChunksRef.current.length === 0) return;
+
+        const durationSec = Math.max(1, recordingSecondsRef.current);
+        const outputMime = (mimeType || recorder.mimeType || "audio/webm").split(";")[0];
+        const ext = outputMime.includes("ogg") ? "ogg" : outputMime.includes("mp4") ? "m4a" : "webm";
+        const blob = new Blob(audioChunksRef.current, { type: outputMime });
+        if (blob.size > MAX_CHAT_MEDIA_BYTES) {
+          showToast("Ovozli xabar hajmi juda katta (maks 20 MB)");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            void handleSendReply(undefined, "", {
+              type: "audio",
+              mediaUrl: reader.result,
+              fileName: `voice-${Date.now()}.${ext}`,
+              mimeType: outputMime,
+              audioDuration: durationSec,
+            });
+          }
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      setIsRecordingVoice(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          const next = prev + 1;
+          recordingSecondsRef.current = next;
+          return next;
+        });
+      }, 1000);
     } catch {
-      // Fallback timer simulation if mic permissions are constrained in iframe
+      showToast("Mikrofonga ruxsat berilmadi");
     }
-    setIsRecordingVoice(true);
-    setRecordingSeconds(0);
-    recordingTimerRef.current = setInterval(() => {
-      setRecordingSeconds((prev) => prev + 1);
-    }, 1000);
   };
 
   const cancelVoiceRecording = () => {
+    voiceCancelledRef.current = true;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+    if (voiceStreamRef.current) {
+      voiceStreamRef.current.getTracks().forEach((t) => t.stop());
+      voiceStreamRef.current = null;
     }
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIsRecordingVoice(false);
+    recordingSecondsRef.current = 0;
     setRecordingSeconds(0);
     audioChunksRef.current = [];
   };
 
   const sendVoiceRecording = () => {
-    const durationSec = recordingSeconds || 4;
+    voiceCancelledRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result as string;
-          handleSendReply(undefined, "🎙️ Ovozli xabar", {
-            type: "audio",
-            mediaUrl: base64,
-            fileName: `voice-${Date.now()}.webm`,
-            audioDuration: durationSec,
-          });
-        };
-        reader.readAsDataURL(blob);
-        mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
-      };
       mediaRecorderRef.current.stop();
-    } else {
-      // Sample audio fallback if mic stream is blocked in sandbox
-      handleSendReply(undefined, "🎙️ Ovozli xabar", {
-        type: "audio",
-        mediaUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-        fileName: `voice-${Date.now()}.mp3`,
-        audioDuration: durationSec,
-      });
     }
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIsRecordingVoice(false);
@@ -733,7 +811,27 @@ export default function AdminChatTab({
               )}
               Online Chat
             </h2>
-            <span className="chat2-badge">{conversations.length}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {!isOnline && (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#B45309",
+                    background: "#FEF3C7",
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                  }}
+                >
+                  <WifiOff size={11} />
+                  Offline
+                </span>
+              )}
+              <span className="chat2-badge">{conversations.length}</span>
+            </div>
           </div>
           <div className="chat2-search-box">
             <span className="chat2-search-icon">🔍</span>
@@ -1186,6 +1284,15 @@ export default function AdminChatTab({
                       showToast("Xabar o'chirildi 🗑️");
                     }}
                     onEdit={(m) => handleStartEditMessage(m)}
+                    onRetry={(m) => {
+                      void retryQueuedChatMessage(m.clientMessageId || m.id).then((res) => {
+                        if (res) showToast("Xabar yuborildi ✓");
+                        else showToast("Qayta yuborish navbatga qo'yildi");
+                      });
+                    }}
+                    onVotePoll={(messageId, optionIndex) => votePollOption(messageId, optionIndex)}
+                    playingAudioId={playingAudioId}
+                    onTogglePlayAudio={togglePlayAudio}
                     onImageClick={(url) => setLightboxImageUrl(url)}
                     senderName={msg.sender === "admin" ? "GULI Operator (Siz)" : currentConversation?.userName || "Mijoz"}
                     senderAvatar={msg.sender === "admin" ? "/guli-logo.png" : undefined}
@@ -1336,6 +1443,18 @@ export default function AdminChatTab({
               type="button"
               className="chatgpt-attach-item"
               onClick={() => {
+                videoInputRef.current?.click();
+                setAttachMenuOpen(false);
+              }}
+            >
+              <Film size={16} className="chatgpt-attach-icon" />
+              <span>Video fayl</span>
+            </button>
+
+            <button
+              type="button"
+              className="chatgpt-attach-item"
+              onClick={() => {
                 setIsVideoRecordingOpen(true);
                 setAttachMenuOpen(false);
               }}
@@ -1353,7 +1472,7 @@ export default function AdminChatTab({
               }}
             >
               <FileText size={16} className="chatgpt-attach-icon" />
-              <span>Fayl / Hujjat</span>
+              <span>Hujjat (PDF, DOC, XLS)</span>
             </button>
 
             <button
@@ -1384,7 +1503,7 @@ export default function AdminChatTab({
 
         {/* Telegram-style Composer Bar: 100% Guli AI / ChatGPT Input Capsule */}
         <form className="chatgpt-input-dock-container" style={{ padding: "8px 18px 14px" }} onSubmit={handleSendReply}>
-          {/* Separate File Inputs for Gallery vs Camera vs File */}
+          {/* Separate File Inputs for Gallery vs Camera vs Video vs Document */}
           <input
             ref={galleryInputRef}
             type="file"
@@ -1401,9 +1520,16 @@ export default function AdminChatTab({
             onChange={handleImageUpload}
           />
           <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime,video/*"
+            style={{ display: "none" }}
+            onChange={handleVideoUpload}
+          />
+          <input
             ref={fileInputRef}
             type="file"
-            accept="*/*"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/*,video/*,audio/*"
             style={{ display: "none" }}
             onChange={handleFileUpload}
           />

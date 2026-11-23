@@ -116,6 +116,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
 
   // Swipe / Drag state for continuous peek transition
   const [dragOffsetY, setDragOffsetY] = useState(0);
+  const dragOffsetYRef = useRef<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartY = useRef<number>(0);
   const touchStartX = useRef<number>(0);
@@ -214,7 +215,10 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", stopAllVideos);
+    const tgWebApp = (window as any).Telegram?.WebApp;
+    tgWebApp?.disableVerticalSwipes?.();
     return () => {
+      tgWebApp?.enableVerticalSwipes?.();
       stopAllVideos();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", stopAllVideos);
@@ -274,11 +278,14 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       markFeedFetched();
       applyIncoming(active);
     } catch (error) {
-      console.error("[Reels] Published server feed could not be loaded:", error);
-      if (!import.meta.env.PROD) {
-        applyIncoming(loadReelsFromStorage().filter((r) => r.status === "active"));
-      } else if (reelsRef.current.length === 0) {
-        setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
+      console.warn("[Reels] Published server feed unavailable, using fallback:", error);
+      if (reelsRef.current.length === 0) {
+        const fallback = loadReelsFromStorage().filter((r) => r.status === "active" && Boolean(r.videoUrl));
+        if (fallback.length > 0) {
+          applyIncoming(fallback);
+        } else {
+          setFeedError("Reels serveriga ulanib bo‘lmadi. Internet aloqasini tekshirib, qayta urinib ko‘ring.");
+        }
       }
     } finally {
       setIsFeedLoading(false);
@@ -415,13 +422,15 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pos, currentReelId, retryNonce, playActiveVideo]);
 
-  // Navigate between reels (infinite loop: the position is unbounded, the reel wraps).
+  // Navigate between reels (infinite forward loop; never go negative before the 1st reel).
   const goToPos = useCallback((position: number) => {
-    if (reelsRef.current.length > 1) setPos(position);
+    if (reelsRef.current.length > 1) setPos(Math.max(0, position));
   }, []);
 
   const goNext = useCallback(() => goToPos(posRef.current + 1), [goToPos]);
-  const goPrev = useCallback(() => goToPos(posRef.current - 1), [goToPos]);
+  const goPrev = useCallback(() => {
+    if (posRef.current > 0) goToPos(posRef.current - 1);
+  }, [goToPos]);
 
   // Trigger Play / Pause indicator animation
   const triggerPlayPauseOverlay = useCallback((type: "play" | "pause") => {
@@ -457,6 +466,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     touchStartY.current = e.touches[0].clientY;
     touchStartX.current = e.touches[0].clientX;
     isSwipingVertically.current = null;
+    dragOffsetYRef.current = 0;
     setIsDragging(true);
   };
 
@@ -473,19 +483,24 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     }
 
     if (isSwipingVertically.current) {
-      // The feed loops, so only a single-reel feed has an edge to resist.
-      setDragOffsetY(count < 2 ? diffY * 0.3 : diffY);
+      // At the first reel (pos === 0), there is no previous reel above it to pull down.
+      const atTopEdge = posRef.current <= 0 && diffY > 0;
+      const nextOffset = atTopEdge ? 0 : count < 2 ? diffY * 0.3 : diffY;
+      dragOffsetYRef.current = nextOffset;
+      setDragOffsetY(nextOffset);
     }
   };
 
-  const handleTouchEnd = () => {
+  const finishTouch = (cancelled: boolean) => {
     if (!isDragging) return;
     setIsDragging(false);
-    const decision = evaluateSwipeGesture(-dragOffsetY, 45);
-
-    if (decision === "next") goNext();
-    else if (decision === "prev") goPrev();
-
+    const finalOffset = dragOffsetYRef.current;
+    if (!cancelled) {
+      const decision = evaluateSwipeGesture(-finalOffset, 45);
+      if (decision === "next") goNext();
+      else if (decision === "prev") goPrev();
+    }
+    dragOffsetYRef.current = 0;
     setDragOffsetY(0);
     touchStartY.current = 0;
     touchStartX.current = 0;
@@ -708,8 +723,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       className="reelsContainer"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onTouchEnd={() => finishTouch(false)}
+      onTouchCancel={() => finishTouch(true)}
       onWheel={handleWheel}
       aria-label="Guli Market Reels video lentasi"
     >
