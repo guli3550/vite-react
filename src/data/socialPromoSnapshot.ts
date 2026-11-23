@@ -1,4 +1,5 @@
 import type { SocialPromoItem, SocialPromoRowSetting } from "../types/socialPromo";
+import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 
 /**
  * Read-only snapshot of the existing social promo configuration.
@@ -15,11 +16,11 @@ export const SOCIAL_PROMO_SETTINGS: SocialPromoRowSetting[] = [
 export const SOCIAL_PROMO_ITEMS: SocialPromoItem[] = [
   {
     id: "adb5fc40-9740-4ed8-a600-b3a893c7e97a",
-    title: "Yusufaliyev",
-    platform: "instagram",
-    label: "Instagram · Gulii MARKET",
+    title: "Guli Market",
+    platform: "custom",
+    label: "Guli Market",
     target_url: "https://www.instagram.com/gulii_market",
-    logo_url: null,
+    logo_url: GULI_LOGO_BASE64,
     row_number: 1,
     sort_order: 1,
     is_active: true,

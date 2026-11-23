@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { getSocialLinks, SocialLinks } from "../utils/socialLinks";
-import { SocialPromoSection } from "./socialPromo/SocialPromoSection";
 import { type Language, getTranslation } from "../utils/translations";
 
 interface SocialLinksModalProps {
@@ -41,8 +40,6 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
         style={{
           width: "100%",
           maxWidth: "460px",
-          maxHeight: "88vh",
-          overflowY: "auto",
           padding: "24px 20px",
           background: "var(--bg-card, #ffffff)",
         }}
@@ -75,21 +72,6 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
             : "GULI Premium do‘konining rasmiy ijtimoiy tarmoqlariga a’zo bo‘ling va eng so‘nggi to‘plamlar hamda chegirmalardan xabardor bo‘ling:"}
         </p>
 
-        <section
-          aria-label="GULI ijtimoiy tarmoqlari lentasi"
-          style={{
-            margin: "0 0 18px",
-            padding: "12px 0 8px",
-            borderTop: "1px solid var(--border-color, #f0e2e5)",
-            borderBottom: "1px solid var(--border-color, #f0e2e5)",
-            overflow: "hidden",
-          }}
-        >
-          <h3 style={{ margin: "0 0 10px", fontSize: "13px", fontWeight: 800, color: "var(--text-main, #1f191b)" }}>
-            GULI ijtimoiy tarmoqlari
-          </h3>
-          <SocialPromoSection language={language} variant="pill" maxRows={3} />
-        </section>
 
         <div style={{ display: "grid", gap: "12px" }}>
           {/* Instagram */}
