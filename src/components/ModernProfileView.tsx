@@ -12,6 +12,7 @@ type PromoModalType = "cashback" | "chat" | "call" | "vip" | null;
 // Persistent background images for Guli Premium customer card (Day / Night mode embedded in Base64 CSS)
 import "./ModernProfileCardBg.css";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
+import { SocialPromoSection } from "./socialPromo/SocialPromoSection";
 
 export const TelegramLogoIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 20, style }) => (
   <svg
@@ -2151,6 +2152,7 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
         </button>
       </section>
 
+
       {/* 6. Sozlamalar va Xavfsizlik */}
       <section className="profileSection" style={{ marginBottom: "20px" }}>
         <h2>⚙️ {t("settings_and_account")}</h2>
@@ -2215,6 +2217,14 @@ export const ModernProfileView: React.FC<ModernProfileViewProps> = ({
             <i style={{ color: "#ef4444" }}>›</i>
           </button>
         )}
+      </section>
+
+      {/* Three-row social promo feed: below cache controls, above the profile footer/username. */}
+      <section
+        aria-label="GULI ijtimoiy tarmoqlari"
+        style={{ margin: "0 16px 18px", overflow: "hidden" }}
+      >
+        <SocialPromoSection language={language} variant="pill" maxRows={3} isDark={activeTheme === "dark"} />
       </section>
 
       {/* Watermark */}

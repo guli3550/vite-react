@@ -72,6 +72,7 @@ export const SocialLinksModal: React.FC<SocialLinksModalProps> = ({ isOpen, onCl
             : "GULI Premium do‘konining rasmiy ijtimoiy tarmoqlariga a’zo bo‘ling va eng so‘nggi to‘plamlar hamda chegirmalardan xabardor bo‘ling:"}
         </p>
 
+
         <div style={{ display: "grid", gap: "12px" }}>
           {/* Instagram */}
           <button

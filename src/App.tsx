@@ -4222,7 +4222,7 @@ export default function App() {
             pointerEvents: "none",
           }}
         >
-          @guli_3550
+          @Yusufaliyev_1225
         </div>
       </main>
     );
