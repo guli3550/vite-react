@@ -1,6 +1,11 @@
-import { useEffect, useState, useMemo, useRef, type FC } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type FC } from "react";
 import type { Product } from "./ProductImageGallery";
-import { type CategoryInfo, normalizeCategory } from "../utils/categoryUtils";
+import type { CategoryInfo } from "../utils/categoryUtils";
+import {
+  buildCategoryShowcaseMap,
+  pickNextRotatableCategory,
+  type CategoryShowcaseItem,
+} from "../utils/categoryShowcase";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
 import "./RotatingCategorySection.css";
 
@@ -8,97 +13,33 @@ export type { CategoryInfo };
 
 interface RotatingCategoryCardProps {
   category: CategoryInfo;
-  products: Product[];
-  index: number;
+  items?: CategoryShowcaseItem[];
+  products?: Product[];
+  activeItemIndex?: number;
+  isFading?: boolean;
   onSelect: (categoryName: string) => void;
   onOpenProduct: (product: Product) => void;
 }
 
-export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
+const RotatingCategoryCardBase: FC<RotatingCategoryCardProps> = ({
   category,
+  items,
   products,
-  index,
+  activeItemIndex = 0,
+  isFading = false,
   onSelect,
-  onOpenProduct
+  onOpenProduct,
 }) => {
-  // Ushbu kategoriyaga tegishli mahsulotlar
-  const categoryProducts = useMemo(() => {
-    const targetNorm = normalizeCategory(category.name);
-    return products.filter(p => p.active !== false && normalizeCategory(p.category) === targetNorm);
-  }, [products, category.name]);
+  const resolvedItems = useMemo(() => {
+    if (items) return items;
+    if (!products?.length) return [];
+    return buildCategoryShowcaseMap([category], products)[category.name] || [];
+  }, [items, products, category]);
 
-  // Barcha rasmlar va tovarlar ro'yxati (har bir tovarning rasmlari bilan)
-  const rotatingItems = useMemo(() => {
-    if (!categoryProducts.length) return [];
-    
-    const items: Array<{
-      product: Product;
-      imageUrl: string;
-      title: string;
-      price: number;
-      oldPrice?: number;
-      discount?: number;
-      isNew?: boolean;
-    }> = [];
-
-    categoryProducts.forEach((p, pIdx) => {
-      const pImages = [p.image, ...(p.images || [])].filter(Boolean);
-      if (pImages.length > 0) {
-        // Har bir mahsulot kategoriya kartasida faqat o'zining asosiy
-        // rasmini ko'rsatadi. Qo'shimcha galereya rasmlari keyingi mahsulot
-        // o'rnini egallamasligi kerak: aylanish tartibi = mahsulot → mahsulot.
-        items.push({
-          product: p,
-          imageUrl: pImages[0],
-          title: p.name,
-          price: p.price,
-          oldPrice: p.oldPrice,
-          discount: p.discount,
-          isNew: pIdx < 2 || Boolean(p.featured)
-        });
-      }
-    });
-
-    return items;
-  }, [categoryProducts]);
-
-  const [activeItemIndex, setActiveItemIndex] = useState(0);
-  const [isFading, setIsFading] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isCardVisible, setIsCardVisible] = useState(false);
-
-  // Ko'rinmayotgan kategoriya kartalarida timer va rasm almashishini to'xtatamiz.
-  useEffect(() => {
-    const node = cardRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setIsCardVisible(true);
-      return;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      setIsCardVisible(Boolean(entry?.isIntersecting));
-    }, { rootMargin: "80px" });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!isCardVisible || rotatingItems.length <= 1) return;
-    const intervalDuration = 4200 + (index % 3) * 500;
-    let fadeTimer: number | undefined;
-    const timer = window.setInterval(() => {
-      setIsFading(true);
-      fadeTimer = window.setTimeout(() => {
-        setActiveItemIndex(prev => (prev + 1) % rotatingItems.length);
-        setIsFading(false);
-      }, 220);
-    }, intervalDuration);
-    return () => {
-      window.clearInterval(timer);
-      if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
-    };
-  }, [isCardVisible, rotatingItems.length, index]);
-
-  const currentItem = rotatingItems[activeItemIndex] || null;
+  const currentItem =
+    resolvedItems.length > 0
+      ? resolvedItems[activeItemIndex % resolvedItems.length] || resolvedItems[0]
+      : null;
 
   const handleClickCard = () => {
     if (currentItem?.product) {
@@ -109,76 +50,75 @@ export const RotatingCategoryCard: FC<RotatingCategoryCardProps> = ({
   };
 
   return (
-    <div
-      ref={cardRef}
+    <button
+      type="button"
       className="rotatingCategoryCard"
       id={`cat-card-${category.name.toLowerCase().replace(/\s+/g, "-")}`}
-      role="button"
-      tabIndex={0}
       onClick={handleClickCard}
-      onKeyDown={e => {
-        if (e.key === "Enter" || e.key === " ") {
-          handleClickCard();
-        }
-      }}
-      title={currentItem ? `${currentItem.title} mahsulotini ko'rish` : `${category.name} toifasidagi barcha mahsulotlarni ko'rish`}
+      title={
+        currentItem
+          ? `${currentItem.title} mahsulotini ko'rish`
+          : `${category.name} toifasidagi barcha mahsulotlarni ko'rish`
+      }
     >
-      {/* Background Image Slideshow */}
       <div className="catCardMedia">
         {currentItem?.imageUrl ? (
           <img
-            key={currentItem.imageUrl + activeItemIndex}
             src={currentItem.imageUrl}
             alt={currentItem.title}
-            className={`catCardImg ${isFading ? "fading" : ""}`}
+            className={isFading ? "catCardImg fading" : "catCardImg"}
             loading="lazy"
             decoding="async"
           />
         ) : (
           <div className="catCardFallback">
-            <span className="catFallbackIcon guli-brand-circle-logo" style={{ width: 50, height: 50, borderRadius: "50%", overflow: "hidden", display: "inline-grid", placeItems: "center" }}>
-              <img src={GULI_LOGO_BASE64} alt="Guli Premium" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            <span
+              className="catFallbackIcon guli-brand-circle-logo"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                overflow: "hidden",
+                display: "inline-grid",
+                placeItems: "center",
+              }}
+            >
+              <img
+                src={GULI_LOGO_BASE64}
+                alt="Guli Premium"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
+              />
             </span>
           </div>
         )}
-        <div className="catCardOverlay" />
+        <div className="catCardOverlay" aria-hidden="true" />
+        {currentItem?.discount && currentItem.discount > 0 ? (
+          <span className="catLiveDiscount">-{currentItem.discount}%</span>
+        ) : null}
       </div>
 
-      {/* Rotating Live Product Info or Category Title */}
       <div className="catCardBottom">
         <h3 className="catTitle">{category.name}</h3>
 
         {currentItem ? (
-          <div
-            className={`catLiveProduct ${isFading ? "fading" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenProduct(currentItem.product);
-            }}
-            title={`${currentItem.title} tovar sahifasiga o'tish`}
-          >
-            <div className="catLiveProductHeader">
-              <span className="catLivePulse" />
-              <span className="catLiveName">{currentItem.title}</span>
-            </div>
-            <div className="catLivePriceRow">
+          <div className={isFading ? "catLiveMeta fading" : "catLiveMeta"}>
+            <span className="catLiveName">{currentItem.title}</span>
+            <span className="catLivePriceRow">
               <span className="catLivePrice">
                 {Math.round(currentItem.price).toLocaleString("uz-UZ")} so'm
               </span>
-              {currentItem.discount ? (
-                <span className="catLiveDiscount">-{currentItem.discount}%</span>
-              ) : (
-                <span className="catViewProductTag">Ko'rish ›</span>
-              )}
-            </div>
+              <span className="catViewProductTag" aria-hidden="true">›</span>
+            </span>
           </div>
         ) : (
-          <span className="catExplorePrompt">To'plamni ko'rish →</span>
+          <span className="catExplorePrompt">To'plam ›</span>
         )}
       </div>
-    </div>
+    </button>
   );
 };
+
+export const RotatingCategoryCard = memo(RotatingCategoryCardBase);
 
 interface RotatingCategoriesSectionProps {
   categories: CategoryInfo[];
@@ -193,18 +133,128 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
   products,
   onSelectCategory,
   onOpenProduct,
-  onViewAll
+  onViewAll,
 }) => {
-  // "Barchasi" dan tashqari asosiy toifalar
-  const displayCategories = useMemo(() => {
-    return categories.filter(c => c.name !== "Barchasi");
-  }, [categories]);
+  const displayCategories = useMemo(
+    () => categories.filter((c) => c.name !== "Barchasi"),
+    [categories],
+  );
+
+  const showcaseMap = useMemo(
+    () => buildCategoryShowcaseMap(displayCategories, products),
+    [displayCategories, products],
+  );
+
+  const categoryNames = useMemo(
+    () => displayCategories.map((c) => c.name),
+    [displayCategories],
+  );
+
+  const [slotIndices, setSlotIndices] = useState<Record<string, number>>({});
+  const [fadingCategory, setFadingCategory] = useState<string | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const rotationCursorRef = useRef(0);
+  const [isSectionVisible, setIsSectionVisible] = useState(true);
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
+    typeof document === "undefined" ? true : document.visibilityState === "visible",
+  );
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false,
+  );
+
+  useEffect(() => {
+    const node = sectionRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setIsSectionVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsSectionVisible(Boolean(entry?.isIntersecting));
+      },
+      { rootMargin: "120px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisibilityChange = () => {
+      setIsDocumentVisible(document.visibilityState === "visible");
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setPrefersReducedMotion(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+
+  const hasRotatableCategories = useMemo(
+    () => categoryNames.some((name) => (showcaseMap[name]?.length || 0) > 1),
+    [categoryNames, showcaseMap],
+  );
+
+  useEffect(() => {
+    if (!isSectionVisible || !isDocumentVisible || prefersReducedMotion || !hasRotatableCategories) {
+      setFadingCategory(null);
+      return;
+    }
+
+    let fadeTimer: number | undefined;
+    const interval = window.setInterval(() => {
+      const next = pickNextRotatableCategory(
+        categoryNames,
+        showcaseMap,
+        rotationCursorRef.current,
+      );
+      if (!next) return;
+
+      rotationCursorRef.current = next.nextCursor;
+      const targetName = next.categoryName;
+      const itemCount = showcaseMap[targetName]?.length || 0;
+      if (itemCount <= 1) return;
+
+      setFadingCategory(targetName);
+      fadeTimer = window.setTimeout(() => {
+        setSlotIndices((prev) => ({
+          ...prev,
+          [targetName]: ((prev[targetName] || 0) + 1) % itemCount,
+        }));
+        setFadingCategory((current) => (current === targetName ? null : current));
+      }, 170);
+    }, 2600);
+
+    return () => {
+      window.clearInterval(interval);
+      if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
+    };
+  }, [
+    isSectionVisible,
+    isDocumentVisible,
+    prefersReducedMotion,
+    hasRotatableCategories,
+    categoryNames,
+    showcaseMap,
+  ]);
 
   return (
-    <section className="section homeCategoriesSection" aria-label="Mahsulot toifalari">
+    <section
+      ref={sectionRef}
+      className="section homeCategoriesSection"
+      aria-label="Mahsulot toifalari"
+    >
       <div className="homeCategoriesCompactAction">
         <span className="categorySectionEyebrow">KOLLEKSIYALAR</span>
         <button
+          type="button"
           className="sectionSeeAllBtn"
           onClick={onViewAll}
           id="see-all-categories-btn"
@@ -214,12 +264,13 @@ export const RotatingCategoriesSection: FC<RotatingCategoriesSectionProps> = ({
       </div>
 
       <div className="categoryScroll rotatingCategoryScroll">
-        {displayCategories.map((cat, idx) => (
+        {displayCategories.map((cat) => (
           <RotatingCategoryCard
             key={cat.name}
             category={cat}
-            products={products}
-            index={idx}
+            items={showcaseMap[cat.name] || []}
+            activeItemIndex={slotIndices[cat.name] || 0}
+            isFading={fadingCategory === cat.name}
             onSelect={onSelectCategory}
             onOpenProduct={onOpenProduct}
           />

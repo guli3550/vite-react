@@ -29,6 +29,12 @@ import { RotatingCategoriesSection } from "./components/RotatingCategorySection"
 import { VideoAdHighlights } from "./components/videoAds/VideoAdHighlights";
 import { ProductReviewsSection } from "./components/ProductReviewsSection";
 import { getSynchronizedCategories, normalizeCategory } from "./utils/categoryUtils";
+import {
+  buildProductQueryKey,
+  getCachedProductQuery,
+  invalidateProductQueryCache,
+  runDeduplicatedProductQuery,
+} from "./utils/productQueryCache";
 import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
@@ -836,6 +842,7 @@ export default function App() {
   const [brandProfileInitialTab, setBrandProfileInitialTab] = useState<"tovarlar" | "reels" | "reklamalar">("tovarlar");
   const PRODUCTS_PAGE_SIZE = 40;
   const [products, setProducts] = useState<Product[]>([]);
+  const [homeCatalogSnapshot, setHomeCatalogSnapshot] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadingMore, setProductsLoadingMore] = useState(false);
   const [productsHasMore, setProductsHasMore] = useState(true);
@@ -1837,7 +1844,21 @@ export default function App() {
       setReuploadingOrderId(null);
     }
   };
-  const loadProducts = useCallback(async (silent = false, append = false) => {
+  const loadProducts = useCallback(async (silent = false, append = false, forceRefresh = false) => {
+    const offset = append ? productsOffsetRef.current : 0;
+    const normalizedSearch = debouncedSearch.trim();
+    const isUnfilteredHomeFeed =
+      offset === 0 &&
+      !normalizedSearch &&
+      (!selectedCategory || selectedCategory === "Barchasi");
+    const queryKey = buildProductQueryKey({
+      category: selectedCategory,
+      search: normalizedSearch,
+      limit: PRODUCTS_PAGE_SIZE,
+      offset,
+    });
+    const hasWarmCache = !append && !forceRefresh && Boolean(getCachedProductQuery<Product>(queryKey));
+
     if (append) {
       if (productsLoadingMoreRef.current || !productsHasMoreRef.current) return [];
       productsLoadingMoreRef.current = true;
@@ -1846,12 +1867,11 @@ export default function App() {
       productsOffsetRef.current = 0;
       productsHasMoreRef.current = true;
       setProductsHasMore(true);
-      if (!silent) {
+      if (!silent && !hasWarmCache) {
         setProductsLoading(true);
       }
     }
 
-    const offset = append ? productsOffsetRef.current : 0;
     const params = new URLSearchParams({
       limit: String(PRODUCTS_PAGE_SIZE),
       offset: String(offset),
@@ -1859,7 +1879,6 @@ export default function App() {
     if (selectedCategory && selectedCategory !== "Barchasi") {
       params.set("category", selectedCategory);
     }
-    const normalizedSearch = debouncedSearch.trim();
     if (normalizedSearch) {
       params.set("search", normalizedSearch);
     }
@@ -1867,47 +1886,56 @@ export default function App() {
     try {
       const query = params.toString();
       const primaryUrl = `${API_URL}/api/products?${query}`.replace("? ", "?");
-      let r: Response | null = null;
-      let lastError: unknown = null;
 
-      // Customer catalog is served by Vercel -> Supabase.
-      // Render is deliberately NOT part of this read path, so a sleeping
-      // backend cannot block the first storefront load.
-      for (let attempt = 0; attempt < 3 && !r; attempt += 1) {
-        try {
-          const candidate = await fetch(primaryUrl, {
-            cache: "no-store",
-            headers: { Accept: "application/json" },
-          });
-          if (candidate.ok) {
-            r = candidate;
-            break;
+      const { rows, hasMore } = await runDeduplicatedProductQuery<Product>(
+        queryKey,
+        async () => {
+          let r: Response | null = null;
+          let lastError: unknown = null;
+
+          // Customer catalog is served by Vercel -> Supabase.
+          // Render is deliberately NOT part of this read path, so a sleeping
+          // backend cannot block the first storefront load.
+          for (let attempt = 0; attempt < 3 && !r; attempt += 1) {
+            try {
+              const candidate = await fetch(primaryUrl, {
+                cache: forceRefresh ? "no-store" : "default",
+                headers: { Accept: "application/json" },
+              });
+              if (candidate.ok) {
+                r = candidate;
+                break;
+              }
+              lastError = new Error(`Status: ${candidate.status}`);
+              if (![429, 500, 502, 503, 504].includes(candidate.status)) {
+                r = candidate;
+                break;
+              }
+            } catch (error) {
+              lastError = error;
+            }
+            if (attempt < 2) {
+              await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            }
           }
-          lastError = new Error(`Status: ${candidate.status}`);
-          if (![429, 500, 502, 503, 504].includes(candidate.status)) {
-            r = candidate;
-            break;
+
+          if (!r) throw (lastError instanceof Error ? lastError : new Error("Katalog serveri vaqtincha javob bermadi"));
+          if (!r.ok) throw new Error(`Status: ${r.status}`);
+
+          const j = await r.json();
+          if (!j || j.success !== true || !Array.isArray(j.data)) {
+            throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
           }
-        } catch (error) {
-          lastError = error;
-        }
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
-        }
-      }
 
-      if (!r) throw (lastError instanceof Error ? lastError : new Error("Katalog serveri vaqtincha javob bermadi"));
-      if (!r.ok) throw new Error(`Status: ${r.status}`);
+          return {
+            rows: j.data as Product[],
+            hasMore: Boolean(j.pagination?.hasMore),
+          };
+        },
+        { forceRefresh },
+      );
 
-      const j = await r.json();
-      if (!j || j.success !== true || !Array.isArray(j.data)) {
-        throw new Error(j?.message || "Katalog API noto‘g‘ri javob qaytardi");
-      }
-
-      const rows: Product[] = j.data;
       const nextOffset = offset + rows.length;
-      const hasMore = Boolean(j.pagination?.hasMore);
-
       productsOffsetRef.current = nextOffset;
       productsHasMoreRef.current = hasMore;
       setProductsHasMore(hasMore);
@@ -1915,6 +1943,10 @@ export default function App() {
       if (productsRecoveryTimerRef.current) {
         clearTimeout(productsRecoveryTimerRef.current);
         productsRecoveryTimerRef.current = null;
+      }
+
+      if (isUnfilteredHomeFeed && rows.length > 0) {
+        setHomeCatalogSnapshot(rows);
       }
 
       setProducts((prev) => {
@@ -1941,7 +1973,7 @@ export default function App() {
         if (!productsRecoveryTimerRef.current) {
           productsRecoveryTimerRef.current = setTimeout(() => {
             productsRecoveryTimerRef.current = null;
-            loadProducts(true).catch(() => {});
+            loadProducts(true, false, true).catch(() => {});
           }, 2500);
         }
       }
@@ -2676,9 +2708,13 @@ export default function App() {
   const maxCashbackDeduction = Math.min(availableCashback, payableBeforeCashback);
   const appliedCashback = useCashback ? maxCashbackDeduction : 0;
   const total = Math.max(0, payableBeforeCashback - appliedCashback);
+  const homeShowcaseProducts = useMemo(
+    () => (homeCatalogSnapshot.length > 0 ? homeCatalogSnapshot : products),
+    [homeCatalogSnapshot, products],
+  );
   const allCategories = useMemo(
-    () => getSynchronizedCategories(products),
-    [products],
+    () => getSynchronizedCategories(homeShowcaseProducts),
+    [homeShowcaseProducts],
   );
   const filtered = useMemo(
     () =>
@@ -4599,7 +4635,7 @@ export default function App() {
 
             <RotatingCategoriesSection
               categories={allCategories}
-              products={products}
+              products={homeShowcaseProducts}
               onSelectCategory={(catName) => {
                 setSelectedCategory(catName);
                 go("catalog");
@@ -4615,9 +4651,9 @@ export default function App() {
                 <span className="categorySectionEyebrow">SARALANGANLAR</span>
                 <button onClick={() => go("catalog")}>{t("see_all")}</button>
               </div>
-              {productsLoading ? (
+              {productsLoading && homeShowcaseProducts.length === 0 ? (
                 <ProductGridSkeleton count={4} />
-              ) : productsError ? (
+              ) : productsError && homeShowcaseProducts.length === 0 ? (
                 <div className="empty">
                   <div>⚠️</div>
                   <h3>Catalog vaqtincha ochilmadi</h3>
@@ -4625,7 +4661,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="productGrid">
-                  {products
+                  {homeShowcaseProducts
                     .filter((p) => p.featured && p.active !== false)
                     .slice(0, 8)
                     .map((p) => card(p))}
@@ -4657,7 +4693,8 @@ export default function App() {
               productsHasMoreRef.current = true;
               setProductsHasMore(true);
               productsLoadingMoreRef.current = false;
-              await loadProducts(true);
+              invalidateProductQueryCache();
+              await loadProducts(true, false, true);
               showToast("✓ Katalog yangilandi");
             }}
           >
@@ -4785,6 +4822,7 @@ export default function App() {
           const handleRatingUpdate = (newRating: number, newCount: number) => {
             setSelectedProduct((prev) => prev ? { ...prev, rating: newRating, reviews: newCount } : prev);
             setProducts((prev) => prev.map((p) => p.id === selectedProduct.id ? { ...p, rating: newRating, reviews: newCount } : p));
+            setHomeCatalogSnapshot((prev) => prev.map((p) => p.id === selectedProduct.id ? { ...p, rating: newRating, reviews: newCount } : p));
           };
 
           return (
