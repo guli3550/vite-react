@@ -509,11 +509,13 @@ function normalizeAdminItems(items) {
 
 app.get("/api/admin/orders", requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const { data, error, count } = await supabase
       .from("orders")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(Math.min(Number(req.query.limit) || 200, 500));
+      .range(offset, offset + limit - 1);
     if (error) throw error;
 
     const rows = data || [];
@@ -541,7 +543,18 @@ app.get("/api/admin/orders", requireAdmin, async (req, res) => {
         items: normalizeAdminItems(row.items)
       };
     });
-    res.json({ success: true, data: formatted });
+    const totalCount = typeof count === "number" ? count : null;
+    const hasMore = totalCount !== null ? offset + formatted.length < totalCount : formatted.length === limit;
+    res.json({
+      success: true,
+      data: formatted,
+      pagination: {
+        limit,
+        offset,
+        totalCount,
+        hasMore,
+      },
+    });
   } catch (error) {
     console.error("Admin orders photo enrichment error:", error);
     res.status(500).json({ success: false, message: "Admin buyurtmalarini yuklashda xatolik" });

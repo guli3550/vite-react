@@ -1662,4 +1662,716 @@ html[data-theme="dark"] body,
   color: #fbeff2 !important;
 }
 
+/* ==========================================================================
+   REALTIME ADMIN NOTIFICATION STREAM (SILLIQ LENTA & PAGINATION UI)
+   ========================================================================== */
 
+.orderStreamHeaderBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 13px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.orderStreamHeaderBtn:hover {
+  background: #fdf3f6;
+  border-color: #e4bfc9;
+}
+
+.orderStreamHeaderBtn:active {
+  transform: scale(0.98);
+}
+
+.orderStreamHeaderBtn.isPulsing {
+  border-color: #e11d48;
+  background: #fff1f4;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14);
+}
+
+.orderStreamBadge {
+  font-variant-numeric: tabular-nums;
+}
+
+.adminStreamDrawerShade {
+  animation: adminStreamFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.adminStreamDrawer {
+  width: min(490px, 100%);
+  animation: adminStreamDrawerSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes adminStreamFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes adminStreamDrawerSlide {
+  from { transform: translateX(28px); opacity: 0.6; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.adminStreamPanel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+.adminStreamPanel.inlineMode {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  overflow: hidden;
+  max-height: 540px;
+}
+
+.adminStreamHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+
+.adminStreamTitleRow h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.adminStreamEyebrowWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminStreamLiveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.adminStreamLiveDot.isLive {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+
+.adminStreamLiveDot.isSync {
+  background: #d97706;
+}
+
+.adminStreamHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminStreamIconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.adminStreamIconBtn:hover:not(:disabled) {
+  background: #fdf2f5;
+  border-color: #e4bfc9;
+}
+
+.adminStreamIconBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.adminStreamTextBtn {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--rose);
+  border-radius: 10px;
+  padding: 0 10px;
+  height: 36px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.adminStreamTextBtn:hover {
+  background: #fdf2f5;
+}
+
+.adminStreamCloseBtn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: #f5e6ea;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.adminStreamControls {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.adminStreamSearchWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--cream);
+}
+
+.adminStreamSearchIcon {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.adminStreamSearchWrap input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 9px 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.adminStreamClearBtn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.adminStreamFilters {
+  display: flex;
+  gap: 6px;
+}
+
+.adminStreamFilters button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: #6b5b62;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.adminStreamFilters button.active {
+  background: #f8e4e9;
+  border-color: #e4b6c3;
+  color: var(--rose);
+  font-weight: 700;
+}
+
+.streamCountNum {
+  font-size: 11px;
+  opacity: 0.78;
+  font-variant-numeric: tabular-nums;
+}
+
+.streamUnreadCount {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.adminStreamErrorBanner {
+  margin: 12px 20px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.adminStreamErrorBanner button {
+  border: 1px solid #fca5a5;
+  background: #ffffff;
+  color: #991b1b;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.adminStreamFeedScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 20px 24px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.adminStreamFeedList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adminStreamCard {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.14s ease;
+}
+
+.adminStreamCard:hover {
+  background: #fff7f9;
+  border-color: #e4c1cc;
+}
+
+.adminStreamCard:active {
+  transform: scale(0.992);
+}
+
+.adminStreamCard.isUnread {
+  background: #fff6f8;
+  border-color: #e7bcc8;
+}
+
+.adminStreamCard.isRealtimeNew {
+  animation: adminStreamCardIn 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes adminStreamCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.adminStreamAvatarWrap {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--rose2);
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+.adminStreamAvatarWrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.adminStreamAvatarLetter {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--rose);
+}
+
+.adminStreamUnreadDot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e11d48;
+  border: 2px solid #ffffff;
+}
+
+.adminStreamCardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.adminStreamCardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.adminStreamOrderMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.adminStreamOrderNum {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.adminStreamCustomerName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adminStreamTime {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.adminStreamCardSub {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adminStreamCardBottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.adminStreamStatusText {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.streamStatusNew { color: var(--rose); }
+.streamStatusInfo { color: #2563eb; }
+.streamStatusSuccess { color: #15803d; }
+.streamStatusDanger { color: #dc2626; }
+
+.adminStreamPrice {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Skeletons */
+.adminStreamSkeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adminStreamSkeletonCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.skAvatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #f1e6e9;
+  animation: streamShimmer 1.3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.skBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skLine {
+  height: 11px;
+  border-radius: 6px;
+  background: #f1e6e9;
+  animation: streamShimmer 1.3s ease-in-out infinite;
+}
+
+.skLine.short { width: 48%; }
+.skLine.long { width: 82%; }
+
+@keyframes streamShimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.adminStreamEmpty {
+  padding: 40px 18px;
+  text-align: center;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+}
+
+.adminStreamEmptyIcon {
+  display: block;
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.adminStreamEmpty b {
+  display: block;
+  font-size: 14.5px;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+
+.adminStreamEmpty p {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.adminStreamResetBtn {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--rose);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.adminStreamSentinel {
+  padding: 12px 0 6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.adminStreamLoadingMore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.streamSpinner {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--rose);
+  animation: streamSpin 0.75s linear infinite;
+}
+
+@keyframes streamSpin {
+  to { transform: rotate(360deg); }
+}
+
+.adminStreamLoadMoreBtn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.adminStreamEndNote {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Dark Theme Overrides for RealtimeAdminNotificationStream */
+[data-theme="dark"] .orderStreamHeaderBtn,
+[data-theme="dark"] .adminStreamIconBtn,
+[data-theme="dark"] .adminStreamTextBtn,
+[data-theme="dark"] .adminStreamFilters button,
+[data-theme="dark"] .adminStreamResetBtn,
+[data-theme="dark"] .adminStreamLoadMoreBtn {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .orderStreamHeaderBtn.isPulsing {
+  border-color: #fb7185 !important;
+  background: #361923 !important;
+}
+
+[data-theme="dark"] .adminStreamFilters button.active {
+  background: #3a1e28 !important;
+  border-color: #be123c !important;
+  color: #fb7185 !important;
+}
+
+[data-theme="dark"] .adminStreamHeader,
+[data-theme="dark"] .adminStreamControls,
+[data-theme="dark"] .adminStreamPanel {
+  background: #191014 !important;
+  border-color: #38262d !important;
+}
+
+[data-theme="dark"] .adminStreamSearchWrap {
+  background: #22151b !important;
+  border-color: #38262d !important;
+}
+
+[data-theme="dark"] .adminStreamSearchWrap input {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .adminStreamCloseBtn {
+  background: #2b1b22 !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .adminStreamCard,
+[data-theme="dark"] .adminStreamSkeletonCard,
+[data-theme="dark"] .adminStreamEmpty {
+  background: #22151b !important;
+  border-color: #38262d !important;
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .adminStreamCard:hover {
+  background: #2b1a22 !important;
+  border-color: #51323d !important;
+}
+
+[data-theme="dark"] .adminStreamCard.isUnread {
+  background: #2b1821 !important;
+  border-color: #6b293f !important;
+}
+
+[data-theme="dark"] .adminStreamUnreadDot {
+  border-color: #22151b !important;
+}
+
+[data-theme="dark"] .adminStreamOrderNum,
+[data-theme="dark"] .adminStreamCustomerName,
+[data-theme="dark"] .adminStreamPrice,
+[data-theme="dark"] .adminStreamTitleRow h2 {
+  color: #fbeff2 !important;
+}
+
+[data-theme="dark"] .skAvatar,
+[data-theme="dark"] .skLine {
+  background: #332028 !important;
+}
+
+[data-theme="dark"] .streamStatusNew { color: #fb7185; }
+[data-theme="dark"] .streamStatusInfo { color: #60a5fa; }
+[data-theme="dark"] .streamStatusSuccess { color: #4ade80; }
+[data-theme="dark"] .streamStatusDanger { color: #f87171; }
+
+@media (max-width: 640px) {
+  .orderStreamHeaderLabel {
+    display: none;
+  }
+  .orderStreamHeaderBtn {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .adminStreamHeader,
+  .adminStreamControls {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .adminStreamFeedScroll {
+    padding: 12px 14px 20px;
+  }
+}

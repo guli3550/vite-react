@@ -18,6 +18,7 @@ import { AdminNotificationsTab } from "./components/AdminNotificationsTab";
 import { AdminSettingsTab } from "./components/AdminSettingsTab";
 import { VideoAdsAdminTab } from "./components/VideoAdsAdminTab";
 import { AdminReelsTab } from "./components/AdminReelsTab";
+import { RealtimeAdminNotificationStream } from "./components/RealtimeAdminNotificationStream";
 import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
@@ -335,11 +336,18 @@ export default function AdminPro() {
   const [unreadChatCount, setUnreadChatCount] = useState<number>(() => getTotalUnreadChatCount());
   const [isBellRinging, setIsBellRinging] = useState<boolean>(false);
   const [userPhotosMap, setUserPhotosMap] = useState<Record<number, string>>({});
+  const [orderStreamOpen, setOrderStreamOpen] = useState(false);
+  const [unreadOrderStreamCount, setUnreadOrderStreamCount] = useState(0);
+  const [isOrderStreamPulsing, setIsOrderStreamPulsing] = useState(false);
 
   const handleAdminDeviceBack = useCallback(() => {
     // 1. Close lightbox or modal drawers
     if (receiptLightboxUrl) {
       setReceiptLightboxUrl(null);
+      return true;
+    }
+    if (orderStreamOpen) {
+      setOrderStreamOpen(false);
       return true;
     }
     if (selectedOrder) {
@@ -380,6 +388,7 @@ export default function AdminPro() {
     return false;
   }, [
     receiptLightboxUrl,
+    orderStreamOpen,
     selectedOrder,
     selectedUser,
     productOpen,
@@ -419,6 +428,7 @@ export default function AdminPro() {
 
     const isNonRoot =
       Boolean(receiptLightboxUrl) ||
+      orderStreamOpen ||
       Boolean(selectedOrder) ||
       Boolean(selectedUser) ||
       productOpen ||
@@ -445,6 +455,7 @@ export default function AdminPro() {
   }, [
     handleAdminDeviceBack,
     receiptLightboxUrl,
+    orderStreamOpen,
     selectedOrder,
     selectedUser,
     productOpen,
@@ -582,9 +593,11 @@ export default function AdminPro() {
   }, [token, customApiUrl]);
 
   const loadInFlight = useRef(false);
+  const lastFullLoadAtRef = useRef(0);
 
   const load = useCallback(async (silent = false) => {
     if (!token || document.visibilityState === "hidden" || loadInFlight.current) return;
+    if (silent && Date.now() - lastFullLoadAtRef.current < 20_000) return;
     loadInFlight.current = true;
     if (!silent) setBusy(true);
     const errors: string[] = [];
@@ -633,6 +646,7 @@ export default function AdminPro() {
           }`
         );
 
+      lastFullLoadAtRef.current = Date.now();
       if (errors.length) {
         if (!silent) notify(errors.join(" • "));
       } else {
@@ -646,12 +660,47 @@ export default function AdminPro() {
     }
   }, [token, request]);
 
+  const handleRealtimeOrder = useCallback((incomingOrder: any, eventType: "INSERT" | "UPDATE") => {
+    if (!incomingOrder || (incomingOrder.id == null && !incomingOrder.order_number)) return;
+    const key = String(incomingOrder.id ?? incomingOrder.order_number);
+
+    setOrders((prev) => {
+      const idx = prev.findIndex((o) => String(o.id ?? o.order_number) === key);
+      if (idx === -1) {
+        return [incomingOrder as Order, ...prev];
+      }
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...incomingOrder };
+      return next;
+    });
+
+    setDashboard((prev: any) => {
+      if (!prev) return prev;
+      const existingRecent: Order[] = Array.isArray(prev.recentOrders) ? prev.recentOrders : [];
+      const existsInRecent = existingRecent.some((o) => String(o.id ?? o.order_number) === key);
+      const nextRecent = existsInRecent
+        ? existingRecent.map((o) => (String(o.id ?? o.order_number) === key ? { ...o, ...incomingOrder } : o))
+        : [incomingOrder as Order, ...existingRecent].slice(0, 8);
+      return {
+        ...prev,
+        ordersCount: !existsInRecent && eventType === "INSERT" ? Number(prev.ordersCount || 0) + 1 : prev.ordersCount,
+        recentOrders: nextRecent,
+      };
+    });
+
+    if (eventType === "INSERT") {
+      setIsOrderStreamPulsing(true);
+      window.setTimeout(() => setIsOrderStreamPulsing(false), 2600);
+      notify(`Yangi buyurtma keldi: #${incomingOrder.order_number || incomingOrder.id}`);
+    }
+  }, []);
+
   useEffect(() => {
     if (!token) return;
     load(false);
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void load(true);
-    }, 30000);
+    }, 90_000);
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void load(true);
     };
@@ -1185,6 +1234,12 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
           onSearchChange={setQuery}
           unreadNotificationsCount={unreadChatCount}
           isRinging={isBellRinging}
+          unreadOrdersCount={unreadOrderStreamCount}
+          isOrderPulse={isOrderStreamPulsing}
+          onOpenOrderStream={() => {
+            setOrderStreamOpen(true);
+            setIsOrderStreamPulsing(false);
+          }}
           activePlatform={activePlatform}
           onPlatformChange={handlePlatformChange}
           onRefresh={load}
@@ -1298,9 +1353,20 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                   <span className="proEyebrow">LIVE</span>
                   <h2>So‘nggi buyurtmalar</h2>
                 </div>
-                <button type="button" onClick={() => navigateTab("orders")}>
-                  Barchasi →
-                </button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderStreamOpen(true);
+                      setIsOrderStreamPulsing(false);
+                    }}
+                  >
+                    ⚡ Jonli lenta
+                  </button>
+                  <button type="button" onClick={() => navigateTab("orders")}>
+                    Barchasi →
+                  </button>
+                </div>
               </div>
               <OrderTable
                 rows={(dashboard?.recentOrders || []).slice(0, 8)}
@@ -1915,6 +1981,18 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
           </button>
         ))}
       </nav>
+
+      <RealtimeAdminNotificationStream
+        apiBase={(customApiUrl.trim() || API).replace(/\/$/, "")}
+        token={token}
+        isOpen={orderStreamOpen}
+        onClose={() => setOrderStreamOpen(false)}
+        onSelectOrder={(o) => setSelectedOrder(o)}
+        seedOrders={dashboard?.recentOrders}
+        onUnreadCountChange={setUnreadOrderStreamCount}
+        onRealtimeOrder={handleRealtimeOrder}
+        playSound={playBellChimeSound}
+      />
 
       {selectedOrder && (
         <OrderDrawer

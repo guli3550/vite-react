@@ -15,7 +15,7 @@ import "./GuliMarketProfile.css";
 interface GuliMarketProfileProps {
   onBack: () => void;
   products: Product[];
-  onOpenProduct: (product: Product) => void;
+  onOpenProduct: (product: Product, productList?: Product[]) => void;
   onNavigateToCatalog: (category?: string) => void;
   onSelectReel: (reelId: string) => void;
   onOpenChat: () => void;
@@ -557,7 +557,7 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
                         key={product.id}
                         type="button"
                         className="brandProfileProductTile"
-                        onClick={() => onOpenProduct(product)}
+                        onClick={() => onOpenProduct(product, displayedProducts)}
                         aria-label={product.name}
                       >
                         <img
@@ -743,7 +743,7 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
           onOpenProduct={(prodId) => {
             setSelectedAdForModal(null);
             const target = products.find((p) => String(p.id) === String(prodId));
-            if (target) onOpenProduct(target);
+            if (target) onOpenProduct(target, activeProducts);
           }}
         />
       )}

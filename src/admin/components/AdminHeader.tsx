@@ -7,6 +7,9 @@ type AdminHeaderProps = {
   onSearchChange: (q: string) => void;
   unreadNotificationsCount?: number;
   isRinging?: boolean;
+  unreadOrdersCount?: number;
+  isOrderPulse?: boolean;
+  onOpenOrderStream?: () => void;
   activePlatform: PlatformType;
   onPlatformChange: (p: PlatformType) => void;
   onRefresh: () => void;
@@ -21,6 +24,9 @@ export function AdminHeader({
   onSearchChange,
   unreadNotificationsCount = 0,
   isRinging = false,
+  unreadOrdersCount = 0,
+  isOrderPulse = false,
+  onOpenOrderStream,
   activePlatform,
   onPlatformChange,
   onRefresh,
@@ -94,6 +100,24 @@ export function AdminHeader({
           <span style={{ fontSize: "14px" }}>✨</span>
           <span>Guli AI</span>
         </button>
+
+        {onOpenOrderStream && (
+          <button
+            type="button"
+            className={`orderStreamHeaderBtn ${isOrderPulse ? "isPulsing" : ""}`}
+            onClick={onOpenOrderStream}
+            title="Buyurtmalar jonli lentasi"
+            aria-label={`Buyurtmalar jonli lentasi${unreadOrdersCount > 0 ? ` (${unreadOrdersCount} ta yangi)` : ""}`}
+          >
+            <span aria-hidden="true">⚡</span>
+            <span className="orderStreamHeaderLabel">Lenta</span>
+            {unreadOrdersCount > 0 && (
+              <span className="notifBadge orderStreamBadge">
+                {unreadOrdersCount > 99 ? "99+" : unreadOrdersCount}
+              </span>
+            )}
+          </button>
+        )}
 
         <button
           type="button"

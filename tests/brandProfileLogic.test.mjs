@@ -94,3 +94,64 @@ test("Brand Profile: Horizontal tab swipe is disabled when viewing Reels from br
   assert.equal(shouldAllowHorizontalTabSwipe("catalog", "home"), true);
 });
 
+import { resolveSwipedProduct } from "../src/utils/productNav.ts";
+
+test("Brand Profile Product Swipe: swiping left advances to next product and swiping right returns to previous", () => {
+  const queue = [{ id: 10 }, { id: 20 }, { id: 30 }];
+
+  const next = resolveSwipedProduct({
+    queue,
+    currentProductId: 10,
+    diffX: -90,
+    diffY: 12,
+    timeDiff: 220,
+  });
+  assert.equal(next?.product.id, 20);
+  assert.equal(next?.index, 1);
+
+  const prev = resolveSwipedProduct({
+    queue,
+    currentProductId: 20,
+    diffX: 85,
+    diffY: -10,
+    timeDiff: 250,
+  });
+  assert.equal(prev?.product.id, 10);
+  assert.equal(prev?.index, 0);
+
+  // Boundary clamp returns null at edges
+  assert.equal(
+    resolveSwipedProduct({
+      queue,
+      currentProductId: 10,
+      diffX: 120,
+      diffY: 0,
+      timeDiff: 200,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveSwipedProduct({
+      queue,
+      currentProductId: 30,
+      diffX: -120,
+      diffY: 0,
+      timeDiff: 200,
+    }),
+    null,
+  );
+
+  // Vertical scroll or small tap does not navigate
+  assert.equal(
+    resolveSwipedProduct({
+      queue,
+      currentProductId: 20,
+      diffX: -30,
+      diffY: 80,
+      timeDiff: 200,
+    }),
+    null,
+  );
+});
+
+

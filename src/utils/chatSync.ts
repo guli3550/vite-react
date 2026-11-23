@@ -611,6 +611,8 @@ export function getUnreadAdminMessagesCount(userId?: string | number): number {
   return getStoredChatMessages(userId).filter((m) => m.sender === "admin" && !m.read && m.id !== "welcome-msg-1").length;
 }
 
+let lastCustomerReadSyncAt = 0;
+
 export function markSingleMessageAsRead(messageId: string, userId?: string | number): void {
   const messages = getStoredChatMessages();
   let changed = false;
@@ -626,16 +628,24 @@ export function markSingleMessageAsRead(messageId: string, userId?: string | num
     const unreadCount = getUnreadAdminMessagesCount(userId);
     localStorage.setItem(NOTIFICATIONS_KEY, String(unreadCount));
     window.dispatchEvent(new CustomEvent("guli_notifications_updated", { detail: unreadCount }));
+    if (unreadCount === 0) {
+      void markServerCustomerMessagesRead(userId, true);
+    }
   }
 }
 
-export async function markServerCustomerMessagesRead(userId?: string | number): Promise<void> {
+export async function markServerCustomerMessagesRead(userId?: string | number, forceSync = false): Promise<void> {
   if (typeof window === "undefined") return;
   if (window.location.pathname.replace(/\/$/, "") === "/admin") return;
-  const unread = getUnreadMessages(userId);
-  if (!unread.length) return;
+  if (!forceSync) {
+    const unread = getUnreadMessages(userId);
+    if (!unread.length) return;
+  }
+  const now = Date.now();
+  if (now - lastCustomerReadSyncAt < 3000) return;
   const headers = getChatAuthHeaders("customer");
   if (!Object.keys(headers).length) return;
+  lastCustomerReadSyncAt = now;
   try {
     await chatFetch("/api/chat/customer-read", {
       method: "POST",
@@ -663,7 +673,7 @@ export function markMessagesAsRead(userId?: string | number, role: "admin" | "us
     if (role === "user") {
       localStorage.setItem(NOTIFICATIONS_KEY, "0");
       window.dispatchEvent(new CustomEvent("guli_notifications_updated", { detail: 0 }));
-      void markServerCustomerMessagesRead(userId);
+      void markServerCustomerMessagesRead(userId, true);
     }
   }
 }

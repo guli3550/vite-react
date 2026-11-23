@@ -70,8 +70,14 @@ import {
   markMessagesAsRead,
   matchesCustomerChatScope,
   subscribeToChat,
-  getStoredChatMessages,
 } from "./utils/chatSync";
+import {
+  dismissNotificationIdsStorage,
+  hasActivePendingOrders,
+  markOrderNotificationsAsReadStorage,
+  shouldPollOrders,
+} from "./utils/notificationFeed";
+import { resolveSwipedProduct } from "./utils/productNav";
 import { detectPlatform, initPlatformEnvironment } from "./utils/platformAdapter";
 import { CustomerAuthModal, type AuthUser } from "./components/CustomerAuthModal";
 import { getSupabase, signOutEverywhere } from "./lib/supabaseClient";
@@ -855,6 +861,7 @@ export default function App() {
   const productsRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [brandProfileProductQueue, setBrandProfileProductQueue] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("Barchasi");
   const [homeVideoAds, setHomeVideoAds] = useState<VideoAd[]>([]);
   const [feedVideoAds, setFeedVideoAds] = useState<VideoAd[]>([]);
@@ -1226,9 +1233,27 @@ export default function App() {
     getUnreadMessages(currentUserId),
   );
 
-  const unreadOrderNotificationCount = orderNotifications.filter((item) => !item.read).length;
+  const unreadOrderNotificationCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const item of orderNotifications) {
+      if (!item.read) {
+        seen.add(String(item.orderNumber || item.id));
+      }
+    }
+    return seen.size;
+  }, [orderNotifications]);
   const totalUnreadNotificationCount =
     unreadMessages.length + unreadOrderNotificationCount;
+
+  const pageRef = useRef<Page>(page);
+  pageRef.current = page;
+  const orderAlertsRef = useRef<boolean>(orderAlerts);
+  orderAlertsRef.current = orderAlerts;
+  const ordersRef = useRef<Order[]>(orders);
+  ordersRef.current = orders;
+  const ordersInFlightRef = useRef<Promise<Order[]> | null>(null);
+  const lastOrdersFetchAtRef = useRef<number>(0);
+  const ordersRealtimeConnectedRef = useRef<boolean>(false);
 
   const registerOrderStateChanges = useCallback((nextOrders: Order[]) => {
     const nextStates: Record<string, string> = {};
@@ -1239,6 +1264,7 @@ export default function App() {
     const previousStates = orderStatesRef.current;
     if (orderStatesReadyRef.current) {
       const changes: OrderNotification[] = [];
+      const isViewingOrders = pageRef.current === "orders";
       nextOrders.forEach((order) => {
         const key = String(order.order_number || order.id);
         const before = previousStates[key];
@@ -1258,15 +1284,29 @@ export default function App() {
           previousStatus: previous.status,
           previousPaymentStatus: previous.paymentStatus,
           timestamp: order.updatedAt || order.statusUpdatedAt || new Date().toISOString(),
-          read: false,
+          read: isViewingOrders,
         });
       });
 
       if (changes.length) {
         setOrderNotifications((existing) => {
-          const updated = [...changes, ...existing].slice(0, 100);
+          const filteredChanges = changes.filter((c) => {
+            const latestExisting = existing.find((e) => e.orderNumber === c.orderNumber);
+            if (!latestExisting) return true;
+            return (
+              latestExisting.status !== c.status ||
+              latestExisting.paymentStatus !== c.paymentStatus
+            );
+          });
+          if (!filteredChanges.length) return existing;
+          const updated = [...filteredChanges, ...existing].slice(0, 100);
           try { localStorage.setItem(orderNotificationsKey, JSON.stringify(updated)); } catch {}
           window.dispatchEvent(new Event("guli_order_notifications_updated"));
+          if (orderAlertsRef.current && !isViewingOrders) {
+            const first = filteredChanges[0];
+            setToast(`📦 Buyurtma №${first.orderNumber}: ${first.status}`);
+            window.setTimeout(() => setToast(""), 2800);
+          }
           return updated;
         });
       }
@@ -1528,27 +1568,18 @@ export default function App() {
     };
   }, [currentUserId, page]);
 
-  // When user is viewing the chat page or orders page, automatically mark incoming notifications as read and dismiss them
+  // When user views Chat or Orders, mark corresponding notifications as read cleanly
   useEffect(() => {
     if (page === "chat") {
       markMessagesAsRead(currentUserId, "user");
       setUnreadMessages([]);
-      try {
-        const raw = localStorage.getItem("guli_dismissed_notifs");
-        const dismissed: string[] = raw ? JSON.parse(raw) : [];
-        const chatMsgs = getStoredChatMessages(currentUserId);
-        const chatIds = chatMsgs.map((m) => `chat-${m.id}`);
-        const next = Array.from(new Set([...dismissed, ...chatIds]));
-        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
-      } catch {}
     } else if (page === "orders") {
-      try {
-        const raw = localStorage.getItem("guli_dismissed_notifs");
-        const dismissed: string[] = raw ? JSON.parse(raw) : [];
-        const orderIds = (orders || []).map((o) => `order-${o.id}`);
-        const next = Array.from(new Set([...dismissed, ...orderIds]));
-        localStorage.setItem("guli_dismissed_notifs", JSON.stringify(next));
-      } catch {}
+      const updated = markOrderNotificationsAsReadStorage(currentUserId);
+      setOrderNotifications(updated);
+      const orderIds = (orders || []).map((o) => `order-${o.id}`);
+      if (orderIds.length) {
+        dismissNotificationIdsStorage(orderIds);
+      }
     }
   }, [page, currentUserId, orders]);
 
@@ -1557,8 +1588,13 @@ export default function App() {
   const tabTouchStartTime = useRef<number>(0);
   const isSwipingTab = useRef<boolean>(false);
 
+  const isBrandProductSwipeActive =
+    page === "product" &&
+    previousPage === "brand_profile" &&
+    brandProfileProductQueue.length > 1;
+
   const handleTabTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    if (!MAIN_TABS.includes(page)) return;
+    if (!MAIN_TABS.includes(page) && !isBrandProductSwipeActive) return;
     // Disable horizontal tab swipe navigation when entering Reels from Guli Market profile
     if (page === "reels" && previousPage === "brand_profile") {
       isSwipingTab.current = false;
@@ -1572,12 +1608,15 @@ export default function App() {
       target.closest(".hero") ||
       target.closest(".heroSlideTrack") ||
       target.closest(".heroSlideItem") ||
-      target.closest(".productGallerySwipe") ||
+      target.closest('.productGallerySwipe[data-multi-image="true"]') ||
+      (!isBrandProductSwipeActive && target.closest(".productGallerySwipe")) ||
       target.closest(".leafletMap") ||
       target.closest(".categoryScroll") ||
       target.closest(".orderFilterTabs") ||
       target.closest(".categoryTabs") ||
       target.closest(".guli-ad-stories") ||
+      target.closest(".options") ||
+      target.closest(".colorOptionsSwatches") ||
       target.closest("input") ||
       target.closest("textarea") ||
       target.closest("button") ||
@@ -1593,7 +1632,7 @@ export default function App() {
   };
 
   const handleTabTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
-    if (!isSwipingTab.current || !MAIN_TABS.includes(page)) return;
+    if (!isSwipingTab.current || (!MAIN_TABS.includes(page) && !isBrandProductSwipeActive)) return;
     if (page === "reels" && previousPage === "brand_profile") {
       isSwipingTab.current = false;
       return;
@@ -1606,6 +1645,26 @@ export default function App() {
     const timeDiff = Date.now() - tabTouchStartTime.current;
     const absX = Math.abs(diffX);
     const absY = Math.abs(diffY);
+
+    if (isBrandProductSwipeActive) {
+      const nextMatch = resolveSwipedProduct({
+        queue: brandProfileProductQueue,
+        currentProductId: selectedProduct?.id,
+        diffX,
+        diffY,
+        timeDiff,
+      });
+      if (nextMatch) {
+        try {
+          tg()?.HapticFeedback?.impactOccurred?.("light");
+        } catch {}
+        setSelectedProduct(nextMatch.product);
+        setSelectedSize(nextMatch.product.sizes?.[0] || "");
+        setSelectedColor(nextMatch.product.colors?.[0] || "");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      return;
+    }
 
     // Swipe threshold
     if (absX >= 48 && absX > absY * 1.25 && timeDiff < 750) {
@@ -1995,6 +2054,9 @@ export default function App() {
 
   const loadOrders = useCallback(
     async (silent = false, customPhone?: string) => {
+      if (!customPhone && ordersInFlightRef.current) {
+        return ordersInFlightRef.current;
+      }
       const token = localStorage.getItem("guli_access_token") || "";
       const savedPhone = customPhone || localStorage.getItem("guli_phone") || localStorage.getItem("guli_customer_phone") || localStorage.getItem("guli_last_order_phone") || authUser?.phone || "";
       const cleanPhone = String(savedPhone).replace(/\D/g, "");
@@ -2032,7 +2094,9 @@ export default function App() {
         return [];
       }
 
+      lastOrdersFetchAtRef.current = Date.now();
       if (!silent) setOrdersLoading(true);
+      const task = (async (): Promise<Order[]> => {
       try {
         const queryParams = new URLSearchParams();
         if (localOrderNumbers.length) {
@@ -2186,8 +2250,17 @@ export default function App() {
 
         return cachedOrders;
       } finally {
+        if (!customPhone) {
+          ordersInFlightRef.current = null;
+        }
+        lastOrdersFetchAtRef.current = Date.now();
         if (!silent) setOrdersLoading(false);
       }
+      })();
+      if (!customPhone) {
+        ordersInFlightRef.current = task;
+      }
+      return task;
     },
     [telegramUser?.id, authUser?.phone, registerOrderStateChanges],
   );
@@ -2255,13 +2328,20 @@ export default function App() {
 
     window.addEventListener("guli_orders_server_sync", handleServerOrderSync);
 
-    // Realtime is the primary status transport. Poll only as a low-frequency
-    // recovery fallback so a large order list cannot trigger request/render storms.
+    // Realtime is the primary status transport. Only poll when cooldown allows,
+    // and back off substantially when Realtime is connected or no pending orders exist.
     const fallbackInterval = setInterval(() => {
-      if (document.visibilityState === "visible") {
+      if (
+        shouldPollOrders({
+          lastPollAt: lastOrdersFetchAtRef.current,
+          realtimeConnected: ordersRealtimeConnectedRef.current,
+          hasPendingOrders: hasActivePendingOrders(ordersRef.current),
+          visibilityState: document.visibilityState,
+        })
+      ) {
         loadOrders(true).catch(() => {});
       }
-    }, 30000);
+    }, 60000);
     
     // Supabase Realtime synchronization
     let activeChannel: any = null;
@@ -2286,7 +2366,6 @@ export default function App() {
               if (!newRow) return;
               const newId = String(newRow.id || '');
               const newOrderNum = String(newRow.order_number || '');
-              console.log('[Supabase Realtime UPDATE received]:', { id: newId, order_number: newOrderNum, status: newRow.status, payment_status: newRow.payment_status });
 
               // Instantly update React state for matching customer orders
               setOrders((prevOrders) => {
@@ -2315,14 +2394,10 @@ export default function App() {
                 }
                 return updated;
               });
-
-              // Do not immediately refetch the entire order list. The realtime
-              // payload already contains the canonical status/payment fields.
-              // A low-frequency fallback refresh handles missed realtime events.
             }
           )
-          .subscribe((status: string, err?: any) => {
-            console.log(`[Supabase Realtime Channel Status]: ${status}`, err || '');
+          .subscribe((status: string) => {
+            ordersRealtimeConnectedRef.current = status === "SUBSCRIBED";
           });
       } catch (e) {
         console.warn("[Supabase Realtime Setup Warning]", e);
@@ -2333,6 +2408,7 @@ export default function App() {
 
     return () => {
       isSubscribed = false;
+      ordersRealtimeConnectedRef.current = false;
       clearInterval(fallbackInterval);
       window.removeEventListener("guli_orders_server_sync", handleServerOrderSync);
       if (activeChannel) {
@@ -2345,14 +2421,34 @@ export default function App() {
   }, [loadOrders]);
 
   useEffect(() => {
-    if (page === "orders") {
+    if (
+      page === "orders" &&
+      shouldPollOrders({
+        lastPollAt: lastOrdersFetchAtRef.current,
+        realtimeConnected: ordersRealtimeConnectedRef.current,
+        hasPendingOrders: hasActivePendingOrders(ordersRef.current),
+        visibilityState: document.visibilityState,
+        force: true,
+        minForceGapMs: 10000,
+      })
+    ) {
       loadOrders(false).catch(() => {});
     }
   }, [page, loadOrders]);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
+      if (
+        document.visibilityState === "visible" &&
+        shouldPollOrders({
+          lastPollAt: lastOrdersFetchAtRef.current,
+          realtimeConnected: ordersRealtimeConnectedRef.current,
+          hasPendingOrders: hasActivePendingOrders(ordersRef.current),
+          visibilityState: document.visibilityState,
+          force: true,
+          minForceGapMs: 20000,
+        })
+      ) {
         loadOrders(true).catch(() => {});
       }
     };
@@ -2620,8 +2716,13 @@ export default function App() {
     search,
     selectedProduct,
   ]);
-  const openProduct = (product: Product, from: Page = page) => {
+  const openProduct = (product: Product, from: Page = page, queue?: Product[]) => {
     setPreviousPage(from);
+    if (from === "brand_profile" && Array.isArray(queue) && queue.length > 0) {
+      setBrandProfileProductQueue(queue);
+    } else if (from !== "product") {
+      setBrandProfileProductQueue([]);
+    }
     setSelectedProduct(product);
     setSelectedSize(product.sizes?.[0] || "");
     setSelectedColor(product.colors?.[0] || "");
@@ -4475,6 +4576,34 @@ export default function App() {
         </div>
         <div className="headerActions">
           <button
+            className="iconButton adminNavBtn"
+            id="topbar-admin-btn"
+            onClick={() => {
+              try {
+                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
+              } catch {}
+              window.location.assign("/admin");
+            }}
+            aria-label="Admin panelga o‘tish"
+            title="Admin panel"
+            type="button"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="M9.5 12l2 2 3.5-4" />
+            </svg>
+          </button>
+          <button
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"
             onClick={() => {
@@ -4492,7 +4621,7 @@ export default function App() {
             </span>
           </button>
           <button
-            className={`iconButton notifBellBtn ${unreadMessages.length > 0 ? "hasUnread" : ""}`}
+            className={`iconButton notifBellBtn ${totalUnreadNotificationCount > 0 ? "hasUnread" : ""}`}
             id="topbar-notifications-btn"
             onClick={() => setIsNotificationsOpen(true)}
             aria-label={t("notifications")}
@@ -4825,8 +4954,54 @@ export default function App() {
             setHomeCatalogSnapshot((prev) => prev.map((p) => p.id === selectedProduct.id ? { ...p, rating: newRating, reviews: newCount } : p));
           };
 
+          const brandQueueIdx =
+            previousPage === "brand_profile" && brandProfileProductQueue.length > 1
+              ? brandProfileProductQueue.findIndex((p) => p.id === selectedProduct.id)
+              : -1;
+
           return (
             <main className="productDetail">
+              {brandQueueIdx !== -1 && (
+                <div className="productQueueNavBar">
+                  <button
+                    type="button"
+                    className="productQueueNavBtn"
+                    disabled={brandQueueIdx <= 0}
+                    onClick={() => {
+                      const prev = brandProfileProductQueue[brandQueueIdx - 1];
+                      if (prev) {
+                        setSelectedProduct(prev);
+                        setSelectedSize(prev.sizes?.[0] || "");
+                        setSelectedColor(prev.colors?.[0] || "");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }
+                    }}
+                    aria-label="Oldingi tavar"
+                  >
+                    ‹ Oldingi
+                  </button>
+                  <span className="productQueueNavMeta">
+                    {brandQueueIdx + 1} / {brandProfileProductQueue.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="productQueueNavBtn"
+                    disabled={brandQueueIdx >= brandProfileProductQueue.length - 1}
+                    onClick={() => {
+                      const next = brandProfileProductQueue[brandQueueIdx + 1];
+                      if (next) {
+                        setSelectedProduct(next);
+                        setSelectedSize(next.sizes?.[0] || "");
+                        setSelectedColor(next.colors?.[0] || "");
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }
+                    }}
+                    aria-label="Keyingi tavar"
+                  >
+                    Keyingi ›
+                  </button>
+                </div>
+              )}
               <div className="detailImageWrap">
                 <ProductImageGallery product={selectedProduct} detail />
                 <button
@@ -5209,7 +5384,7 @@ export default function App() {
               go(target);
             }}
             products={products}
-            onOpenProduct={(prod) => openProduct(prod, "brand_profile")}
+            onOpenProduct={(prod, list) => openProduct(prod, "brand_profile", list)}
             onNavigateToCatalog={(cat) => {
               if (cat) setSelectedCategory(cat);
               go("catalog");

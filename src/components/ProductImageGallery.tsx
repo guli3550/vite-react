@@ -132,8 +132,10 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
   };
 
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    // Stop propagation so global tab swipe doesn't trigger
-    e.stopPropagation();
+    // Only stop propagation when gallery itself has multiple images to swipe
+    if (!detail || imageList.length > 1) {
+      e.stopPropagation();
+    }
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     touchStartTime.current = Date.now();
@@ -143,7 +145,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
   };
 
   const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || (detail && imageList.length <= 1)) return;
     const diffX = e.touches[0].clientX - touchStartX.current;
     const diffY = e.touches[0].clientY - touchStartY.current;
     if (Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY)) {
@@ -156,7 +158,9 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
   const handleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
     if (!isDragging.current) return;
     isDragging.current = false;
-    e.stopPropagation();
+    if (!detail || imageList.length > 1) {
+      e.stopPropagation();
+    }
 
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;
@@ -166,7 +170,11 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
 
     // Minimum swipe displacement
     const velocity = Math.abs(diffX) / Math.max(timeTaken, 1);
-    const shouldSwipe = Math.abs(diffX) >= 45 && Math.abs(diffX) > Math.abs(diffY) * 1.15 && (timeTaken < 800 || velocity > 0.35);
+    const shouldSwipe =
+      imageList.length > 1 &&
+      Math.abs(diffX) >= 45 &&
+      Math.abs(diffX) > Math.abs(diffY) * 1.15 &&
+      (timeTaken < 800 || velocity > 0.35);
     if (shouldSwipe && !isAnimating) {
       setIsAnimating(true);
       setDragX(diffX < 0 ? -window.innerWidth : window.innerWidth);
@@ -185,6 +193,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
     <div
       ref={galleryRootRef}
       className={`productGallerySwipe ${detail ? "detailGallery" : "cardGallery"}`}
+      data-multi-image={imageList.length > 1 ? "true" : "false"}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
