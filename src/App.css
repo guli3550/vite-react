@@ -5634,3 +5634,1072 @@ html[data-theme="dark"] .orderReceiptQuickBtn {
   align-self: center;
   margin: 0;
 }
+
+/* ============================================================
+   Yandex-style Checkout Map (YandexCheckoutMap)
+   ============================================================ */
+.yandexMapCard {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  overflow: visible;
+}
+
+.yandexMapHeader {
+  position: relative;
+  z-index: 600;
+  padding: 12px 12px 10px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 18px 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.yandexAddressBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+}
+
+.yandexPinBadgeIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(252, 63, 29, 0.12);
+  color: #fc3f1d;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.yandexAddressTextCol {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yandexAddressEyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text-muted);
+}
+
+.yandexAddressValue {
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.35;
+  color: var(--text-main);
+  word-break: break-word;
+}
+
+.yandexSearchWrapper {
+  position: relative;
+}
+
+.yandexSearchInputBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 10px 0 12px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.yandexSearchInputBox:focus-within {
+  border-color: #fc3f1d;
+  box-shadow: 0 0 0 3px rgba(252, 63, 29, 0.12);
+}
+
+.yandexSearchLeadIcon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.yandexSearchInputBox input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0;
+}
+
+.yandexSearchInputBox input::placeholder {
+  color: var(--text-muted);
+}
+
+.yandexSearchStatusIcon {
+  color: #fc3f1d;
+  flex-shrink: 0;
+}
+
+.yandexSearchClearBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-card-sub);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.yandexSearchClearBtn:hover {
+  color: var(--text-main);
+}
+
+.yandexSearchDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 650;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yandexSearchOption {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.yandexSearchOption:hover,
+.yandexSearchOption:focus-visible {
+  background: var(--bg-card-sub);
+  outline: none;
+}
+
+.yandexOptionIcon {
+  color: #fc3f1d;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.yandexOptionText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.yandexOptionText b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.yandexOptionText span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+
+.yandexMapStage {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  overflow: hidden;
+  background: #eaeff4;
+  touch-action: none;
+}
+
+.yandexLeafletCanvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.yandexMapLoadingOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 480;
+  background: rgba(248, 250, 252, 0.88);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-main);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.yandexCenterPinWrap {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  z-index: 450;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.yandexCenterTooltip {
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.9);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.25);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+}
+
+.yandexPinMarker {
+  width: 34px;
+  height: 34px;
+  border-radius: 50% 50% 50% 4px;
+  background: linear-gradient(145deg, #ff512f, #fc3f1d);
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 8px 18px rgba(252, 63, 29, 0.38);
+  transform: rotate(-45deg);
+  display: grid;
+  place-items: center;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  margin-bottom: 4px;
+}
+
+.yandexPinCore {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ffffff;
+  transform: rotate(45deg);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.yandexPinShadow {
+  width: 14px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.34);
+  filter: blur(1px);
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.yandexCenterPinWrap.isLifted .yandexPinMarker {
+  transform: translateY(-10px) scale(1.06) rotate(-45deg);
+}
+
+.yandexCenterPinWrap.isLifted .yandexCenterTooltip {
+  transform: translateY(-8px);
+}
+
+.yandexCenterPinWrap.isLifted .yandexPinShadow {
+  transform: scale(0.72);
+  opacity: 0.45;
+}
+
+.yandexMapControls {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  z-index: 460;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.yandexCtrlBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.96);
+  color: #0f172a;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.14s ease, background-color 0.14s ease;
+}
+
+.yandexCtrlBtn:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.yandexCtrlBtn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.yandexLocateBtn {
+  background: #fc3f1d;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.yandexLocateBtn:hover:not(:disabled) {
+  background: #e63616;
+}
+
+.yandexLocateBtn.isBusy,
+.yandexLocateBtn:disabled {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.yandexMapFooter {
+  padding: 9px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card-sub);
+  border-radius: 0 0 18px 18px;
+  font-size: 11px;
+  line-height: 1.38;
+  color: var(--text-muted);
+}
+
+.yandexSpin {
+  animation: yandexSpinAnim 0.85s linear infinite;
+}
+
+@keyframes yandexSpinAnim {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Dark theme adjustments for YandexCheckoutMap */
+[data-theme="dark"] .yandexMapStage {
+  background: #18202c;
+}
+
+[data-theme="dark"] .yandexLeafletCanvas .leaflet-tile-pane {
+  filter: brightness(0.9) contrast(1.04) saturate(0.92);
+}
+
+[data-theme="dark"] .yandexMapLoadingOverlay {
+  background: rgba(15, 23, 42, 0.86);
+}
+
+[data-theme="dark"] .yandexCtrlBtn {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .yandexLocateBtn {
+  background: #fc3f1d;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .yandexSearchDropdown {
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .yandexCenterTooltip {
+  background: rgba(248, 250, 252, 0.94);
+  color: #0f172a;
+}
+
+@media (max-width: 480px) {
+  .yandexMapStage {
+    height: 260px;
+  }
+
+  .yandexCtrlBtn {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+/* ============================================================
+   Guli Market Signature Promo Card (CheckoutView)
+   ============================================================ */
+.guliPromoCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.guliPromoHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.guliPromoIconWrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-sub);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.guliPromoTitle {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 750;
+  letter-spacing: -0.15px;
+  color: var(--text-main);
+}
+
+.guliPromoRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.guliPromoInputWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  background: var(--bg-card-sub);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.guliPromoInputWrap:focus-within {
+  background: var(--bg-card);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(189, 82, 106, 0.14);
+}
+
+.guliPromoInputWrap.is-applied {
+  border-color: var(--primary);
+  background: var(--bg-card);
+}
+
+.guliPromoInput {
+  width: 100%;
+  height: 44px;
+  padding: 0 44px 0 13px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.guliPromoInput::placeholder {
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.guliPromoQrBtn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 0.16s ease, transform 0.16s ease;
+}
+
+.guliPromoQrBtn:hover,
+.guliPromoQrBtn:focus-visible {
+  background: var(--bg-card-hover);
+  outline: none;
+}
+
+.guliPromoQrBtn:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.guliPromoApplyBtn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-sub);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: not-allowed;
+  transition: transform 0.16s ease, box-shadow 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.guliPromoApplyBtn.is-ready {
+  background: var(--primary-gradient);
+  border-color: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(189, 82, 106, 0.24);
+}
+
+.guliPromoApplyBtn.is-ready:hover {
+  box-shadow: 0 8px 20px rgba(189, 82, 106, 0.32);
+}
+
+.guliPromoApplyBtn.is-applied {
+  background: var(--bg-card-sub);
+  border-color: var(--primary);
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.guliPromoAppliedBar {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--bg-card-sub);
+  border: 1px dashed var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.guliPromoAppliedText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.guliPromoAppliedText svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.guliPromoAppliedText strong {
+  color: var(--primary);
+  letter-spacing: 0.4px;
+}
+
+.guliPromoAppliedText b {
+  color: var(--text-main);
+  font-weight: 800;
+}
+
+.guliPromoRemoveBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.guliPromoRemoveBtn:hover {
+  color: var(--primary);
+  background: var(--bg-card-hover);
+}
+
+[data-theme="dark"] .guliPromoInputWrap:focus-within {
+  box-shadow: 0 0 0 3px rgba(226, 107, 132, 0.18);
+}
+
+[data-theme="dark"] .guliPromoApplyBtn.is-ready {
+  box-shadow: 0 6px 18px rgba(217, 85, 114, 0.28);
+}
+
+/* ============================================================
+   Guli Market Full-Screen QR Scanner (QrCodeScannerModal)
+   ============================================================ */
+.guliQrFullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  z-index: 99999;
+  background: #120b0e;
+  color: #fbeff2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.guliQrFullscreen.isClosing {
+  opacity: 0;
+}
+
+.guliQrTopbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 25;
+  padding: max(14px, env(safe-area-inset-top)) 16px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(18, 11, 14, 0.84) 0%, rgba(18, 11, 14, 0) 100%);
+}
+
+.guliQrBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.guliQrBrandIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(226, 107, 132, 0.2);
+  border: 1px solid rgba(226, 107, 132, 0.4);
+  color: #f4a3b5;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.guliQrTitle {
+  font-size: 15px;
+  font-weight: 750;
+  color: #ffffff;
+  letter-spacing: -0.15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guliQrTopActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.guliQrIconBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(28, 19, 23, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #fbeff2;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.14s ease, background-color 0.16s ease;
+}
+
+.guliQrIconBtn:hover {
+  background: rgba(189, 82, 106, 0.35);
+}
+
+.guliQrCloseBtn {
+  border-radius: 50%;
+}
+
+.guliQrStage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  background: #0d080a;
+}
+
+.guliQrVideo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guliQrInitOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(18, 11, 14, 0.76);
+  display: grid;
+  place-items: center;
+}
+
+.guliQrSpinner {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid rgba(226, 107, 132, 0.25);
+  border-top-color: #e26b84;
+  animation: yandexSpinAnim 0.8s linear infinite;
+}
+
+.guliQrCenterRegion {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 20px 110px;
+}
+
+.guliQrSquareBox {
+  position: relative;
+  width: clamp(220px, 64vw, 272px);
+  height: clamp(220px, 64vw, 272px);
+  border-radius: 26px;
+  box-shadow: 0 0 0 9999px rgba(14, 8, 11, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.guliQrSquareBox.isSuccess {
+  border-color: #e26b84;
+}
+
+.guliQrCorner {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-color: #e26b84;
+  border-style: solid;
+  border-width: 0;
+  filter: drop-shadow(0 0 8px rgba(226, 107, 132, 0.55));
+}
+
+.guliQrCorner.tl {
+  top: 0;
+  left: 0;
+  border-top-width: 4px;
+  border-left-width: 4px;
+  border-top-left-radius: 24px;
+}
+
+.guliQrCorner.tr {
+  top: 0;
+  right: 0;
+  border-top-width: 4px;
+  border-right-width: 4px;
+  border-top-right-radius: 24px;
+}
+
+.guliQrCorner.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 4px;
+  border-left-width: 4px;
+  border-bottom-left-radius: 24px;
+}
+
+.guliQrCorner.br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 4px;
+  border-right-width: 4px;
+  border-bottom-right-radius: 24px;
+}
+
+.guliQrScanBeam {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2.5px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, #e26b84, #fff0f4, #e26b84, transparent);
+  box-shadow: 0 0 14px rgba(226, 107, 132, 0.9);
+  animation: guliQrSweep 2.1s ease-in-out infinite;
+}
+
+@keyframes guliQrSweep {
+  0% {
+    top: 10%;
+    opacity: 0.7;
+  }
+  50% {
+    top: 88%;
+    opacity: 1;
+  }
+  100% {
+    top: 10%;
+    opacity: 0.7;
+  }
+}
+
+.guliQrSuccessOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 19, 23, 0.78);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.guliQrSuccessCircle {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 10px 24px rgba(189, 82, 106, 0.45);
+}
+
+.guliQrSuccessOverlay strong {
+  padding: 6px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: 14px;
+  letter-spacing: 0.6px;
+}
+
+.guliQrMiddleCaption {
+  margin-top: 22px;
+  padding: 10px 18px;
+  border-radius: 16px;
+  background: rgba(28, 19, 23, 0.68);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(244, 163, 181, 0.22);
+  text-align: center;
+  max-width: 290px;
+}
+
+.guliQrCaptionTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.guliQrCaptionSub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: #e6c6cf;
+  font-weight: 500;
+}
+
+.guliQrFloatingToast {
+  margin-top: 12px;
+  padding: 7px 14px;
+  border-radius: 12px;
+  background: rgba(189, 82, 106, 0.92);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.guliQrBottomBar {
+  position: absolute;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.guliQrTorchBtn {
+  width: 60px;
+  height: 60px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(28, 19, 23, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fbeff2;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.guliQrTorchBtn:active {
+  transform: scale(0.94);
+}
+
+.guliQrTorchBtn.isOn {
+  background: var(--primary-gradient);
+  border-color: rgba(255, 255, 255, 0.48);
+  color: #ffffff;
+  box-shadow: 0 10px 28px rgba(226, 107, 132, 0.55);
+}
+
+.guliQrTorchBtn.isUnavailable {
+  opacity: 0.72;
+}
+
+.guliQrTorchLabel {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #fbeff2;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* Pre-flight & Blocked Card inside Fullscreen Modal */
+.guliQrCenterCardWrap {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 84px 20px 28px;
+}
+
+.guliQrPromptCard {
+  width: min(360px, 100%);
+  background: #1c1317;
+  border: 1px solid #38262d;
+  border-radius: 24px;
+  padding: 26px 22px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.guliQrPromptIcon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  background: rgba(226, 107, 132, 0.16);
+  border: 1px solid rgba(226, 107, 132, 0.35);
+  color: #e26b84;
+  display: grid;
+  place-items: center;
+}
+
+.guliQrPromptCard h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 750;
+  color: #fbeff2;
+}
+
+.guliQrPromptCard p {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #b89ea6;
+}
+
+.guliQrInlineAlert {
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(189, 82, 106, 0.18);
+  color: #f4a3b5;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.guliQrPromptActions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.guliQrPrimaryBtn,
+.guliQrSecondaryBtn {
+  height: 46px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.guliQrPrimaryBtn {
+  background: var(--primary-gradient);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 8px 22px rgba(189, 82, 106, 0.35);
+}
+
+.guliQrSecondaryBtn {
+  background: #261b20;
+  color: #fbeff2;
+  border: 1px solid #38262d;
+}
+
+
+

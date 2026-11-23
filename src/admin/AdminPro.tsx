@@ -23,6 +23,15 @@ import ReviewsAdmin from "./ReviewsAdmin";
 import { MetricCard } from "./components/AdminUIComponents";
 import { formatColorName } from "../utils/colorHelpers";
 import { copyToClipboard } from "../utils/clipboard";
+import { QrCode, Download, RefreshCw, ScanLine, X } from "lucide-react";
+import {
+  AdminQrPreviewPanel,
+  QrCodeThumbnail,
+  downloadQrVoucherCardPng,
+  generateQrPromoCode,
+  type PromoRecord,
+} from "./components/AdminQrPromoModal";
+import { AdminQrScannerPanel } from "./components/AdminQrScannerPanel";
 
 import "./AdminPro.css";
 import "./ReviewsNav.css";
@@ -153,17 +162,7 @@ function getResolvedCustomerPhoto(u: any, photosMap?: Record<string | number, st
   return direct || "";
 }
 
-type Promo = {
-  id?: number;
-  code: string;
-  discount_type: "percent" | "fixed";
-  discount_value: number;
-  max_discount_amount?: number | null;
-  min_order_amount: number;
-  usage_limit: number | null;
-  used_count: number;
-  active: boolean;
-};
+type Promo = PromoRecord;
 
 const API = getApiBaseUrl();
 
@@ -202,8 +201,21 @@ const emptyPromo: Promo = {
   min_order_amount: 0,
   usage_limit: null,
   used_count: 0,
+  starts_at: null,
+  expires_at: null,
   active: true,
+  promo_kind: "promo",
+  qr_label: "",
+  qr_color: "#9f3654",
 };
+
+const emptyQrPromo = (): Promo => ({
+  ...emptyPromo,
+  code: generateQrPromoCode(),
+  promo_kind: "qr",
+  qr_label: "Guli Market QR Vaucher",
+  qr_color: "#9f3654",
+});
 
 const money = (n: number) =>
   `${Math.round(Number(n) || 0).toLocaleString("uz-UZ")} so'm`;
@@ -327,6 +339,8 @@ export default function AdminPro() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [product, setProduct] = useState<Product>(emptyProduct);
   const [promo, setPromo] = useState<Promo>(emptyPromo);
+  const [promoSubTab, setPromoSubTab] = useState<"promo" | "qr">("promo");
+  const [qrScannerPanelOpen, setQrScannerPanelOpen] = useState(false);
   const [productOpen, setProductOpen] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -959,6 +973,12 @@ export default function AdminPro() {
       if (limit !== null && (!Number.isInteger(limit) || limit < 1))
         throw Error("Limit kamida 1 bo‘lishi kerak yoki bo‘sh qoldiring");
 
+      if (promo.starts_at && promo.expires_at) {
+        if (new Date(promo.expires_at).getTime() <= new Date(promo.starts_at).getTime()) {
+          throw Error("Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak");
+        }
+      }
+
       const payload = {
         ...promo,
         code,
@@ -967,6 +987,11 @@ export default function AdminPro() {
         max_discount_amount: maxLimit,
         min_order_amount: min,
         usage_limit: limit,
+        promo_kind: promo.promo_kind === "qr" ? "qr" : "promo",
+        qr_label: promo.qr_label || "",
+        qr_color: promo.qr_color || "#9f3654",
+        starts_at: promo.starts_at || null,
+        expires_at: promo.expires_at || null,
       };
       const r = promo.id
         ? await request(`/api/admin/promos/${promo.id}`, {
@@ -980,8 +1005,9 @@ export default function AdminPro() {
       setPromos((x) =>
         promo.id ? x.map((p) => (p.id === promo.id ? r.data : p)) : [r.data, ...x]
       );
+      setPromoSubTab(payload.promo_kind === "qr" ? "qr" : "promo");
       setPromoOpen(false);
-      notify("Promo kod muvaffaqiyatli saqlandi ✓");
+      notify(payload.promo_kind === "qr" ? "QR kod muvaffaqiyatli saqlandi ✓" : "Promo kod muvaffaqiyatli saqlandi ✓");
     } catch (e) {
       notify(e instanceof Error ? e.message : "Promo kod yaratishda xatolik");
     } finally {
@@ -1263,16 +1289,37 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
               </button>
             )}
             {tab === "promos" && (
-              <button
-                type="button"
-                className="proPrimary"
-                onClick={() => {
-                  setPromo({ ...emptyPromo });
-                  setPromoOpen(true);
-                }}
-              >
-                + Promo kod
-              </button>
+              <div className="adminPromoToolbarBtns">
+                <button
+                  type="button"
+                  className="proPrimary"
+                  onClick={() => {
+                    setPromo({ ...emptyPromo });
+                    setPromoOpen(true);
+                  }}
+                >
+                  + Promo kod
+                </button>
+                <button
+                  type="button"
+                  className="adminQrCreateBtn"
+                  onClick={() => {
+                    setPromo(emptyQrPromo());
+                    setPromoOpen(true);
+                  }}
+                >
+                  <QrCode size={15} />
+                  <span>+ QR kod</span>
+                </button>
+                <button
+                  type="button"
+                  className={`adminQrSecBtn ${qrScannerPanelOpen || promoSubTab === "qr" ? "isActive" : ""}`}
+                  onClick={() => setQrScannerPanelOpen((v) => !v)}
+                >
+                  <ScanLine size={15} />
+                  <span>QR skaner</span>
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1782,85 +1829,187 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
         {/* Tab 6: 💳 To‘lovlar */}
         {tab === "payments" && <AdminPaymentsTab notify={notify} />}
 
-        {/* Tab 7: 🎟 Kuponlar */}
-        {tab === "promos" && (
-          <section className="proPanel tablePanel">
-            <div className="panelHead">
-              <div>
-                <span className="proEyebrow">MARKETING</span>
-                <h2>{promos.length} ta promo</h2>
+        {/* Tab 7: 🎟 Kuponlar & QR kodlar */}
+        {tab === "promos" && (() => {
+          const regularPromos = promos.filter((p) => p.promo_kind !== "qr");
+          const qrPromos = promos.filter((p) => p.promo_kind === "qr");
+          const activeList = (promoSubTab === "qr" ? qrPromos : regularPromos).filter((p) =>
+            p.code.toLowerCase().includes(query.toLowerCase()) ||
+            (p.qr_label || "").toLowerCase().includes(query.toLowerCase())
+          );
+
+          return (
+            <section className="proPanel tablePanel">
+              <div className="panelHead" style={{ flexWrap: "wrap", gap: "12px" }}>
+                <div>
+                  <span className="proEyebrow">MARKETING VA VAUCHERLAR</span>
+                  <h2>
+                    {promoSubTab === "qr"
+                      ? `${qrPromos.length} ta QR kod`
+                      : `${regularPromos.length} ta promo kod`}
+                  </h2>
+                </div>
+
+                <div className="adminPromoSubTabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={promoSubTab === "promo"}
+                    className={`adminPromoSubTab ${promoSubTab === "promo" ? "active" : ""}`}
+                    onClick={() => setPromoSubTab("promo")}
+                  >
+                    <span>Promo kodlar ({regularPromos.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={promoSubTab === "qr"}
+                    className={`adminPromoSubTab ${promoSubTab === "qr" ? "active" : ""}`}
+                    onClick={() => setPromoSubTab("qr")}
+                  >
+                    <QrCode size={14} />
+                    <span>QR kodlar ({qrPromos.length})</span>
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="tableScroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Kod</th>
-                    <th>Chegirma</th>
-                    <th>Min.</th>
-                    <th>Foydalanish</th>
-                    <th>Holat</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {promos
-                    .filter((p) =>
-                      p.code.toLowerCase().includes(query.toLowerCase())
-                    )
-                    .map((p) => (
-                      <tr key={p.id}>
-                        <td>
-                          <b className="promoCode">{p.code}</b>
-                        </td>
-                        <td>
-                          {p.discount_type === "percent" ? (
-                            <div>
-                              <b>{p.discount_value}%</b>
-                              {p.max_discount_amount && Number(p.max_discount_amount) > 0 ? (
-                                <div style={{ fontSize: "11px", color: "var(--accent, #e11d48)", fontWeight: 500 }}>
-                                  maks. {money(p.max_discount_amount)}
-                                </div>
-                              ) : (
-                                <div style={{ fontSize: "11px", color: "var(--text-muted, #71717a)" }}>
-                                  limitsiz
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            money(p.discount_value)
-                          )}
-                        </td>
-                        <td>{money(p.min_order_amount)}</td>
-                        <td>
-                          {p.used_count}
-                          {p.usage_limit ? ` / ${p.usage_limit}` : " / ∞"}
-                        </td>
-                        <td>
-                          <span
-                            className={`pill ${p.active ? "" : "mutedPill"}`}
-                          >
-                            {p.active ? "Faol" : "O‘chiq"}
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPromo({ ...p });
-                              setPromoOpen(true);
-                            }}
-                          >
-                            Tahrirlash
-                          </button>
-                        </td>
+
+              {(qrScannerPanelOpen || promoSubTab === "qr") && (
+                <AdminQrScannerPanel
+                  apiBase={customApiUrl}
+                  promos={promos}
+                  onApplyScannedFilter={(code, kind) => {
+                    setPromoSubTab(kind);
+                    setQuery(code);
+                  }}
+                  onEditMatchedPromo={(matched) => {
+                    setPromo({ ...matched });
+                    setPromoOpen(true);
+                  }}
+                  onCreateQrFromCode={(code) => {
+                    setPromo({ ...emptyQrPromo(), code });
+                    setPromoOpen(true);
+                  }}
+                  onNotify={notify}
+                />
+              )}
+
+              {query && (
+                <div className="adminPromoFilterBar">
+                  <span>
+                    Qidiruv natijasi: <b>{query}</b>
+                  </span>
+                  <button type="button" onClick={() => setQuery("")}>
+                    <X size={13} />
+                    <span>Filtrni tozalash</span>
+                  </button>
+                </div>
+              )}
+
+              {activeList.length === 0 ? (
+                <div className="proEmpty" style={{ marginTop: "8px" }}>
+                  {promoSubTab === "qr"
+                    ? "Hozircha shakllantirilgan QR kodlar yo‘q. Yuqoridagi «+ QR kod» tugmasi orqali yarating."
+                    : "Hozircha promo kodlar yo‘q. Yuqoridagi «+ Promo kod» tugmasi orqali yarating."}
+                </div>
+              ) : (
+                <div className="tableScroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{promoSubTab === "qr" ? "QR Kod" : "Kod"}</th>
+                        <th>Chegirma</th>
+                        <th>Min.</th>
+                        <th>Foydalanish</th>
+                        <th>Muddat</th>
+                        <th>Holat</th>
+                        <th />
                       </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
+                    </thead>
+                    <tbody>
+                      {activeList.map((p) => (
+                        <tr key={p.id || p.code}>
+                          <td>
+                            {promoSubTab === "qr" ? (
+                              <div className="adminQrRowCell">
+                                <QrCodeThumbnail code={p.code} color={p.qr_color} />
+                                <div>
+                                  <b className="promoCode">{p.code}</b>
+                                  {p.qr_label && <small>{p.qr_label}</small>}
+                                </div>
+                              </div>
+                            ) : (
+                              <b className="promoCode">{p.code}</b>
+                            )}
+                          </td>
+                          <td>
+                            {p.discount_type === "percent" ? (
+                              <div>
+                                <b>{p.discount_value}%</b>
+                                {p.max_discount_amount && Number(p.max_discount_amount) > 0 ? (
+                                  <div style={{ fontSize: "11px", color: "var(--accent, #e11d48)", fontWeight: 500 }}>
+                                    maks. {money(p.max_discount_amount)}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: "11px", color: "var(--text-muted, #71717a)" }}>
+                                    limitsiz
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              money(p.discount_value)
+                            )}
+                          </td>
+                          <td>{money(p.min_order_amount)}</td>
+                          <td>
+                            {p.used_count}
+                            {p.usage_limit ? ` / ${p.usage_limit}` : " / ∞"}
+                          </td>
+                          <td>
+                            <small style={{ fontSize: "11px", color: "var(--muted)" }}>
+                              {p.expires_at
+                                ? `${new Date(p.expires_at).toLocaleDateString("uz-UZ")} gacha`
+                                : "Muddatsiz"}
+                            </small>
+                          </td>
+                          <td>
+                            <span className={`pill ${p.active ? "" : "mutedPill"}`}>
+                              {p.active ? "Faol" : "O‘chiq"}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="actions">
+                              {promoSubTab === "qr" && (
+                                <button
+                                  type="button"
+                                  title="QR vaucherni yuklab olish"
+                                  onClick={async () => {
+                                    await downloadQrVoucherCardPng(p);
+                                    notify("QR vaucher PNG yuklandi ✓");
+                                  }}
+                                >
+                                  <Download size={14} />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPromo({ ...p });
+                                  setPromoOpen(true);
+                                }}
+                              >
+                                Tahrirlash
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* Tab 8: 🖼 Bannerlar */}
         {tab === "banners" && <AdminBannersTab notify={notify} />}
@@ -2069,6 +2218,7 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
           onClose={() => setPromoOpen(false)}
           onChange={setPromo}
           onSave={savePromo}
+          onNotify={notify}
         />
       )}
       {toast && <div className="proToast">{toast}</div>}
@@ -3180,46 +3330,108 @@ function UserDrawer({
   );
 }
 
+function toDatetimeLocalValue(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocalValue(val: string): string | null {
+  if (!val) return null;
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 function PromoModal({
   value,
   busy,
   onClose,
   onChange,
   onSave,
+  onNotify,
 }: {
   value: Promo;
   busy: boolean;
   onClose: () => void;
   onChange: (v: Promo) => void;
   onSave: (e: FormEvent) => void;
+  onNotify?: (msg: string) => void;
 }) {
   const set = (k: keyof Promo, v: any) => onChange({ ...value, [k]: v });
   const replaceZeroOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     if (e.currentTarget.value === "0") e.currentTarget.select();
   };
   const isPercent = (value.discount_type || "percent") === "percent";
+  const isQrMode = value.promo_kind === "qr";
 
   return (
     <Modal
-      title={value.id ? "Promo tahrirlash" : "Yangi promo"}
-      eyebrow="MARKETING"
+      title={
+        isQrMode
+          ? value.id
+            ? "QR kodni tahrirlash"
+            : "Yangi QR kod yaratish"
+          : value.id
+          ? "Promo tahrirlash"
+          : "Yangi promo"
+      }
+      eyebrow={isQrMode ? "QR VAUCHER" : "MARKETING"}
       onClose={onClose}
     >
       <form onSubmit={onSave}>
         <div className="formGrid">
+          {isQrMode && (
+            <AdminQrPreviewPanel
+              promo={value}
+              onGenerateCode={() => set("code", generateQrPromoCode())}
+              onChangeLabel={(lbl) => set("qr_label", lbl)}
+              onChangeColor={(hex) => set("qr_color", hex)}
+              onNotify={onNotify}
+            />
+          )}
+
           <label>
-            Kod
+            <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{isQrMode ? "QR vaucher kodi" : "Kod"}</span>
+              {isQrMode && (
+                <button
+                  type="button"
+                  onClick={() => set("code", generateQrPromoCode())}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--rose)",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: 0,
+                  }}
+                >
+                  <RefreshCw size={11} />
+                  <span>Generatsiya</span>
+                </button>
+              )}
+            </span>
             <input
               value={value.code}
               onChange={(e) =>
                 set("code", e.target.value.toUpperCase().replace(/\s/g, ""))
               }
-              placeholder="Masalan: GULI20"
+              placeholder={isQrMode ? "Masalan: GULIQR-8F3K2A" : "Masalan: GULI20"}
               maxLength={40}
               pattern="[A-Za-z0-9_-]{3,40}"
               required
             />
-            <small>Faqat harf, raqam, _ va - ishlating.</small>
+            <small>
+              {isQrMode
+                ? "Bu kod faqat QR skaner orqali ishlaydi (alohida tizim)."
+                : "Faqat harf, raqam, _ va - ishlating."}
+            </small>
           </label>
 
           <label>
@@ -3288,7 +3500,7 @@ function PromoModal({
                 placeholder="Masalan: 100000 (bo‘sh qoldirilsa limitsiz)"
               />
               <small>
-                Mijoz qancha katta xarid qilsa ham (masalan 1 000 000 so'm), chegirma shu ko'rsatilgan limitdan oshmaydi.
+                Mijoz qancha katta xarid qilsa ham, chegirma shu ko‘rsatilgan limitdan oshmaydi.
               </small>
               <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
                 {[30000, 50000, 100000, 200000].map((preset) => (
@@ -3367,6 +3579,26 @@ function PromoModal({
           </label>
 
           <label>
+            Boshlanish vaqti (ixtiyoriy)
+            <input
+              type="datetime-local"
+              value={toDatetimeLocalValue(value.starts_at)}
+              onChange={(e) => set("starts_at", fromDatetimeLocalValue(e.target.value))}
+            />
+            <small>Bo‘sh bo‘lsa darhol ishlaydi.</small>
+          </label>
+
+          <label>
+            Tugash vaqti (ixtiyoriy)
+            <input
+              type="datetime-local"
+              value={toDatetimeLocalValue(value.expires_at)}
+              onChange={(e) => set("expires_at", fromDatetimeLocalValue(e.target.value))}
+            />
+            <small>Bo‘sh bo‘lsa muddatsiz.</small>
+          </label>
+
+          <label>
             Holat
             <select
               value={value.active ? "active" : "off"}
@@ -3382,7 +3614,7 @@ function PromoModal({
             Bekor qilish
           </button>
           <button className="proPrimary" disabled={busy}>
-            {busy ? "Saqlanmoqda…" : "Saqlash"}
+            {busy ? "Saqlanmoqda…" : isQrMode ? "QR kodni saqlash" : "Saqlash"}
           </button>
         </div>
       </form>

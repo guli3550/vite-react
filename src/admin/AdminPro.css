@@ -2375,3 +2375,541 @@ html[data-theme="dark"] body,
     padding: 12px 14px 20px;
   }
 }
+
+/* ============================================================
+   Admin QR Promo Builder & Sub-tabs
+   ============================================================ */
+.adminPromoToolbarBtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adminQrCreateBtn {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 13px;
+  border: 1px solid #e7c5cd;
+  background: #fff4f6;
+  color: var(--rose, #bd526a);
+  font-size: 13px;
+  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: transform 0.14s ease, background-color 0.16s ease;
+}
+
+.adminQrCreateBtn:hover {
+  background: #fde8ed;
+}
+
+.adminPromoSubTabs {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 14px;
+  background: #f8eff1;
+  border: 1px solid #ead8dd;
+  gap: 4px;
+}
+
+.adminPromoSubTab {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: #7d6870;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.adminPromoSubTab.active {
+  background: #ffffff;
+  color: var(--rose, #bd526a);
+  box-shadow: 0 2px 8px rgba(182, 83, 107, 0.12);
+}
+
+.adminQrRowCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adminQrThumbImg,
+.adminQrThumbPlaceholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid #f0dfe3;
+  background: #ffffff;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.adminQrThumbPlaceholder {
+  display: grid;
+  place-items: center;
+  color: var(--rose, #bd526a);
+}
+
+.adminQrBuilderCard {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #fff6f8;
+  border: 1px solid #f0dfe3;
+  margin-bottom: 6px;
+}
+
+.adminQrPreviewSide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.adminQrPreviewFrame {
+  width: 170px;
+  height: 170px;
+  padding: 10px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #f0dfe3;
+  display: grid;
+  place-items: center;
+}
+
+.adminQrPreviewFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.adminQrEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #a6939b;
+  font-size: 12px;
+}
+
+.adminQrPreviewMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.adminQrBrandBadge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--rose, #bd526a);
+}
+
+.adminQrPreviewMeta b {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+}
+
+.adminQrPreviewMeta small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.adminQrConfigSide {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.adminQrFieldLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d5e64;
+  margin-bottom: 6px;
+}
+
+.adminQrSwatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.adminQrSwatchBtn {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid #e7d7dc;
+  background: #ffffff;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.adminQrSwatchBtn span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.adminQrSwatchBtn small {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adminQrSwatchBtn.active {
+  border-color: var(--rose, #bd526a);
+  background: #fff0f4;
+}
+
+.adminQrActionRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adminQrSecBtn,
+.adminQrDownloadBtn {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.adminQrSecBtn {
+  border: 1px solid #e7d7dc;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.adminQrDownloadBtn {
+  border: none;
+  background: linear-gradient(135deg, #c9526b, #b84561);
+  color: #ffffff;
+}
+
+[data-theme="dark"] .adminQrCreateBtn {
+  background: #2b1a21;
+  border-color: #4f2f3b;
+  color: #f4a3b5;
+}
+
+[data-theme="dark"] .adminPromoSubTabs {
+  background: #22151b;
+  border-color: #38262d;
+}
+
+[data-theme="dark"] .adminPromoSubTab {
+  color: #b89ea6;
+}
+
+[data-theme="dark"] .adminPromoSubTab.active {
+  background: #321f27;
+  color: #f4a3b5;
+}
+
+[data-theme="dark"] .adminQrBuilderCard {
+  background: #22151b;
+  border-color: #38262d;
+}
+
+[data-theme="dark"] .adminQrSwatchBtn,
+[data-theme="dark"] .adminQrSecBtn {
+  background: #2b1b22;
+  border-color: #48323a;
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .adminQrSwatchBtn.active {
+  border-color: #e26b84;
+  background: #3a222b;
+}
+
+@media (max-width: 640px) {
+  .adminQrBuilderCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   Admin QR Scanner & Promo Validation Panel
+   ============================================================ */
+.adminQrScannerBox {
+  margin: 12px 0 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #fff6f8;
+  border: 1px solid #f0dfe3;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adminQrScannerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.adminQrScannerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adminQrScannerBadge {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(189, 82, 106, 0.14);
+  color: var(--rose, #bd526a);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.adminQrScannerTitleRow strong {
+  display: block;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.adminQrScannerTitleRow small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.adminQrScannerBtnGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adminQrCameraOpenBtn {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: none;
+  background: linear-gradient(135deg, #c9526b, #b84561);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.adminQrScannerForm {
+  display: grid;
+  grid-template-columns: 1fr 165px auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.adminQrInputGroup {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.adminQrInputGroup input {
+  width: 100%;
+  height: 40px;
+  padding: 0 34px 0 12px;
+  border-radius: 11px;
+  border: 1px solid #e7d7dc;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.adminQrClearInputBtn {
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 0;
+  background: #f3e6ea;
+  color: #7d6870;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.adminQrSubtotalInput {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.adminQrSubtotalInput input {
+  height: 40px;
+  padding: 0 10px;
+  border-radius: 11px;
+  border: 1px solid #e7d7dc;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.adminQrVerifyBtn {
+  height: 40px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminQrScanResult {
+  padding: 12px 14px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.adminQrScanResult.isValid {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.adminQrScanResult.isInvalid {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+}
+
+.adminQrScanResultInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adminQrResultTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adminQrKindTag {
+  font-size: 10.5px;
+  font-weight: 750;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(189, 82, 106, 0.14);
+  color: var(--rose, #bd526a);
+}
+
+.adminQrScanResultInfo small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.adminQrPromoFilterBar,
+.adminPromoFilterBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: #fff0f4;
+  border: 1px solid #f0dfe3;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.adminPromoFilterBar button {
+  border: 0;
+  background: transparent;
+  color: var(--rose, #bd526a);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.adminQrSecBtn.isActive {
+  border-color: var(--rose, #bd526a);
+  background: #fff0f4;
+  color: var(--rose, #bd526a);
+}
+
+[data-theme="dark"] .adminQrScannerBox {
+  background: #22151b;
+  border-color: #38262d;
+}
+
+[data-theme="dark"] .adminQrInputGroup input,
+[data-theme="dark"] .adminQrSubtotalInput input {
+  background: #170e12;
+  border-color: #3f2b33;
+  color: #fbeff2;
+}
+
+[data-theme="dark"] .adminQrScanResult.isValid {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #a7f3d0;
+}
+
+[data-theme="dark"] .adminQrScanResult.isInvalid {
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #fecdd3;
+}
+
+[data-theme="dark"] .adminPromoFilterBar {
+  background: #2a1920;
+  border-color: #462b35;
+  color: #fbeff2;
+}
+
+@media (max-width: 720px) {
+  .adminQrScannerForm {
+    grid-template-columns: 1fr;
+  }
+}
+

@@ -214,7 +214,7 @@ export function exportOrdersToPDF(options: ExportPdfOptions): boolean {
       doc.setFontSize(7.5);
       doc.setTextColor(140, 120, 125);
       doc.text(
-        "GULI Premium Lingerie Store · Shaxsiy buyurtmalar hisoboti · guli.uz",
+        "GULI Market · Shaxsiy buyurtmalar hisoboti · gulii.uz",
         margin,
         pageHeight - 8
       );

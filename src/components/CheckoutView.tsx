@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { QrCode, Camera } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { QrCode, TicketPercent, Check, X } from "lucide-react";
 import type { Address, CartItem } from "../types";
 import { formatColorName } from "../utils/colorHelpers";
 import { getDeliveryEstimate } from "../utils/delivery";
 import { type Language } from "../utils/translations";
+import { extractAndNormalizePromoCode } from "../utils/qrPromoValidator";
 import { QrCodeScannerModal } from "./QrCodeScannerModal";
 
 interface CheckoutViewProps {
@@ -40,13 +41,24 @@ interface CheckoutViewProps {
     latitude: number;
     longitude: number;
     onChange: (lat: number, lon: number) => void;
+    language?: Language;
+    region?: string;
+    district?: string;
+    street?: string;
+    house?: string;
+    isResolving?: boolean;
+    locationLoading?: boolean;
+    onRequestLocation?: () => void;
+    onSelectCandidate?: (candidate: any) => void;
   }>;
+  isResolvingAddress?: boolean;
+  onSelectSearchCandidate?: (candidate: any) => void;
   promo?: string;
   setPromo?: (v: string) => void;
   promoApplied?: boolean;
   promoDiscount?: number;
   promoLoading?: boolean;
-  onApplyPromo?: (code?: string) => Promise<boolean> | void;
+  onApplyPromo?: (code?: string, source?: "manual" | "qr") => Promise<boolean> | void;
   onRemovePromo?: () => void;
 }
 
@@ -81,6 +93,8 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   onToggleCashback,
   cashbackDiscount = 0,
   LocationPicker,
+  isResolvingAddress = false,
+  onSelectSearchCandidate,
   promo = "",
   setPromo,
   promoApplied = false,
@@ -94,11 +108,17 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
   const [showOrderSummary, setShowOrderSummary] = useState(false);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [promoInput, setPromoInput] = useState(promo || "");
+  const [promoSource, setPromoSource] = useState<"manual" | "qr">("manual");
+  const prevPromoRef = useRef(promo);
+  const [isMapOpen, setIsMapOpen] = useState(false);
 
-  // Keep promoInput in sync with external promo state
+  // Keep promoInput in sync with external promo updates (including reset after order)
   useEffect(() => {
-    if (promo && promo !== promoInput) {
-      setPromoInput(promo);
+    const prev = prevPromoRef.current;
+    prevPromoRef.current = promo;
+    if (promo !== prev) {
+      setPromoInput(promo || "");
+      if (!promo) setPromoSource("manual");
     }
   }, [promo]);
 
@@ -110,23 +130,34 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
     }
     if (setPromo) setPromo(targetCode);
     if (onApplyPromo) {
-      await onApplyPromo(targetCode);
+      await onApplyPromo(targetCode, promoSource);
     }
   };
 
-  const handleScanSuccess = async (scannedCode: string) => {
-    const cleaned = scannedCode.trim().toUpperCase();
+  const handleScanSuccess = async (scannedPayload: string) => {
+    const cleaned = extractAndNormalizePromoCode(scannedPayload);
+    if (!cleaned) {
+      showToast(
+        isRu
+          ? "Промокод в QR не найден"
+          : isEn
+          ? "No promo code found in QR"
+          : "QR koddan promokod aniqlanmadi"
+      );
+      return;
+    }
+    setPromoSource("qr");
     setPromoInput(cleaned);
     if (setPromo) setPromo(cleaned);
     showToast(
       isRu
-        ? `📷 Промокод считан: ${cleaned}`
+        ? `QR-код считан: ${cleaned}`
         : isEn
-        ? `📷 Scanned promo code: ${cleaned}`
-        : `📷 Promokod o‘qildi: ${cleaned}`
+        ? `QR code scanned: ${cleaned}`
+        : `QR kod o‘qildi: ${cleaned}`
     );
     if (onApplyPromo) {
-      await onApplyPromo(cleaned);
+      await onApplyPromo(cleaned, "qr");
     }
   };
 
@@ -687,54 +718,95 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
               {isRu ? "Адрес доставки" : isEn ? "Delivery Address" : "Yetkazib berish manzili"}
             </h3>
             <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-              {isRu ? "Определите по GPS или выберите на карте" : isEn ? "Detect via GPS or select on map" : "GPS orqali aniqlang yoki xaritadan tanlang"}
+              {isRu
+                ? "Нажмите кнопку ниже, чтобы открыть карту и точно определить адрес"
+                : isEn
+                ? "Tap below to open the map and auto-fill exact delivery address"
+                : "Xaritani ochish va aniq manzilni avtomatik to‘ldirish uchun tugmani bosing"}
             </p>
           </div>
         </div>
 
-        {/* GPS Button */}
-        <button
-          type="button"
-          className="locationButton"
-          onClick={requestLocation}
-          disabled={locationLoading}
-          style={{
-            width: "100%",
-            padding: "12px 14px",
-            borderRadius: "14px",
-            background: "linear-gradient(135deg, #0284c7, #0369a1)",
-            color: "#ffffff",
-            border: "none",
-            fontWeight: "750",
-            fontSize: "12.5px",
-            cursor: "pointer",
-            boxShadow: "0 4px 12px rgba(2,132,199,0.2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          {locationLoading ? (
-            <>{isRu ? "⌛ Определение местоположения..." : isEn ? "⌛ Detecting location..." : "⌛ Joylashuv aniqlanmoqda..."}</>
-          ) : address.latitude ? (
-            <>{isRu ? "↻ Переопределить GPS" : isEn ? "↻ Redetect GPS" : "↻ Joylashuvni qayta aniqlash (GPS)"}</>
-          ) : (
-            <>{isRu ? "🎯 Определить местоположение (GPS)" : isEn ? "🎯 Detect my location (GPS)" : "🎯 Hozirgi joylashuvimni aniqlash (GPS)"}</>
-          )}
-        </button>
+        {/* Location Detect / Re-detect Button (opens Yandex-style map on click) */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            id="checkout-location-btn"
+            className="locationButton"
+            onClick={() => {
+              setIsMapOpen(true);
+              requestLocation();
+            }}
+            disabled={locationLoading}
+            style={{
+              flex: 1,
+              padding: "12px 14px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #fc3f1d, #e11d48)",
+              color: "#ffffff",
+              border: "none",
+              fontWeight: "750",
+              fontSize: "12.5px",
+              cursor: "pointer",
+              boxShadow: "0 4px 14px rgba(225,29,72,0.22)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {locationLoading ? (
+              <>{isRu ? "⌛ Определение местоположения..." : isEn ? "⌛ Detecting location..." : "⌛ Joylashuv aniqlanmoqda..."}</>
+            ) : address.latitude || isMapOpen ? (
+              <>{isRu ? "↻ Переопределить местоположение" : isEn ? "↻ Redetect location" : "↻ Joylashuvni qayta aniqlash"}</>
+            ) : (
+              <>{isRu ? "📍 Определить местоположение" : isEn ? "📍 Detect location" : "📍 Joylashuvni aniqlash"}</>
+            )}
+          </button>
 
-        {/* Map Picker */}
-        {address.latitude ? (
-          <div style={{ borderRadius: "16px", overflow: "hidden", border: "1px solid var(--border-color)", marginBottom: 14 }}>
+          {isMapOpen && (
+            <button
+              type="button"
+              onClick={() => setIsMapOpen(false)}
+              style={{
+                padding: "0 14px",
+                borderRadius: "14px",
+                background: "var(--bg-card-sub)",
+                border: "1px solid var(--border-color)",
+                color: "var(--text-main)",
+                fontSize: "12px",
+                fontWeight: "700",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {isRu ? "Скрыть" : isEn ? "Hide" : "Yopish"}
+            </button>
+          )}
+        </div>
+
+        {/* Yandex-style Interactive Map Picker — strictly hidden until detect button is clicked */}
+        {isMapOpen && (
+          <div style={{ marginBottom: 14 }}>
             <LocationPicker
-              latitude={address.latitude}
-              longitude={address.longitude}
+              latitude={address.latitude || 41.2995}
+              longitude={address.longitude || 69.2401}
               onChange={updateMapPosition}
+              language={language}
+              region={address.region || ""}
+              district={address.district || ""}
+              street={address.street || ""}
+              house={address.house || ""}
+              isResolving={isResolvingAddress}
+              locationLoading={locationLoading}
+              onRequestLocation={() => {
+                setIsMapOpen(true);
+                requestLocation();
+              }}
+              onSelectCandidate={onSelectSearchCandidate}
             />
           </div>
-        ) : null}
+        )}
 
         {/* Region & District Selectors */}
         <div className="twoInputs" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
@@ -963,82 +1035,26 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
         </div>
       </div>
 
-      {/* Promo Code & Camera QR Scanner Section */}
-      <div
-        className="checkoutCard promoCard"
-        style={{
-          background: "var(--bg-card)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "20px",
-          padding: "16px 18px",
-          marginBottom: "16px",
-          boxShadow: "var(--shadow-sm)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "12px",
-                background: "linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(225, 29, 72, 0.06))",
-                color: "var(--primary)",
-                display: "grid",
-                placeItems: "center",
-                fontSize: "18px",
-                flexShrink: 0,
-              }}
-            >
-              🎟️
-            </div>
-            <div>
-              <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-main)" }}>
-                {isRu ? "Промокод и купоны" : isEn ? "Promo Code & Coupons" : "Promokod va vaucherlar"}
-              </div>
-              <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "2px" }}>
-                {isRu
-                  ? "Введите вручную или отсканируйте камерой"
-                  : isEn
-                  ? "Enter manually or scan with camera"
-                  : "Kodni kiriting yoki kamera bilan skanerlang"}
-              </div>
-            </div>
+      {/* Promo Code & Voucher Section — Guli Market Signature Style */}
+      <div className="checkoutCard guliPromoCard">
+        <div className="guliPromoHeader">
+          <div className="guliPromoIconWrap" aria-hidden="true">
+            <TicketPercent size={17} strokeWidth={2.1} />
           </div>
-
-          {/* Quick QR Scanner Pill Button */}
-          <button
-            type="button"
-            onClick={() => setIsQrScannerOpen(true)}
-            id="checkout-qr-scanner-btn"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "7px 12px",
-              borderRadius: "12px",
-              background: "linear-gradient(135deg, rgba(225, 29, 72, 0.12), rgba(225, 29, 72, 0.05))",
-              border: "1px solid rgba(225, 29, 72, 0.35)",
-              color: "var(--primary)",
-              fontSize: "11.5px",
-              fontWeight: 800,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-            }}
-          >
-            <QrCode size={15} />
-            <span>{isRu ? "QR-сканер" : isEn ? "Scan QR" : "QR Skaner"}</span>
-          </button>
+          <h3 className="guliPromoTitle">
+            {isRu ? "Промокод" : isEn ? "Promo code" : "Promokod"}
+          </h3>
         </div>
 
-        {/* Input + Action Buttons */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <div style={{ position: "relative", flex: 1 }}>
+        <div className="guliPromoRow">
+          <div className={`guliPromoInputWrap ${promoApplied ? "is-applied" : ""}`}>
             <input
               type="text"
+              className="guliPromoInput"
               value={promoInput}
               onChange={(e) => {
                 const val = e.target.value.toUpperCase();
+                setPromoSource("manual");
                 setPromoInput(val);
                 if (promoApplied && onRemovePromo) {
                   onRemovePromo();
@@ -1050,129 +1066,64 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
                   handleApplyPromo(promoInput);
                 }
               }}
-              placeholder={isRu ? "Введите промокод" : isEn ? "Enter promo code" : "Promokod (masalan: GULI20)"}
+              placeholder={isRu ? "Промокод" : isEn ? "Promo code" : "Promokod"}
               maxLength={40}
-              style={{
-                width: "100%",
-                padding: "11px 40px 11px 12px",
-                borderRadius: "13px",
-                border: promoApplied
-                  ? "1.5px solid #10b981"
-                  : "1px solid var(--border-input)",
-                background: "var(--bg-input)",
-                color: "var(--text-main)",
-                fontSize: "13px",
-                fontWeight: 700,
-                letterSpacing: "0.5px",
-                boxSizing: "border-box",
-                textTransform: "uppercase",
-              }}
+              aria-label={isRu ? "Промокод" : isEn ? "Promo code" : "Promokod"}
             />
-            {/* Embedded Mini QR Camera icon inside input field for quick click */}
             <button
               type="button"
+              id="checkout-qr-scanner-btn"
+              className="guliPromoQrBtn"
               onClick={() => setIsQrScannerOpen(true)}
-              title={isRu ? "Сканировать камерой" : isEn ? "Scan with camera" : "Kamera orqali skanerlash"}
-              style={{
-                position: "absolute",
-                right: 8,
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "transparent",
-                border: "none",
-                color: "var(--primary)",
-                cursor: "pointer",
-                padding: 4,
-                display: "grid",
-                placeItems: "center",
-              }}
+              title={isRu ? "Сканировать QR" : isEn ? "Scan QR" : "QR skaner"}
+              aria-label={isRu ? "Сканировать QR" : isEn ? "Scan QR" : "QR skaner"}
             >
-              <Camera size={18} />
+              <QrCode size={18} />
             </button>
           </div>
 
           <button
             type="button"
+            className={`guliPromoApplyBtn ${
+              promoApplied ? "is-applied" : promoInput.trim() ? "is-ready" : ""
+            }`}
             onClick={() => handleApplyPromo(promoInput)}
             disabled={promoLoading || !promoInput.trim()}
-            style={{
-              padding: "11px 16px",
-              borderRadius: "13px",
-              background: promoApplied
-                ? "#10b981"
-                : promoInput.trim()
-                ? "var(--primary)"
-                : "var(--bg-card-sub)",
-              color: promoInput.trim() || promoApplied ? "#ffffff" : "var(--text-muted)",
-              border: "none",
-              fontSize: "12.5px",
-              fontWeight: 800,
-              cursor: promoLoading || !promoInput.trim() ? "not-allowed" : "pointer",
-              whiteSpace: "nowrap",
-              transition: "all 0.2s ease",
-            }}
           >
-            {promoLoading
-              ? isRu ? "Проверка…" : isEn ? "Checking…" : "Tekshirilmoqda…"
-              : promoApplied
-              ? isRu ? "✓ Применен" : isEn ? "✓ Applied" : "✓ Qo‘llandi"
-              : isRu ? "Применить" : isEn ? "Apply" : "Qo‘llash"}
+            {promoLoading ? (
+              "…"
+            ) : promoApplied ? (
+              <>
+                <Check size={15} strokeWidth={2.5} />
+                <span>{isRu ? "Применён" : isEn ? "Applied" : "Qo‘llandi"}</span>
+              </>
+            ) : (
+              <span>{isRu ? "Применить" : isEn ? "Apply" : "Qo‘llash"}</span>
+            )}
           </button>
         </div>
 
-        {/* Applied Promo Banner / Tag */}
-        {promoApplied && promoDiscount > 0 ? (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "9px 12px",
-              backgroundColor: "rgba(16, 185, 129, 0.1)",
-              borderRadius: "12px",
-              border: "1px solid rgba(16, 185, 129, 0.28)",
-              color: "#059669",
-              fontSize: "12px",
-              fontWeight: 750,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span>✓</span>
-              <span>
-                <b>{promoInput || promo}</b> {isRu ? "скидка применена:" : isEn ? "discount applied:" : "chegirmasi qo‘llandi:"}{" "}
-                <b>−{formatPrice(promoDiscount)}</b>
-              </span>
-            </div>
+        {promoApplied && promoDiscount > 0 && (
+          <div className="guliPromoAppliedBar">
+            <span className="guliPromoAppliedText">
+              <Check size={14} strokeWidth={2.5} />
+              <strong>{promoInput || promo}</strong>
+              <span aria-hidden="true">·</span>
+              <b>−{formatPrice(promoDiscount)}</b>
+            </span>
             <button
               type="button"
+              className="guliPromoRemoveBtn"
               onClick={() => {
+                setPromoSource("manual");
                 if (onRemovePromo) onRemovePromo();
                 setPromoInput("");
               }}
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#e11d48",
-                fontSize: "11px",
-                fontWeight: 800,
-                cursor: "pointer",
-                padding: "2px 6px",
-              }}
+              aria-label={isRu ? "Удалить промокод" : isEn ? "Remove promo code" : "Promokodni bekor qilish"}
+              title={isRu ? "Удалить" : isEn ? "Remove" : "Bekor qilish"}
             >
-              {isRu ? "Удалить" : isEn ? "Remove" : "Bekor qilish"}
+              <X size={14} />
             </button>
-          </div>
-        ) : (
-          <div style={{ marginTop: 8, fontSize: "11px", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 5 }}>
-            <span>💡</span>
-            <span>
-              {isRu
-                ? "Нажмите «QR-сканер» чтобы мгновенно считать промокод с купона или чека."
-                : isEn
-                ? "Tap “Scan QR” to instantly read promo code from voucher or card."
-                : "Kupon yoki chekdagi promokodni o‘qish uchun «QR Skaner» tugmasini bosing."}
-            </span>
           </div>
         )}
       </div>

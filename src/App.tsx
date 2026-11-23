@@ -51,6 +51,12 @@ import {
 import { SocialLinksModal } from "./components/SocialLinksModal";
 import { SavedAddressesManager } from "./components/SavedAddressesManager";
 import { CheckoutView } from "./components/CheckoutView";
+import { YandexCheckoutMap } from "./components/YandexCheckoutMap";
+import {
+  UZBEKISTAN_REGIONS_DATA,
+  reverseGeocodeCoordinates,
+  type AddressSearchCandidate,
+} from "./utils/uzbekistanGeocoding";
 import { OrderConfirmedModal } from "./components/OrderConfirmedModal";
 import { GULI_LOGO_BASE64 } from "./utils/guliLogoBase64";
 import {
@@ -227,358 +233,7 @@ const persistOrdersSafely = (orders: Order[]) => {
   }
 };
 
-const uzbekistanRegionsData: Record<string, string[]> = {
-  "Toshkent sh.": [
-    "Chilonzor tumani",
-    "Yunusobod tumani",
-    "Mirzo Ulug‘bek tumani",
-    "Yakkasaroy tumani",
-    "Shayxontohur tumani",
-    "Olmazor tumani",
-    "Uchtepa tumani",
-    "Mirobod tumani",
-    "Yashnobod tumani",
-    "Sergeli tumani",
-    "Yangihayot tumani",
-    "Bektemir tumani"
-  ],
-  "Toshkent vil.": [
-    "Chinoz tumani",
-    "Zangiota tumani",
-    "Qibray tumani",
-    "Toshkent tumani",
-    "Yangiyo‘l tumani",
-    "Oqqo‘rg‘on tumani",
-    "Bo‘ka tumani",
-    "Chirchiq sh.",
-    "Angren sh.",
-    "Olmaliq sh.",
-    "Bekobod sh.",
-    "Parkent tumani",
-    "Piskent tumani",
-    "Bo‘stonliq tumani",
-    "Quyichirchiq tumani",
-    "O‘rtachirchiq tumani"
-  ],
-  "Samarqand vil.": [
-    "Samarqand sh.",
-    "Samarqand tumani",
-    "Urgut tumani",
-    "Kattaqo‘rg‘on sh.",
-    "Kattaqo‘rg‘on tumani",
-    "Ishtixon tumani",
-    "Payariq tumani",
-    "Jomboy tumani",
-    "Bulung‘ur tumani",
-    "Narpay tumani",
-    "Paxtachi tumani",
-    "Nurobod tumani",
-    "Qo‘shrabot tumani",
-    "Tayloq tumani"
-  ],
-  "Buxoro vil.": [
-    "Buxoro sh.",
-    "Buxoro tumani",
-    "G‘ijduvon tumani",
-    "Vobkent tumani",
-    "Kogon sh.",
-    "Kogon tumani",
-    "Jondor tumani",
-    "Olot tumani",
-    "Qorako‘l tumani",
-    "Peshku tumani",
-    "Romitan tumani",
-    "Shofirkon tumani"
-  ],
-  "Farg‘ona vil.": [
-    "O‘zbekiston tumani",
-    "Farg‘ona sh.",
-    "Marg‘ilon sh.",
-    "Qo‘qon sh.",
-    "Quvasoy sh.",
-    "Farg‘ona tumani",
-    "Quva tumani",
-    "Rishton tumani",
-    "Oltiariq tumani",
-    "Bag‘dod tumani",
-    "Beshariq tumani",
-    "Dang‘ara tumani",
-    "Furqat tumani",
-    "Qo‘shtepa tumani",
-    "Uchko‘prik tumani",
-    "Yozyovon tumani",
-    "Toshloq tumani",
-    "So‘x tumani"
-  ],
-  "Andijon vil.": [
-    "Andijon sh.",
-    "Xonobod sh.",
-    "Andijon tumani",
-    "Asaka tumani",
-    "Baliqchi tumani",
-    "Buloqboshi tumani",
-    "Bo‘z tumani",
-    "Jalaquduq tumani",
-    "Izboskan tumani",
-    "Marhamat tumani",
-    "Oltinko‘l tumani",
-    "Paxtaobod tumani",
-    "Shahrixon tumani",
-    "Ulug‘nor tumani",
-    "Qo‘rg‘ontepa tumani"
-  ],
-  "Namangan vil.": [
-    "Namangan sh.",
-    "Namangan tumani",
-    "Chust tumani",
-    "Kosonsoy tumani",
-    "Mingbuloq tumani",
-    "Norin tumani",
-    "Pop tumani",
-    "To‘raqo‘rg‘on tumani",
-    "Uychi tumani",
-    "Uchqo‘rg‘on tumani",
-    "Yangiqo‘rg‘on tumani"
-  ],
-  "Qashqadaryo vil.": [
-    "Qarshi sh.",
-    "Shahrisabz sh.",
-    "Qarshi tumani",
-    "G‘uzor tumani",
-    "Dehqonobod tumani",
-    "Qamashi tumani",
-    "Kasbi tumani",
-    "Kitob tumani",
-    "Mirishkor tumani",
-    "Muborak tumani",
-    "Nishon tumani",
-    "Chiroqchi tumani",
-    "Yakkabog‘ tumani"
-  ],
-  "Surxondaryo vil.": [
-    "Termiz sh.",
-    "Denov tumani",
-    "Angor tumani",
-    "Boysun tumani",
-    "Bandixon tumani",
-    "Jarkurgon tumani",
-    "Muzrabot tumani",
-    "Oltinsoy tumani",
-    "Sariosiyo tumani",
-    "Termiz tumani",
-    "Uzun tumani",
-    "Sherobod tumani",
-    "Sho‘rchi tumani"
-  ],
-  "Xorazm vil.": [
-    "Urganch sh.",
-    "Xiva sh.",
-    "Bog‘ot tumani",
-    "Gurlan tumani",
-    "Qo‘shko‘pir tumani",
-    "Shovot tumani",
-    "Urganch tumani",
-    "Xazorasp tumani",
-    "Xiva tumani",
-    "Yangiariq tumani",
-    "Yangibozor tumani",
-    "Tuproqqal’a tumani"
-  ],
-  "Navoiy vil.": [
-    "Navoiy sh.",
-    "Zarafshon sh.",
-    "Konimex tumani",
-    "Karmana tumani",
-    "Qiziltepa tumani",
-    "Navbahor tumani",
-    "Nurota tumani",
-    "Tomdi tumani",
-    "Uchquduq tumani",
-    "Xatirchi tumani"
-  ],
-  "Jizzax vil.": [
-    "Jizzax sh.",
-    "Arnasoy tumani",
-    "Baxmal tumani",
-    "G‘allaorol tumani",
-    "Sharof Rashidov tumani",
-    "Do‘stlik tumani",
-    "Zafarobod tumani",
-    "Zarbdor tumani",
-    "Mirzacho‘l tumani",
-    "Paxtakor tumani",
-    "Forish tumani",
-    "Yangiobod tumani"
-  ],
-  "Sirdaryo vil.": [
-    "Guliston sh.",
-    "Yangiyer sh.",
-    "Shirin sh.",
-    "Oqoltin tumani",
-    "Boyovut tumani",
-    "Guliston tumani",
-    "Mirzaobod tumani",
-    "Sardoba tumani",
-    "Sayxunobod tumani",
-    "Sirdaryo tumani",
-    "Xovos tumani"
-  ],
-  "Qoraqalpog‘iston Respublikasi": [
-    "Nukus sh.",
-    "Amudaryo tumani",
-    "Beruniy tumani",
-    "Kegeyli tumani",
-    "Qonliko‘l tumani",
-    "Qorao‘zak tumani",
-    "Chimboy tumani",
-    "Shumanay tumani",
-    "Ellikqal’a tumani",
-    "Mo‘ynoq tumani",
-    "Nukus tumani",
-    "Taxtako‘pir tumani",
-    "To‘rtko‘l tumani",
-    "Xo‘jayli tumani"
-  ]
-};
-
-function matchUzbekistanRegionAndDistrict(
-  rawState: string,
-  rawCounty: string,
-  rawCity: string,
-  lat: number,
-  lon: number,
-): { region: string; district: string } {
-  const norm = (s: string) =>
-    (s || "")
-      .toLowerCase()
-      .replace(/['`‘’]/g, "")
-      .replace(/viloyat(i)?|vil\.?/g, "")
-      .replace(/tuman(i)?|tum\.?/g, "")
-      .replace(/shahar(i)?|sh\.?/g, "")
-      .replace(/district|region|city|state|county|area|republic|resp/g, "")
-      .trim();
-
-  const combined = `${norm(rawState)} ${norm(rawCounty)} ${norm(rawCity)}`;
-
-  let foundRegion = "";
-
-  // 1. Check coordinates for Tashkent city bounds explicitly
-  if (lat >= 41.15 && lat <= 41.42 && lon >= 69.10 && lon <= 69.45) {
-    foundRegion = "Toshkent sh.";
-  } else {
-    // 2. Text match against region keys
-    for (const rKey of Object.keys(uzbekistanRegionsData)) {
-      const nKey = norm(rKey);
-      if (!nKey) continue;
-      if (
-        combined.includes(nKey) ||
-        (nKey.includes("toshkent") && combined.includes("tashkent")) ||
-        (nKey.includes("samarqand") && combined.includes("samarkand")) ||
-        (nKey.includes("buxoro") && combined.includes("bukhara")) ||
-        (nKey.includes("farg") && combined.includes("fergana")) ||
-        (nKey.includes("andijon") && combined.includes("andijan")) ||
-        (nKey.includes("namangan") && combined.includes("namangan")) ||
-        (nKey.includes("qashqadaryo") && (combined.includes("kashkadarya") || combined.includes("qarshi"))) ||
-        (nKey.includes("surxondaryo") && (combined.includes("surkhandarya") || combined.includes("termiz"))) ||
-        (nKey.includes("xorazm") && (combined.includes("khorezm") || combined.includes("urganch"))) ||
-        (nKey.includes("navoiy") && combined.includes("navoi")) ||
-        (nKey.includes("jizzax") && combined.includes("jizzakh")) ||
-        (nKey.includes("sirdaryo") && (combined.includes("syrdarya") || combined.includes("guliston"))) ||
-        (nKey.includes("qoraqalp") && combined.includes("karakalpak"))
-      ) {
-        foundRegion = rKey;
-        break;
-      }
-    }
-  }
-
-  // 3. Fallback to coordinate bounding boxes if text match didn't yield a region
-  if (!foundRegion) {
-    if (lat >= 40.5 && lat <= 42.2 && lon >= 68.5 && lon <= 71.2) foundRegion = "Toshkent vil.";
-    else if (lat >= 39.1 && lat <= 40.2 && lon >= 65.5 && lon <= 67.5) foundRegion = "Samarqand vil.";
-    else if (lat >= 40.0 && lat <= 40.9 && lon >= 70.3 && lon <= 72.0) foundRegion = "Farg‘ona vil.";
-    else if (lat >= 40.4 && lat <= 41.0 && lon >= 71.9 && lon <= 73.2) foundRegion = "Andijon vil.";
-    else if (lat >= 40.7 && lat <= 41.5 && lon >= 70.4 && lon <= 72.2) foundRegion = "Namangan vil.";
-    else if (lat >= 38.8 && lat <= 41.1 && lon >= 62.1 && lon <= 65.2) foundRegion = "Buxoro vil.";
-    else if (lat >= 38.2 && lat <= 39.4 && lon >= 64.9 && lon <= 67.5) foundRegion = "Qashqadaryo vil.";
-    else if (lat >= 37.1 && lat <= 38.6 && lon >= 66.5 && lon <= 68.4) foundRegion = "Surxondaryo vil.";
-    else if (lat >= 41.0 && lat <= 42.0 && lon >= 60.0 && lon <= 61.5) foundRegion = "Xorazm vil.";
-    else if (lat >= 39.8 && lat <= 43.5 && lon >= 62.0 && lon <= 66.0) foundRegion = "Navoiy vil.";
-    else if (lat >= 39.8 && lat <= 41.5 && lon >= 67.0 && lon <= 68.9) foundRegion = "Jizzax vil.";
-    else if (lat >= 40.0 && lat <= 41.0 && lon >= 68.3 && lon <= 69.3) foundRegion = "Sirdaryo vil.";
-    else if (lat >= 41.0 && lat <= 45.6 && lon >= 56.0 && lon <= 62.5) foundRegion = "Qoraqalpog‘iston Respublikasi";
-    else foundRegion = "Toshkent sh.";
-  }
-
-  // 4. Find matching district in foundRegion
-  const distList = uzbekistanRegionsData[foundRegion] || [];
-  let foundDistrict = "";
-
-  const countyNorm = norm(rawCounty);
-  const cityNorm = norm(rawCity);
-
-  // Special district detection for Farg‘ona vil. (O‘zbekiston tumani / Yaypan)
-  if (foundRegion === "Farg‘ona vil.") {
-    if (
-      countyNorm.includes("ozbekiston") ||
-      countyNorm.includes("uzbekistan") ||
-      countyNorm.includes("yaypan") ||
-      cityNorm.includes("yaypan") ||
-      combined.includes("yaypan") ||
-      (lat >= 40.25 && lat <= 40.58 && lon >= 70.70 && lon <= 71.15)
-    ) {
-      foundDistrict = "O‘zbekiston tumani";
-    }
-  }
-
-  if (!foundDistrict) {
-    for (const d of distList) {
-      const nD = norm(d);
-      if (!nD) continue;
-
-      if (d === "O‘zbekiston tumani" || nD === "ozbekiston") {
-        if (
-          countyNorm.includes("ozbekiston") ||
-          countyNorm.includes("uzbekistan") ||
-          countyNorm.includes("yaypan") ||
-          combined.includes("yaypan")
-        ) {
-          foundDistrict = d;
-          break;
-        }
-        continue;
-      }
-
-      if (
-        combined.includes(nD) ||
-        (countyNorm && (nD.includes(countyNorm) || countyNorm.includes(nD))) ||
-        (cityNorm && (nD.includes(cityNorm) || cityNorm.includes(nD)))
-      ) {
-        foundDistrict = d;
-        break;
-      }
-    }
-  }
-
-  // Tashkent city sub-bounds for district detection
-  if (!foundDistrict && foundRegion === "Toshkent sh.") {
-    if (lat <= 41.28 && lon <= 69.23) foundDistrict = "Chilonzor tumani";
-    else if (lat >= 41.32 && lon >= 69.25) foundDistrict = "Yunusobod tumani";
-    else if (lat >= 41.30 && lon >= 69.30) foundDistrict = "Mirzo Ulug‘bek tumani";
-    else if (lat <= 41.27 && lon >= 69.28) foundDistrict = "Yashnobod tumani";
-    else if (lat <= 41.24 && lon <= 69.22) foundDistrict = "Sergeli tumani";
-    else if (lat >= 41.30 && lon <= 69.22) foundDistrict = "Uchtepa tumani";
-    else if (lat >= 41.32 && lon >= 69.24) foundDistrict = "Shayxontohur tumani";
-    else if (lat >= 41.34 && lon >= 69.24) foundDistrict = "Olmazor tumani";
-    else foundDistrict = "Chilonzor tumani";
-  }
-
-  if (!foundDistrict && distList.length > 0) {
-    foundDistrict = distList[0];
-  }
-
-  return { region: foundRegion, district: foundDistrict };
-}
+const uzbekistanRegionsData = UZBEKISTAN_REGIONS_DATA;
 const tg = () => window.Telegram?.WebApp;
 const formatDate = (v: string) => {
   const d = new Date(v);
@@ -689,106 +344,7 @@ function OrdersListSkeleton({ count = 3 }: { count?: number }) {
     </div>
   );
 }
-function LocationPicker({
-  latitude,
-  longitude,
-  onChange,
-}: {
-  latitude: number;
-  longitude: number;
-  onChange: (lat: number, lon: number) => void;
-}) {
-  const el = useRef<HTMLDivElement | null>(null);
-  const map = useRef<any>(null);
-  const marker = useRef<any>(null);
-  const onChangeRef = useRef(onChange);
-  const [ready, setReady] = useState(Boolean(window.L));
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  });
-
-  useEffect(() => {
-    if (window.L) {
-      setReady(true);
-      return;
-    }
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(css);
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-    script.async = true;
-    script.onload = () => setReady(true);
-    document.body.appendChild(script);
-    return () => {
-      script.remove();
-      css.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!ready || !el.current || !window.L) return;
-    const L = window.L;
-    const lat = latitude || 41.2995;
-    const lon = longitude || 69.2401;
-
-    if (!map.current) {
-      map.current = L.map(el.current, { zoomControl: false }).setView(
-        [lat, lon],
-        16,
-      );
-      L.control.zoom({ position: "bottomright" }).addTo(map.current);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap",
-      }).addTo(map.current);
-      marker.current = L.marker([lat, lon], {
-        draggable: true,
-      }).addTo(map.current);
-      marker.current.on("dragend", () => {
-        const p = marker.current.getLatLng();
-        onChangeRef.current(p.lat, p.lng);
-      });
-      map.current.on("click", (e: any) => {
-        marker.current.setLatLng(e.latlng);
-        onChangeRef.current(e.latlng.lat, e.latlng.lng);
-      });
-    } else {
-      marker.current?.setLatLng([lat, lon]);
-      map.current.setView([lat, lon], 16);
-    }
-    setTimeout(() => map.current?.invalidateSize(), 100);
-  }, [ready, latitude, longitude]);
-
-  return (
-    <div className="mapPicker">
-      <div className="mapModalCard3D" style={{ margin: "10px 0" }}>
-        <div className="mapModalHeader">
-          <h3>🗺️ 3D Aniq Joylashuv Xaritasi</h3>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>GPS Faol</span>
-        </div>
-        <div className="mapInteractiveStage">
-          <div ref={el} className="leafletMap" style={{ width: "100%", height: "100%" }} />
-          <div className="mapPinPulse">
-            <span className="mapPinIcon">📍</span>
-            <span className="mapPinLabel">Sizning turgan joyingiz</span>
-          </div>
-        </div>
-        <div className="mapCoordsBar">
-          <div className="coordsInfoText">
-            📍 Kenglik va uzunlik: <b>{latitude.toFixed(5)}, {longitude.toFixed(5)}</b>
-          </div>
-        </div>
-      </div>
-      {!ready ? <div className="mapLoading">Xarita yuklanmoqda…</div> : null}
-      <div className="mapHint">
-        💡 Pinni xaritada istalgan joyga sudrang yoki bosing
-      </div>
-    </div>
-  );
-}
+const LocationPicker = YandexCheckoutMap;
 
 export default function App() {
   const isTelegramWebapp = useMemo(() => detectPlatform().isTelegram, []);
@@ -950,10 +506,13 @@ export default function App() {
     }),
   );
   const [locationLoading, setLocationLoading] = useState(false);
+  const [locationResolving, setLocationResolving] = useState(false);
+  const geocodeAbortRef = useRef<AbortController | null>(null);
   const [promo, setPromo] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoLoading, setPromoLoading] = useState(false);
+  const pendingQrPromoRef = useRef<string>("");
   const [useCashback, setUseCashback] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -1611,6 +1170,8 @@ export default function App() {
       target.closest('.productGallerySwipe[data-multi-image="true"]') ||
       (!isBrandProductSwipeActive && target.closest(".productGallerySwipe")) ||
       target.closest(".leafletMap") ||
+      target.closest(".yandexMapCard") ||
+      target.closest(".yandexLeafletCanvas") ||
       target.closest(".categoryScroll") ||
       target.closest(".orderFilterTabs") ||
       target.closest(".categoryTabs") ||
@@ -2829,23 +2390,26 @@ export default function App() {
         }),
     [products],
   );
-  const applyPromo = async () => {
+  const applyPromo = async (
+    overrideCode?: string,
+    source: "manual" | "qr" = "manual",
+  ): Promise<boolean> => {
     try {
       window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("medium");
     } catch {}
-    const code = promo.trim().toUpperCase();
+    const code = (overrideCode !== undefined ? overrideCode : promo).trim().toUpperCase();
     if (!code) {
       setPromoApplied(false);
       setPromoDiscount(0);
       showToast(t("promo_placeholder"));
-      return;
+      return false;
     }
     setPromoLoading(true);
     try {
       const r = await fetch(`${API_URL}/api/promo/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, subtotal }),
+        body: JSON.stringify({ code, subtotal, source }),
       });
       const j = await r.json();
       if (!r.ok || !j.success)
@@ -2861,6 +2425,7 @@ export default function App() {
       showToast(
         `Promo qo‘llandi: −${formatPrice(Number(j.data?.discount || 0))} ✓`,
       );
+      return true;
     } catch (e) {
       setPromoApplied(false);
       setPromoDiscount(0);
@@ -2872,69 +2437,112 @@ export default function App() {
       showToast(
         e instanceof Error ? e.message : "Promo kodni tekshirishda xatolik",
       );
+      return false;
     } finally {
       setPromoLoading(false);
     }
   };
+
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const rawPromo =
+        url.searchParams.get("promo") ||
+        url.searchParams.get("code") ||
+        "";
+      const clean = rawPromo.trim().toUpperCase();
+      if (clean && /^[A-Z0-9_-]{3,40}$/.test(clean)) {
+        pendingQrPromoRef.current = clean;
+        setPromo(clean);
+        showToast(`✓ QR vaucher tayyor: ${clean}`);
+        url.searchParams.delete("promo");
+        url.searchParams.delete("code");
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const pending = pendingQrPromoRef.current;
+    if (page === "checkout" && pending && subtotal > 0 && !promoApplied && !promoLoading) {
+      pendingQrPromoRef.current = "";
+      void applyPromo(pending, "qr");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, subtotal]);
   const reverseGeocode = async (lat: number, lon: number) => {
-    let rawState = "";
-    let rawCounty = "";
-    let rawCity = "";
-    let streetName = "";
+    try {
+      geocodeAbortRef.current?.abort();
+    } catch {}
+    const controller = new AbortController();
+    geocodeAbortRef.current = controller;
+    setLocationResolving(true);
 
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1&accept-language=uz,ru,en`,
+      const resolved = await reverseGeocodeCoordinates(lat, lon, controller.signal);
+      if (controller.signal.aborted) return;
+
+      setAddress((a) => ({
+        ...a,
+        latitude: resolved.latitude,
+        longitude: resolved.longitude,
+        region: resolved.region,
+        district: resolved.district,
+        street: resolved.street,
+        house: resolved.house,
+      }));
+
+      showToast(
+        resolved.formattedAddress
+          ? `📍 ${resolved.formattedAddress}`
+          : `📍 Joylashuv aniqlandi: ${resolved.region}, ${resolved.district}`,
       );
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.address) {
-          const addr = data.address;
-          rawState = addr.state || addr.region || addr.city || "";
-          rawCounty =
-            addr.county ||
-            addr.district ||
-            addr.suburb ||
-            addr.city_district ||
-            addr.town ||
-            "";
-          rawCity = addr.city || addr.town || addr.village || "";
-          streetName = addr.road || addr.street || addr.pedestrian || "";
-        }
-      }
     } catch (e) {
-      console.warn("Reverse geocode fetch failed:", e);
+      if ((e as Error)?.name !== "AbortError") {
+        console.warn("Reverse geocode error:", e);
+      }
+    } finally {
+      if (geocodeAbortRef.current === controller) {
+        setLocationResolving(false);
+      }
     }
+  };
 
-    const { region, district } = matchUzbekistanRegionAndDistrict(
-      rawState,
-      rawCounty,
-      rawCity,
-      lat,
-      lon,
-    );
-
+  const handleSelectAddressCandidate = (candidate: AddressSearchCandidate) => {
+    try {
+      geocodeAbortRef.current?.abort();
+    } catch {}
+    setLocationResolving(false);
     setAddress((a) => ({
       ...a,
-      latitude: lat,
-      longitude: lon,
-      region,
-      district,
-      street: streetName || a.street || "",
+      latitude: candidate.latitude,
+      longitude: candidate.longitude,
+      region: candidate.region,
+      district: candidate.district,
+      street: candidate.street,
+      house: candidate.house,
     }));
-
-    showToast(`📍 Joylashuv va manzil aniqlandi: ${region}, ${district}`);
+    const fullText = [
+      candidate.region,
+      candidate.district,
+      candidate.street,
+      candidate.house ? `${candidate.house}-uy` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    showToast(`📍 ${fullText}`);
   };
 
   const updateMapPosition = (lat: number, lon: number) => {
     setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
-    reverseGeocode(lat, lon);
+    void reverseGeocode(lat, lon);
   };
 
   const requestLocation = () => {
     if (!navigator.geolocation) {
-      showToast("Telefoningiz lokatsiyani qo‘llab-quvvatlamaydi. Toshkent markazi belgilanmoqda.");
-      updateMapPosition(41.2995, 69.2401);
+      showToast("Joylashuv aniqlash imkonsiz. Xaritadan manzilingizni bosing.");
+      updateMapPosition(address.latitude || 41.2995, address.longitude || 69.2401);
       return;
     }
     setLocationLoading(true);
@@ -2942,17 +2550,18 @@ export default function App() {
       async (p) => {
         const lat = p.coords.latitude;
         const lon = p.coords.longitude;
+        setAddress((a) => ({ ...a, latitude: lat, longitude: lon }));
         await reverseGeocode(lat, lon);
         setLocationLoading(false);
       },
       async () => {
         setLocationLoading(false);
         showToast(
-          "Lokatsiya ruxsati berilmadi. Toshkent markazi avtomatik belgilandi.",
+          "Aniq joylashuv olinmadi. Xaritadan o‘z uyingizni bosing yoki qidiring.",
         );
-        await reverseGeocode(41.2995, 69.2401);
+        await reverseGeocode(address.latitude || 41.2995, address.longitude || 69.2401);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   };
   const requestTelegramPhone = () => {
@@ -5250,33 +4859,6 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                <div className="promoBox">
-                  <input
-                    value={promo}
-                    onChange={(e) => {
-                      setPromo(e.target.value.toUpperCase());
-                      if (promoApplied) {
-                        setPromoApplied(false);
-                        setPromoDiscount(0);
-                      }
-                    }}
-                    placeholder="Promo kod"
-                    maxLength={40}
-                  />
-                  <button onClick={applyPromo} disabled={promoLoading}>
-                    {promoLoading
-                      ? "Tekshirilmoqda…"
-                      : promoApplied
-                        ? "✓ Qo‘llandi"
-                        : "Qo‘llash"}
-                  </button>
-                </div>
-                {promoApplied ? (
-                  <div className="promoSuccess">
-                    ✓ {promo} promo kodi qo‘llandi · −
-                    {formatPrice(promoDiscount)}
-                  </div>
-                ) : null}
                 <div className="summary">
                   <div>
                     <span>Mahsulotlar</span>
@@ -5346,6 +4928,18 @@ export default function App() {
             onToggleCashback={setUseCashback}
             cashbackDiscount={appliedCashback}
             LocationPicker={LocationPicker}
+            isResolvingAddress={locationResolving}
+            onSelectSearchCandidate={handleSelectAddressCandidate}
+            promo={promo}
+            setPromo={setPromo}
+            promoApplied={promoApplied}
+            promoDiscount={promoDiscount}
+            promoLoading={promoLoading}
+            onApplyPromo={applyPromo}
+            onRemovePromo={() => {
+              setPromoApplied(false);
+              setPromoDiscount(0);
+            }}
           />
         )}
         {page === "reels" && (

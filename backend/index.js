@@ -9,7 +9,18 @@ try {
   console.warn("[Startup] Optional dependency 'sharp' could not be loaded:", e.message);
 }
 const { listProducts, getProduct } = require("./catalog");
-const { getLimitsMap, getPromoLimit, setPromoLimit, deletePromoLimit, calculatePromoDiscount } = require("./promoLimits");
+const {
+  getLimitsMap,
+  getPromoLimit,
+  setPromoLimit,
+  deletePromoLimit,
+  getPromoMetaMap,
+  getPromoMeta,
+  setPromoMeta,
+  deletePromoMeta,
+  validatePromoChannelAccess,
+  calculatePromoDiscount,
+} = require("./promoLimits");
 const { installRoutes: installCategoryRoutes } = require("./category-settings-patch");
 // Social Promo API intentionally unmounted; profile links are served from a local snapshot.
 require("./videoAdsRuntime");
@@ -295,13 +306,23 @@ app.post("/api/promo/validate", async (req, res) => {
   try {
     const code = String(req.body?.code || "").trim().toUpperCase();
     const subtotal = Number(req.body?.subtotal) || 0;
+    const applySource = req.body?.source === "qr" ? "qr" : "manual";
     if (!code) return res.status(400).json({ success: false, message: "Promo kodini kiriting" });
     const { data, error } = await supabase.from("promo_codes").select("*").eq("code", code).eq("active", true).maybeSingle();
     if (error) throw error;
     if (!data) return res.status(404).json({ success: false, message: "Promo kod topilmadi yoki faol emas" });
+
+    const meta = getPromoMeta(data.code);
+    const channelCheck = validatePromoChannelAccess(meta.promo_kind, applySource);
+    if (!channelCheck.ok) {
+      return res.status(400).json({ success: false, message: channelCheck.message });
+    }
+
+    const effectiveStartsAt = data.starts_at || meta.starts_at;
+    const effectiveExpiresAt = data.expires_at || meta.expires_at;
     const now = Date.now();
-    if (data.starts_at && new Date(data.starts_at).getTime() > now) return res.status(400).json({ success: false, message: "Promo kod hali kuchga kirmagan" });
-    if (data.expires_at && new Date(data.expires_at).getTime() < now) return res.status(400).json({ success: false, message: "Promo kod muddati tugagan" });
+    if (effectiveStartsAt && new Date(effectiveStartsAt).getTime() > now) return res.status(400).json({ success: false, message: "Promo kod hali kuchga kirmagan" });
+    if (effectiveExpiresAt && new Date(effectiveExpiresAt).getTime() < now) return res.status(400).json({ success: false, message: "Promo kod muddati tugagan" });
     if (data.usage_limit != null && Number(data.used_count || 0) >= Number(data.usage_limit)) return res.status(400).json({ success: false, message: "Promo koddan foydalanish limiti tugagan" });
     if (subtotal < Number(data.min_order_amount || 0)) return res.status(400).json({ success: false, message: `Minimal buyurtma ${Number(data.min_order_amount || 0).toLocaleString("uz-UZ")} so‘m` });
     
@@ -315,6 +336,7 @@ app.post("/api/promo/validate", async (req, res) => {
         discount_value: Number(data.discount_value),
         max_discount_amount,
         is_limit_applied,
+        promo_kind: meta.promo_kind,
       }
     });
   } catch (error) { console.error("Promo validation error:", error); res.status(500).json({ success: false, message: "Promo kodni tekshirishda xatolik" }); }
@@ -348,29 +370,35 @@ app.get("/api/promos", async (req, res) => {
     }
 
     if (error) throw error;
+    const metaMap = getPromoMetaMap();
     const now = Date.now();
-    const promosWithStatus = (data || []).map((p) => {
-      let status = "active";
-      let statusLabel = "Aktiv";
-      if (!p.active) {
-        status = "inactive";
-        statusLabel = "Nofaol";
-      } else if (p.expires_at && new Date(p.expires_at).getTime() < now) {
-        status = "expired";
-        statusLabel = "Muddati o‘tgan";
-      } else if (p.starts_at && new Date(p.starts_at).getTime() > now) {
-        status = "upcoming";
-        statusLabel = "Kutilmoqda";
-      } else if (p.usage_limit != null && Number(p.used_count || 0) >= Number(p.usage_limit)) {
-        status = "exhausted";
-        statusLabel = "Limit tugagan";
-      }
-      return {
-        ...p,
-        status,
-        statusLabel,
-      };
-    });
+    const promosWithStatus = (data || [])
+      .filter((p) => {
+        const meta = metaMap[String(p.code || "").trim().toUpperCase()];
+        return (meta?.promo_kind || "promo") !== "qr";
+      })
+      .map((p) => {
+        let status = "active";
+        let statusLabel = "Aktiv";
+        if (!p.active) {
+          status = "inactive";
+          statusLabel = "Nofaol";
+        } else if (p.expires_at && new Date(p.expires_at).getTime() < now) {
+          status = "expired";
+          statusLabel = "Muddati o‘tgan";
+        } else if (p.starts_at && new Date(p.starts_at).getTime() > now) {
+          status = "upcoming";
+          statusLabel = "Kutilmoqda";
+        } else if (p.usage_limit != null && Number(p.used_count || 0) >= Number(p.usage_limit)) {
+          status = "exhausted";
+          statusLabel = "Limit tugagan";
+        }
+        return {
+          ...p,
+          status,
+          statusLabel,
+        };
+      });
     res.json({ success: true, data: promosWithStatus });
   } catch (e) {
     console.error("Public promos fetch error:", e);
@@ -877,10 +905,20 @@ app.get("/api/admin/promos", requireAdmin, async (req,res) => {
     const { data, error } = await supabase.from("promo_codes").select("*").order("created_at",{ascending:false}).limit(Math.min(Number(req.query.limit)||200,500));
     if(error) throw error;
     const limitsMap = getLimitsMap();
-    const enriched = (data || []).map((p) => ({
-      ...p,
-      max_discount_amount: p.max_discount_amount != null ? Number(p.max_discount_amount) : (limitsMap[p.code] || null),
-    }));
+    const metaMap = getPromoMetaMap();
+    const enriched = (data || []).map((p) => {
+      const codeKey = String(p.code || "").trim().toUpperCase();
+      const meta = metaMap[codeKey] || {};
+      return {
+        ...p,
+        max_discount_amount: p.max_discount_amount != null ? Number(p.max_discount_amount) : (limitsMap[p.code] || null),
+        promo_kind: meta.promo_kind === "qr" ? "qr" : "promo",
+        qr_label: meta.qr_label || "",
+        qr_color: meta.qr_color || "#9f3654",
+        starts_at: p.starts_at || meta.starts_at || null,
+        expires_at: p.expires_at || meta.expires_at || null,
+      };
+    });
     res.json({success:true,data:enriched});
   } catch(error) {
     console.error("Admin promos list error:", error);
@@ -895,13 +933,18 @@ function promoPayload(body) {
   const minOrderAmount = Number(body?.min_order_amount || 0);
   const maxDiscountAmount = body?.max_discount_amount == null || body.max_discount_amount === "" ? null : Number(body.max_discount_amount);
   const usageLimit = body?.usage_limit == null || body.usage_limit === "" ? null : Number(body.usage_limit);
+  const startsAt = body?.starts_at ? String(body.starts_at).trim() : null;
+  const expiresAt = body?.expires_at ? String(body.expires_at).trim() : null;
   if (!/^[A-Z0-9_-]{3,40}$/.test(code)) throw Object.assign(new Error("Promo kodi 3–40 belgidan iborat bo‘lsin: harf, raqam, _ yoki -"),{status:400});
   if (!Number.isFinite(discountValue) || discountValue <= 0) throw Object.assign(new Error("Chegirma qiymati 0 dan katta bo‘lishi kerak"),{status:400});
   if (discountType === "percent" && discountValue > 100) throw Object.assign(new Error("Foizli chegirma 100% dan oshmasin"),{status:400});
   if (maxDiscountAmount !== null && (!Number.isFinite(maxDiscountAmount) || maxDiscountAmount <= 0)) throw Object.assign(new Error("Maksimal chegirma summasi 0 dan katta bo‘lishi kerak"),{status:400});
   if (!Number.isFinite(minOrderAmount) || minOrderAmount < 0) throw Object.assign(new Error("Minimal buyurtma 0 yoki undan katta bo‘lishi kerak"),{status:400});
   if (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit < 1)) throw Object.assign(new Error("Limit kamida 1 bo‘lishi kerak yoki bo‘sh qoldiring"),{status:400});
-  return {
+  if (startsAt && expiresAt && new Date(expiresAt).getTime() <= new Date(startsAt).getTime()) {
+    throw Object.assign(new Error("Tugash vaqti boshlanish vaqtidan keyin bo‘lishi kerak"), { status: 400 });
+  }
+  const dbRow = {
     code,
     discount_type: discountType,
     discount_value: discountValue,
@@ -910,29 +953,50 @@ function promoPayload(body) {
     usage_limit: usageLimit,
     active: body?.active !== false
   };
+  if (startsAt) dbRow.starts_at = startsAt;
+  else dbRow.starts_at = null;
+  if (expiresAt) dbRow.expires_at = expiresAt;
+  else dbRow.expires_at = null;
+  return {
+    dbRow,
+    meta: {
+      promo_kind: body?.promo_kind === "qr" ? "qr" : "promo",
+      qr_label: typeof body?.qr_label === "string" ? body.qr_label.trim() : "",
+      qr_color: typeof body?.qr_color === "string" ? body.qr_color.trim() : "#9f3654",
+      starts_at: startsAt,
+      expires_at: expiresAt,
+    },
+  };
 }
 
 app.post("/api/admin/promos", requireAdmin, async (req,res) => {
   try {
-    const payload = promoPayload(req.body);
+    const { dbRow: payload, meta } = promoPayload(req.body);
     const maxDiscount = payload.max_discount_amount;
     setPromoLimit(payload.code, maxDiscount);
+    setPromoMeta(payload.code, meta);
 
     let resData = null;
     let { data, error } = await supabase.from("promo_codes").insert([payload]).select("*").single();
-    if (error && /column .*max_discount_amount.* does not exist/i.test(error.message || "")) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.max_discount_amount;
+    if (error && /column .* does not exist/i.test(error.message || "")) {
+      const fallbackPayload = {
+        code: payload.code,
+        discount_type: payload.discount_type,
+        discount_value: payload.discount_value,
+        min_order_amount: payload.min_order_amount,
+        usage_limit: payload.usage_limit,
+        active: payload.active,
+      };
       const secondTry = await supabase.from("promo_codes").insert([fallbackPayload]).select("*").single();
       if (secondTry.error) throw secondTry.error;
-      resData = { ...secondTry.data, max_discount_amount: maxDiscount };
+      resData = { ...secondTry.data, max_discount_amount: maxDiscount, ...meta };
     } else if (error) {
       console.error("Promo create DB error:", error);
-      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} promo kodi allaqachon mavjud` });
+      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} kodi allaqachon mavjud` });
       if (/relation .*promo_codes.*does not exist|schema cache/i.test(error.message || "")) return res.status(503).json({ success: false, message: "promo_codes jadvali Supabase'da hali tayyor emas. Repair SQL'ni bir marta ishga tushiring." });
       return res.status(500).json({ success: false, message: "Promo kod yaratishda xatolik", detail: error.message });
     } else {
-      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount };
+      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount, ...meta };
     }
 
     res.status(201).json({ success: true, data: resData });
@@ -945,24 +1009,36 @@ app.post("/api/admin/promos", requireAdmin, async (req,res) => {
 
 app.put("/api/admin/promos/:id", requireAdmin, async (req,res) => {
   try {
-    const payload = promoPayload(req.body);
+    const { data: existing } = await supabase.from("promo_codes").select("code").eq("id", req.params.id).maybeSingle();
+    const { dbRow: payload, meta } = promoPayload(req.body);
+    if (existing?.code && String(existing.code).trim().toUpperCase() !== payload.code) {
+      deletePromoLimit(existing.code);
+      deletePromoMeta(existing.code);
+    }
     const maxDiscount = payload.max_discount_amount;
     setPromoLimit(payload.code, maxDiscount);
+    setPromoMeta(payload.code, meta);
 
     let resData = null;
     let { data, error } = await supabase.from("promo_codes").update(payload).eq("id", req.params.id).select("*").single();
-    if (error && /column .*max_discount_amount.* does not exist/i.test(error.message || "")) {
-      const fallbackPayload = { ...payload };
-      delete fallbackPayload.max_discount_amount;
+    if (error && /column .* does not exist/i.test(error.message || "")) {
+      const fallbackPayload = {
+        code: payload.code,
+        discount_type: payload.discount_type,
+        discount_value: payload.discount_value,
+        min_order_amount: payload.min_order_amount,
+        usage_limit: payload.usage_limit,
+        active: payload.active,
+      };
       const secondTry = await supabase.from("promo_codes").update(fallbackPayload).eq("id", req.params.id).select("*").single();
       if (secondTry.error) throw secondTry.error;
-      resData = { ...secondTry.data, max_discount_amount: maxDiscount };
+      resData = { ...secondTry.data, max_discount_amount: maxDiscount, ...meta };
     } else if (error) {
       console.error("Promo update DB error:", error);
-      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} promo kodi allaqachon mavjud` });
+      if (error.code === "23505") return res.status(409).json({ success: false, message: `${payload.code} kodi allaqachon mavjud` });
       return res.status(500).json({ success: false, message: "Promo kodni yangilashda xatolik", detail: error.message });
     } else {
-      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount };
+      resData = { ...data, max_discount_amount: maxDiscount ?? data.max_discount_amount, ...meta };
     }
 
     res.json({ success: true, data: resData });
@@ -975,7 +1051,10 @@ app.put("/api/admin/promos/:id", requireAdmin, async (req,res) => {
 app.delete("/api/admin/promos/:id", requireAdmin, async (req,res) => {
   try {
     const { data: existing } = await supabase.from("promo_codes").select("code").eq("id", req.params.id).maybeSingle();
-    if (existing?.code) deletePromoLimit(existing.code);
+    if (existing?.code) {
+      deletePromoLimit(existing.code);
+      deletePromoMeta(existing.code);
+    }
     const { error } = await supabase.from("promo_codes").delete().eq("id", req.params.id);
     if(error) throw error;
     res.json({ success: true });
