@@ -218,7 +218,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
                 src={isNearViewport ? (normalized || placeholder(product.name)) : placeholder(product.name)}
                 alt={`${product.name} - rasm ${index + 1}`}
                 loading={detail ? "eager" : "lazy"}
-                fetchPriority={detail ? "high" : "auto"}
+                {...({ fetchpriority: detail ? "high" : "auto" } as Record<string, string>)}
                 decoding="async"
                 draggable={false}
                 onError={(event) => {

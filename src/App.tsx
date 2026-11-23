@@ -92,6 +92,7 @@ import { checkReceiptDelayed, getDeliveryEstimate } from "./utils/delivery";
 import { copyToClipboard } from "./utils/clipboard";
 import { VideoAdCard } from "./components/videoAds/VideoAdCard";
 import { getAdsForPlacement, isAdActiveAndVisible, type VideoAd } from "./types/videoAd";
+import { markStartupPhase } from "./utils/startupProgress";
 
 declare global {
   interface Window {
@@ -415,6 +416,8 @@ export default function App() {
   // Keeps the storefront self-healing when the Render service is cold-starting.
   // A customer must never need to refresh the entire page to recover the catalog.
   const productsRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupProductsReportedRef = useRef(false);
+  const startupBannersReportedRef = useRef(false);
   const [productsError, setProductsError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [brandProfileProductQueue, setBrandProfileProductQueue] = useState<Product[]>([]);
@@ -703,6 +706,8 @@ export default function App() {
   };
 
   useEffect(() => {
+    markStartupPhase("cache");
+
     const syncBanners = async () => {
       try {
         const res = await fetch(`${API_URL}/api/banners`, {
@@ -721,6 +726,11 @@ export default function App() {
         console.warn("[GULI] Production banner load failed", error);
         setHeroBanners([]);
         setActiveBannerIdx(0);
+      } finally {
+        if (!startupBannersReportedRef.current) {
+          startupBannersReportedRef.current = true;
+          markStartupPhase("banners");
+        }
       }
     };
 
@@ -1599,6 +1609,10 @@ export default function App() {
       }
       return [];
     } finally {
+      if (!append && !startupProductsReportedRef.current) {
+        startupProductsReportedRef.current = true;
+        markStartupPhase("products");
+      }
       if (append) {
         productsLoadingMoreRef.current = false;
         setProductsLoadingMore(false);
@@ -4184,34 +4198,6 @@ export default function App() {
           </button>
         </div>
         <div className="headerActions">
-          <button
-            className="iconButton adminNavBtn"
-            id="topbar-admin-btn"
-            onClick={() => {
-              try {
-                window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
-              } catch {}
-              window.location.assign("/admin");
-            }}
-            aria-label="Admin panelga o‘tish"
-            title="Admin panel"
-            type="button"
-          >
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              <path d="M9.5 12l2 2 3.5-4" />
-            </svg>
-          </button>
           <button
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"

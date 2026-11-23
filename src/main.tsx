@@ -11,6 +11,7 @@ import './admin/CustomerIdentity.css'
 import './components/ModernProfileCardBg.css'
 import { GULI_LOGO_BASE64 } from './utils/guliLogoBase64'
 import { installBannerFetchCache } from './utils/bannerFetchCache'
+import { markStartupPhase } from './utils/startupProgress'
 
 // The admin panel is large and only needed on /admin. Loading it lazily keeps it
 // out of the customer bundle, which is what slow connections download first.
@@ -267,6 +268,10 @@ const isAdmin = typeof window !== 'undefined' && (
   window.location.search.includes('admin') ||
   window.location.hash === '#admin'
 )
+
+if (!isAdmin) {
+  markStartupPhase('boot')
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

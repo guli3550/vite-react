@@ -1,52 +1,104 @@
 import { useEffect, useState } from "react";
 import { Truck, ShieldCheck, Gift } from "lucide-react";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
+import {
+  computeNextSplashProgress,
+  getStartupProgressState,
+} from "../utils/startupProgress";
 import "./GuliStartupSplash.css";
 
-/**
- * GULI branded startup splash.
- *
- * The logo is intentionally NOT rendered here: the final background artwork
- * will contain the GULI logo as part of the image itself.
- */
 const BENEFITS = [
   { Icon: Truck, label: "Tez yetkazib berish" },
   { Icon: ShieldCheck, label: "Xavfsiz savdo" },
   { Icon: Gift, label: "Siz uchun" },
 ];
 
+const MIN_VISIBLE_MS = 700;
+const SAFETY_TIMEOUT_MS = 5500;
+
 export function GuliStartupSplash() {
+  const initial = getStartupProgressState();
   const [mounted, setMounted] = useState(true);
   const [leaving, setLeaving] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [targetProgress, setTargetProgress] = useState(() => Math.max(15, initial.progress));
+  const [progress, setProgress] = useState(() => Math.max(12, Math.min(100, initial.progress || 12)));
+  const [statusLabel, setStatusLabel] = useState(() => initial.label || "Ilova ishga tushmoqda...");
+  const [mountedAt] = useState(() => Date.now());
 
   useEffect(() => {
+    let unmountTimer: number | null = null;
+    let finished = false;
+
+    const triggerLeave = () => {
+      if (finished) return;
+      finished = true;
+      setLeaving(true);
+      unmountTimer = window.setTimeout(() => setMounted(false), 380);
+    };
+
+    const syncFromState = (nextProgress?: number, nextLabel?: string) => {
+      if (typeof nextProgress === "number" && Number.isFinite(nextProgress)) {
+        const clamped = Math.max(0, Math.min(100, nextProgress));
+        setTargetProgress((prev) => Math.max(prev, clamped));
+      }
+      if (typeof nextLabel === "string" && nextLabel.trim()) {
+        setStatusLabel(nextLabel.trim());
+      }
+    };
+
+    const latest = getStartupProgressState();
+    syncFromState(latest.progress, latest.label);
+
     const onProgress = (event: Event) => {
-      const value = Number((event as CustomEvent<{ progress?: number }>).detail?.progress);
-      if (!Number.isFinite(value)) return;
-      setProgress((current) => Math.max(current, Math.min(100, value)));
+      const detail = (event as CustomEvent<{ progress?: number; label?: string }>).detail;
+      syncFromState(detail?.progress, detail?.label);
     };
 
     window.addEventListener("guli_startup_progress", onProgress);
 
-    // The splash has a fixed 3-second visual window. The progress bar itself
-    // is NOT a looping animation: App reports real startup milestones.
-    const DURATION_MS = 3000;
-    const leaveTimer = window.setTimeout(() => {
-      setProgress((current) => (current >= 100 ? 100 : current));
-      setLeaving(true);
-      window.setTimeout(() => setMounted(false), 380);
-    }, DURATION_MS);
+    const safetyTimer = window.setTimeout(() => {
+      setTargetProgress(100);
+      setProgress(100);
+      setStatusLabel("Guli Market'ga xush kelibsiz!");
+      triggerLeave();
+    }, SAFETY_TIMEOUT_MS);
 
     return () => {
       window.removeEventListener("guli_startup_progress", onProgress);
-      window.clearTimeout(leaveTimer);
+      window.clearTimeout(safetyTimer);
+      if (unmountTimer !== null) window.clearTimeout(unmountTimer);
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setProgress((prev) => computeNextSplashProgress(prev, targetProgress));
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [targetProgress]);
+
+  useEffect(() => {
+    if (targetProgress < 100 || progress < 100) return;
+
+    const elapsed = Date.now() - mountedAt;
+    const leaveDelay = Math.max(180, MIN_VISIBLE_MS - elapsed);
+    const leaveTimer = window.setTimeout(() => {
+      setLeaving(true);
+    }, leaveDelay);
+    const unmountTimer = window.setTimeout(() => {
+      setMounted(false);
+    }, leaveDelay + 380);
+
+    return () => {
+      window.clearTimeout(leaveTimer);
+      window.clearTimeout(unmountTimer);
+    };
+  }, [targetProgress, progress, mountedAt]);
+
   if (!mounted) return null;
 
-  const isReady = progress >= 100;
+  const roundedProgress = Math.min(100, Math.max(0, Math.round(progress)));
+  const isReady = roundedProgress >= 100;
 
   return (
     <div
@@ -60,13 +112,12 @@ export function GuliStartupSplash() {
       <div className="guliSplashBody">
         <div className="guliSplashLogoWrap">
           <img
-            src="/guli-logo.jpg"
+            src={GULI_LOGO_BASE64}
             alt="Guli Market"
             className="guliSplashLogo"
+            loading="eager"
+            decoding="sync"
             draggable={false}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = GULI_LOGO_BASE64;
-            }}
           />
         </div>
         <div className="guliSplashBrand">GULI MARKET</div>
@@ -83,24 +134,27 @@ export function GuliStartupSplash() {
             </div>
           ))}
         </div>
-      </div>
 
-      <div className="guliSplashFooter">
-        <div className="guliSplashStatus">
-          {isReady ? "Guli Market'ga xush kelibsiz!" : "Tizim yuklanmoqda..."}
-        </div>
-        <div
-          className="guliSplashProgressTrack"
-          role="progressbar"
-          aria-label="GULI Market yuklanish jarayoni"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
+        <div className="guliSplashFooter">
+          <div className="guliSplashStatusRow">
+            <span className="guliSplashStatus">
+              {isReady ? "Guli Market'ga xush kelibsiz!" : statusLabel}
+            </span>
+            <span className="guliSplashPercent">{roundedProgress}%</span>
+          </div>
           <div
-            className="guliSplashProgressBar"
-            style={{ width: `${progress}%` }}
-          />
+            className="guliSplashProgressTrack"
+            role="progressbar"
+            aria-label="GULI Market yuklanish jarayoni"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={roundedProgress}
+          >
+            <div
+              className="guliSplashProgressBar"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       </div>
     </div>
