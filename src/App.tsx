@@ -2,6 +2,7 @@ import React, {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -35,6 +36,14 @@ import {
   invalidateProductQueryCache,
   runDeduplicatedProductQuery,
 } from "./utils/productQueryCache";
+import {
+  REELS_TRANSITION_DURATION_MS,
+  THEME_TRANSITION_DURATION_MS,
+  analyzeColorTransition,
+  flushElementStyles,
+  prefersReducedMotionEnabled,
+  syncBrowserAndTelegramChrome,
+} from "./utils/themeTransition";
 import { getApiBaseUrl } from "./lib/apiOrigin";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
@@ -1002,9 +1011,93 @@ export default function App() {
     showToast("✓ Profil muvaffaqiyatli saqlandi!");
   };
 
-  // Apply theme to root (User Specific)
+  const appShellRef = useRef<HTMLDivElement | null>(null);
+  const themeVeilRef = useRef<HTMLDivElement | null>(null);
+  const themeToggleBtnRef = useRef<HTMLButtonElement | null>(null);
+  const prevThemeRef = useRef<"light" | "dark">(theme);
+  const prevRenderedPageRef = useRef<Page>(page);
+  const themeTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reelsTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themeIconTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Smooth gradual color transitions for theme switch & Reels <-> storefront navigation
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const appShellEl = appShellRef.current;
+    const veilEl = themeVeilRef.current;
+    const toggleBtnEl = themeToggleBtnRef.current;
+
+    const plan = analyzeColorTransition(
+      prevThemeRef.current,
+      theme,
+      prevRenderedPageRef.current,
+      page,
+    );
+    const reducedMotion = prefersReducedMotionEnabled();
+
+    if (plan.needsColorTransition && !reducedMotion) {
+      if (themeTransitionTimerRef.current) {
+        clearTimeout(themeTransitionTimerRef.current);
+      }
+      root.classList.add("guli-theme-transitioning");
+      if (plan.themeChanged) {
+        flushElementStyles(root);
+      }
+      themeTransitionTimerRef.current = setTimeout(() => {
+        root.classList.remove("guli-theme-transitioning");
+        themeTransitionTimerRef.current = null;
+      }, THEME_TRANSITION_DURATION_MS + 40);
+    }
+
+    if (plan.themeChanged && toggleBtnEl && !reducedMotion) {
+      if (themeIconTimerRef.current) {
+        clearTimeout(themeIconTimerRef.current);
+      }
+      toggleBtnEl.classList.remove("is-switching");
+      flushElementStyles(toggleBtnEl);
+      toggleBtnEl.classList.add("is-switching");
+      themeIconTimerRef.current = setTimeout(() => {
+        toggleBtnEl.classList.remove("is-switching");
+        themeIconTimerRef.current = null;
+      }, 500);
+    }
+
+    if ((plan.reelsExited || plan.reelsEntered) && !reducedMotion) {
+      if (reelsTransitionTimerRef.current) {
+        clearTimeout(reelsTransitionTimerRef.current);
+      }
+      appShellEl?.classList.remove("guli-reels-exiting", "guli-reels-entering");
+      if (veilEl) {
+        veilEl.classList.remove("is-from-reels", "is-to-reels");
+        flushElementStyles(veilEl);
+        veilEl.classList.add(plan.reelsExited ? "is-from-reels" : "is-to-reels");
+      }
+      appShellEl?.classList.add(plan.reelsExited ? "guli-reels-exiting" : "guli-reels-entering");
+      reelsTransitionTimerRef.current = setTimeout(() => {
+        appShellEl?.classList.remove("guli-reels-exiting", "guli-reels-entering");
+        veilEl?.classList.remove("is-from-reels", "is-to-reels");
+        reelsTransitionTimerRef.current = null;
+      }, REELS_TRANSITION_DURATION_MS + 40);
+    }
+
+    root.setAttribute("data-theme", theme);
+    syncBrowserAndTelegramChrome(theme, page);
+
+    prevThemeRef.current = theme;
+    prevRenderedPageRef.current = page;
+  }, [theme, page]);
+
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    return () => {
+      if (themeTransitionTimerRef.current) clearTimeout(themeTransitionTimerRef.current);
+      if (reelsTransitionTimerRef.current) clearTimeout(reelsTransitionTimerRef.current);
+      if (themeIconTimerRef.current) clearTimeout(themeIconTimerRef.current);
+      document.documentElement.classList.remove("guli-theme-transitioning");
+    };
+  }, []);
+
+  // Persist theme choice (User Specific)
+  useEffect(() => {
     localStorage.setItem(`guli_theme_${currentUserId}`, theme);
     localStorage.setItem("guli_theme", theme);
   }, [theme, currentUserId]);
@@ -4136,7 +4229,11 @@ export default function App() {
   };
 
   return (
-    <div className={`appShell ${page === "chat" ? "chatPageActive" : ""} ${page === "reels" ? "reelsPageActive" : ""}`}>
+    <div
+      ref={appShellRef}
+      className={`appShell ${page === "chat" ? "chatPageActive" : ""} ${page === "reels" ? "reelsPageActive" : ""}`}
+    >
+      <div ref={themeVeilRef} className="guliThemeTransitionVeil" aria-hidden="true" />
       <PwaInstallPrompt hidden={page === "reels"} />
       {page !== "chat" && page !== "reels" && page !== "brand_profile" && (
       <header className="topbar">
@@ -4199,6 +4296,7 @@ export default function App() {
         </div>
         <div className="headerActions">
           <button
+            ref={themeToggleBtnRef}
             className="iconButton themeToggleBtn"
             id="topbar-theme-toggle-btn"
             onClick={() => {
@@ -4211,7 +4309,7 @@ export default function App() {
             aria-label={theme === "dark" ? "Kunduzgi rejimga o'tish" : "Tungi rejimga o'tish"}
             title={theme === "dark" ? "Kunduzgi rejim (Yorug')" : "Tungi rejim (Qorong'i)"}
           >
-            <span style={{ fontSize: "16px", display: "inline-flex", alignItems: "center" }}>
+            <span className="themeToggleGlyph">
               {theme === "dark" ? "☀️" : "🌙"}
             </span>
           </button>
