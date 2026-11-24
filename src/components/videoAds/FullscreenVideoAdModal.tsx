@@ -7,6 +7,7 @@ import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { detectPlatform } from "../../utils/platformAdapter";
 import { GULI_LOGO_BASE64 } from "../../utils/guliLogoBase64";
 import "./FullscreenVideoAdModal.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 interface FullscreenVideoAdModalProps {
   isOpen: boolean;
@@ -413,8 +414,8 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
         <video
           key={activeAd.id}
           ref={videoRef}
-          src={activeAd.video_url}
-          poster={activeAd.poster_url || undefined}
+          src={resolvePublicMediaUrl(activeAd.video_url)}
+          poster={resolvePublicMediaUrl(activeAd.poster_url || "") || undefined}
           className="guli-fullscreen-video-element"
           playsInline
           webkit-playsinline="true"
