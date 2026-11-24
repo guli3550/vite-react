@@ -143,11 +143,7 @@ async function receiptUrl(order) {
   const path = String(order?.payment_receipt_path || "").replace(/^\/+/, "");
   if (!path || !supabase) return "";
   const signedUrl = signedReadUrl("payment-receipts", path, 60 * 60);
-  if (error) {
-    console.warn("[Admin Telegram bot] receipt signed URL failed:", error.message);
-    return "";
-  }
-  return data?.signedUrl || "";
+  return signedUrl || "";
 }
 
 function isPdf(path) { return /\.pdf$/i.test(String(path || "")); }
