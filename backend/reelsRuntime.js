@@ -2,7 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
-const { signedUploadUrl } = require("./r2StorageRuntime");
+const { signedUploadUrl, resolvePublicUrl } = require("./r2StorageRuntime");
 
 let client;
 function db() {
@@ -21,8 +21,8 @@ function normalizeReel(row, comments = [], isLiked = false) {
   const author = row.author && typeof row.author === "object" ? row.author : {};
   return {
     id: String(row.id),
-    videoUrl: row.video_url || "",
-    posterUrl: row.poster_url || "",
+    videoUrl: resolvePublicUrl(row.video_url, "reels-media") || "",
+    posterUrl: resolvePublicUrl(row.poster_url, "reels-media") || "",
     caption: row.caption || "",
     musicTitle: row.music_title || undefined,
     author: {
