@@ -50,5 +50,5 @@ test("keeps private media on the private bucket and signs reads for at most one 
 
 test("rejects path traversal and unsupported storage buckets", () => {
   assert.throws(() => runtime.objectKey("chat-media", "../private.txt"), /path noto/);
-  assert.throws(() => runtime.objectKey("unknown-bucket", "file.jpg"), /Storage object path/);
+  assert.throws(() => runtime.storageFor("unknown-bucket"), /bucket ruxsat etilmagan/);
 });
