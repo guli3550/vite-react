@@ -1,0 +1,38 @@
+name: Supabase Storage backup dry run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-storage-backup-dry-run
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Preview backup utility
+        uses: actions/checkout@v4
+        with:
+          ref: feat/cloudflare-r2-media-migration
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Supabase client only
+        run: npm install --prefix backend --no-save --package-lock=false --ignore-scripts --no-audit --no-fund '@supabase/supabase-js@^2.57.0'
+
+      - name: Inventory source objects without downloading
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          set -o pipefail
+          node backend/scripts/backup-supabase-storage-to-r2.js | tee "$RUNNER_TEMP/backup-dry-run.log"
+          cat "$RUNNER_TEMP/backup-dry-run.log" >> "$GITHUB_STEP_SUMMARY"
