@@ -360,7 +360,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       if (poster) {
         const img = new Image();
         img.decoding = "async";
-        img.src = poster;
+        img.src = resolvePublicMediaUrl(poster);
       }
     }
   }, [pos, count]);
@@ -1011,7 +1011,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       style={{ textDecoration: "none", color: "inherit" }}
                     >
                       <div className="reelsProductThumbWrap">
-                        <img src={reel.promoImageUrl} alt={reel.promoText} className="reelsProductThumb" />
+                        <img src={resolvePublicMediaUrl(reel.promoImageUrl)} alt={reel.promoText} className="reelsProductThumb" />
                       </div>
                       <div className="reelsProductDetails">
                         <span className="reelsProductTitle">{reel.promoText}</span>
@@ -1036,7 +1036,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       <div className="reelsProductThumbWrap">
                         <img
                           src={
-                            reel.productImage ||
+                            resolvePublicMediaUrl(reel.productImage || "") ||
                             "https://images.unsplash.com/photo-1596483785989-619f5637fa97?auto=format&fit=crop&w=120&q=80"
                           }
                           alt={reel.productName}
