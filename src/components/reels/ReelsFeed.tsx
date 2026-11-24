@@ -760,7 +760,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                   {/* Poster Image */}
                   {reel.posterUrl && (
                     <img
-                      src={reel.posterUrl}
+                      src={resolvePublicMediaUrl(reel.posterUrl)}
                       alt={reel.caption}
                       className={`reelsPoster ${
                         isActive && !hasError && isPlaying && !isLoadingVideo ? "hiddenBehindVideo" : ""
