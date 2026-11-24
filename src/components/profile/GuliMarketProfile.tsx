@@ -620,7 +620,7 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
                       aria-label={reel.caption || "Guli Market Reels videosi"}
                     >
                       <img
-                        src={reel.posterUrl}
+                        src={resolvePublicMediaUrl(reel.posterUrl)}
                         alt={reel.caption}
                         loading="lazy"
                         className="brandProfileReelPoster"
