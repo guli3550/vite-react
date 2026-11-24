@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install backend dependencies
-        run: npm ci --prefix backend
+        run: npm install --prefix backend --no-audit --no-fund
       - name: List object metadata only (read-only)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
