@@ -4394,7 +4394,7 @@ export default function App() {
                     <div key={banner.id || idx} className="heroSlideItem" onClick={handleBannerClick}>
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
-                        src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
+                        src={resolvePublicMediaUrl(banner.imageUrl || promoBannerUrl) || placeholder("GULI")}
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
                         onError={(e) => {
