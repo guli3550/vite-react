@@ -27,13 +27,13 @@ jobs:
         run: npm install --prefix backend --no-audit --no-fund
       - name: Copy objects and verify SHA-256 (never deletes source)
         env:
-          SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: \${{ secrets.SUPABASE_SECRET_KEY }}
-          R2_ENDPOINT: \${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_PUBLIC_BUCKET_NAME: \${{ secrets.R2_PUBLIC_BUCKET_NAME }}
-          R2_PRIVATE_BUCKET_NAME: \${{ secrets.R2_PRIVATE_BUCKET_NAME }}
-          MIGRATION_CONFIRM_COPY: \${{ inputs.confirm_copy }}
-          GITHUB_STEP_SUMMARY: \${{ github.step_summary }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_BUCKET_NAME: ${{ secrets.R2_PUBLIC_BUCKET_NAME }}
+          R2_PRIVATE_BUCKET_NAME: ${{ secrets.R2_PRIVATE_BUCKET_NAME }}
+          MIGRATION_CONFIRM_COPY: ${{ inputs.confirm_copy }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         run: node backend/scripts/supabase-storage-to-r2-copy.js
