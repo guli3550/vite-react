@@ -199,6 +199,8 @@ install("get", "/api/admin/video-ads", requireAdmin, async (req, res) => {
       const st = statsByAd[ad.id] || { impressions: 0, clicks: 0 };
       return {
         ...ad,
+        video_url: resolvePublicUrl(ad.video_url, "video-ads"),
+        poster_url: resolvePublicUrl(ad.poster_url, "video-ads"),
         stats: {
           impressions: st.impressions,
           clicks: st.clicks,
