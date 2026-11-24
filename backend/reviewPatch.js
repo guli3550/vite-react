@@ -1,3 +1,4 @@
+const { uploadObject } = require("./r2StorageRuntime.js");
 // GULI public product reviews: verified-purchase, transparent and Telegram-authenticated.
 const REVIEW_MAX_PHOTOS = 3;
 const REVIEW_MAX_PHOTO_BYTES = 220 * 1024;
