@@ -2,6 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
+const { createMediaUploadUrl } = require("./r2StorageRuntime");
 
 let client;
 function db() {
@@ -248,10 +249,8 @@ install("post", "/api/admin/reels/upload-url", requireAdmin, async (req, res) =>
     const ext = (fileName.match(/\.([a-zA-Z0-9]{2,5})$/) || [])[1] || (isVideo ? "mp4" : "webp");
     const path = `${isVideo ? "videos" : "posters"}/${require("crypto").randomUUID()}.${ext.toLowerCase()}`;
     const bucket = "reels-media";
-    const { data, error } = await db().storage.from(bucket).createSignedUploadUrl(path);
-    if (error) throw error;
-    const publicUrl = db().storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    return res.json({ success: true, data: { path, token: data.token, publicUrl, bucket } });
+    const upload = createMediaUploadUrl(bucket, path, 600);
+    return res.json({ success: true, data: { path, uploadUrl: upload.uploadUrl, publicUrl: upload.publicUrl, bucket } });
   } catch (error) { return fail(res, error); }
 });
 
