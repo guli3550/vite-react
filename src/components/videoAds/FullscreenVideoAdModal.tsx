@@ -488,7 +488,7 @@ export const FullscreenVideoAdModal: React.FC<FullscreenVideoAdModalProps> = ({
       <div className={`guli-fullscreen-bottom-card${isInfoExpanded ? " guli-story-info-expanded" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="guli-fullscreen-card-inner">
           {activeAd.poster_url ? (
-            <img src={activeAd.poster_url} alt={activeAd.title} className="guli-fullscreen-card-thumb" referrerPolicy="no-referrer" />
+            <img src={resolvePublicMediaUrl(activeAd.poster_url) || undefined} alt={activeAd.title} className="guli-fullscreen-card-thumb" referrerPolicy="no-referrer" />
           ) : (
             <div className="guli-fullscreen-card-thumb-placeholder"><span>GULI</span></div>
           )}
