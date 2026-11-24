@@ -37,7 +37,7 @@ function storageFor(sourceBucket) {
 
 function objectKey(sourceBucket, path) {
   const cleanPath = clean(path).replace(/^\/+/, "");
-  if (!cleanPath || cleanPath.split("/").some((part) => !part || part === "." || part === "..") || cleanPath.includes("\\\\")) {
+  if (!cleanPath || cleanPath.split("/").some((part) => !part || part === "." || part === "..") || cleanPath.includes("\\")) {
     throw new Error("Storage object path noto‘g‘ri");
   }
   return clean(sourceBucket) + "/" + cleanPath;
@@ -70,4 +70,23 @@ function signedUploadUrl(sourceBucket, path, expiresIn = 600) {
   return { url: storage.presign("PUT", key, expiresIn), key, publicUrl: PUBLIC_BUCKETS.has(sourceBucket) ? storage.publicObjectUrl(key) : null };
 }
 
-module.exports = { PUBLIC_BUCKETS, PRIVATE_BUCKETS, storageFor, objectKey, uploadObject, publicUrl, signedReadUrl, signedUploadUrl };
+async function deleteObject(sourceBucket, path) {
+  return storageFor(sourceBucket).deleteObject(objectKey(sourceBucket, path));
+}
+
+function resolvePublicUrl(value, expectedBucket) {
+  const input = clean(value);
+  if (!input) return input;
+  try {
+    const parsed = new URL(input);
+    const match = parsed.pathname.match(/^\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
+    if (!match) return input;
+    const sourceBucket = decodeURIComponent(match[1]);
+    if (expectedBucket && sourceBucket !== expectedBucket) return input;
+    return publicUrl(sourceBucket, decodeURIComponent(match[2]));
+  } catch {
+    return input;
+  }
+}
+
+module.exports = { PUBLIC_BUCKETS, PRIVATE_BUCKETS, storageFor, objectKey, uploadObject, publicUrl, signedReadUrl, signedUploadUrl, deleteObject, resolvePublicUrl };
