@@ -1,4 +1,4 @@
-const { uploadObject } = require("./r2StorageRuntime.js");
+const { uploadObject, resolvePublicUrl } = require("./r2StorageRuntime.js");
 // GULI product reviews v2: UUID-safe product matching, verified delivered purchases, and public aggregate stats.
 const REVIEW_MAX_PHOTOS = 3;
 const REVIEW_MAX_PHOTO_BYTES = 220 * 1024;
@@ -49,7 +49,7 @@ app.get("/api/reviews", async (req, res) => {
     if (!product) return res.status(404).json({ success: false, message: "Mahsulot topilmadi" });
     const { data, error } = await supabase.from("product_reviews").select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").eq("product_id", product.id).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
-    const rows = (data || []).map((row) => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
+    const rows = (data || []).map((row) => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos.map((url) => resolvePublicUrl(url, "review-images")) : [] }));
     const liveCount = rows.length;
     const liveSum = rows.reduce((sum, row) => sum + Number(row.rating || 0), 0);
     const legacyCount = Math.max(0, Number(product.reviews || 0));
