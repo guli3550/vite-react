@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
-const { uploadObject } = require('./r2StorageRuntime.js');
+const { uploadObject, resolvePublicUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
@@ -172,7 +172,7 @@ install('get', '/api/reviews', async (req, res) => {
       .select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number')
       .eq('product_id', product.id).eq('status', 'approved').order('created_at', { ascending: false }).limit(100);
     if (error) throw error;
-    const rows = (data || []).map(row => ({ ...row, display_name: display(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
+    const rows = (data || []).map(row => ({ ...row, display_name: display(row), photos: Array.isArray(row.photos) ? row.photos.map((url) => resolvePublicUrl(url, 'review-images')) : [] }));
     const liveSum = rows.reduce((sum, row) => sum + Number(row.rating || 0), 0);
     const legacyCount = Math.max(0, Number(product.reviews || 0));
     const legacyAverage = Math.max(0, Number(product.rating || 0));
