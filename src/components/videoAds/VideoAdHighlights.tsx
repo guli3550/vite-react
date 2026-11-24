@@ -3,6 +3,7 @@ import { Play } from "lucide-react";
 import type { VideoAd } from "../../types/videoAd";
 import { FullscreenVideoAdModal } from "./FullscreenVideoAdModal";
 import "./VideoAdHighlights.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 interface VideoAdHighlightsProps {
   ads: VideoAd[];
@@ -34,8 +35,8 @@ export const VideoAdHighlights: React.FC<VideoAdHighlightsProps> = ({
             <span className="guli-video-highlight-ring">
               {ad.video_url ? (
                 <video
-                  src={ad.video_url}
-                  poster={ad.poster_url || undefined}
+                  src={resolvePublicMediaUrl(ad.video_url)}
+                  poster={resolvePublicMediaUrl(ad.poster_url || "") || undefined}
                   muted
                   loop
                   autoPlay
