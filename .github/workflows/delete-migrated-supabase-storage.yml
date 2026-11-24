@@ -1,0 +1,37 @@
+name: Delete migrated Supabase Storage originals
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_delete:
+        description: "Permanently delete the 585 migrated originals from the six approved buckets"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  delete-migrated-originals:
+    if: ${{ inputs.confirm_delete == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/full-r2-storage-migration
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies
+        run: npm install --prefix backend --no-audit --no-fund
+      - name: Preflight and delete only the six approved buckets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          CONFIRM_DELETE_SUPABASE_STORAGE: ${{ inputs.confirm_delete }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+        run: node backend/scripts/delete-migrated-supabase-storage.js
