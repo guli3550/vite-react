@@ -1,0 +1,57 @@
+name: Supabase Storage backup to private R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_backup:
+        description: "Type BACKUP-585-FILES to authorize uploading the inventoried 585 files"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-storage-backup-execute
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: ${{ inputs.confirm_backup == 'BACKUP-585-FILES' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Preview backup utility
+        uses: actions/checkout@v4
+        with:
+          ref: feat/cloudflare-r2-media-migration
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Supabase client only
+        run: npm install --prefix backend --no-save --package-lock=false --ignore-scripts --no-audit --no-fund '@supabase/supabase-js@^2.57.0'
+
+      - name: Upload and verify backup objects
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BACKUP_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          R2_BACKUP_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          R2_BACKUP_BUCKET: guli-market-backup
+        run: |
+          set -o pipefail
+          node backend/scripts/backup-supabase-storage-to-r2.js --execute | tee "$RUNNER_TEMP/backup-execute.log"
+          cat "$RUNNER_TEMP/backup-execute.log" >> "$GITHUB_STEP_SUMMARY"
+
+  reject-unconfirmed:
+    if: ${{ inputs.confirm_backup != 'BACKUP-585-FILES' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require exact confirmation
+        run: |
+          echo "Backup not started. Enter the exact confirmation BACKUP-585-FILES to authorize uploads."
+          exit 1
