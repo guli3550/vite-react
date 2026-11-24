@@ -24,6 +24,7 @@ import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 // App.tsx imports this module at start-up: warm the feed while the customer is still on the home screen.
 scheduleReelsWarmup();
@@ -788,8 +789,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     ) : (
                       <video
                         ref={getVideoRef(position)}
-                        src={reel.videoUrl}
-                        poster={reel.posterUrl || undefined}
+                        src={resolvePublicMediaUrl(reel.videoUrl)}
+                        poster={resolvePublicMediaUrl(reel.posterUrl) || undefined}
                         className="reelsVideoElement"
                         playsInline
                         loop
