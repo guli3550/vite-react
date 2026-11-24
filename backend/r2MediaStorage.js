@@ -73,7 +73,7 @@ function createR2MediaStorage(options = {}) {
 
   function presign(method, key, expiresIn = 600) {
     const safeMethod = String(method || "").toUpperCase();
-    if (!["GET", "PUT", "HEAD"].includes(safeMethod)) throw new Error("R2 HTTP method ruxsat etilmagan");
+    if (!["GET", "PUT", "HEAD", "DELETE"].includes(safeMethod)) throw new Error("R2 HTTP method ruxsat etilmagan");
     const ttl = Number(expiresIn);
     if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) throw new Error("R2 signed URL muddati 1–3600 soniya bo‘lishi kerak");
 
