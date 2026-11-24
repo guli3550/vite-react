@@ -54,7 +54,7 @@ function imageUrl(item) {
 async function receiptUrl(o) {
   const path = String(o?.payment_receipt_path || '').replace(/^\/+/, '');
   if (!path || !db || /\.pdf$/i.test(path)) return '';
-  const { data } = signedReadUrl('payment-receipts', path, 3600);
+  const data = { signedUrl: signedReadUrl('payment-receipts', path, 3600) };
   return data?.signedUrl || '';
 }
 async function getImage(url) {
