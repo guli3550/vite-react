@@ -1,4 +1,4 @@
-const { uploadObject } = require("./r2StorageRuntime.js");
+const { uploadObject, resolvePublicUrl } = require("./r2StorageRuntime.js");
 // GULI public product reviews: verified-purchase, transparent and Telegram-authenticated.
 const REVIEW_MAX_PHOTOS = 3;
 const REVIEW_MAX_PHOTO_BYTES = 220 * 1024;
@@ -46,7 +46,7 @@ app.get("/api/reviews", async (req, res) => {
     if (!product) return res.status(404).json({ success: false, message: "Mahsulot topilmadi" });
     const { data, error } = await supabase.from("product_reviews").select("id,rating,comment,photos,first_name,created_at,verified_purchase,order_number").eq("product_id", product.id).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
-    const rows = (data || []).map(row => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
+    const rows = (data || []).map(row => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos.map((url) => resolvePublicUrl(url, "review-images")) : [] }));
     const distribution = [5,4,3,2,1].map(star => ({ star, count: rows.filter(r => Number(r.rating) === star).length }));
     const liveCount = rows.length;
     const liveSum = rows.reduce((sum, r) => sum + Number(r.rating || 0), 0);
