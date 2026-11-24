@@ -1,3 +1,4 @@
+const { signedReadUrl } = require("./r2StorageRuntime.js");
 // Dedicated GULI admin Telegram bot bridge.
 // This bot is independent from the customer-facing TELEGRAM_BOT_TOKEN.
 // It polls the production DB so notifications do not depend on Express route registration order.
@@ -141,7 +142,7 @@ function orderProductImages(order) {
 async function receiptUrl(order) {
   const path = String(order?.payment_receipt_path || "").replace(/^\/+/, "");
   if (!path || !supabase) return "";
-  const { data, error } = await supabase.storage.from("payment-receipts").createSignedUrl(path, 60 * 60);
+  const signedUrl = signedReadUrl("payment-receipts", path, 60 * 60);
   if (error) {
     console.warn("[Admin Telegram bot] receipt signed URL failed:", error.message);
     return "";
