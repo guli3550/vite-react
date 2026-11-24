@@ -5,6 +5,22 @@ const DEFAULT_SUPABASE_URL = "https://qttwufydrvdwmhxcpgjb.supabase.co";
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_L0uxrZ6QTpHQUyWVDqfRdg_DTLXuqHX";
 let cachedClient = null;
 
+function resolveProductImage(value) {
+  const input = String(value || "");
+  if (!input) return input;
+  try {
+    const parsed = new URL(input);
+    const match = parsed.pathname.match(/^\/storage\/v1\/object\/public\/product-images\/(.+)$/);
+    if (!match) return input;
+    const base = String(process.env.R2_PUBLIC_URL || "").trim().replace(/\/+$/, "");
+    if (!base) return input;
+    const key = match[1].split("/").map((part) => decodeURIComponent(part)).map(encodeURIComponent).join("/");
+    return base + "/product-images/" + key;
+  } catch {
+    return input;
+  }
+}
+
 function getClient() {
   if (cachedClient) return cachedClient;
   const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL)
@@ -43,8 +59,8 @@ export function toProduct(row) {
     price: Number(row.price || 0),
     oldPrice: row.old_price == null ? undefined : Number(row.old_price),
     old_price: row.old_price == null ? undefined : Number(row.old_price),
-    image: row.image || "",
-    images: toArray(row.images),
+    image: resolveProductImage(row.image || ""),
+    images: toArray(row.images).map(resolveProductImage),
     description: row.description || "",
     sizes: toArray(row.sizes),
     colors: toArray(row.colors),
