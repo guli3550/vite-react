@@ -1,3 +1,4 @@
+const { signedReadUrl } = require("./r2StorageRuntime.js");
 // GULI ADMIN TELEGRAM BOT - EXACT 1 MESSAGE PER ORDER
 // Strictly satisfies: 1 order = exactly 1 Telegram message.
 // All subsequent updates (status change, receipt upload, verification/rejection)
@@ -173,7 +174,7 @@ async function getOrderReceiptUrl(o) {
   if (o?.payment_receipt_path && db) {
     try {
       const cleanPath = String(o.payment_receipt_path).replace(/^\/+/, '');
-      const { data, error } = await db.storage.from('payment-receipts').createSignedUrl(cleanPath, 86400 * 7);
+      const signedUrl = signedReadUrl('payment-receipts', cleanPath, 86400 * 7);
       if (!error && data?.signedUrl) return data.signedUrl;
     } catch (e) {
       console.warn('[Admin bot] Signed receipt error:', e.message);
