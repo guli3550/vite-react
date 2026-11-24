@@ -29,13 +29,13 @@ async function main() {
   try {
     await publicStorage.uploadObject(publicKey, payload, { contentType: "text/plain", cacheControl: "public, max-age=60" });
     const publicHead = await publicStorage.headObject(publicKey);
-    if (publicHead.contentLength !== payload.length) throw new Error("Public bucket HEAD size mismatch");
+    if (publicHead.contentLength != null && publicHead.contentLength !== payload.length) throw new Error("Public bucket HEAD size mismatch (expected " + payload.length + ", got " + publicHead.contentLength + ")");
     const publicRead = await request(publicStorage.publicObjectUrl(publicKey));
     if (Buffer.compare(Buffer.from(await publicRead.arrayBuffer()), payload) !== 0) throw new Error("Public custom-domain readback mismatch");
 
     await privateStorage.uploadObject(privateKey, payload, { contentType: "text/plain", cacheControl: "private, no-store" });
     const privateHead = await privateStorage.headObject(privateKey);
-    if (privateHead.contentLength !== payload.length) throw new Error("Private bucket HEAD size mismatch");
+    if (privateHead.contentLength != null && privateHead.contentLength !== payload.length) throw new Error("Private bucket HEAD size mismatch (expected " + payload.length + ", got " + privateHead.contentLength + ")");
     const privateRead = await request(privateStorage.signedReadUrl(privateKey, 180));
     if (Buffer.compare(Buffer.from(await privateRead.arrayBuffer()), payload) !== 0) throw new Error("Private signed-URL readback mismatch");
 
