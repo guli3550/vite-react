@@ -73,7 +73,7 @@ function createR2MediaStorage(options = {}) {
 
   function presign(method, key, expiresIn = 600) {
     const safeMethod = String(method || "").toUpperCase();
-    if (!["GET", "PUT", "HEAD"].includes(safeMethod)) throw new Error("R2 HTTP method ruxsat etilmagan");
+    if (!["GET", "PUT", "HEAD", "DELETE"].includes(safeMethod)) throw new Error("R2 HTTP method ruxsat etilmagan");
     const ttl = Number(expiresIn);
     if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) throw new Error("R2 signed URL muddati 1–3600 soniya bo‘lishi kerak");
 
@@ -152,7 +152,17 @@ function createR2MediaStorage(options = {}) {
     return presign("GET", key, expiresIn);
   }
 
-  return Object.freeze({ presign, publicObjectUrl, signedReadUrl, headObject, uploadObject });
+  async function deleteObject(key) {
+    const response = await fetchImpl(presign("DELETE", key, 60), { method: "DELETE" });
+    if (!response.ok && response.status !== 404) {
+      const error = new Error("R2 DELETE so‘rovi muvaffaqiyatsiz (HTTP " + response.status + ")");
+      error.status = response.status;
+      throw error;
+    }
+    return { deleted: response.ok || response.status === 404 };
+  }
+
+  return Object.freeze({ presign, publicObjectUrl, signedReadUrl, headObject, uploadObject, deleteObject });
 }
 
 module.exports = { createR2MediaStorage, validateObjectKey, loadConfig };
