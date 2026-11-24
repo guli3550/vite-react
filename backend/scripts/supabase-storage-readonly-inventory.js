@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Read-only Supabase Storage inventory. Lists object metadata only; it never
+// Read-only Supabase Storage inventory. Uses paginated metadata listing only; it never
 // downloads, uploads, updates, or deletes an object.
 const { createClient } = require("@supabase/supabase-js");
 
