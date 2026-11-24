@@ -1,0 +1,24 @@
+name: Supabase R2 backup script syntax
+
+on:
+  push:
+    branches:
+      - feat/supabase-r2-storage-backup
+    paths:
+      - "backend/scripts/backup-supabase-storage-to-r2.js"
+      - ".github/workflows/supabase-r2-backup-check.yml"
+  pull_request:
+    paths:
+      - "backend/scripts/backup-supabase-storage-to-r2.js"
+      - ".github/workflows/supabase-r2-backup-check.yml"
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check backup script syntax
+        run: node --check backend/scripts/backup-supabase-storage-to-r2.js
