@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { uploadObject } = require("./r2StorageRuntime.js");
 let sharp = null;
 try {
   sharp = require("sharp");
