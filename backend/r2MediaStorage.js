@@ -124,7 +124,7 @@ function createR2MediaStorage(options = {}) {
       throw error;
     }
     return {
-      contentLength: Number(response.headers.get("content-length") || 0),
+      contentLength: response.headers.has("content-length") ? Number(response.headers.get("content-length")) : null,
       contentType: response.headers.get("content-type") || "",
       etag: response.headers.get("etag") || "",
     };
