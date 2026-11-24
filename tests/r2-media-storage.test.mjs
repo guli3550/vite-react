@@ -40,7 +40,9 @@ test("creates deterministic, method-specific SigV4 presigned URLs", () => {
   assert.match(put.searchParams.get("X-Amz-Signature"), /^[a-f0-9]{64}$/);
   assert.notEqual(put.searchParams.get("X-Amz-Signature"), get.searchParams.get("X-Amz-Signature"));
   assert.equal(get.searchParams.get("X-Amz-Expires"), "300");
-  assert.throws(() => storage.presign("DELETE", "reels/video.mp4"));
+  const del = new URL(storage.presign("DELETE", "reels/video.mp4"));
+  assert.equal(del.searchParams.get("X-Amz-Algorithm"), "AWS4-HMAC-SHA256");
+  assert.notEqual(del.searchParams.get("X-Amz-Signature"), get.searchParams.get("X-Amz-Signature"));
   assert.throws(() => storage.presign("GET", "reels/video.mp4", 3601));
 });
 
