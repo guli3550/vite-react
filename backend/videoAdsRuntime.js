@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
-const { uploadObject, signedUploadUrl } = require("./r2StorageRuntime");
+const { uploadObject, signedUploadUrl, resolvePublicUrl } = require("./r2StorageRuntime");
 
 function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");
@@ -75,7 +75,11 @@ install("get", "/api/video-ads", async (req, res) => {
           if (ad.starts_at && new Date(ad.starts_at).toISOString() > nowIso) return false;
           if (ad.ends_at && new Date(ad.ends_at).toISOString() < nowIso) return false;
           return true;
-        });
+        }).map((ad) => ({
+          ...ad,
+          video_url: resolvePublicUrl(ad.video_url, "video-ads"),
+          poster_url: resolvePublicUrl(ad.poster_url, "video-ads"),
+        }));
 
         res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
         return res.json({ success: true, data: filtered });
