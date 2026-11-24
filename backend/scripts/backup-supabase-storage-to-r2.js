@@ -30,7 +30,7 @@ function awsEncode(value) {
 function hmac(key, value, encoding) {
   return crypto.createHmac("sha256", key).update(value, "utf8").digest(encoding);
 }
-function makePresignedPutUrl(endpoint, bucket, key, accessKeyId, secretAccessKey, expiresIn = 900) {
+function makePresignedUrl(method, endpoint, bucket, key, accessKeyId, secretAccessKey, expiresIn = 900) {
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
@@ -46,7 +46,7 @@ function makePresignedPutUrl(endpoint, bucket, key, accessKeyId, secretAccessKey
   const canonicalQuery = Object.keys(query).sort()
     .map((name) => awsEncode(name) + "=" + awsEncode(query[name])).join("&");
   const canonicalHeaders = "host:" + endpoint.host + "\n";
-  const canonicalRequest = ["PUT", path, canonicalQuery, canonicalHeaders, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const canonicalRequest = [method, path, canonicalQuery, canonicalHeaders, "host", "UNSIGNED-PAYLOAD"].join("\n");
   const stringToSign = [
     "AWS4-HMAC-SHA256",
     amzDate,
@@ -60,18 +60,30 @@ function makePresignedPutUrl(endpoint, bucket, key, accessKeyId, secretAccessKey
   const signature = hmac(kSigning, stringToSign, "hex");
   return endpoint.origin + path + "?" + canonicalQuery + "&X-Amz-Signature=" + signature;
 }
-async function putObject(config, key, body, contentType) {
-  const url = makePresignedPutUrl(
-    config.endpoint, config.bucket, key, config.accessKeyId, config.secretAccessKey
+async function requestObject(config, method, key, body, contentType) {
+  const url = makePresignedUrl(
+    method, config.endpoint, config.bucket, key, config.accessKeyId, config.secretAccessKey
   );
   const response = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": contentType || "application/octet-stream" },
-    body,
+    method,
+    headers: method === "PUT" ? { "Content-Type": contentType || "application/octet-stream" } : undefined,
+    body: method === "PUT" ? body : undefined,
   });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 500);
-    throw new Error("R2 PUT failed (" + response.status + ") for " + key + ": " + detail);
+    throw new Error("R2 " + method + " failed (" + response.status + ") for " + key + ": " + detail);
+  }
+  return response;
+}
+async function putObject(config, key, body, contentType) {
+  await requestObject(config, "PUT", key, body, contentType);
+}
+async function verifyObject(config, key, expectedBuffer, expectedSha256) {
+  const response = await requestObject(config, "GET", key);
+  const actual = Buffer.from(await response.arrayBuffer());
+  const actualHash = crypto.createHash("sha256").update(actual).digest("hex");
+  if (actual.length !== expectedBuffer.length || actualHash !== expectedSha256) {
+    throw new Error("R2 verification mismatch for " + key);
   }
 }
 async function listAllFiles(storage, bucket) {
@@ -192,12 +204,14 @@ async function main() {
       const contentType = file.metadata.mimetype || "application/octet-stream";
       const destinationKey = "supabase-storage-backup/" + runId + "/" + bucket + "/" + file.path;
       await putObject(r2, destinationKey, buffer, contentType);
+      await verifyObject(r2, destinationKey, buffer, sha256);
       manifest.files.push({
         bucket,
         path: file.path,
         destination_key: destinationKey,
         bytes: buffer.length,
         sha256,
+        verified: true,
         content_type: contentType,
         created_at: file.created_at,
         updated_at: file.updated_at,
