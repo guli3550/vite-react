@@ -45,6 +45,7 @@ import {
   syncBrowserAndTelegramChrome,
 } from "./utils/themeTransition";
 import { getApiBaseUrl } from "./lib/apiOrigin";
+import { resolvePublicMediaUrl } from "./utils/resolvePublicMediaUrl";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
@@ -285,7 +286,7 @@ const placeholder = (name = "GULI") =>
   `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1000"><rect width="800" height="1000" fill="#f6e8eb"/><text x="400" y="500" text-anchor="middle" font-family="Arial" font-size="42" fill="#b95a70">${name.slice(0, 18)}</text></svg>`)}`;
 const imageUrl = (p: Product, index = 0) => {
   const list = [p.image, ...(p.images || [])].filter(Boolean);
-  const url = list[index] || list[0] || "";
+  const url = resolvePublicMediaUrl(list[index] || list[0] || "");
   if (!url) return placeholder(p.name);
   try {
     const u = new URL(url);
