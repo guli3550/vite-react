@@ -33,7 +33,7 @@ function sha256(value) {
 function canonicalQuery(params) {
   return Object.entries(params)
     .map(([key, value]) => [encodeSegment(key), encodeSegment(value)])
-    .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue))
+    .sort(([aKey, aValue], [bKey, bValue]) => (aKey < bKey ? -1 : aKey > bKey ? 1 : aValue < bValue ? -1 : aValue > bValue ? 1 : 0))
     .map(([key, value]) => key + "=" + value)
     .join("&");
 }
