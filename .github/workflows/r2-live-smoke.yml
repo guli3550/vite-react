@@ -1,0 +1,32 @@
+name: GULI R2 live smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  r2-live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout R2 integration test
+        uses: actions/checkout@v4
+        with:
+          ref: feat/r2-storage-runtime-integration
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies
+        run: npm install --prefix backend --no-audit --no-fund
+      - name: Verify public and private R2 buckets end-to-end
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_BUCKET_NAME: ${{ secrets.R2_PUBLIC_BUCKET_NAME }}
+          R2_PRIVATE_BUCKET_NAME: ${{ secrets.R2_PRIVATE_BUCKET_NAME }}
+          R2_PUBLIC_URL: https://media.gulii.uz
+        run: node backend/scripts/r2-live-smoke.js
