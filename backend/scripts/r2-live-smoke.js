@@ -23,7 +23,9 @@ async function main() {
   const privateStorage = createR2MediaStorage({ config: { ...common, bucket: required("R2_PRIVATE_BUCKET_NAME") } });
   const nonce = crypto.randomUUID();
   const publicKey = "__guli_r2_smoke__/" + nonce + ".txt";
-  const privateKey = "__guli_r2_smoke__/" + nonce + ".txt";
+  // Use a distinct key so the public-bucket test object cannot cause a false-positive
+  // when checking whether the private bucket is exposed by the public hostname.
+  const privateKey = "__guli_r2_private_smoke__/" + nonce + ".txt";
   const payload = Buffer.from("GULI MARKET R2 smoke " + nonce, "utf8");
   let publicDeleted = false, privateDeleted = false;
   try {
@@ -39,9 +41,9 @@ async function main() {
     const privateRead = await request(privateStorage.signedReadUrl(privateKey, 180));
     if (Buffer.compare(Buffer.from(await privateRead.arrayBuffer()), payload) !== 0) throw new Error("Private signed-URL readback mismatch");
 
-    // The public media hostname must not expose the private-bucket key.
-    const privateLeak = await fetch(publicBase + "/" + encodeURIComponent(privateKey));
-    if (privateLeak.ok) throw new Error("Private smoke object unexpectedly accessible through public media hostname");
+    // The public media hostname must not expose the private-only key.
+    const privateLeak = await fetch(publicBase + "/" + privateKey.split("/").map(encodeURIComponent).join("/"));
+    if (privateLeak.ok) throw new Error("Private smoke object unexpectedly accessible through public media hostname (HTTP " + privateLeak.status + ")");
 
     process.stdout.write(JSON.stringify({
       status: "SUCCESS",
