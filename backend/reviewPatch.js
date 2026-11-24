@@ -101,11 +101,8 @@ app.post("/api/reviews", requireTelegramUser, async (req, res) => {
       const parsed = parseReviewPhoto(input);
       if (!parsed) continue;
       const path = `${req.telegramUser.id}/${product.id}/${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${parsed.ext}`;
-      const { error: uploadError } = await supabase.storage.from("review-images").upload(path, parsed.buffer, { contentType: parsed.mime, cacheControl: "31536000", upsert: false });
-      if (!uploadError) {
-        const { data: publicData } = supabase.storage.from("review-images").getPublicUrl(path);
-        if (publicData?.publicUrl) photoUrls.push(publicData.publicUrl);
-      }
+      const uploaded = await uploadObject("review-images", path, parsed.buffer, { contentType: parsed.mime });
+      if (uploaded.url) photoUrls.push(uploaded.url);
     }
     const row = { product_id: product.id, product_code: code, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, rating, comment, photos: photoUrls, verified_purchase: true, order_number: order.order_number, status: "approved", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("product_reviews").insert([row]).select("id,rating,comment,photos,first_name,created_at,verified_purchase,order_number").single();
