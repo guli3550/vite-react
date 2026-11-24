@@ -81,3 +81,37 @@ The tests use injected time/fetch and do not contact Cloudflare or Supabase.
 - No Supabase Storage objects, database rows, or buckets changed.
 - No R2 production media object written by this work.
 - No Supabase original deletion is authorized.
+
+
+## Live Supabase Storage inventory snapshot (2026-11-24)
+
+Read-only workflow: `Supabase Storage read-only object inventory`
+Run: https://github.com/guli3550/vite-react/actions/runs/45357433737
+
+The workflow successfully enumerated the six target buckets and found no extra buckets:
+- Actual bucket count: 6
+- Missing target buckets: 0
+- Unplanned buckets: 0
+- Total objects: 585
+- Total object bytes: 337,959,271
+- Unknown object sizes: 0
+- No object names were emitted; no file contents were downloaded; no Storage data was modified.
+
+| Bucket | Public | Objects | Bytes | Actual configured size limit |
+|---|---:|---:|---:|---:|
+| `reels-media` | yes | 74 | 176,725,828 | 100 MiB |
+| `video-ads` | yes | 38 | 53,233,835 | 50 MiB |
+| `chat-media` | no | 101 | 45,994,297 | 8 MiB |
+| `payment-receipts` | no | 97 | 35,851,394 | 6 MiB |
+| `product-images` | yes | 271 | 25,976,422 | 3,000,000 bytes |
+| `review-images` | yes | 4 | 177,495 | not set |
+
+### Important live mismatch — chat-media
+
+The active chat storage runtime declares a 20 MiB maximum and allows audio/video/document MIME types. The live Supabase bucket is configured for only 8 MiB and its current allowlist contains image and document types but omits the audio/video types declared by the runtime. The runtime's `ensureBucket()` attempts to update the bucket but catches update failures and continues. Therefore the code's 20 MiB capability is not proof that production Storage accepts 20 MiB or all declared types.
+
+This must be resolved deliberately before chat-media migration: verify the exact Supabase bucket update error and decide the target R2 private bucket limits. Do not silently expand production Supabase bucket settings as part of this R2 migration.
+
+### Backup reconciliation status
+
+The live read-only inventory totals (585 objects / 337,959,271 bytes) exactly match the previously completed R2 backup job totals (585 files / 337,959,271 bytes). The R2 backup's independent verifier also passed its manifest-to-object SHA-256 checks. Matching live source counts/bytes plus backup manifest verification is strong evidence of a complete backup, but it is not a fresh byte-for-byte comparison against the live Supabase objects; do not describe it as a direct source-vs-backup SHA-256 comparison.
