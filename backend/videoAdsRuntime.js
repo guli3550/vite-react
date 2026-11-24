@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
+const { createPresignedPutUrl, publicObjectUrl } = require("./r2Storage");
 
 function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");
@@ -473,26 +474,15 @@ install("post", "/api/admin/video-ads/upload-url", requireAdmin, async (req, res
       "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
       "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
     };
-    const folder = mediaType === "video" ? "videos" : "posters";
+    const folder = mediaType === "video" ? "video-ads/videos" : "video-ads/posters";
     const path = folder + "/" + Date.now() + "-" + crypto.randomBytes(8).toString("hex") + "." + extensionByMime[mimeType];
-    const client = getSupabaseClient();
-    if (!client) {
-      return res.status(503).json({ success: false, message: "Supabase Storage ulanishi mavjud emas" });
-    }
-
-    const { data, error } = await client.storage.from("video-ads").createSignedUploadUrl(path);
-    if (error || !data?.signedUrl) {
-      console.error("[Video Ads] Signed upload URL error:", error?.message || "Missing signed URL");
-      return res.status(503).json({ success: false, message: "Yuklash havolasini yaratib bo‘lmadi" });
-    }
-
-    const { data: publicData } = client.storage.from("video-ads").getPublicUrl(path);
+    const signedUrl = createPresignedPutUrl(path, 600);
+    const url = publicObjectUrl(path);
     return res.json({
       success: true,
-      signedUrl: data.signedUrl,
-      token: data.token,
-      path: data.path || path,
-      url: publicData?.publicUrl || null,
+      signedUrl,
+      path,
+      url,
       maxBytes,
     });
   } catch (error) {
