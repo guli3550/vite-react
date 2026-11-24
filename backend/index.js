@@ -422,18 +422,6 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
     }
 
     const bucket = "product-images";
-    const existing = await supabase.storage.getBucket(bucket);
-    if (existing.error) {
-      const created = await supabase.storage.createBucket(bucket, {
-        public: true,
-        allowedMimeTypes: ["image/*"],
-        fileSizeLimit: "3MB",
-      });
-      if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) {
-        throw created.error;
-      }
-    }
-
     const cleanFolder = folder === "banners" ? "banners" : "products";
     const baseName = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
     const inputBuffer = Buffer.from(data, "base64");
@@ -450,15 +438,11 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
         .toBuffer();
 
       const variantPath = `${baseName}-${width}.webp`;
-      const { error } = await supabase.storage.from(bucket).upload(variantPath, optimizedBuffer, {
+      const uploaded = await uploadObject(bucket, variantPath, optimizedBuffer, {
         contentType: "image/webp",
-        cacheControl: "31536000",
-        upsert: false,
+        cacheControl: "public, max-age=31536000, immutable",
       });
-      if (error) throw error;
-
-      const { data: variantPublic } = supabase.storage.from(bucket).getPublicUrl(variantPath);
-      variants[width] = variantPublic.publicUrl;
+      variants[width] = uploaded.url;
     }
 
     res.json({
