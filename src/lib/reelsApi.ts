@@ -232,11 +232,13 @@ export async function recordServerReelView(reelId: string): Promise<{ viewsCount
 export async function uploadReelMedia(file: File): Promise<string> {
   if (file.size > 100 * 1024 * 1024) throw new Error("Fayl hajmi 100 MB dan oshmasligi kerak");
   const contentType = file.type || (file.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "");
-  const signed = await request<{ path: string; uploadUrl: string; publicUrl: string; bucket: string }>("/api/admin/reels/upload-url", {
+  const signed = await request<{ path: string; uploadUrl?: string; signedUrl?: string; publicUrl: string; bucket: string }>("/api/admin/reels/upload-url", {
     method: "POST",
     body: JSON.stringify({ fileName: file.name, contentType }),
   }, true);
-  const response = await fetch(signed.uploadUrl, {
+  const uploadUrl = signed.uploadUrl || signed.signedUrl;
+  if (!uploadUrl || !signed.publicUrl) throw new Error("Reels serveri yuklash havolasini to‘liq qaytarmadi.");
+  const response = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" },
     body: file,
