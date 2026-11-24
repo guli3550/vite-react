@@ -24,7 +24,7 @@ function installDelete(path,handler){ install('delete', path, handler); }
 
 function decode(data,mime){const raw=String(data||'');if(!raw||raw.length>9000000||raw.length%4===1||!/^[A-Za-z0-9+/]*={0,2}$/.test(raw))throw new Error('Chek fayli noto‘g‘ri kodlangan');const b=Buffer.from(raw,'base64');if(!b.length||b.length>MAX)throw new Error('Chek hajmi 6 MB dan oshmasligi kerak');const h=b.subarray(0,12);const ok=(mime==='image/jpeg'&&h[0]===255&&h[1]===216&&h[2]===255)||(mime==='image/png'&&h.toString('hex',0,8)==='89504e470d0a1a0a')||(mime==='image/webp'&&h.toString('ascii',0,4)==='RIFF'&&h.toString('ascii',8,12)==='WEBP')||(mime==='application/pdf'&&h.toString('ascii',0,5)==='%PDF-');if(!ok)throw new Error('Chek fayli e’lon qilingan formatga mos emas');return b}
 const ext=m=>m==='application/pdf'?'pdf':m==='image/png'?'png':m==='image/webp'?'webp':'jpg';
-async function remove(path){if(!path)return;await deleteObject(BUCKET,String(path).replace(/^\\/+/, ''))}
+async function remove(path){if(!path)return;await deleteObject(BUCKET,String(path).replace(/^\/+/, ''))}
 
 installPost('/api/orders/:orderNumber/receipt', handleReceiptUpload);
 installPost('/api/customer/orders/:orderNumber/receipt', handleReceiptUpload);
