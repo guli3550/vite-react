@@ -40,7 +40,7 @@ async function main() {
     },
   };
 
-  process.stdout.write(JSON.stringify(report, null, 2) + "\\n");
+  process.stdout.write(JSON.stringify(report, null, 2) + "\n");
   if (process.env.GITHUB_STEP_SUMMARY) {
     const lines = [
       "# GULI MARKET — Supabase Storage bucket inventory",
@@ -55,11 +55,11 @@ async function main() {
       "",
       "No Storage objects were listed, downloaded, uploaded, or modified.",
     ];
-    require("node:fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\\n") + "\\n");
+    require("node:fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
   }
 }
 
 main().catch((error) => {
-  process.stderr.write("INVENTORY_FAILED: " + error.message + "\\n");
+  process.stderr.write("INVENTORY_FAILED: " + error.message + "\n");
   process.exitCode = 1;
 });
