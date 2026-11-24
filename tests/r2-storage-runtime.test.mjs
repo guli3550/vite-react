@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 
 const original = {
   R2_ENDPOINT: process.env.R2_ENDPOINT,
