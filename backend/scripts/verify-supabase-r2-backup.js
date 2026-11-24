@@ -15,13 +15,13 @@ function required(name) {
 }
 function awsEncode(value) {
   return encodeURIComponent(String(value)).replace(/[!'()*]/g, (c) =>
-    "%" + c.charCodeAt(0).toString(16).toString().toUpperCase()
+    "%" + c.charCodeAt(0).toString(16).toUpperCase()
   );
 }
 function canonicalQuery(params) {
   return Object.entries(params)
     .map(([key, value]) => [awsEncode(key), awsEncode(value)])
-    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]))
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0))
     .map(([key, value]) => key + "=" + value)
     .join("&");
 }
@@ -30,7 +30,7 @@ function hmac(key, value, encoding) {
 }
 function signedUrl(method, endpoint, bucket, key, accessKeyId, secretAccessKey, extraQuery = {}) {
   const now = new Date();
-  const amzDate = now.toISOString().replace(/[:-]|\\.\\d{3}/g, "");
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
   const scope = dateStamp + "/auto/s3/aws4_request";
   const encodedKey = key ? "/" + key.split("/").map(awsEncode).join("/") : "";
@@ -44,13 +44,13 @@ function signedUrl(method, endpoint, bucket, key, accessKeyId, secretAccessKey, 
     "X-Amz-SignedHeaders": "host",
   };
   const queryString = canonicalQuery(query);
-  const canonicalRequest = [method, path, queryString, "host:" + endpoint.host + "\\n", "host", "UNSIGNED-PAYLOAD"].join("\\n");
+  const canonicalRequest = [method, path, queryString, "host:" + endpoint.host + "\n", "host", "UNSIGNED-PAYLOAD"].join("\n");
   const stringToSign = [
     "AWS4-HMAC-SHA256",
     amzDate,
     scope,
     crypto.createHash("sha256").update(canonicalRequest).digest("hex"),
-  ].join("\\n");
+  ].join("\n");
   const kDate = hmac("AWS4" + secretAccessKey, dateStamp);
   const kRegion = hmac(kDate, "auto");
   const kService = hmac(kRegion, "s3");
@@ -81,7 +81,7 @@ async function listPrefix(config, prefix) {
     if (continuationToken) query["continuation-token"] = continuationToken;
     const response = await getObject(config, "", query);
     const xml = await response.text();
-    const contents = xml.match(/<Contents>[\\s\\S]*?<\\/Contents>/g) || [];
+    const contents = xml.match(/<Contents>[\s\S]*?<\/Contents>/g) || [];
     for (const item of contents) {
       const key = xmlText(item, "Key");
       const size = Number(xmlText(item, "Size"));
@@ -140,7 +140,7 @@ async function main() {
     }
     totalBytes += buffer.length;
     if ((i + 1) % 50 === 0 || i + 1 === manifest.files.length) {
-      process.stdout.write("Verified " + (i + 1) + "/" + manifest.files.length + " objects\\n");
+      process.stdout.write("Verified " + (i + 1) + "/" + manifest.files.length + " objects\n");
     }
   }
 
@@ -158,7 +158,7 @@ async function main() {
     manifestBytes: listedByKey.get(manifestKey).size,
     supabaseTouched: false,
     sourceObjectsModified: false,
-  }, null, 2) + "\\n");
+  }, null, 2) + "\n");
 }
 main().catch((error) => {
   console.error("R2_BACKUP_VERIFICATION_FAILED:", error.message);
