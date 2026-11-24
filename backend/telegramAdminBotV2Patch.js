@@ -175,7 +175,7 @@ async function getOrderReceiptUrl(o) {
     try {
       const cleanPath = String(o.payment_receipt_path).replace(/^\/+/, '');
       const signedUrl = signedReadUrl('payment-receipts', cleanPath, 86400 * 7);
-      if (!error && data?.signedUrl) return data.signedUrl;
+      return signedUrl;
     } catch (e) {
       console.warn('[Admin bot] Signed receipt error:', e.message);
     }
