@@ -130,17 +130,6 @@ async function persistTelegramProfilePhoto(telegramId, photoUrl) {
   }
 }
 
-async function ensureReviewBucket() {
-  if (!supabase) throw new Error('Supabase sozlanmagan');
-  const existing = await supabase.storage.getBucket('review-images');
-  if (!existing.error) return;
-  const created = await supabase.storage.createBucket('review-images', {
-    public: true,
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-    fileSizeLimit: '220KB',
-  });
-  if (created.error && !/already exists|duplicate/i.test(created.error.message || '')) throw created.error;
-}
 
 async function verifiedOrder(telegramId, productId, productCode) {
   const { data, error } = await supabase
