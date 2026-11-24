@@ -2,11 +2,9 @@
 // Stores customer/admin chat attachments in Supabase Storage instead of browser localStorage/base64.
 const express = require("express");
 const crypto = require("crypto");
-const { createClient } = require("@supabase/supabase-js");
+const { uploadObject, signedReadUrl } = require("./r2StorageRuntime.js");
 const { verifyAccessToken } = require("./guliCustomAuth.js");
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
-const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
 const ADMIN_SECRET = String(process.env.ADMIN_SECRET || "").trim();
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const SIGNING_SECRET = ADMIN_SECRET || BOT_TOKEN;
@@ -36,8 +34,6 @@ const ALLOWED_MIME_TYPES = [
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
-let bucketVerifiedThisProcess = false;
-const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
 
 const originalJson = express.json;
 express.json = function chatMediaJson(options = {}) { return originalJson.call(this, { ...options, limit: "30mb" }); };
@@ -208,37 +204,7 @@ function validMagic(buffer, mime) {
   }
   return validMime(m);
 }
-async function ensureBucket() {
-  if (!supabase) throw new Error("Supabase sozlanmagan");
-  if (bucketVerifiedThisProcess) return;
-  const current = await supabase.storage.getBucket(BUCKET);
-  if (current.error) {
-    const created = await supabase.storage.createBucket(BUCKET, {
-      public: false,
-      fileSizeLimit: MAX_BYTES,
-      allowedMimeTypes: ALLOWED_MIME_TYPES,
-    });
-    if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) throw created.error;
-    bucketVerifiedThisProcess = true;
-    return;
-  }
-  // Ensure existing production buckets also permit video/* and audio/* up to 20MB.
-  const existingTypes = Array.isArray(current.data?.allowed_mime_types) ? current.data.allowed_mime_types : [];
-  const existingLimit = Number(current.data?.file_size_limit || 0);
-  const missingTypes = ALLOWED_MIME_TYPES.some(t => !existingTypes.includes(t));
-  if (missingTypes || (existingLimit > 0 && existingLimit < MAX_BYTES)) {
-    try {
-      await supabase.storage.updateBucket(BUCKET, {
-        public: false,
-        fileSizeLimit: MAX_BYTES,
-        allowedMimeTypes: ALLOWED_MIME_TYPES,
-      });
-    } catch (e) {
-      console.warn("[Chat media] bucket update skipped:", e?.message || e);
-    }
-  }
-  bucketVerifiedThisProcess = true;
-}
+
 function signPath(path, fileName) {
   const exp = Date.now() + TOKEN_TTL;
   const body = Buffer.from(JSON.stringify({ path, exp, ...(fileName ? { fileName } : {}) })).toString("base64url");
@@ -275,24 +241,20 @@ async function persistInlineChatMedia({ telegramId, type, mediaUrl, fileName }) 
   const mimeType = normalizeMime(match[1], buffer, safeName, type);
   if (!mimeType) throw new Error("Bu fayl turi qo‘llab-quvvatlanmaydi");
   if (!validMagic(buffer, mimeType)) throw new Error("Fayl formati noto‘g‘ri");
-  await ensureBucket();
   const id = Number.isSafeInteger(Number(telegramId)) ? Number(telegramId) : 0;
   const path = `messages/${id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType, safeName)}`;
-  const uploaded = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-  if (uploaded.error) throw uploaded.error;
+  await uploadObject(BUCKET, path, buffer, { contentType: mimeType });
   const token = signPath(path, safeName);
   let telegramMediaUrl = "";
   try {
-    const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-    telegramMediaUrl = signed?.data?.signedUrl || "";
+    telegramMediaUrl = signedReadUrl(BUCKET, path, 3600);
   } catch {}
   const resolvedType = inferChatTypeFromMime(mimeType, String(type || ""));
   return { mediaUrl: `/api/chat/media-file/${token}`, telegramMediaUrl, mediaPath: path, fileName: safeName, mimeType, type: resolvedType };
 }
 globalThis.__GULI_CHAT_PERSIST_MEDIA__ = persistInlineChatMedia;
 async function persistTelegramChatMedia({ telegramId, fileId, fileName, type, mimeHint }) {
-  if (!BOT_TOKEN || !supabase || !fileId) return null;
-  await ensureBucket();
+  if (!BOT_TOKEN || !fileId) return null;
   const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`);
   const fileJson = await fileRes.json().catch(() => null);
   if (!fileRes.ok || !fileJson?.ok || !fileJson?.result?.file_path) {
@@ -312,8 +274,7 @@ async function persistTelegramChatMedia({ telegramId, fileId, fileName, type, mi
   if (!validMagic(buffer, mimeType)) throw new Error("Telegram media formati noto'g'ri");
   const id = Number.isSafeInteger(Number(telegramId)) ? Number(telegramId) : 0;
   const path = `messages/${id}/telegram-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType, safeName)}`;
-  const uploaded = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-  if (uploaded.error) throw uploaded.error;
+  await uploadObject(BUCKET, path, buffer, { contentType: mimeType });
   const token = signPath(path, safeName);
   return { mediaUrl: `/api/chat/media-file/${token}`, mediaPath: path, fileName: safeName, mimeType, type: inferChatTypeFromMime(mimeType, String(type || "")) };
 }
@@ -343,14 +304,11 @@ install("post", "/api/chat/media-upload", async (req, res) => {
     const mimeType = normalizeMime(rawMime, buffer, safeName, reqType);
     if (!mimeType) return res.status(400).json({ success: false, message: "Bu fayl turi qo‘llab-quvvatlanmaydi" });
     if (!validMagic(buffer, mimeType)) return res.status(400).json({ success: false, message: "Fayl formati noto‘g‘ri" });
-    await ensureBucket();
-    const path = `messages/${id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType, safeName)}`;
-    const uploaded = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-    if (uploaded.error) throw uploaded.error;
+      const path = `messages/${id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extFor(mimeType, safeName)}`;
+    await uploadObject(BUCKET, path, buffer, { contentType: mimeType });
     const token = signPath(path, safeName);
     let telegramMediaUrl = "";
-    const signed = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-    telegramMediaUrl = signed?.data?.signedUrl || "";
+    telegramMediaUrl = signedReadUrl(BUCKET, path, 3600);
     const resolvedType = inferChatTypeFromMime(mimeType, reqType);
     return res.json({ success: true, data: { mediaUrl: `/api/chat/media-file/${token}`, telegramMediaUrl, mediaPath: path, fileName: safeName, type: resolvedType, mimeType } });
   } catch (e) {
@@ -363,15 +321,11 @@ install("get", "/api/chat/media-file/:token", async (req, res) => {
   try {
     const parsed = verifyPath(req.params.token);
     if (!parsed?.path) return res.status(404).json({ success: false, message: "Fayl havolasi eskirgan yoki yaroqsiz" });
-    await ensureBucket();
-    const forceDownload = req.query?.download === "1" || req.query?.download === "true";
-    const downloadName = String(req.query?.name || parsed.fileName || parsed.path.split("/").pop() || "guli-chat-file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const signedOpts = forceDownload ? { download: downloadName } : undefined;
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(parsed.path, 3600, signedOpts);
-    if (error || !data?.signedUrl) return res.status(404).json({ success: false, message: "Fayl Storage'da topilmadi" });
+      const signedUrl = signedReadUrl(BUCKET, parsed.path, 3600);
+    if (!signedUrl) return res.status(404).json({ success: false, message: "Fayl Storage'da topilmadi" });
     res.setHeader("Cache-Control", "private, max-age=300");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    return res.redirect(302, data.signedUrl);
+    return res.redirect(302, signedUrl);
   } catch (e) {
     console.error("Chat media proxy error:", e);
     return res.status(500).json({ success: false, message: "Faylni ochishda xatolik" });
