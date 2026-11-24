@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { signedReadUrl } = require("./r2StorageRuntime.js");
 
 const URL = String(process.env.SUPABASE_URL || "").trim();
 const KEY = String(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
@@ -22,9 +23,7 @@ async function signedReceiptUrl(order) {
   const path = String(order?.payment_receipt_path || "").replace(/^\/+/, "");
   if (!path || !db || /\.pdf$/i.test(path)) return "";
   try {
-    const { data, error } = await db.storage.from("payment-receipts").createSignedUrl(path, 3600);
-    if (error) return "";
-    return data?.signedUrl || "";
+    return signedReadUrl("payment-receipts", path, 3600);
   } catch { return ""; }
 }
 
