@@ -17,8 +17,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Install backend dependencies
-        run: npm ci --prefix backend
+      - name: Install only the Supabase client (avoid unrelated backend lockfile drift)
+        run: npm install --prefix backend --no-save --package-lock=false --ignore-scripts --no-audit --no-fund '@supabase/supabase-js@^2.57.0'
       - name: List actual Supabase Storage buckets (read-only)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
