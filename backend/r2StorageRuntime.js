@@ -60,7 +60,8 @@ function publicUrl(sourceBucket, path) {
 
 function signedReadUrl(sourceBucket, path, expiresIn = 300) {
   if (!PRIVATE_BUCKETS.has(sourceBucket)) throw new Error("Signed private URL faqat private bucketlar uchun");
-  return storageFor(sourceBucket).signedReadUrl(objectKey(sourceBucket, path), expiresIn);
+  const ttl = Math.min(3600, Math.max(1, Number(expiresIn) || 300));
+  return storageFor(sourceBucket).signedReadUrl(objectKey(sourceBucket, path), ttl);
 }
 
 function signedUploadUrl(sourceBucket, path, expiresIn = 600) {
