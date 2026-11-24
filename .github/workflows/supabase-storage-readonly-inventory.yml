@@ -1,0 +1,33 @@
+name: Supabase Storage read-only object inventory
+
+on:
+  push:
+    branches:
+      - feat/full-r2-storage-migration
+    paths:
+      - "backend/scripts/supabase-storage-readonly-inventory.js"
+      - ".github/workflows/supabase-storage-readonly-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+      - name: List object metadata only (read-only)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
+        run: node backend/scripts/supabase-storage-readonly-inventory.js
