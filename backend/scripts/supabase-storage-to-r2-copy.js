@@ -100,7 +100,7 @@ async function copyOne({ supabase, r2, sourceBucket, object, dryRun }) {
   if (Number.isFinite(sourceSize) && sourceSize >= 0 && sourceBytes.length !== sourceSize) {
     throw new Error("Source metadata size mismatch for " + sourceBucket + " object");
   }
-  await r2.uploadObject(targetKey, sourceBytes, { contentType, cacheControl: "public, max-age=31536000, immutable" });
+  await r2.uploadObject(targetKey, sourceBytes, { contentType, cacheControl: PRIVATE_SOURCE_BUCKETS.includes(sourceBucket) ? "private, no-store" : "public, max-age=31536000, immutable" });
   const head = await r2.headObject(targetKey);
   if (head.contentLength !== sourceBytes.length) throw new Error("R2 HEAD size mismatch after upload: " + targetKey);
   const readBack = await readR2AndHash(r2, targetKey);
