@@ -1,3 +1,4 @@
+const { uploadObject, resolvePublicUrl } = require("./r2StorageRuntime.js");
 // GULI product reviews v2: UUID-safe product matching, verified delivered purchases, and public aggregate stats.
 const REVIEW_MAX_PHOTOS = 3;
 const REVIEW_MAX_PHOTO_BYTES = 220 * 1024;
@@ -48,7 +49,7 @@ app.get("/api/reviews", async (req, res) => {
     if (!product) return res.status(404).json({ success: false, message: "Mahsulot topilmadi" });
     const { data, error } = await supabase.from("product_reviews").select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").eq("product_id", product.id).eq("status", "approved").order("created_at", { ascending: false }).limit(100);
     if (error) throw error;
-    const rows = (data || []).map((row) => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
+    const rows = (data || []).map((row) => ({ ...row, display_name: reviewDisplayName(row), photos: Array.isArray(row.photos) ? row.photos.map((url) => resolvePublicUrl(url, "review-images")) : [] }));
     const liveCount = rows.length;
     const liveSum = rows.reduce((sum, row) => sum + Number(row.rating || 0), 0);
     const legacyCount = Math.max(0, Number(product.reviews || 0));
@@ -104,10 +105,8 @@ app.post("/api/reviews", requireTelegramUser, async (req, res) => {
       const parsed = parseReviewPhoto(input);
       if (!parsed) continue;
       const path = `${req.telegramUser.id}/${product.id}/${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${parsed.ext}`;
-      const { error: uploadError } = await supabase.storage.from("review-images").upload(path, parsed.buffer, { contentType: parsed.mime, cacheControl: "31536000", upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: publicData } = supabase.storage.from("review-images").getPublicUrl(path);
-      if (publicData?.publicUrl) photoUrls.push(publicData.publicUrl);
+      const uploaded = await uploadObject("review-images", path, parsed.buffer, { contentType: parsed.mime });
+      if (uploaded.url) photoUrls.push(uploaded.url);
     }
     const row = { product_id: product.id, product_code: code, telegram_id: req.telegramUser.id, username: req.telegramUser.username || null, first_name: req.telegramUser.first_name || null, rating, comment, photos: photoUrls, verified_purchase: true, order_number: order.order_number, status: "approved", created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data, error } = await supabase.from("product_reviews").insert([row]).select("id,rating,comment,photos,username,first_name,created_at,verified_purchase,order_number").single();

@@ -42,7 +42,7 @@ if (!webhookGuard.includes('TELEGRAM_WEBHOOK_SECRET') || !webhookGuard.includes(
 
 const required = [
   'payment-receipts',
-  'createSignedUrl',
+  'signedReadUrl',
   'payment_status',
   'payment_receipt_path',
   'guli_payment_guard',

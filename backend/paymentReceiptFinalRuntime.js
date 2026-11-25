@@ -1,6 +1,7 @@
 const express=require('express');const crypto=require('crypto');const {createClient}=require('@supabase/supabase-js');
 const { verifyAccessToken } = require('./guliCustomAuth.js');
 const { notifyCustomerReceiptUploaded } = require('./customerNotificationService.js');
+const { uploadObject, signedReadUrl, deleteObject } = require('./r2StorageRuntime.js');
 const originalJson=express.json;express.json=function(options={}){return originalJson({...options,limit:'12mb'})};
 const URL_=process.env.SUPABASE_URL||'',KEY=process.env.SUPABASE_SECRET_KEY||'',BOT=process.env.TELEGRAM_BOT_TOKEN||'',SECRET=process.env.ADMIN_SECRET||'';const supabase=URL_&&KEY?createClient(URL_,KEY,{auth:{persistSession:false,autoRefreshToken:false}}):null;const BUCKET='payment-receipts';const MAX=6*1024*1024;
 const eq=(a,b)=>{const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length===y.length&&crypto.timingSafeEqual(x,y)};
@@ -20,10 +21,10 @@ function admin(req){try{if(!SECRET)return false;const h=String(req.headers.autho
 const { install } = require('./routeRegistry.js');
 function installPost(path,handler){ install('post', path, handler); }
 function installDelete(path,handler){ install('delete', path, handler); }
-async function ensureBucket(){if(!supabase)throw new Error('Supabase sozlanmagan');const b=await supabase.storage.getBucket(BUCKET);if(!b.error)return;const c=await supabase.storage.createBucket(BUCKET,{public:false,allowedMimeTypes:['image/jpeg','image/png','image/webp','application/pdf'],fileSizeLimit:`${MAX}B`});if(c.error&&!/already exists|duplicate/i.test(c.error.message||''))throw c.error}
+
 function decode(data,mime){const raw=String(data||'');if(!raw||raw.length>9000000||raw.length%4===1||!/^[A-Za-z0-9+/]*={0,2}$/.test(raw))throw new Error('Chek fayli noto‘g‘ri kodlangan');const b=Buffer.from(raw,'base64');if(!b.length||b.length>MAX)throw new Error('Chek hajmi 6 MB dan oshmasligi kerak');const h=b.subarray(0,12);const ok=(mime==='image/jpeg'&&h[0]===255&&h[1]===216&&h[2]===255)||(mime==='image/png'&&h.toString('hex',0,8)==='89504e470d0a1a0a')||(mime==='image/webp'&&h.toString('ascii',0,4)==='RIFF'&&h.toString('ascii',8,12)==='WEBP')||(mime==='application/pdf'&&h.toString('ascii',0,5)==='%PDF-');if(!ok)throw new Error('Chek fayli e’lon qilingan formatga mos emas');return b}
 const ext=m=>m==='application/pdf'?'pdf':m==='image/png'?'png':m==='image/webp'?'webp':'jpg';
-async function remove(path){if(!path)return;const r=await supabase.storage.from(BUCKET).remove([String(path).replace(/^\/+/, '')]);if(r.error)throw r.error}
+async function remove(path){if(!path)return;await deleteObject(BUCKET,String(path).replace(/^\/+/, ''))}
 
 installPost('/api/orders/:orderNumber/receipt', handleReceiptUpload);
 installPost('/api/customer/orders/:orderNumber/receipt', handleReceiptUpload);
@@ -114,12 +115,10 @@ async function handleReceiptUpload(req, res) {
     if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || '')) && mimeType !== 'application/pdf') return res.status(400).json({ success: false, message: 'Chek faqat JPG, PNG, WEBP yoki PDF bo‘lishi mumkin' });
 
     const buffer = decode(rawData, mimeType);
-    await ensureBucket();
 
     path = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext(mimeType)}`;
 
-    const { error: up } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: '31536000', upsert: false });
-    if (up) throw up;
+    await uploadObject(BUCKET, path, buffer, { contentType: mimeType });
 
     const patchData = { payment_receipt_path: path, payment_status: 'receipt_uploaded', payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() };
     const { data: updated, error: ue } = await supabase.from('orders').update(patchData).eq('id', order.id).select('id,order_number,total,payment_status,payment_receipt_uploaded_at,payment_receipt_path').single();
@@ -132,8 +131,7 @@ async function handleReceiptUpload(req, res) {
 
     let signedReceiptUrl = '';
     try {
-      const { data: sData } = await supabase.storage.from(BUCKET).createSignedUrl(path, 86400);
-      signedReceiptUrl = sData?.signedUrl || '';
+      signedReceiptUrl = signedReadUrl(BUCKET, path, 86400);
     } catch {}
 
     try {

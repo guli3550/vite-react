@@ -1,3 +1,4 @@
+const { resolvePublicUrl } = require("./r2StorageRuntime.js");
 const crypto = require("crypto");
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
@@ -108,7 +109,7 @@ function installRoutes(app) {
   app.get("/api/settings/banner", async (_req,res)=>{
     try {
       const {data,error}=await db().from("category_settings").select("image_url").eq("slug","promo_banner").maybeSingle();
-      if(error) throw error; res.setHeader("Cache-Control","no-store, max-age=0"); res.json({success:true,url:data?.image_url||null});
+      if(error) throw error; res.setHeader("Cache-Control","no-store, max-age=0"); res.json({success:true,url:resolvePublicUrl(data?.image_url,"product-images")||null});
     } catch(error){ console.error("Get banner error:",error); res.status(500).json({success:false,message:"Banner rasmini yuklashda xatolik"}); }
   });
 
@@ -129,7 +130,7 @@ function installRoutes(app) {
       if(error) throw error;
       const banners=(data||[]).map((item,idx)=>{
         let meta={}; try{meta=JSON.parse(item.name||"{}")}catch{meta={title:item.name}};
-        return {id:item.slug.replace(/^banner_/,"")||`banner-${idx+1}`,imageUrl:item.image_url,title:meta.title||"Maxsus Taklif",subtitle:meta.subtitle||"",badgeText:meta.badgeText||"TOP SOTILGAN",ctaText:meta.ctaText||"Xarid qilish",actionType:meta.actionType||"catalog",actionTarget:meta.actionTarget||"",active:item.active!==false,createdAt:item.updated_at};
+        return {id:item.slug.replace(/^banner_/,"")||`banner-${idx+1}`,imageUrl:resolvePublicUrl(item.image_url,"product-images"),title:meta.title||"Maxsus Taklif",subtitle:meta.subtitle||"",badgeText:meta.badgeText||"TOP SOTILGAN",ctaText:meta.ctaText||"Xarid qilish",actionType:meta.actionType||"catalog",actionTarget:meta.actionTarget||"",active:item.active!==false,createdAt:item.updated_at};
       });
       publicBannerCache = { expiresAt: now + 30_000, data: banners };
       res.setHeader("Cache-Control","public, max-age=30, stale-while-revalidate=300");
@@ -156,7 +157,7 @@ function installRoutes(app) {
       const imageUrl=String(req.body?.image_url||"").trim();
       if(!imageUrl||!/^https?:\/\//i.test(imageUrl)) return res.status(400).json({success:false,message:"To‘g‘ri rasm URL manzili kerak"});
       const {data,error}=await db().from("category_settings").upsert({slug:"promo_banner",name:"Promo Banner",image_url:imageUrl,sort_order:999,active:true,updated_at:new Date().toISOString()},{onConflict:"slug"}).select("image_url").single();
-      if(error) throw error; res.json({success:true,url:data?.image_url});
+      if(error) throw error; res.json({success:true,url:resolvePublicUrl(data?.image_url,"product-images")});
     } catch(error){ console.error("Update banner error:",error); res.status(500).json({success:false,message:"Banner rasmini yangilashda xatolik"}); }
   });
 }

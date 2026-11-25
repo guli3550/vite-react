@@ -2,6 +2,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
+const { signedUploadUrl, resolvePublicUrl } = require("./r2StorageRuntime");
 
 let client;
 function db() {
@@ -20,8 +21,8 @@ function normalizeReel(row, comments = [], isLiked = false) {
   const author = row.author && typeof row.author === "object" ? row.author : {};
   return {
     id: String(row.id),
-    videoUrl: row.video_url || "",
-    posterUrl: row.poster_url || "",
+    videoUrl: resolvePublicUrl(row.video_url, "reels-media") || "",
+    posterUrl: resolvePublicUrl(row.poster_url, "reels-media") || "",
     caption: row.caption || "",
     musicTitle: row.music_title || undefined,
     author: {
@@ -248,10 +249,8 @@ install("post", "/api/admin/reels/upload-url", requireAdmin, async (req, res) =>
     const ext = (fileName.match(/\.([a-zA-Z0-9]{2,5})$/) || [])[1] || (isVideo ? "mp4" : "webp");
     const path = `${isVideo ? "videos" : "posters"}/${require("crypto").randomUUID()}.${ext.toLowerCase()}`;
     const bucket = "reels-media";
-    const { data, error } = await db().storage.from(bucket).createSignedUploadUrl(path);
-    if (error) throw error;
-    const publicUrl = db().storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    return res.json({ success: true, data: { path, token: data.token, publicUrl, bucket } });
+    const signed = signedUploadUrl(bucket, path, 600);
+    return res.json({ success: true, data: { path, signedUrl: signed.url, publicUrl: signed.publicUrl, bucket } });
   } catch (error) { return fail(res, error); }
 });
 

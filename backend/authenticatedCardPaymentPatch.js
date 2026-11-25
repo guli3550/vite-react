@@ -4,6 +4,7 @@ const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 const { verifyAccessToken } = require("./guliCustomAuth.js");
 const { install } = require("./routeRegistry.js");
+const { uploadObject } = require("./r2StorageRuntime.js");
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
@@ -58,8 +59,7 @@ install("post", "/api/auth/orders/:orderNumber/receipt", async (req, res) => {
     const buffer = decodeReceipt(data, mimeType);
     await ensureBucket();
     const path = `receipts/${order.id}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext(mimeType)}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: mimeType, cacheControl: "31536000", upsert: false });
-    if (uploadError) throw uploadError;
+    await uploadObject(BUCKET, path, buffer, { contentType: mimeType });
     const { data: updated, error: updateError } = await supabase.from("orders").update({ payment_receipt_path: path, payment_status: "receipt_uploaded", payment_receipt_uploaded_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", order.id).eq("auth_user_id", user.id).select("id,order_number,total,payment_status,payment_receipt_path").single();
     if (updateError) throw updateError;
     return res.json({ success: true, message: "Chek muvaffaqiyatli yuborildi. Admin tekshiradi.", data: updated });

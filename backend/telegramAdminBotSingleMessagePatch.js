@@ -1,3 +1,4 @@
+const { signedReadUrl } = require("./r2StorageRuntime.js");
 // GULI admin Telegram bot: receipt-first order notification.
 // There is intentionally NO "YANGI ORDER" admin notification.
 // The first admin notification for a card order is the receipt-upload event.
@@ -51,8 +52,7 @@ function imageUrl(item) {
 async function receiptUrl(o) {
   const path = String(o?.payment_receipt_path || "").replace(/^\/+/, "");
   if (!path || !db || /\.pdf$/i.test(path)) return "";
-  const { data } = await db.storage.from("payment-receipts").createSignedUrl(path, 3600);
-  return data?.signedUrl || "";
+  return signedReadUrl("payment-receipts", path, 3600);
 }
 async function getImage(url) {
   try {

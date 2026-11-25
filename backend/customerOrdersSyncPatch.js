@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
+const { signedReadUrl } = require('./r2StorageRuntime.js');
 const { verifyAccessToken } = require('./guliCustomAuth.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
@@ -145,8 +146,7 @@ async function listOrders(req, res) {
       let receiptUrl = '';
       if (row.payment_receipt_path) {
         try {
-          const { data: sData } = await supabase.storage.from('payment-receipts').createSignedUrl(String(row.payment_receipt_path).replace(/^\/+/, ''), 86400);
-          receiptUrl = sData?.signedUrl || '';
+          receiptUrl = signedReadUrl("payment-receipts", String(row.payment_receipt_path).replace(/^\/+/, ""), 86400);
         } catch {}
       }
       return mapOrder({ ...row, receipt_url: receiptUrl || undefined, last_name: undefined });

@@ -1,3 +1,4 @@
+const { signedReadUrl } = require("./r2StorageRuntime.js");
 // GULI ADMIN TELEGRAM BOT — single durable order message + online chat alerts.
 // One order => one admin message per admin chat. Receipt/status/payment changes edit that message in place.
 const { createClient } = require('@supabase/supabase-js');
@@ -53,7 +54,7 @@ function imageUrl(item) {
 async function receiptUrl(o) {
   const path = String(o?.payment_receipt_path || '').replace(/^\/+/, '');
   if (!path || !db || /\.pdf$/i.test(path)) return '';
-  const { data } = await db.storage.from('payment-receipts').createSignedUrl(path, 3600);
+  const data = { signedUrl: signedReadUrl('payment-receipts', path, 3600) };
   return data?.signedUrl || '';
 }
 async function getImage(url) {

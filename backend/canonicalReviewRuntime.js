@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
+const { uploadObject, resolvePublicUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
@@ -129,17 +130,6 @@ async function persistTelegramProfilePhoto(telegramId, photoUrl) {
   }
 }
 
-async function ensureReviewBucket() {
-  if (!supabase) throw new Error('Supabase sozlanmagan');
-  const existing = await supabase.storage.getBucket('review-images');
-  if (!existing.error) return;
-  const created = await supabase.storage.createBucket('review-images', {
-    public: true,
-    allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-    fileSizeLimit: '220KB',
-  });
-  if (created.error && !/already exists|duplicate/i.test(created.error.message || '')) throw created.error;
-}
 
 async function verifiedOrder(telegramId, productId, productCode) {
   const { data, error } = await supabase
@@ -171,7 +161,7 @@ install('get', '/api/reviews', async (req, res) => {
       .select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number')
       .eq('product_id', product.id).eq('status', 'approved').order('created_at', { ascending: false }).limit(100);
     if (error) throw error;
-    const rows = (data || []).map(row => ({ ...row, display_name: display(row), photos: Array.isArray(row.photos) ? row.photos : [] }));
+    const rows = (data || []).map(row => ({ ...row, display_name: display(row), photos: Array.isArray(row.photos) ? row.photos.map((url) => resolvePublicUrl(url, 'review-images')) : [] }));
     const liveSum = rows.reduce((sum, row) => sum + Number(row.rating || 0), 0);
     const legacyCount = Math.max(0, Number(product.reviews || 0));
     const legacyAverage = Math.max(0, Number(product.rating || 0));
@@ -225,13 +215,9 @@ install('post', '/api/reviews', requireCustomer, async (req, res) => {
       const parsed = parsePhoto(raw);
       if (!parsed) continue;
       try {
-        await ensureReviewBucket();
         const path = `${req.customerIdentity.telegram_id}/${product.id}/${Date.now()}-${crypto.randomBytes(5).toString('hex')}.${parsed.ext}`;
-        const uploaded = await supabase.storage.from('review-images').upload(path, parsed.buffer, { contentType: parsed.mime, cacheControl: '31536000', upsert: false });
-        if (!uploaded.error) {
-          const publicUrl = supabase.storage.from('review-images').getPublicUrl(path)?.data?.publicUrl;
-          if (publicUrl) photoUrls.push(publicUrl);
-        }
+        const uploaded = await uploadObject('review-images', path, parsed.buffer, { contentType: parsed.mime });
+        if (uploaded.url) photoUrls.push(uploaded.url);
       } catch (photoError) {
         console.warn('Review photo upload skipped:', photoError?.message || photoError);
       }

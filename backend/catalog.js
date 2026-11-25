@@ -1,4 +1,5 @@
 const { createClient } = require("@supabase/supabase-js");
+const { resolvePublicUrl } = require("./r2StorageRuntime.js");
 
 function getSupabaseClient() {
   const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/^['"]|['"]$/g, "");
@@ -55,8 +56,8 @@ const toProduct = (row) => ({
   category: row.category,
   price: Number(row.price || 0),
   oldPrice: row.old_price == null ? undefined : Number(row.old_price),
-  image: row.image || "",
-  images: toArray(row.images),
+  image: resolvePublicUrl(row.image, "product-images") || "",
+  images: toArray(row.images).map((url) => resolvePublicUrl(url, "product-images")),
   description: row.description || "",
   sizes: toArray(row.sizes),
   colors: toArray(row.colors),

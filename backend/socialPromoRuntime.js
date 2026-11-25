@@ -1,3 +1,4 @@
+const { uploadObject } = require("./r2StorageRuntime.js");
 // ============================================================================
 // GULI MARKET: ANIMATED SOCIAL PROMO BUTTONS RUNTIME & BACKEND API
 // ============================================================================
@@ -545,26 +546,13 @@ install("post", "/api/admin/social-promos/upload-logo", requireAdmin, async (req
     const client = getSupabaseClient();
     if (client) {
       try {
-        const bucketName = "review-images"; // reuse existing storage bucket
-        const { error: uploadError } = await client.storage
-          .from(bucketName)
-          .upload(filename, buffer, {
-            contentType: mime,
-            upsert: true,
+        const uploaded = await uploadObject("review-images", filename, buffer, { contentType: mime });
+        if (uploaded.url) {
+          return res.json({
+            success: true,
+            message: "Logo muvaffaqiyatli yuklandi ✓",
+            data: { url: uploaded.url },
           });
-
-        if (!uploadError) {
-          const { data: publicUrlData } = client.storage
-            .from(bucketName)
-            .getPublicUrl(filename);
-
-          if (publicUrlData?.publicUrl) {
-            return res.json({
-              success: true,
-              message: "Logo muvaffaqiyatli yuklandi ✓",
-              data: { url: publicUrlData.publicUrl },
-            });
-          }
         }
       } catch (e) {
         console.warn("[Social Promos] Storage upload fallback to data URI:", e.message);
