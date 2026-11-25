@@ -31,6 +31,9 @@ export function resolvePublicMediaUrl(value: unknown): string {
 
     // Keep the encoded object key and query string intact.
     const objectPath = match[2].replace(/^\/+/, "");
+    // Banner objects are resolved server-side only after a real R2 HEAD 200.
+    // Do not blanket-rewrite missing legacy banner URLs to R2.
+    if (bucket === "product-images" && objectPath.startsWith("banners/")) return raw;
     return `${R2_PUBLIC_BASE}/${bucket}/${objectPath}${url.search}`;
   } catch {
     return raw;
