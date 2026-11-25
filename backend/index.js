@@ -467,6 +467,10 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
           contentType: "image/webp",
           cacheControl: "public, max-age=31536000, immutable",
         });
+        const stored = await r2Storage.headObject(objectKey);
+        if (stored.contentType && !stored.contentType.toLowerCase().startsWith("image/webp")) {
+          throw new Error("R2 banner varianti noto‘g‘ri content-type bilan saqlandi");
+        }
         variants[width] = r2Storage.publicObjectUrl(objectKey);
       } else {
         const { error } = await supabase.storage.from(bucket).upload(variantPath, optimizedBuffer, {
