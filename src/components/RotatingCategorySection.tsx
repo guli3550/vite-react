@@ -7,6 +7,7 @@ import {
   type CategoryShowcaseItem,
 } from "../utils/categoryShowcase";
 import { GULI_LOGO_BASE64 } from "../utils/guliLogoBase64";
+import { resolvePublicMediaUrl } from "../utils/resolvePublicMediaUrl";
 import "./RotatingCategorySection.css";
 
 export type { CategoryInfo };
@@ -64,7 +65,7 @@ const RotatingCategoryCardBase: FC<RotatingCategoryCardProps> = ({
       <div className="catCardMedia">
         {currentItem?.imageUrl ? (
           <img
-            src={currentItem.imageUrl}
+            src={resolvePublicMediaUrl(currentItem.imageUrl)}
             alt={currentItem.title}
             className={isFading ? "catCardImg fading" : "catCardImg"}
             loading="lazy"

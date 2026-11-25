@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, type TouchEvent, type FC } from "react";
+import { resolvePublicMediaUrl } from "../utils/resolvePublicMediaUrl";
 
 export interface Product {
   id: number;
@@ -36,6 +37,7 @@ const placeholder = (name = "GULI") =>
   )}`;
 
 const formatImageUrl = (url: string) => {
+  url = resolvePublicMediaUrl(url);
   if (!url) return "";
   try {
     const u = new URL(url);
@@ -61,7 +63,7 @@ export const ProductImageGallery: FC<GalleryProps> = ({ product, detail = false,
 
   // Extract all available valid images
   const imageList = useMemo(() => {
-    const rawList = [product.image, ...(product.images || [])].filter(Boolean);
+    const rawList = [product.image, ...(product.images || [])].map(formatImageUrl).filter(Boolean);
     return rawList.length > 0 ? Array.from(new Set(rawList)) : [];
   }, [product.image, product.images]);
 

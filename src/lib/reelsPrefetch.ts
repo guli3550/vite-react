@@ -9,6 +9,7 @@ import {
   readSeen,
 } from "../utils/reelsFeedLogic";
 import { isInstagramUrl } from "../utils/instagramFetcher";
+import { resolvePublicMediaUrl } from "../utils/resolvePublicMediaUrl";
 
 /**
  * Warms the Reels feed while the customer is still on the home screen:
@@ -70,7 +71,7 @@ export function warmReelsMedia(ordered: readonly ReelItem[]): void {
     if (!reel.posterUrl) continue;
     const img = new Image();
     img.decoding = "async";
-    img.src = reel.posterUrl;
+    img.src = resolvePublicMediaUrl(reel.posterUrl);
     posterHolders.push(img);
   }
   if (posterHolders.length > 12) posterHolders.splice(0, posterHolders.length - 12);
@@ -82,7 +83,7 @@ export function warmReelsMedia(ordered: readonly ReelItem[]): void {
   video.preload = "auto";
   video.muted = true;
   video.playsInline = true;
-  video.src = first.videoUrl;
+  video.src = resolvePublicMediaUrl(first.videoUrl);
   video.load();
   warmVideo = video;
   // The player in the feed takes over; do not keep a decoder allocated forever.

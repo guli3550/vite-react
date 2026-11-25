@@ -6,6 +6,7 @@ import { getDeliveryEstimate } from "../utils/delivery";
 import { type Language } from "../utils/translations";
 import { extractAndNormalizePromoCode } from "../utils/qrPromoValidator";
 import { QrCodeScannerModal } from "./QrCodeScannerModal";
+import { resolvePublicMediaUrl } from "../utils/resolvePublicMediaUrl";
 
 interface CheckoutViewProps {
   onBack: () => void;
@@ -483,7 +484,7 @@ export const CheckoutView: React.FC<CheckoutViewProps> = ({
           {showOrderSummary && (
             <div style={{ borderTop: "1px solid var(--border-color)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
               {cart.map((item, idx) => {
-                const img = item.product.image || item.product.images?.[0] || "/placeholder.jpg";
+                const img = resolvePublicMediaUrl(item.product.image || item.product.images?.[0] || "") || "/placeholder.jpg";
                 return (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 8, borderBottom: idx < cart.length - 1 ? "1px dashed var(--border-color)" : "none" }}>
                     <img

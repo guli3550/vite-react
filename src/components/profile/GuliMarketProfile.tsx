@@ -11,6 +11,7 @@ import { PromosModal, DeliveryTermsModal } from "../ProfileExtraModals";
 import { FullscreenVideoAdModal } from "../videoAds/FullscreenVideoAdModal";
 import { SocialPromoSection } from "../socialPromo/SocialPromoSection";
 import "./GuliMarketProfile.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 interface GuliMarketProfileProps {
   onBack: () => void;
@@ -547,7 +548,7 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
               <>
                 <div className="brandProfileProductGrid">
                   {displayedProducts.slice(0, visibleProductCount).map((product) => {
-                    const imgUrl = product.image || product.images?.[0] || "";
+                    const imgUrl = resolvePublicMediaUrl(product.image || product.images?.[0] || "");
                     const priceFormatted = product.price
                       ? product.price.toLocaleString("uz-UZ") + " so‘m"
                       : "";
@@ -619,7 +620,7 @@ export const GuliMarketProfile: React.FC<GuliMarketProfileProps> = ({
                       aria-label={reel.caption || "Guli Market Reels videosi"}
                     >
                       <img
-                        src={reel.posterUrl}
+                        src={resolvePublicMediaUrl(reel.posterUrl)}
                         alt={reel.caption}
                         loading="lazy"
                         className="brandProfileReelPoster"

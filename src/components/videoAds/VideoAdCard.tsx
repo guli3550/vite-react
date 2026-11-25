@@ -6,6 +6,7 @@ import { getApiBaseUrl } from "../../lib/apiOrigin";
 import { detectPlatform } from "../../utils/platformAdapter";
 import { FullscreenVideoAdModal } from "./FullscreenVideoAdModal";
 import "./VideoAdCard.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 interface VideoAdCardProps {
   ad: VideoAd;
@@ -251,8 +252,8 @@ export const VideoAdCard: React.FC<VideoAdCardProps> = ({
               <>
                 <video
                   ref={videoRef}
-                  src={ad.video_url}
-                  poster={ad.poster_url || undefined}
+                  src={resolvePublicMediaUrl(ad.video_url)}
+                  poster={resolvePublicMediaUrl(ad.poster_url || "") || undefined}
                   className="guli-video-element"
                   playsInline
                   webkit-playsinline="true"

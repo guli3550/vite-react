@@ -24,6 +24,7 @@ import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
+import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 // App.tsx imports this module at start-up: warm the feed while the customer is still on the home screen.
 scheduleReelsWarmup();
@@ -359,7 +360,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
       if (poster) {
         const img = new Image();
         img.decoding = "async";
-        img.src = poster;
+        img.src = resolvePublicMediaUrl(poster);
       }
     }
   }, [pos, count]);
@@ -759,7 +760,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                   {/* Poster Image */}
                   {reel.posterUrl && (
                     <img
-                      src={reel.posterUrl}
+                      src={resolvePublicMediaUrl(reel.posterUrl)}
                       alt={reel.caption}
                       className={`reelsPoster ${
                         isActive && !hasError && isPlaying && !isLoadingVideo ? "hiddenBehindVideo" : ""
@@ -788,8 +789,8 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                     ) : (
                       <video
                         ref={getVideoRef(position)}
-                        src={reel.videoUrl}
-                        poster={reel.posterUrl || undefined}
+                        src={resolvePublicMediaUrl(reel.videoUrl)}
+                        poster={resolvePublicMediaUrl(reel.posterUrl) || undefined}
                         className="reelsVideoElement"
                         playsInline
                         loop
@@ -1010,7 +1011,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       style={{ textDecoration: "none", color: "inherit" }}
                     >
                       <div className="reelsProductThumbWrap">
-                        <img src={reel.promoImageUrl} alt={reel.promoText} className="reelsProductThumb" />
+                        <img src={resolvePublicMediaUrl(reel.promoImageUrl)} alt={reel.promoText} className="reelsProductThumb" />
                       </div>
                       <div className="reelsProductDetails">
                         <span className="reelsProductTitle">{reel.promoText}</span>
@@ -1035,7 +1036,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                       <div className="reelsProductThumbWrap">
                         <img
                           src={
-                            reel.productImage ||
+                            resolvePublicMediaUrl(reel.productImage || "") ||
                             "https://images.unsplash.com/photo-1596483785989-619f5637fa97?auto=format&fit=crop&w=120&q=80"
                           }
                           alt={reel.productName}
