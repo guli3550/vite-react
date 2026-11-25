@@ -25,11 +25,12 @@ self.addEventListener("activate", (event) => {
 });
 
 function isStorageImage(request, url) {
-  return (
-    request.destination === "image" &&
+  if (request.destination !== "image") return false;
+  const isSupabasePublic =
     /\.supabase\.(co|in)$/i.test(url.hostname) &&
-    url.pathname.indexOf("/storage/v1/object/public/") === 0
-  );
+    url.pathname.indexOf("/storage/v1/object/public/") === 0;
+  const isR2Public = url.hostname === "media.gulii.uz";
+  return isSupabasePublic || isR2Public;
 }
 
 async function trimImageCache(cache) {

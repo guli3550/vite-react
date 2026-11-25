@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
+const { createR2MediaStorage } = require("./r2MediaStorage");
 let sharp = null;
 try {
   sharp = require("sharp");
@@ -422,19 +423,29 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
     }
 
     const bucket = "product-images";
-    const existing = await supabase.storage.getBucket(bucket);
-    if (existing.error) {
-      const created = await supabase.storage.createBucket(bucket, {
-        public: true,
-        allowedMimeTypes: ["image/*"],
-        fileSizeLimit: "3MB",
+    const cleanFolder = folder === "banners" ? "banners" : "products";
+    let r2Storage = null;
+    if (cleanFolder === "banners") {
+      // Never recreate or write new banner media into the empty legacy Supabase bucket.
+      if (!process.env.R2_PUBLIC_BUCKET_NAME || !process.env.R2_PUBLIC_URL) {
+        return res.status(503).json({ success: false, message: "Bannerlar uchun R2_PUBLIC_BUCKET_NAME va R2_PUBLIC_URL sozlanmagan" });
+      }
+      r2Storage = createR2MediaStorage({
+        config: { bucket: process.env.R2_PUBLIC_BUCKET_NAME, publicBase: process.env.R2_PUBLIC_URL },
       });
-      if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) {
-        throw created.error;
+    } else {
+      const existing = await supabase.storage.getBucket(bucket);
+      if (existing.error) {
+        const created = await supabase.storage.createBucket(bucket, {
+          public: true,
+          allowedMimeTypes: ["image/*"],
+          fileSizeLimit: "3MB",
+        });
+        if (created.error && !/already exists|duplicate/i.test(created.error.message || "")) {
+          throw created.error;
+        }
       }
     }
-
-    const cleanFolder = folder === "banners" ? "banners" : "products";
     const baseName = `${cleanFolder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
     const inputBuffer = Buffer.from(data, "base64");
 
@@ -450,15 +461,27 @@ app.post("/api/admin/upload-image", requireAdmin, async (req, res) => {
         .toBuffer();
 
       const variantPath = `${baseName}-${width}.webp`;
-      const { error } = await supabase.storage.from(bucket).upload(variantPath, optimizedBuffer, {
-        contentType: "image/webp",
-        cacheControl: "31536000",
-        upsert: false,
-      });
-      if (error) throw error;
-
-      const { data: variantPublic } = supabase.storage.from(bucket).getPublicUrl(variantPath);
-      variants[width] = variantPublic.publicUrl;
+      if (r2Storage) {
+        const objectKey = `product-images/${variantPath}`;
+        await r2Storage.uploadObject(objectKey, optimizedBuffer, {
+          contentType: "image/webp",
+          cacheControl: "public, max-age=31536000, immutable",
+        });
+        const stored = await r2Storage.headObject(objectKey);
+        if (stored.contentType && !stored.contentType.toLowerCase().startsWith("image/webp")) {
+          throw new Error("R2 banner varianti noto‘g‘ri content-type bilan saqlandi");
+        }
+        variants[width] = r2Storage.publicObjectUrl(objectKey);
+      } else {
+        const { error } = await supabase.storage.from(bucket).upload(variantPath, optimizedBuffer, {
+          contentType: "image/webp",
+          cacheControl: "31536000",
+          upsert: false,
+        });
+        if (error) throw error;
+        const { data: variantPublic } = supabase.storage.from(bucket).getPublicUrl(variantPath);
+        variants[width] = variantPublic.publicUrl;
+      }
     }
 
     res.json({
