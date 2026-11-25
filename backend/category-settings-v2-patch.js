@@ -124,7 +124,7 @@ function installRoutes(app) {
   app.get("/api/banners", async (_req,res)=>{
     try {
       const now = Date.now();
-      if (publicBannerCache.data && publicBannerCache.expiresAt > now) {
+      if (_req.query.fresh !== "1" && publicBannerCache.data && publicBannerCache.expiresAt > now) {
         res.setHeader("Cache-Control","public, max-age=30, stale-while-revalidate=300");
         return res.json({success:true,data:publicBannerCache.data});
       }
