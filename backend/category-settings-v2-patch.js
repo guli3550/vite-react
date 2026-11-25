@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { resolveBannerMedia } = require("./bannerMedia");
 
 function getSupabase() {
   const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim().replace(/^['"]|['"]$/g, "");
@@ -108,7 +109,10 @@ function installRoutes(app) {
   app.get("/api/settings/banner", async (_req,res)=>{
     try {
       const {data,error}=await db().from("category_settings").select("image_url").eq("slug","promo_banner").maybeSingle();
-      if(error) throw error; res.setHeader("Cache-Control","no-store, max-age=0"); res.json({success:true,url:data?.image_url||null});
+      if(error) throw error;
+      const media = data?.image_url ? await resolveBannerMedia(data.image_url) : null;
+      res.setHeader("Cache-Control","no-store, max-age=0");
+      res.json({success:true,url:media && !media.missing ? media.url : null,mediaStatus:media?.missing?"missing":(media?.checked?"verified":"unchanged")});
     } catch(error){ console.error("Get banner error:",error); res.status(500).json({success:false,message:"Banner rasmini yuklashda xatolik"}); }
   });
 
@@ -127,10 +131,16 @@ function installRoutes(app) {
 
       const {data,error}=await db().from("category_settings").select("slug,name,image_url,sort_order,active,updated_at").like("slug","banner_%").order("sort_order",{ascending:true});
       if(error) throw error;
-      const banners=(data||[]).map((item,idx)=>{
+      const allBanners = await Promise.all((data||[]).map(async (item,idx)=>{
         let meta={}; try{meta=JSON.parse(item.name||"{}")}catch{meta={title:item.name}};
-        return {id:item.slug.replace(/^banner_/,"")||`banner-${idx+1}`,imageUrl:item.image_url,title:meta.title||"Maxsus Taklif",subtitle:meta.subtitle||"",badgeText:meta.badgeText||"TOP SOTILGAN",ctaText:meta.ctaText||"Xarid qilish",actionType:meta.actionType||"catalog",actionTarget:meta.actionTarget||"",active:item.active!==false,createdAt:item.updated_at};
-      });
+        const media = await resolveBannerMedia(item.image_url);
+        return {id:item.slug.replace(/^banner_/,"")||`banner-${idx+1}`,imageUrl:media.missing?"":media.url,title:meta.title||"Maxsus Taklif",subtitle:meta.subtitle||"",badgeText:meta.badgeText||"TOP SOTILGAN",ctaText:meta.ctaText||"Xarid qilish",actionType:meta.actionType||"catalog",actionTarget:meta.actionTarget||"",active:item.active!==false,createdAt:item.updated_at,_mediaMissing:media.missing};
+      }));
+      // Public storefront never sends inactive base64 image blobs or confirmed missing objects.
+      // Admin requests with fresh=1 retain inactive rows so they can be reviewed/replaced.
+      const banners = _req.query.fresh === "1"
+        ? allBanners.map(({_mediaMissing,...row})=>row)
+        : allBanners.filter(row=>row.active && !row._mediaMissing).map(({_mediaMissing,...row})=>row);
       publicBannerCache = { expiresAt: now + 30_000, data: banners };
       res.setHeader("Cache-Control","public, max-age=30, stale-while-revalidate=300");
       res.json({success:true,data:banners});
