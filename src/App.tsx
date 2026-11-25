@@ -45,6 +45,7 @@ import {
   syncBrowserAndTelegramChrome,
 } from "./utils/themeTransition";
 import { getApiBaseUrl } from "./lib/apiOrigin";
+import { resolvePublicMediaUrl } from "./utils/resolvePublicMediaUrl";
 import type { Banner } from "./admin/components/AdminBannersTab";
 import { SettingsModal } from "./components/SettingsModal";
 import { HelpSupportModal } from "./components/HelpSupportModal";
@@ -752,7 +753,7 @@ export default function App() {
         const res = await fetch(`${API_URL}/api/settings/banner`, { cache: "no-store" });
         if (!res.ok) return;
         const json = await res.json().catch(() => null);
-        setPromoBannerUrl(json?.success === true && typeof json.url === "string" ? json.url : "");
+        setPromoBannerUrl(json?.success === true && typeof json.url === "string" ? resolvePublicMediaUrl(json.url) : "");
       } catch {
         setPromoBannerUrl("");
       }
@@ -4393,11 +4394,11 @@ export default function App() {
                     <div key={banner.id || idx} className="heroSlideItem" onClick={handleBannerClick}>
                       {/* Background Image - 100% Natural, Vibrant and Crisp */}
                       <img
-                        src={banner.imageUrl || promoBannerUrl || placeholder("GULI")}
+                        src={resolvePublicMediaUrl(banner.imageUrl || promoBannerUrl) || placeholder("GULI")}
                         alt={banner.title || "Banner"}
                         className="heroSlideImg"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = promoBannerUrl;
+                          (e.target as HTMLImageElement).src = resolvePublicMediaUrl(promoBannerUrl) || placeholder("GULI");
                         }}
                         draggable={false}
                       />
