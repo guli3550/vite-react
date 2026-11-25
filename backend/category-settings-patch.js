@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
+const { resolveBannerMedia } = require("./bannerMedia");
 
 function getSupabaseClient() {
   const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "")
@@ -82,9 +83,9 @@ function bannerRowToPublic(item, idx) {
   };
 }
 
-async function loadBannerManifest() {
+async function loadBannerManifest(includeInactive = false) {
   const now = Date.now();
-  if (bannerCache.body && bannerCache.expiresAt > now) return bannerCache;
+  if (!includeInactive && bannerCache.body && bannerCache.expiresAt > now) return bannerCache;
   if (bannerInflight) return bannerInflight;
 
   bannerInflight = (async () => {
@@ -95,10 +96,27 @@ async function loadBannerManifest() {
         .like("slug", "banner_%")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      const body = JSON.stringify({ success: true, data: (data || []).map(bannerRowToPublic) });
+      const resolvedRows = await Promise.all((data || []).map(async (row, idx) => {
+        const item = bannerRowToPublic(row, idx);
+        // Inactive legacy base64 blobs are retained in the database for admin review,
+        // but are never sent to the public storefront or repeated as huge API payloads.
+        if (!item.active && String(item.imageUrl || "").startsWith("data:")) {
+          return { ...item, imageUrl: "", mediaMissing: false };
+        }
+        const media = await resolveBannerMedia(item.imageUrl);
+        return { ...item, imageUrl: media.missing ? "" : media.url, mediaMissing: media.missing };
+      }));
+      const publicRows = includeInactive
+        ? resolvedRows
+        : resolvedRows.filter((row) => row.active && !row.mediaMissing);
+      const body = JSON.stringify({
+        success: true,
+        data: publicRows.map(({ mediaMissing, ...row }) => row),
+      });
       const etag = 'W/"' + crypto.createHash("sha1").update(body).digest("base64url") + '"';
-      bannerCache = { expiresAt: Date.now() + BANNER_CACHE_TTL_MS, body, etag };
-      return bannerCache;
+      const manifest = { expiresAt: Date.now() + BANNER_CACHE_TTL_MS, body, etag };
+      if (!includeInactive) bannerCache = manifest;
+      return manifest;
     } catch (error) {
       // Serve the last good manifest rather than leaving the home screen without banners.
       if (bannerCache.body) {
@@ -435,8 +453,9 @@ function installRoutes(app) {
         .eq("slug", "promo_banner")
         .maybeSingle();
       if (error) throw error;
+      const media = data?.image_url ? await resolveBannerMedia(data.image_url) : null;
       res.setHeader("Cache-Control", "no-store, max-age=0");
-      res.json({ success: true, url: data?.image_url || null });
+      res.json({ success: true, url: media && !media.missing ? media.url : null });
     } catch (error) {
       console.error("Get banner error:", error);
       res.status(500).json({ success: false, message: "Banner rasmini yuklashda xatolik" });
@@ -445,7 +464,7 @@ function installRoutes(app) {
 
   route(app, "get", "/api/banners", async (req, res) => {
     try {
-      const manifest = await loadBannerManifest();
+      const manifest = await loadBannerManifest(req.query.fresh === "1");
       // `no-cache` = the browser may store it but must revalidate (ETag) before reuse.
       res.setHeader("Cache-Control", "public, no-cache");
       res.setHeader("ETag", manifest.etag);
