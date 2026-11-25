@@ -128,7 +128,7 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      // Supabase Storage signed-upload endpoint expects PUT for the raw file body.
+      // Cloudflare R2 presigned PUT endpoint accepts the raw file body.
       xhr.open("PUT", signedData.signedUrl);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
