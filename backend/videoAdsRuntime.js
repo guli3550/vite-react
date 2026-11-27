@@ -7,6 +7,20 @@ const crypto = require("crypto");
 const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
+const { createMediaUploadUrl, uploadMedia } = require("./r2StorageRuntime");
+
+function resolveVideoAdMediaUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const match = url.pathname.match(/^\/storage\/v1\/object\/public\/video-ads\/(.+)$/);
+    if (url.protocol === "https:" && url.hostname.endsWith(".supabase.co") && match) {
+      return "https://media.gulii.uz/video-ads/" + match[1] + url.search;
+    }
+  } catch {}
+  return raw;
+}
 
 function cleanEnv(val) {
   return String(val || "").trim().replace(/^['"]|['"]$/g, "");
@@ -74,7 +88,11 @@ install("get", "/api/video-ads", async (req, res) => {
           if (ad.starts_at && new Date(ad.starts_at).toISOString() > nowIso) return false;
           if (ad.ends_at && new Date(ad.ends_at).toISOString() < nowIso) return false;
           return true;
-        });
+        }).map((ad) => ({
+          ...ad,
+          video_url: resolveVideoAdMediaUrl(ad.video_url),
+          poster_url: resolveVideoAdMediaUrl(ad.poster_url),
+        }));
 
         res.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
         return res.json({ success: true, data: filtered });
@@ -194,6 +212,8 @@ install("get", "/api/admin/video-ads", requireAdmin, async (req, res) => {
       const st = statsByAd[ad.id] || { impressions: 0, clicks: 0 };
       return {
         ...ad,
+        video_url: resolveVideoAdMediaUrl(ad.video_url),
+        poster_url: resolveVideoAdMediaUrl(ad.poster_url),
         stats: {
           impressions: st.impressions,
           clicks: st.clicks,
@@ -475,25 +495,15 @@ install("post", "/api/admin/video-ads/upload-url", requireAdmin, async (req, res
     };
     const folder = mediaType === "video" ? "videos" : "posters";
     const path = folder + "/" + Date.now() + "-" + crypto.randomBytes(8).toString("hex") + "." + extensionByMime[mimeType];
-    const client = getSupabaseClient();
-    if (!client) {
-      return res.status(503).json({ success: false, message: "Supabase Storage ulanishi mavjud emas" });
-    }
-
-    const { data, error } = await client.storage.from("video-ads").createSignedUploadUrl(path);
-    if (error || !data?.signedUrl) {
-      console.error("[Video Ads] Signed upload URL error:", error?.message || "Missing signed URL");
-      return res.status(503).json({ success: false, message: "Yuklash havolasini yaratib bo‘lmadi" });
-    }
-
-    const { data: publicData } = client.storage.from("video-ads").getPublicUrl(path);
+    const upload = createMediaUploadUrl("video-ads", path, 600);
     return res.json({
       success: true,
-      signedUrl: data.signedUrl,
-      token: data.token,
-      path: data.path || path,
-      url: publicData?.publicUrl || null,
+      signedUrl: upload.uploadUrl,
+      uploadUrl: upload.uploadUrl,
+      path,
+      url: upload.publicUrl,
       maxBytes,
+      storage: "r2",
     });
   } catch (error) {
     console.error("[Video Ads] Signed upload URL handler error:", error.message);
@@ -548,32 +558,11 @@ install("post", "/api/admin/video-ads/upload", requireAdmin, async (req, res) =>
     const folder = isVideo ? "videos" : "posters";
     const fileName = `${folder}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${extClean}`;
 
-    const client = getSupabaseClient();
-    if (!client) {
-      return res.status(503).json({
-        success: false,
-        message: "Supabase Storage ulanishi mavjud emas. Iltimos, to‘g‘ridan-to‘g‘ri video URL kiriting.",
-      });
-    }
-
-    const { error: uploadError } = await client.storage
-      .from("video-ads")
-      .upload(fileName, buffer, {
-        contentType: safeMime,
-        cacheControl: "31536000",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error("[Video Ads] Storage upload error:", uploadError);
-      return res.status(500).json({
-        success: false,
-        message: "Storage'ga yuklashda xatolik: " + uploadError.message,
-      });
-    }
-
-    const publicRes = client.storage.from("video-ads").getPublicUrl(fileName);
-    const publicUrl = publicRes?.data?.publicUrl;
+    const uploaded = await uploadMedia("video-ads", fileName, buffer, {
+      contentType: safeMime,
+      cacheControl: "public, max-age=31536000, immutable",
+    });
+    const publicUrl = uploaded.url;
 
     if (!publicUrl) {
       return res.status(500).json({ success: false, message: "Public URL olinmadi" });
