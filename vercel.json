@@ -86,6 +86,16 @@
     },
     {
       "source": "/api/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "vite-react-git-feat-r2-reels-video-ads-mainline-guli3550.vercel.app"
+        }
+      ],
+      "destination": "https://guli-lingerie-api-r2-preview.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/:path*",
       "destination": "https://guli-lingerie-api.onrender.com/api/:path*"
     },
     {
