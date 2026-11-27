@@ -236,12 +236,25 @@ export async function uploadReelMedia(file: File): Promise<string> {
     method: "POST",
     body: JSON.stringify({ fileName: file.name, contentType }),
   }, true);
-  if (!signed.uploadUrl || !signed.publicUrl) throw new Error("R2 yuklash havolasi to‘liq emas");
-  const uploaded = await fetch(signed.uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" },
-    body: file,
-  });
-  if (!uploaded.ok) throw new Error("R2 Reels yuklashda xatolik (HTTP " + uploaded.status + ")");
+  if (!signed?.uploadUrl || !signed?.publicUrl) {
+    const returnedFields = signed && typeof signed === "object" ? Object.keys(signed).join(", ") : "data yo‘q";
+    throw new Error(
+      "Preview API R2 upload javobini qaytarmadi. Kutilgan: uploadUrl va publicUrl. Olingan maydonlar: " +
+      returnedFields + ". Preview /api rewrite va Render R2 backendini tekshiring."
+    );
+  }
+  let uploaded: Response;
+  try {
+    uploaded = await fetch(signed.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" },
+      body: file,
+    });
+  } catch {
+    throw new Error("R2 ga ulanish amalga oshmadi. CORS, R2 presigned URL yoki internet ulanishini tekshiring.");
+  }
+  if (!uploaded.ok) {
+    throw new Error("R2 Reels yuklash rad etildi (HTTP " + uploaded.status + "). Render va R2 loglarini tekshiring.");
+  }
   return signed.publicUrl;
 }
