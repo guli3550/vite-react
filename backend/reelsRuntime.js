@@ -14,6 +14,24 @@ function db() {
   client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return client;
 }
+const commentRateBuckets = new Map();
+function consumeCommentRateLimit(key, max, windowMs = 10 * 60 * 1000) {
+  const now = Date.now();
+  const current = commentRateBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    commentRateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+  } else {
+    if (current.count >= max) return false;
+    current.count += 1;
+  }
+  if (commentRateBuckets.size > 5000) {
+    for (const [bucketKey, bucket] of commentRateBuckets) {
+      if (bucket.resetAt <= now) commentRateBuckets.delete(bucketKey);
+    }
+  }
+  return true;
+}
+
 function fail(res, error, status = 500) {
   console.error("[Reels API]", error?.message || error);
   return res.status(status).json({ success: false, message: status === 500 ? "Reels server xatoligi. Ma'lumotlar bazasi migratsiyasini tekshiring." : String(error?.message || error) });
@@ -253,7 +271,16 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
     } else if (!isVerifiedTelegramCustomer) {
       guestKey = String(req.body?.guestKey || req.headers["x-guli-guest-key"] || "").trim();
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
+      const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+      const clientIp = String(req.ip || forwarded || "unknown").slice(0, 120);
+      const guestRateKey = "guest:" + require("crypto").createHash("sha256").update(clientIp + ":" + guestKey).digest("hex");
+      if (!consumeCommentRateLimit(guestRateKey, 3)) {
+        return fail(res, new Error("Juda ko‘p izoh yuborildi. 10 daqiqadan keyin qayta urinib ko‘ring."), 429);
+      }
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
+    }
+    if (authorUserId && !consumeCommentRateLimit("customer:" + authorUserId, 10)) {
+      return fail(res, new Error("Juda ko‘p izoh yuborildi. Birozdan keyin qayta urinib ko‘ring."), 429);
     }
     const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || "/guli-logo.png", body };
     const { data, error } = await db().from("reel_comments").insert(row).select("*").single();
