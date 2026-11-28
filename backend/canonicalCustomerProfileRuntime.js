@@ -65,7 +65,7 @@ async function canonicalUser(req) {
     if (error) throw error;
     if (data) return { row: data, source: 'telegram', telegram };
     const { data: customer, error: customerError } = await db.from('customers')
-      .select('id,telegram_id,full_name,username,avatar_url,phone,created_at,updated_at')
+      .select('id,telegram_id,full_name,avatar_url,phone,created_at,updated_at')
       .eq('telegram_id', Number(telegram.id)).maybeSingle();
     if (customerError) throw customerError;
     if (customer) return { row: customer, source: 'telegram-customer', telegram };
