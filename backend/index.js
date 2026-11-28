@@ -754,7 +754,7 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
       if (!canonicalError && Array.isArray(canonicalUsers)) {
         for (const profile of canonicalUsers) {
           const key = `tg_${profile.telegram_id}`;
-          const parts = String(profile.full_name || "").trim().split(/\\s+/).filter(Boolean);
+          const parts = String(profile.full_name || "").trim().split(/[ ]+/).filter(Boolean);
           const existing = usersMap.get(key) || {
             id: key,
             telegram_id: Number(profile.telegram_id),
