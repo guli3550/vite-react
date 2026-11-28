@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
+const { uploadTelegramAvatarToR2 } = require('./customerAvatarR2.js');
+const { isR2MediaUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
@@ -110,22 +112,43 @@ function parsePhoto(value) {
 
 async function persistTelegramProfilePhoto(telegramId, photoUrl) {
   const id = Number(telegramId);
-  const url = String(photoUrl || '').trim();
-  if (!Number.isSafeInteger(id) || id <= 0 || !/^https:\/\//i.test(url)) return;
+  const sourceUrl = String(photoUrl || '').trim();
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
   try {
-    // The photo_url comes from Telegram's validated WebApp initData. Keep the
-    // canonical Telegram photo URL on users so browser profile + chat can use
-    // the same durable source. Never let this auxiliary sync block a review.
-    await supabase.from('users')
-      .update({ telegram_photo_url: url, updated_at: new Date().toISOString() })
+    const { data: current, error: currentError } = await supabase.from('users')
+      .select('telegram_photo_url')
+      .eq('telegram_id', id)
+      .maybeSingle();
+    if (currentError) throw currentError;
+    const currentUrl = String(current?.telegram_photo_url || '').trim();
+    if (isR2MediaUrl(currentUrl)) return currentUrl;
+
+    let publicUrl = isR2MediaUrl(sourceUrl) ? sourceUrl : null;
+    if (!publicUrl && sourceUrl) {
+      try {
+        publicUrl = await uploadTelegramAvatarToR2({ telegramId: id, photoUrl: sourceUrl });
+      } catch (uploadError) {
+        console.warn('Telegram avatar R2 upload skipped:', uploadError?.message || uploadError);
+      }
+    }
+    if (!publicUrl) return currentUrl || null;
+
+    const { error: userError } = await supabase.from('users')
+      .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
       .eq('telegram_id', id);
-    // Do not overwrite a customer's manually uploaded avatar.
-    await supabase.from('customers')
-      .update({ avatar_url: url, updated_at: new Date().toISOString() })
+    if (userError) throw userError;
+
+    // Keep the legacy customer avatar field in sync only when it is empty;
+    // public profile consumers should prefer users.telegram_photo_url.
+    const { error: customerError } = await supabase.from('customers')
+      .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
       .eq('telegram_id', id)
       .is('avatar_url', null);
+    if (customerError) console.warn('Legacy customer avatar sync skipped:', customerError.message);
+    return publicUrl;
   } catch (error) {
-    console.warn('Telegram profile photo sync skipped:', error?.message || error);
+    console.warn('Telegram profile photo R2 sync skipped:', error?.message || error);
+    return null;
   }
 }
 
@@ -237,13 +260,17 @@ install('post', '/api/reviews', requireCustomer, async (req, res) => {
       }
     }
 
+    const canonicalAvatarUrl = await persistTelegramProfilePhoto(
+      req.customerIdentity.telegram_id,
+      req.customerIdentity.photo_url
+    );
     const row = {
       product_id: product.id,
       product_code: code,
       telegram_id: req.customerIdentity.telegram_id,
       username: req.customerIdentity.username || null,
       first_name: req.customerIdentity.first_name || null,
-      photo_url: req.customerIdentity.photo_url || null,
+      photo_url: canonicalAvatarUrl,
       rating,
       comment,
       photos: photoUrls,
@@ -255,7 +282,6 @@ install('post', '/api/reviews', requireCustomer, async (req, res) => {
     };
     const { data, error } = await supabase.from('product_reviews').insert([row]).select('id,rating,comment,photos,first_name,photo_url,created_at,verified_purchase,order_number').single();
     if (error) throw error;
-    await persistTelegramProfilePhoto(req.customerIdentity.telegram_id, req.customerIdentity.photo_url);
     res.status(201).json({ success: true, message: 'Sharhingiz e’lon qilindi ✓', data: { ...data, display_name: display(data) } });
   } catch (error) {
     console.error('Canonical review POST:', error);
