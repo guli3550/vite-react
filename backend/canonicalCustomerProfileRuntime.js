@@ -68,7 +68,7 @@ async function canonicalUser(req) {
       .select('id,telegram_id,full_name,avatar_url,phone,created_at,updated_at')
       .eq('telegram_id', Number(telegram.id)).maybeSingle();
     if (customerError) throw customerError;
-    if (customer) return { row: customer, source: 'telegram-customer', telegram };
+    if (customer) return { row: { ...customer, username: telegram.username || null }, source: 'telegram-customer', telegram };
   }
   return null;
 }
@@ -213,6 +213,7 @@ async function sync(req, res) {
     } else {
       row = {
         ...synced.customer,
+        username: telegram.username || null,
         telegram_username: telegram.username || null,
         telegram_photo_url: synced.avatarUrl,
       };
