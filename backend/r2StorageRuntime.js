@@ -2,7 +2,7 @@
 
 const { createR2MediaStorage } = require("./r2MediaStorage");
 
-const PUBLIC_BUCKETS = new Set(["reels-media", "video-ads", "product-images", "review-images"]);
+const PUBLIC_BUCKETS = new Set(["reels-media", "video-ads", "product-images", "review-images", "avatars"]);
 const PRIVATE_BUCKETS = new Set(["chat-media", "payment-receipts"]);
 const clients = new Map();
 
