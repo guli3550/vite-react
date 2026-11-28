@@ -12,6 +12,19 @@ async function fetchWithTimeout(url, options = {}) {
   return fetch(url, { ...options, signal: AbortSignal.timeout(12_000) });
 }
 
+async function telegramProfileFileId(telegramId) {
+  if (!TELEGRAM_BOT_TOKEN) return "";
+  const response = await fetchWithTimeout(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUserProfilePhotos`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ user_id: Number(telegramId), limit: 1 }),
+  });
+  const payload = await response.json().catch(() => null);
+  const sizes = payload?.ok && Array.isArray(payload.result?.photos) ? payload.result.photos[0] : null;
+  if (!Array.isArray(sizes) || !sizes.length) return "";
+  return String(sizes[sizes.length - 1]?.file_id || "");
+}
+
 async function telegramFileUrl(fileId) {
   if (!TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN sozlanmagan");
   const response = await fetchWithTimeout(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile`, {
@@ -61,8 +74,14 @@ async function uploadTelegramAvatarToR2({ telegramId, photoUrl, fileId }) {
       console.warn("[Customer avatar] Telegram photo_url download skipped:", error.message);
     }
   }
-  if (!source && fileId) {
-    const url = await telegramFileUrl(fileId);
+  let resolvedFileId = String(fileId || "");
+  if (!source && !resolvedFileId) {
+    try { resolvedFileId = await telegramProfileFileId(id); } catch (error) {
+      console.warn("[Customer avatar] Telegram profile file lookup skipped:", error.message);
+    }
+  }
+  if (!source && resolvedFileId) {
+    const url = await telegramFileUrl(resolvedFileId);
     source = await downloadImage(url);
   }
   if (!source) return null;
@@ -95,4 +114,4 @@ async function uploadTelegramAvatarToR2({ telegramId, photoUrl, fileId }) {
   return uploaded.url;
 }
 
-module.exports = { uploadTelegramAvatarToR2, safeTelegramPhotoUrl };
+module.exports = { uploadTelegramAvatarToR2, safeTelegramPhotoUrl, telegramProfileFileId };
