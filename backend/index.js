@@ -836,7 +836,11 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
             const existing = usersMap.get(key);
             // Telegram users are inserted first; merge the canonical customer avatar
             // instead of discarding it because the key already exists.
-            if (c.avatar_url && !existing.photo_url && !existing.avatar_url) existing.photo_url = c.avatar_url;
+            if (c.avatar_url) {
+              existing.photo_url = c.avatar_url;
+              existing.avatar_url = c.avatar_url;
+              existing.customer_photo_url = c.avatar_url;
+            }
             if (c.phone && !existing.phone) existing.phone = c.phone;
             if (c.full_name && !existing.first_name) {
               const parts = String(c.full_name).trim().split(/\s+/);
