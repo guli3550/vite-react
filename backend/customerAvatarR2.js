@@ -78,6 +78,11 @@ async function uploadTelegramAvatarToR2({ telegramId, photoUrl, fileId }) {
     .webp({ quality: 84, effort: 4 })
     .toBuffer();
 
+  const publicBucket = String(process.env.R2_PUBLIC_BUCKET_NAME || process.env.R2_BUCKET_NAME || "").trim();
+  if (publicBucket !== "guli-market-media") {
+    throw new Error("Avatarlar faqat guli-market-media public bucket'iga yuklanishi mumkin");
+  }
+
   const digest = crypto.createHash("sha256").update(webp).digest("hex").slice(0, 20);
   const path = `${id}/${digest}.webp`;
   const uploaded = await uploadMedia("avatars", path, webp, {
