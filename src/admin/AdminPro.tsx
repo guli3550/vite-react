@@ -142,6 +142,7 @@ type User = {
   created_at?: string;
   photo_url?: string;
   avatar_url?: string;
+  telegram_photo_url?: string;
   telegram_photo?: string;
   orders_count?: number;
   total_spent?: number;
@@ -153,6 +154,7 @@ function getResolvedCustomerPhoto(u: any, photosMap?: Record<string | number, st
   const fromMap = tgId && photosMap ? (photosMap[tgId] || (photosMap as any)[u.telegram_id]) : "";
   const direct =
     u.customer_photo_url ||
+    u.telegram_photo_url ||
     u.avatar_url ||
     u.photo_url ||
     fromMap ||
@@ -501,7 +503,7 @@ export default function AdminPro() {
     const base = (sessionStorage.getItem("guli_custom_api_url") || API).replace(/\/$/, "");
     if (!adminToken || !users.length) return;
 
-    const missingUsers = users.filter((u) => u.telegram_id && !userPhotosMap[u.telegram_id]);
+    const missingUsers = users.filter((u) => u.telegram_id && !getResolvedCustomerPhoto(u, userPhotosMap));
     if (!missingUsers.length) return;
 
     missingUsers.slice(0, 30).forEach((u) => {
