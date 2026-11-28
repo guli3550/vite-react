@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
 const { issueAccessToken, issueRefreshToken, rotateRefreshToken } = require('./guliCustomAuth.js');
-const { uploadTelegramAvatarToR2 } = require('./customerAvatarR2.js');
+const { uploadTelegramAvatarToR2, telegramProfileFileId } = require('./customerAvatarR2.js');
 const { isR2MediaUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
@@ -64,7 +64,6 @@ async function refreshTelegramPhotoUrl(telegramId, verifiedPhotoUrl = "") {
       .maybeSingle();
     if (currentError) throw currentError;
     const currentUrl = String(current?.telegram_photo_url || '').trim();
-    if (isR2MediaUrl(currentUrl)) return currentUrl;
 
     const { data: tg, error: tgError } = await supabase
       .from('telegram_users')
@@ -76,28 +75,26 @@ async function refreshTelegramPhotoUrl(telegramId, verifiedPhotoUrl = "") {
     let fileId = Array.isArray(tg?.profile_photos) && tg.profile_photos.length
       ? String(tg.profile_photos[0] || '')
       : '';
-
-    if (!fileId && TELEGRAM_BOT_TOKEN) {
-      try {
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${id}`, {
-          signal: AbortSignal.timeout(10000),
-        });
-        const result = await response.json().catch(() => null);
-        if (response.ok && result?.ok) {
-          fileId = String(result.result?.photo?.big_file_id || result.result?.photo?.small_file_id || '');
-        }
-      } catch (error) {
-        console.warn('[auth] Telegram getChat avatar lookup skipped:', error.message);
-      }
+    let latestFileId = fileId;
+    try {
+      latestFileId = await telegramProfileFileId(id) || fileId;
+    } catch (error) {
+      console.warn('[auth] Telegram latest profile photo lookup skipped:', error.message);
+    }
+    if (isR2MediaUrl(currentUrl) && latestFileId && latestFileId === fileId && !verifiedPhotoUrl) {
+      return currentUrl;
+    }
+    if (isR2MediaUrl(currentUrl) && !latestFileId && !verifiedPhotoUrl) {
+      return currentUrl;
     }
 
-    const sourceUrl = String(verifiedPhotoUrl || currentUrl || '').trim();
+    const sourceUrl = String(verifiedPhotoUrl || (isR2MediaUrl(currentUrl) ? '' : currentUrl) || '').trim();
     let publicUrl = null;
     try {
       publicUrl = await uploadTelegramAvatarToR2({
         telegramId: id,
         photoUrl: sourceUrl,
-        fileId,
+        fileId: latestFileId || fileId,
       });
     } catch (error) {
       // Avatar storage is best-effort: an R2 outage must not block a verified
@@ -113,10 +110,10 @@ async function refreshTelegramPhotoUrl(telegramId, verifiedPhotoUrl = "") {
         console.warn('[auth] Canonical R2 avatar URL save skipped:', updateError.message);
         return currentUrl || null;
       }
-      if (fileId) {
+      if (latestFileId || fileId) {
         const { error: photoError } = await supabase.from('telegram_users').upsert({
           telegram_id: id,
-          profile_photos: [fileId],
+          profile_photos: [latestFileId || fileId],
           profile_photo_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'telegram_id' });
