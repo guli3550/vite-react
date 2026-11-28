@@ -9,8 +9,8 @@
   const STORE_TEXT = "🛍 Do‘konni ochish";
   const paymentLabels = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
   const removeReplyKeyboard = { remove_keyboard: true };
-  const AUTH_KEY = process.env.SUPABASE_SECRET_KEY || "guli-auth";
-  const authHash = (value) => crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex");
+  const AUTH_KEY = String(process.env.AUTH_JWT_SECRET || "").trim();
+  const authHash = (value) => { if (AUTH_KEY.length < 32) throw new Error("AUTH_JWT_SECRET must be configured"); return crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex"); };
   const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
   const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
 
