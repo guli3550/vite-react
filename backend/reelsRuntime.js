@@ -196,7 +196,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
     if (!exists.data) return fail(res, new Error("Reels topilmadi"), 404);
     const authHeader = String(req.headers.authorization || "");
     const telegramInitData = String(req.headers["x-telegram-init-data"] || "");
-    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null;
+    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null, isVerifiedTelegramCustomer = false;
     let claims = null;
     if (authHeader.startsWith("Bearer ")) {
       try { claims = verifyAccessToken(authHeader.slice(7).trim()); } catch {}
@@ -226,8 +226,21 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!telegramId) return fail(res, new Error("Telegram sessiyasi yaroqsiz. Mini App’ni qayta oching."), 401);
       const profile = await db().from("users").select("*").eq("telegram_id", telegramId).maybeSingle();
       if (profile.error) throw profile.error;
-      if (!profile.data) return fail(res, new Error("Telegram foydalanuvchi profili topilmadi"), 401);
-      claims = { sub: String(profile.data.id) };
+      if (profile.data) {
+        claims = { sub: String(profile.data.id) };
+      } else {
+        // Telegram Mini App customers are registered in public.customers before
+        // they complete the optional phone-verification/browser-login flow.
+        const customer = await db().from("customers")
+          .select("id,telegram_id,full_name,avatar_url")
+          .eq("telegram_id", telegramId)
+          .maybeSingle();
+        if (customer.error) throw customer.error;
+        if (!customer.data) return fail(res, new Error("Telegram mijoz profili topilmadi. Sahifani yangilang."), 401);
+        isVerifiedTelegramCustomer = true;
+        authorName = String(customer.data.full_name || "").trim() || "GULI mijozi";
+        authorAvatar = String(customer.data.avatar_url || "").trim();
+      }
     }
     if (claims?.sub) {
       const profile = await db().from("users").select("*").eq("id", String(claims.sub)).maybeSingle();
@@ -237,7 +250,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       authorUserId = String(user.id);
       authorName = String(user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.telegram_username || user.username || "").trim() || "GULI mijozi";
       authorAvatar = await resolveCustomerAvatar(user);
-    } else {
+    } else if (!isVerifiedTelegramCustomer) {
       guestKey = String(req.body?.guestKey || req.headers["x-guli-guest-key"] || "").trim();
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
