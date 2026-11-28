@@ -50,7 +50,7 @@ async function bridge(req, res, next) {
       .eq('id', String(claims.sub))
       .maybeSingle();
     if (error || !user?.telegram_id) return next();
-    const nameParts = String(user.full_name || '').trim().split(/\\s+/).filter(Boolean);
+    const nameParts = String(user.full_name || '').trim().split(/[ ]+/).filter(Boolean);
     const internalInitData = makeInternalTelegramInitData({
       telegram_id: user.telegram_id,
       first_name: nameParts[0] || '',
