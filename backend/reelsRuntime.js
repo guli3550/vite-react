@@ -275,7 +275,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
       const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const clientIp = String(req.ip || forwarded || "unknown").slice(0, 120);
-      const guestRateKey = "guest:" + require("crypto").createHash("sha256").update(clientIp + ":" + guestKey).digest("hex");
+      const guestRateKey = "guest-ip:" + require("crypto").createHash("sha256").update(clientIp).digest("hex");
       commentRateKey = guestRateKey;
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
     }
