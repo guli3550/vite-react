@@ -92,18 +92,19 @@ async function syncTelegramCustomerProfile(telegram) {
   const fileId = Array.isArray(tgRow?.profile_photos) ? String(tgRow.profile_photos[0] || '') : '';
   const previousAvatar = String(canonicalUser?.telegram_photo_url || existing?.avatar_url || '').trim();
 
-  let avatarUrl = isR2MediaUrl(previousAvatar) ? previousAvatar : null;
-  if (!avatarUrl) {
-    try {
-      avatarUrl = await uploadTelegramAvatarToR2({
-        telegramId,
-        photoUrl: telegram.photo_url || previousAvatar,
-        fileId,
-      });
-    } catch (error) {
-      console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
-    }
+  // Telegram photo_url is refreshed with initData. Re-uploading is idempotent:
+  // content-hash object keys reuse the same R2 object when the photo is unchanged.
+  let avatarUrl = null;
+  try {
+    avatarUrl = await uploadTelegramAvatarToR2({
+      telegramId,
+      photoUrl: telegram.photo_url || (isR2MediaUrl(previousAvatar) ? '' : previousAvatar),
+      fileId,
+    });
+  } catch (error) {
+    console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
   }
+  if (!avatarUrl && isR2MediaUrl(previousAvatar)) avatarUrl = previousAvatar;
 
   const now = new Date().toISOString();
   const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim() || null;
