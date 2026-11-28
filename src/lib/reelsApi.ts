@@ -243,18 +243,33 @@ export async function uploadReelMedia(file: File): Promise<string> {
       returnedFields + ". Preview /api rewrite va Render R2 backendini tekshiring."
     );
   }
-  let uploaded: Response;
-  try {
-    uploaded = await fetch(signed.uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType, "Cache-Control": "public, max-age=31536000, immutable" },
-      body: file,
-    });
-  } catch {
-    throw new Error("R2 ga ulanish amalga oshmadi. CORS, R2 presigned URL yoki internet ulanishini tekshiring.");
-  }
-  if (!uploaded.ok) {
-    throw new Error("R2 Reels yuklash rad etildi (HTTP " + uploaded.status + "). Render va R2 loglarini tekshiring.");
-  }
+  // Use XHR, matching the already-working Video Ads uploader. This also
+  // exposes the actual HTTP status and upload progress instead of hiding all
+  // browser network/CORS failures behind fetch's generic TypeError.
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signed.uploadUrl);
+    xhr.timeout = 180000;
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      const detail = (xhr.responseText || "").slice(0, 180);
+      reject(new Error(
+        "R2 Reels yuklash rad etildi (HTTP " + xhr.status + ")" +
+        (detail ? ": " + detail : "") + ". R2 javobi va bucket sozlamalarini tekshiring."
+      ));
+    };
+    xhr.onerror = () => reject(new Error(
+      "Reels videosi R2 ga yuborilmadi: brauzer CORS/preflight yoki tarmoq xatosi. " +
+      "R2 bucket CORS sozlamasida aynan Preview domeni uchun PUT, OPTIONS, Content-Type va Cache-Control ruxsatlarini tekshiring."
+    ));
+    xhr.ontimeout = () => reject(new Error("R2 video yuklash vaqti tugadi (180 soniya). Internetni tekshirib qayta urinib ko‘ring."));
+    xhr.onabort = () => reject(new Error("R2 video yuklash bekor qilindi."));
+    xhr.send(file);
+  });
   return signed.publicUrl;
 }
