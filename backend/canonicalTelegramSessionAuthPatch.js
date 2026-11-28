@@ -41,7 +41,7 @@ const SESSION_TTL_MS = 5 * 60 * 1000; // matches CustomerAuthModal's 300000ms po
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assertSecret() {
-  if (SECRET.length < 32) throw new Error('AUTH_JWT_SECRET (or SUPABASE_SECRET_KEY) must be configured with at least 32 characters');
+  if (SECRET.length < 32) throw new Error('AUTH_JWT_SECRET must be configured with at least 32 characters');
 }
 function hashTicket(ticket) {
   assertSecret();
