@@ -3,9 +3,9 @@
 // The backend signs short-lived customer JWTs and stores only hashed refresh tokens.
 const crypto = require("crypto");
 
-// Prefer a dedicated secret. A server-only Supabase secret remains a fallback
-// for deployments where AUTH_JWT_SECRET has not yet been provisioned.
-const SECRET = String(process.env.AUTH_JWT_SECRET || process.env.SUPABASE_SECRET_KEY || "").trim();
+// Customer JWTs must use a dedicated, server-only secret. Never reuse the
+// Supabase service-role key as an authentication signing key.
+const SECRET = String(process.env.AUTH_JWT_SECRET || "").trim();
 const ACCESS_TTL_SEC = 15 * 60;
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 function b64url(value) { return Buffer.from(value).toString("base64url"); }
