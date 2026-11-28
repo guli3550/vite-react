@@ -276,9 +276,6 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
       const clientIp = String(req.ip || forwarded || "unknown").slice(0, 120);
       const guestRateKey = "guest:" + require("crypto").createHash("sha256").update(clientIp + ":" + guestKey).digest("hex");
-      if (!consumeCommentRateLimit(guestRateKey, 3)) {
-        return fail(res, new Error("Juda ko‘p izoh yuborildi. 10 daqiqadan keyin qayta urinib ko‘ring."), 429);
-      }
       commentRateKey = guestRateKey;
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
     }
