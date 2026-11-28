@@ -136,15 +136,27 @@ async function persistTelegramProfilePhoto(telegramId, photoUrl) {
     const { error: userError } = await supabase.from('users')
       .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
       .eq('telegram_id', id);
-    if (userError) throw userError;
+    if (userError) console.warn('Canonical users avatar sync skipped:', userError.message);
 
-    // Keep the legacy customer avatar field in sync only when it is empty;
-    // public profile consumers should prefer users.telegram_photo_url.
-    const { error: customerError } = await supabase.from('customers')
-      .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+    const { data: customer, error: customerReadError } = await supabase.from('customers')
+      .select('id')
       .eq('telegram_id', id)
-      .is('avatar_url', null);
-    if (customerError) console.warn('Legacy customer avatar sync skipped:', customerError.message);
+      .maybeSingle();
+    if (customerReadError) throw customerReadError;
+    if (customer?.id) {
+      const { error } = await supabase.from('customers')
+        .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', customer.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('customers').insert({
+        telegram_id: id,
+        auth_provider: 'telegram',
+        avatar_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    }
     return publicUrl;
   } catch (error) {
     console.warn('Telegram profile photo R2 sync skipped:', error?.message || error);
