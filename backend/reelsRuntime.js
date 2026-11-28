@@ -2,7 +2,8 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
-const { createMediaUploadUrl } = require("./r2StorageRuntime");
+const { createMediaUploadUrl, isR2MediaUrl } = require("./r2StorageRuntime");
+const { uploadTelegramAvatarToR2 } = require("./customerAvatarR2");
 
 let client;
 function db() {
@@ -17,6 +18,40 @@ function fail(res, error, status = 500) {
   console.error("[Reels API]", error?.message || error);
   return res.status(status).json({ success: false, message: status === 500 ? "Reels server xatoligi. Ma'lumotlar bazasi migratsiyasini tekshiring." : String(error?.message || error) });
 }
+async function resolveCustomerAvatar(user) {
+  const telegramId = Number(user?.telegram_id);
+  const currentUrl = String(user?.telegram_photo_url || user?.avatar_url || user?.photo_url || "").trim();
+  if (isR2MediaUrl(currentUrl)) return currentUrl;
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return currentUrl;
+
+  let fileId = "";
+  try {
+    const { data } = await db().from("telegram_users")
+      .select("profile_photos")
+      .eq("telegram_id", telegramId)
+      .maybeSingle();
+    fileId = Array.isArray(data?.profile_photos) ? String(data.profile_photos[0] || "") : "";
+  } catch {}
+
+  try {
+    const publicUrl = await uploadTelegramAvatarToR2({
+      telegramId,
+      photoUrl: currentUrl,
+      fileId,
+    });
+    if (publicUrl) {
+      const { error } = await db().from("users")
+        .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq("id", String(user.id));
+      if (error) console.warn("[Reels API] canonical avatar URL save skipped:", error.message);
+      return publicUrl;
+    }
+  } catch (error) {
+    console.warn("[Reels API] customer avatar R2 sync skipped:", error.message);
+  }
+  return currentUrl;
+}
+
 function resolveReelsMediaUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -201,7 +236,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       const user = profile.data;
       authorUserId = String(user.id);
       authorName = String(user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.telegram_username || user.username || "").trim() || "GULI mijozi";
-      authorAvatar = String(user.telegram_photo_url || user.avatar_url || user.photo_url || "").trim();
+      authorAvatar = await resolveCustomerAvatar(user);
     } else {
       guestKey = String(req.body?.guestKey || req.headers["x-guli-guest-key"] || "").trim();
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
