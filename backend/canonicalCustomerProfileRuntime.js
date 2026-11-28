@@ -62,28 +62,95 @@ async function canonicalUser(req) {
     const { data, error } = await db.from('users')
       .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('telegram_id', Number(telegram.id)).maybeSingle();
-    if (!error && data) return { row: data, source: 'telegram', telegram };
+    if (error) throw error;
+    if (data) return { row: data, source: 'telegram', telegram };
+    const { data: customer, error: customerError } = await db.from('customers')
+      .select('id,telegram_id,full_name,username,avatar_url,phone,created_at,updated_at')
+      .eq('telegram_id', Number(telegram.id)).maybeSingle();
+    if (customerError) throw customerError;
+    if (customer) return { row: customer, source: 'telegram-customer', telegram };
   }
   return null;
 }
 
+async function syncTelegramCustomerProfile(telegram) {
+  const telegramId = Number(telegram?.id);
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error('Telegram ID noto‘g‘ri');
+
+  const { data: tgRow, error: tgReadError } = await db.from('telegram_users')
+    .select('profile_photos')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+  if (tgReadError) throw tgReadError;
+  const fileId = Array.isArray(tgRow?.profile_photos) ? String(tgRow.profile_photos[0] || '') : '';
+
+  let avatarUrl = null;
+  try {
+    avatarUrl = await uploadTelegramAvatarToR2({
+      telegramId,
+      photoUrl: telegram.photo_url || '',
+      fileId,
+    });
+  } catch (error) {
+    console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
+  }
+
+  const now = new Date().toISOString();
+  const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim() || null;
+  const { error: tgUpsertError } = await db.from('telegram_users').upsert({
+    telegram_id: telegramId,
+    ...(telegram.username ? { username: telegram.username } : {}),
+    ...(telegram.first_name ? { first_name: telegram.first_name } : {}),
+    ...(telegram.last_name ? { last_name: telegram.last_name } : {}),
+    updated_at: now,
+  }, { onConflict: 'telegram_id' });
+  if (tgUpsertError) throw tgUpsertError;
+
+  const { data: existing, error: customerReadError } = await db.from('customers')
+    .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at')
+    .eq('telegram_id', telegramId)
+    .maybeSingle();
+  if (customerReadError) throw customerReadError;
+
+  const payload = {
+    telegram_id: telegramId,
+    full_name: fullName || existing?.full_name || null,
+    auth_provider: 'telegram',
+    updated_at: now,
+    ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+  };
+  let customer;
+  if (existing) {
+    const updated = await db.from('customers').update(payload).eq('id', existing.id)
+      .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').single();
+    if (updated.error) throw updated.error;
+    customer = updated.data;
+  } else {
+    const inserted = await db.from('customers').insert(payload)
+      .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').single();
+    if (inserted.error) throw inserted.error;
+    customer = inserted.data;
+  }
+  return { customer, avatarUrl: avatarUrl || customer.avatar_url || null };
+}
+
 function publicProfile(row) {
-  const fullName = String(row.full_name || '').trim();
+  const fullName = String(row.full_name || [row.first_name, row.last_name].filter(Boolean).join(' ')).trim();
   const nameParts = fullName.split(/\\s+/).filter(Boolean);
-  const avatarUrl = row.telegram_photo_url || null;
+  const avatarUrl = row.telegram_photo_url || row.avatar_url || null;
   return {
     id: row.id,
     telegram_id: row.telegram_id != null ? Number(row.telegram_id) : null,
-    username: row.telegram_username || null,
-    telegram_username: row.telegram_username || null,
+    username: row.telegram_username || row.username || null,
+    telegram_username: row.telegram_username || row.username || null,
     first_name: nameParts[0] || null,
     last_name: nameParts.slice(1).join(' ') || null,
     full_name: fullName || null,
     avatar_url: avatarUrl,
     photo_url: avatarUrl,
     telegram_photo_url: avatarUrl,
-    phone: row.phone_number || null,
-    phone_number: row.phone_number || null,
+    phone: row.phone_number || row.phone || null,
+    phone_number: row.phone_number || row.phone || null,
     provider: 'telegram',
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
@@ -120,39 +187,36 @@ async function sync(req, res) {
   }
 
   if (telegram) {
+    // A Telegram Mini App visit is itself a verified customer registration.
+    // Keep pre-phone customers in public.customers; phone-verified browser
+    // authentication later links the same Telegram ID to public.users.
+    const synced = await syncTelegramCustomerProfile(telegram);
     const result = await db.from('users')
       .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('telegram_id', Number(telegram.id)).maybeSingle();
-    if (result.error || !result.data) {
-      return fail(res, 409, 'Telegram foydalanuvchisi canonical sessiya orqali ro‘yxatdan o‘tishi kerak.', 'CANONICAL_TELEGRAM_SESSION_REQUIRED');
-    }
-    if (row && String(row.id) !== String(result.data.id)) {
-      return fail(res, 409, 'Telegram identifikatori va canonical sessiya mos emas.', 'IDENTITY_MISMATCH');
-    }
-    row = result.data;
-
-    // These fields come only from Telegram's server-verified initData.
-    // Never clear a previously stored name/avatar when Telegram omits a field.
-    const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim();
-    const update = {
-      telegram_id: Number(telegram.id),
-      ...(telegram.username ? { telegram_username: telegram.username } : {}),
-      ...(fullName ? { full_name: fullName } : {}),
-      updated_at: new Date().toISOString(),
-    };
-    const incomingPhoto = String(telegram.photo_url || '').trim();
-    if (incomingPhoto) {
-      try {
-        const publicUrl = await uploadTelegramAvatarToR2({ telegramId: Number(telegram.id), photoUrl: incomingPhoto });
-        if (publicUrl) update.telegram_photo_url = publicUrl;
-      } catch (error) {
-        console.warn('[GULI] Customer avatar R2 sync skipped:', error.message);
+    if (result.error) return fail(res, 500, 'Telegram profilini tekshirishda xatolik.', 'PROFILE_LOOKUP_FAILED');
+    if (result.data) {
+      if (row && String(row.id) !== String(result.data.id)) {
+        return fail(res, 409, 'Telegram identifikatori va canonical sessiya mos emas.', 'IDENTITY_MISMATCH');
       }
+      const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim();
+      const update = {
+        ...(telegram.username ? { telegram_username: telegram.username } : {}),
+        ...(fullName ? { full_name: fullName } : {}),
+        ...(synced.avatarUrl ? { telegram_photo_url: synced.avatarUrl } : {}),
+        updated_at: new Date().toISOString(),
+      };
+      const updated = await db.from('users').update(update).eq('id', result.data.id)
+        .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at').single();
+      if (updated.error || !updated.data) return fail(res, 500, 'Telegram profilini yangilashda xatolik.', 'PROFILE_SYNC_FAILED');
+      row = updated.data;
+    } else {
+      row = {
+        ...synced.customer,
+        telegram_username: telegram.username || null,
+        telegram_photo_url: synced.avatarUrl,
+      };
     }
-    const updated = await db.from('users').update(update).eq('id', row.id)
-      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at').single();
-    if (updated.error || !updated.data) return fail(res, 500, 'Telegram profilini yangilashda xatolik.', 'PROFILE_SYNC_FAILED');
-    row = updated.data;
   }
 
   return res.json({ success: true, data: publicProfile(row) });
