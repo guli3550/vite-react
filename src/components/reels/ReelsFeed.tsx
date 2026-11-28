@@ -24,7 +24,7 @@ import { ReelsCommentsModal } from "./ReelsCommentsModal";
 import { ReelsShareModal } from "./ReelsShareModal";
 import { isInstagramUrl, extractInstagramShortcode } from "../../utils/instagramFetcher";
 import "./Reels.css";
-import { resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
+import { getPreviewR2FallbackUrl, resolvePublicMediaUrl } from "../../utils/resolvePublicMediaUrl";
 
 // App.tsx imports this module at start-up: warm the feed while the customer is still on the home screen.
 scheduleReelsWarmup();
@@ -644,8 +644,33 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
     return saved;
   };
 
-  // Never replace a failed reel with an unrelated sample video.
-  const handleVideoError = (id: string) => {
+  // On Preview only, retry a Custom Domain failure against the same R2 object
+  // through the Development URL. Production never uses this rate-limited endpoint.
+  const handleVideoError = (id: string, video: HTMLVideoElement) => {
+    const mediaError = video.error;
+    console.warn("[Reels] Video media error", {
+      reelId: id,
+      code: mediaError?.code ?? null,
+      message: mediaError?.message ?? "",
+      networkState: video.networkState,
+      readyState: video.readyState,
+      currentSrc: video.currentSrc,
+    });
+
+    if (video.dataset.r2FallbackTried !== "1") {
+      const fallback = getPreviewR2FallbackUrl(video.currentSrc || video.src);
+      if (fallback) {
+        video.dataset.r2FallbackTried = "1";
+        console.info("[Reels] Preview retry via R2 Development URL", { reelId: id, fallback });
+        video.src = fallback;
+        video.load();
+        video.play().catch((error) => {
+          console.warn("[Reels] Preview fallback play() rejected", { reelId: id, error });
+        });
+        return;
+      }
+    }
+
     setVideoError((prev) => ({ ...prev, [id]: true }));
     setIsLoadingVideo(false);
   };
@@ -766,8 +791,15 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                         isActive && !hasError && isPlaying && !isLoadingVideo ? "hiddenBehindVideo" : ""
                       }`}
                       onError={(e) => {
+                        const image = e.currentTarget;
+                        const fallback = getPreviewR2FallbackUrl(image.currentSrc || image.src);
+                        if (fallback && image.dataset.r2FallbackTried !== "1") {
+                          image.dataset.r2FallbackTried = "1";
+                          image.src = fallback;
+                          return;
+                        }
                         // Never substitute an unrelated picture; just reveal the black background.
-                        e.currentTarget.style.visibility = "hidden";
+                        image.style.visibility = "hidden";
                       }}
                     />
                   )}
@@ -804,7 +836,7 @@ export const ReelsFeed: React.FC<ReelsFeedProps> = ({
                           if (video && video.paused && isPlaying) video.play().catch(() => {});
                         } : undefined}
                         onPlaying={isActive ? () => setIsLoadingVideo(false) : undefined}
-                        onError={() => handleVideoError(reel.id)}
+                        onError={(event) => handleVideoError(reel.id, event.currentTarget)}
                       />
                     )
                   )}
