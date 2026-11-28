@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
 const { verifyAccessToken } = require('./guliCustomAuth.js');
+const { uploadTelegramAvatarToR2 } = require('./customerAvatarR2.js');
+const { isR2MediaUrl } = require('./r2StorageRuntime.js');
 
 const URL_ = String(process.env.SUPABASE_URL || '').trim();
 const KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
@@ -48,36 +50,112 @@ function jwtClaims(req) {
 async function canonicalUser(req) {
   if (!db) return null;
   const claims = jwtClaims(req);
+  const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
+
   if (claims?.sub) {
     const { data, error } = await db.from('users')
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at')
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('id', String(claims.sub)).maybeSingle();
-    if (!error && data) return { row: data, source: 'jwt', telegram: null };
+    if (error) throw error;
+    if (!data) return null;
+    if (telegram && Number(data.telegram_id) !== Number(telegram.id)) return null;
+    return { row: data, source: 'jwt', telegram };
   }
 
-  const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
   if (telegram) {
     const { data, error } = await db.from('users')
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at')
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('telegram_id', Number(telegram.id)).maybeSingle();
-    if (!error && data) return { row: data, source: 'telegram', telegram };
+    if (error) throw error;
+    if (data) return { row: data, source: 'telegram', telegram };
+    const { data: customer, error: customerError } = await db.from('customers')
+      .select('id,telegram_id,full_name,avatar_url,phone,created_at,updated_at')
+      .eq('telegram_id', Number(telegram.id)).maybeSingle();
+    if (customerError) throw customerError;
+    if (customer) return { row: { ...customer, username: telegram.username || null }, source: 'telegram-customer', telegram };
   }
   return null;
 }
 
+async function syncTelegramCustomerProfile(telegram) {
+  const telegramId = Number(telegram?.id);
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error('Telegram ID noto‘g‘ri');
+
+  const [{ data: tgRow, error: tgReadError }, { data: existing, error: customerReadError }, { data: canonicalUser, error: userReadError }] = await Promise.all([
+    db.from('telegram_users').select('profile_photos').eq('telegram_id', telegramId).maybeSingle(),
+    db.from('customers').select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').eq('telegram_id', telegramId).maybeSingle(),
+    db.from('users').select('telegram_photo_url').eq('telegram_id', telegramId).maybeSingle(),
+  ]);
+  if (tgReadError) throw tgReadError;
+  if (customerReadError) throw customerReadError;
+  if (userReadError) throw userReadError;
+  const fileId = Array.isArray(tgRow?.profile_photos) ? String(tgRow.profile_photos[0] || '') : '';
+  const previousAvatar = String(canonicalUser?.telegram_photo_url || existing?.avatar_url || '').trim();
+
+  // Telegram photo_url is refreshed with initData. Re-uploading is idempotent:
+  // content-hash object keys reuse the same R2 object when the photo is unchanged.
+  let avatarUrl = null;
+  try {
+    avatarUrl = await uploadTelegramAvatarToR2({
+      telegramId,
+      photoUrl: telegram.photo_url || (isR2MediaUrl(previousAvatar) ? '' : previousAvatar),
+      fileId,
+    });
+  } catch (error) {
+    console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
+  }
+  if (!avatarUrl && isR2MediaUrl(previousAvatar)) avatarUrl = previousAvatar;
+
+  const now = new Date().toISOString();
+  const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim() || null;
+  const { error: tgUpsertError } = await db.from('telegram_users').upsert({
+    telegram_id: telegramId,
+    ...(telegram.username ? { username: telegram.username } : {}),
+    ...(telegram.first_name ? { first_name: telegram.first_name } : {}),
+    ...(telegram.last_name ? { last_name: telegram.last_name } : {}),
+    updated_at: now,
+  }, { onConflict: 'telegram_id' });
+  if (tgUpsertError) throw tgUpsertError;
+
+  const payload = {
+    telegram_id: telegramId,
+    full_name: fullName || existing?.full_name || null,
+    auth_provider: 'telegram',
+    updated_at: now,
+    ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+  };
+  let customer;
+  if (existing) {
+    const updated = await db.from('customers').update(payload).eq('id', existing.id)
+      .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').single();
+    if (updated.error) throw updated.error;
+    customer = updated.data;
+  } else {
+    const inserted = await db.from('customers').insert(payload)
+      .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').single();
+    if (inserted.error) throw inserted.error;
+    customer = inserted.data;
+  }
+  return { customer, avatarUrl: avatarUrl || customer.avatar_url || null };
+}
+
 function publicProfile(row) {
+  const fullName = String(row.full_name || [row.first_name, row.last_name].filter(Boolean).join(' ')).trim();
+  const nameParts = fullName.split(/[ ]+/).filter(Boolean);
+  const avatarUrl = row.telegram_photo_url || row.avatar_url || null;
   return {
     id: row.id,
     telegram_id: row.telegram_id != null ? Number(row.telegram_id) : null,
-    username: row.username || null,
-    telegram_username: row.username || null,
-    first_name: row.first_name || null,
-    last_name: row.last_name || null,
-    full_name: [row.first_name, row.last_name].filter(Boolean).join(' ') || null,
-    avatar_url: row.avatar_url || null,
-    photo_url: row.avatar_url || null,
-    phone: row.phone_number || null,
-    phone_number: row.phone_number || null,
+    username: row.telegram_username || row.username || null,
+    telegram_username: row.telegram_username || row.username || null,
+    first_name: nameParts[0] || null,
+    last_name: nameParts.slice(1).join(' ') || null,
+    full_name: fullName || null,
+    avatar_url: avatarUrl,
+    photo_url: avatarUrl,
+    telegram_photo_url: avatarUrl,
+    phone: row.phone_number || row.phone || null,
+    phone_number: row.phone_number || row.phone || null,
     provider: 'telegram',
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
@@ -107,37 +185,47 @@ async function sync(req, res) {
   let row = null;
   if (claims?.sub) {
     const result = await db.from('users')
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at')
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('id', String(claims.sub)).maybeSingle();
     if (result.error || !result.data) return fail(res, 401, 'Canonical foydalanuvchi topilmadi.', 'CANONICAL_USER_NOT_FOUND');
     row = result.data;
   }
 
   if (telegram) {
-    const result = await db.from('users')
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at')
-      .eq('telegram_id', Number(telegram.id)).maybeSingle();
-    if (result.error || !result.data) {
-      return fail(res, 409, 'Telegram foydalanuvchisi canonical sessiya orqali ro‘yxatdan o‘tishi kerak.', 'CANONICAL_TELEGRAM_SESSION_REQUIRED');
-    }
-    if (row && String(row.id) !== String(result.data.id)) {
+    if (row && Number(row.telegram_id) !== Number(telegram.id)) {
       return fail(res, 409, 'Telegram identifikatori va canonical sessiya mos emas.', 'IDENTITY_MISMATCH');
     }
-    row = result.data;
-
-    // These fields come only from Telegram's server-verified initData.
-    const update = {
-      telegram_id: Number(telegram.id),
-      username: telegram.username || null,
-      first_name: telegram.first_name || null,
-      last_name: telegram.last_name || null,
-      avatar_url: telegram.photo_url || null,
-      updated_at: new Date().toISOString(),
-    };
-    const updated = await db.from('users').update(update).eq('id', row.id)
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at').single();
-    if (updated.error || !updated.data) return fail(res, 500, 'Telegram profilini yangilashda xatolik.', 'PROFILE_SYNC_FAILED');
-    row = updated.data;
+    // A Telegram Mini App visit is itself a verified customer registration.
+    // Keep pre-phone customers in public.customers; phone-verified browser
+    // authentication later links the same Telegram ID to public.users.
+    const synced = await syncTelegramCustomerProfile(telegram);
+    const result = await db.from('users')
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
+      .eq('telegram_id', Number(telegram.id)).maybeSingle();
+    if (result.error) return fail(res, 500, 'Telegram profilini tekshirishda xatolik.', 'PROFILE_LOOKUP_FAILED');
+    if (result.data) {
+      if (row && String(row.id) !== String(result.data.id)) {
+        return fail(res, 409, 'Telegram identifikatori va canonical sessiya mos emas.', 'IDENTITY_MISMATCH');
+      }
+      const fullName = [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim();
+      const update = {
+        ...(telegram.username ? { telegram_username: telegram.username } : {}),
+        ...(fullName ? { full_name: fullName } : {}),
+        ...(synced.avatarUrl ? { telegram_photo_url: synced.avatarUrl } : {}),
+        updated_at: new Date().toISOString(),
+      };
+      const updated = await db.from('users').update(update).eq('id', result.data.id)
+        .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at').single();
+      if (updated.error || !updated.data) return fail(res, 500, 'Telegram profilini yangilashda xatolik.', 'PROFILE_SYNC_FAILED');
+      row = updated.data;
+    } else {
+      row = {
+        ...synced.customer,
+        username: telegram.username || null,
+        telegram_username: telegram.username || null,
+        telegram_photo_url: synced.avatarUrl,
+      };
+    }
   }
 
   return res.json({ success: true, data: publicProfile(row) });
@@ -153,14 +241,35 @@ async function updateProfile(req, res) {
   // dedicated verified Contact Share flow.
   const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
   if (telegram && Number(auth.row.telegram_id) === Number(telegram.id)) {
-    const updated = await db.from('users').update({
-      username: telegram.username || null,
-      first_name: telegram.first_name || null,
-      last_name: telegram.last_name || null,
-      avatar_url: telegram.photo_url || null,
+    if (auth.source === 'telegram-customer') {
+      const synced = await syncTelegramCustomerProfile(telegram);
+      return res.json({
+        success: true,
+        data: publicProfile({
+          ...synced.customer,
+          username: telegram.username || null,
+          telegram_photo_url: synced.avatarUrl,
+        }),
+      });
+    }
+    const update = {
+      ...(telegram.username ? { telegram_username: telegram.username } : {}),
+      ...([telegram.first_name, telegram.last_name].filter(Boolean).length
+        ? { full_name: [telegram.first_name, telegram.last_name].filter(Boolean).join(' ').trim() }
+        : {}),
       updated_at: new Date().toISOString(),
-    }).eq('id', auth.row.id)
-      .select('id,telegram_id,username,first_name,last_name,avatar_url,phone_number,created_at,updated_at').single();
+    };
+    const incomingPhoto = String(telegram.photo_url || '').trim();
+    if (incomingPhoto && !isR2MediaUrl(auth.row.telegram_photo_url)) {
+      try {
+        const publicUrl = await uploadTelegramAvatarToR2({ telegramId: Number(telegram.id), photoUrl: incomingPhoto });
+        if (publicUrl) update.telegram_photo_url = publicUrl;
+      } catch (error) {
+        console.warn('[GULI] Customer avatar R2 update skipped:', error.message);
+      }
+    }
+    const updated = await db.from('users').update(update).eq('id', auth.row.id)
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at').single();
     if (updated.error || !updated.data) return fail(res, 500, 'Telegram profilini yangilashda xatolik.', 'PROFILE_UPDATE_FAILED');
     return res.json({ success: true, data: publicProfile(updated.data) });
   }

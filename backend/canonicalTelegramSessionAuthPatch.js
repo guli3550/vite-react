@@ -25,11 +25,13 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
 const { issueAccessToken, issueRefreshToken, rotateRefreshToken } = require('./guliCustomAuth.js');
+const { uploadTelegramAvatarToR2, telegramProfileFileId } = require('./customerAvatarR2.js');
+const { isR2MediaUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-const SECRET = String(process.env.AUTH_JWT_SECRET || process.env.SUPABASE_SECRET_KEY || '').trim();
+const SECRET = String(process.env.AUTH_JWT_SECRET || '').trim();
 
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -39,7 +41,7 @@ const SESSION_TTL_MS = 5 * 60 * 1000; // matches CustomerAuthModal's 300000ms po
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function assertSecret() {
-  if (SECRET.length < 32) throw new Error('AUTH_JWT_SECRET (or SUPABASE_SECRET_KEY) must be configured with at least 32 characters');
+  if (SECRET.length < 32) throw new Error('AUTH_JWT_SECRET must be configured with at least 32 characters');
 }
 function hashTicket(ticket) {
   assertSecret();
@@ -51,61 +53,77 @@ function safeEqualHex(a, b) {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 }
 
-const AVATAR_SIGN_KEY = String(process.env.AUTH_JWT_SECRET || SUPABASE_KEY || 'guli-auth').trim();
-
-function signTelegramAvatar(telegramId, fileId, expires) {
-  return crypto.createHmac('sha256', AVATAR_SIGN_KEY)
-    .update(`${Number(telegramId)}.${String(fileId)}.${Number(expires)}`)
-    .digest('base64url');
-}
-
-async function refreshTelegramPhotoUrl(telegramId) {
+async function refreshTelegramPhotoUrl(telegramId, verifiedPhotoUrl = "") {
   const id = Number(telegramId);
   if (!Number.isSafeInteger(id) || id <= 0 || !supabase) return null;
   try {
-    const { data: current } = await supabase
+    const { data: current, error: currentError } = await supabase
       .from('users')
       .select('telegram_photo_url')
       .eq('telegram_id', id)
       .maybeSingle();
+    if (currentError) throw currentError;
     const currentUrl = String(current?.telegram_photo_url || '').trim();
-    // Telegram's Mini App photo_url is already a browser-safe HTTPS URL.
-    if (/^https:\/\/t\.me\/i\/userpic\//i.test(currentUrl)) return currentUrl;
 
-    const { data: tg } = await supabase
+    const { data: tg, error: tgError } = await supabase
       .from('telegram_users')
       .select('profile_photos')
       .eq('telegram_id', id)
       .maybeSingle();
+    if (tgError) console.warn('[auth] Telegram file_id lookup skipped:', tgError.message);
 
     let fileId = Array.isArray(tg?.profile_photos) && tg.profile_photos.length
       ? String(tg.profile_photos[0] || '')
       : '';
-
-    if (!fileId && TELEGRAM_BOT_TOKEN) {
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${id}`);
-      const result = await response.json().catch(() => null);
-      if (result?.ok) fileId = String(result.result?.photo?.big_file_id || result.result?.photo?.small_file_id || '');
-    }
-    if (!fileId) return currentUrl || null;
-
-    const expires = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
-    const url = `/api/v1/profile/telegram-avatar/${id}/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signTelegramAvatar(id, fileId, expires))}`;
-
-    await supabase.from('users')
-      .update({ telegram_photo_url: url, updated_at: new Date().toISOString() })
-      .eq('telegram_id', id);
-
+    let latestFileId = fileId;
     try {
-      await supabase.from('telegram_users').upsert({
-        telegram_id: id,
-        profile_photos: [fileId],
-        profile_photo_synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'telegram_id' });
-    } catch {}
+      latestFileId = await telegramProfileFileId(id) || fileId;
+    } catch (error) {
+      console.warn('[auth] Telegram latest profile photo lookup skipped:', error.message);
+    }
+    if (isR2MediaUrl(currentUrl) && latestFileId && latestFileId === fileId && !verifiedPhotoUrl) {
+      return currentUrl;
+    }
+    if (isR2MediaUrl(currentUrl) && !latestFileId && !verifiedPhotoUrl) {
+      return currentUrl;
+    }
 
-    return url;
+    const sourceUrl = String(verifiedPhotoUrl || (isR2MediaUrl(currentUrl) ? '' : currentUrl) || '').trim();
+    let publicUrl = null;
+    try {
+      publicUrl = await uploadTelegramAvatarToR2({
+        telegramId: id,
+        photoUrl: sourceUrl,
+        fileId: latestFileId || fileId,
+      });
+    } catch (error) {
+      // Avatar storage is best-effort: an R2 outage must not block a verified
+      // Telegram sign-in or prevent the customer from opening the app.
+      console.warn('[auth] Telegram avatar R2 upload skipped:', error.message);
+    }
+
+    if (publicUrl) {
+      const { error: updateError } = await supabase.from('users')
+        .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('telegram_id', id);
+      if (updateError) {
+        console.warn('[auth] Canonical R2 avatar URL save skipped:', updateError.message);
+        return currentUrl || null;
+      }
+      if (latestFileId || fileId) {
+        const { error: photoError } = await supabase.from('telegram_users').upsert({
+          telegram_id: id,
+          profile_photos: [latestFileId || fileId],
+          profile_photo_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'telegram_id' });
+        if (photoError) console.warn('[auth] Telegram file_id persistence skipped:', photoError.message);
+      }
+      return publicUrl;
+    }
+
+    // Preserve the previous URL if Telegram/R2 is temporarily unavailable.
+    return currentUrl || null;
   } catch (error) {
     console.warn('[auth] Telegram avatar refresh skipped:', error?.message || error);
     return null;

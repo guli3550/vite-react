@@ -22,8 +22,7 @@ const crypto = require("crypto");
 const { install } = require("./routeRegistry.js");
 
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
-const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || "").trim();
-const SIGN_KEY = String(process.env.AUTH_JWT_SECRET || SUPABASE_KEY || "guli-auth").trim();
+const SIGN_KEY = String(process.env.AUTH_JWT_SECRET || "").trim();
 
 function safeEqual(a, b) {
   const x = Buffer.from(String(a || ""));
@@ -45,6 +44,7 @@ async function telegramApi(method, body) {
 // short-lived HMAC URL. The bot token is never exposed to the browser.
 install("get", "/api/v1/profile/telegram-avatar/:telegramId/:fileId", async (req, res) => {
   try {
+    if (SIGN_KEY.length < 32) return res.status(503).end();
     const telegramId = Number(req.params.telegramId);
     const fileId = String(req.params.fileId || "");
     const expires = Number(req.query?.expires);

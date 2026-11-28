@@ -11,8 +11,8 @@ const supabase = SUPABASE_URL && SUPABASE_SECRET_KEY ? createClient(SUPABASE_URL
 const WEB_APP_URL = (process.env.MINI_APP_URL || process.env.VERCEL_APP_URL || "https://vite-react-seven-inky-10.vercel.app/?tgapp=v20260829").trim();
 const STORE_TEXT = "🛍 Do‘konni ochish";
 const PAYMENT_LABELS = { pending: "To‘lov kutilmoqda", receipt_uploaded: "Chek yuborildi — admin tekshiradi", verified: "To‘lov tasdiqlandi ✓", rejected: "Chek rad etildi — qayta yuboring" };
-const AUTH_KEY = SUPABASE_SECRET_KEY || "guli-auth";
-const authHash = (value) => crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex");
+const AUTH_KEY = String(process.env.AUTH_JWT_SECRET || "").trim();
+const authHash = (value) => { if (AUTH_KEY.length < 32) throw new Error("AUTH_JWT_SECRET must be configured"); return crypto.createHmac("sha256", AUTH_KEY).update(String(value)).digest("hex"); };
 const normalizePhone = (value) => { let v = String(value || "").trim().replace(/[^\d+]/g, ""); if (v.startsWith("00")) v = "+" + v.slice(2); if (!v.startsWith("+")) v = "+" + v; return v; };
 const validPhone = (v) => /^\+[1-9]\d{7,14}$/.test(v);
 async function sendOrderMedia(telegramId, order) {

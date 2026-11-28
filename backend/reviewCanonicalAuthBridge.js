@@ -46,11 +46,18 @@ async function bridge(req, res, next) {
     const claims = verifyAccessToken(authorization.slice(7).trim());
     if (!claims?.sub) return next();
     const { data: user, error } = await db.from('users')
-      .select('id,telegram_id,username,first_name,last_name,avatar_url')
+      .select('id,telegram_id,full_name,telegram_username,telegram_photo_url')
       .eq('id', String(claims.sub))
       .maybeSingle();
     if (error || !user?.telegram_id) return next();
-    const internalInitData = makeInternalTelegramInitData(user);
+    const nameParts = String(user.full_name || '').trim().split(/[ ]+/).filter(Boolean);
+    const internalInitData = makeInternalTelegramInitData({
+      telegram_id: user.telegram_id,
+      first_name: nameParts[0] || '',
+      last_name: nameParts.slice(1).join(' '),
+      username: user.telegram_username || '',
+      photo_url: user.telegram_photo_url || '',
+    });
     req.headers['x-telegram-init-data'] = internalInitData;
     return next();
   } catch {

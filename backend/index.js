@@ -743,6 +743,46 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
       console.warn("CRM: tgUsers load issue", e.message);
     }
 
+    // 1b. Canonical Telegram profiles are the preferred avatar source.
+    // R2 public URLs override expiring Telegram proxy URLs from the legacy table.
+    try {
+      const { data: canonicalUsers, error: canonicalError } = await supabase
+        .from("users")
+        .select("id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at")
+        .not("telegram_id", "is", null)
+        .limit(limit);
+      if (!canonicalError && Array.isArray(canonicalUsers)) {
+        for (const profile of canonicalUsers) {
+          const key = `tg_${profile.telegram_id}`;
+          const parts = String(profile.full_name || "").trim().split(/[ ]+/).filter(Boolean);
+          const existing = usersMap.get(key) || {
+            id: key,
+            telegram_id: Number(profile.telegram_id),
+            provider: "telegram",
+            orders_count: 0,
+            total_spent: 0,
+          };
+          existing.first_name = parts[0] || existing.first_name || "";
+          existing.last_name = parts.slice(1).join(" ") || existing.last_name || "";
+          existing.username = profile.telegram_username || existing.username || "";
+          existing.phone = profile.phone_number || existing.phone || "";
+          existing.telegram_phone = profile.phone_number || existing.telegram_phone || "";
+          if (profile.telegram_photo_url) {
+            existing.photo_url = profile.telegram_photo_url;
+            existing.avatar_url = profile.telegram_photo_url;
+            existing.customer_photo_url = profile.telegram_photo_url;
+          }
+          existing.created_at = profile.created_at || existing.created_at;
+          existing.updated_at = profile.updated_at || existing.updated_at;
+          usersMap.set(key, existing);
+        }
+      } else if (canonicalError) {
+        console.warn("CRM: canonical users avatar lookup skipped", canonicalError.message);
+      }
+    } catch (e) {
+      console.warn("CRM: canonical users load issue", e.message);
+    }
+
     // 2. Load Supabase Auth registered users (Email + Google)
     try {
       if (supabase?.auth?.admin?.listUsers) {
@@ -796,7 +836,11 @@ app.get("/api/admin/users", requireAdmin, async (req, res) => {
             const existing = usersMap.get(key);
             // Telegram users are inserted first; merge the canonical customer avatar
             // instead of discarding it because the key already exists.
-            if (c.avatar_url && !existing.photo_url && !existing.avatar_url) existing.photo_url = c.avatar_url;
+            if (c.avatar_url) {
+              existing.photo_url = c.avatar_url;
+              existing.avatar_url = c.avatar_url;
+              existing.customer_photo_url = c.avatar_url;
+            }
             if (c.phone && !existing.phone) existing.phone = c.phone;
             if (c.full_name && !existing.first_name) {
               const parts = String(c.full_name).trim().split(/\s+/);

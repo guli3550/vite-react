@@ -47,7 +47,7 @@ function getCurrentUserProfile(): { name: string; avatar: string } {
       const parsed = JSON.parse(raw);
       if (parsed) {
         const name = parsed.full_name || parsed.name || parsed.username || parsed.telegram_username || parsed.email?.split("@")[0] || "";
-        const avatar = parsed.avatar_url || parsed.avatar || "";
+        const avatar = parsed.telegram_photo_url || parsed.avatar_url || parsed.photo_url || parsed.avatar || "";
         if (name) return { name, avatar };
       }
     }
@@ -85,6 +85,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 }) => {
   const [inputText, setInputText] = useState("");
   const [comments, setComments] = useState<ReelComment[]>(reel.comments || []);
+  const [failedAvatars, setFailedAvatars] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [likedComments, setLikedComments] = useState<Record<string, boolean>>({});
@@ -317,12 +318,13 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 
               return (
                 <div key={comment.id} className="reelsCommentItem">
-                  {comment.authorAvatar ? (
+                  {comment.authorAvatar && failedAvatars[comment.id] !== comment.authorAvatar ? (
                     <img
                       src={comment.authorAvatar}
                       alt={comment.authorName}
                       className="reelsCommentAvatar"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      loading="lazy"
+                      onError={() => setFailedAvatars((prev) => ({ ...prev, [comment.id]: comment.authorAvatar }))}
                     />
                   ) : (
                     <div

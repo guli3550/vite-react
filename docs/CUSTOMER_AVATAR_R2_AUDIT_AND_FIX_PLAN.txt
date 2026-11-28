@@ -1,0 +1,82 @@
+﻿**Oraliq audit natijasi (faqat o'qish).** `main` HEAD: `5f19914` (2026-11-28). Backend kodi va Supabase sxemasi tekshirildi, bazadan faqat jadval tuzilmasi va umumiy sonlar olindi. Frontend, `/admin`, R2 live, Vercel va Render hali tekshirilmadi (⚪).
+
+**Qisqa xulosa: Telegram profil rasmi R2 ga yuklanmaydi. Bu funksiya kodda umuman yo'q. Production tayyorligi: NO.**
+
+**Talablar bo'yicha holat**
+1. **Mini App registratsiya 🟠.** `canonicalCustomerProfileRuntime.js` da initData HMAC tekshiruvi to'g'ri (`verifiedTelegram`). Lekin `/api/customer/sync` yangi mijoz yaratmaydi: u 409 `CANONICAL_TELEGRAM_SESSION_REQUIRED` qaytaradi. Bu fayl `users` dan `first_name`, `last_name`, `username`, `avatar_url` ustunlarini o'qiydi, bazada esa bunday ustunlar yo'q (`users`: `full_name`, `telegram_username`, `telegram_photo_url`). Shu sababli `/api/customer/profile` doim 401 qaytarishi ehtimoli yuqori. Live so'rov bilan tasdiqlanmadi.
+2. **Brauzer + bot 🟡.** Oqim: `init-session`, t.me havola, webhookda kontakt tekshiruvi, `exchange` (`canonicalTelegramSessionAuthPatch.js`). Ticket bir martalik va HMAC bilan hash qilingan, sessiya 5 daqiqa yashaydi, sessiyani yopish atomik, telefon bo'yicha hisob to'qnashuvidan himoya bor. Kod darajasida kuchli, lekin live test yo'q.
+3. **Rasmni olish 🟡.** `refreshTelegramPhotoUrl` rasmni `getChat` yoki `profile_photos` orqali topadi. Keyin 30 kunlik imzolangan proxy URL yaratadi va u har so'rovda Telegram'dan qayta yuklanadi (`guliTelegramProfileAuthPatch.js`). Rasm hech qayerda saqlanmaydi.
+4. **R2 ga upload 🔴.** `r2StorageRuntime.js` da faqat `reels-media`, `video-ads`, `product-images`, `review-images` bor, `avatars/` prefiksi yo'q. `sharp` dependency'da bor, lekin avatar uchun ishlatilmagan (WebP optimizatsiyasi yo'q).
+5. **Public URL saqlash 🔴.** Bazada R2 URL: `users` 0, `customers` 0, `product_reviews` 0, `reel_comments` 0.
+6. **Admin Panel ⚪.** Tekshirilmadi.
+7. **Reels izohlari 🟠.** `author_avatar` = `telegram_photo_url || avatar_url || photo_url` (`reelsRuntime.js`). Bu nisbiy proxy yo'li bo'lib, bazaga doimiy yoziladi, imzo esa 30 kundan keyin tugaydi. Natijada rasm 403 beradi. 18 izohdan 6 tasida proxy yo'li, 12 tasida logo bor. Shu 12 tasi mehmon izohlari (`author_user_id` bo'sh), mehmon izohi ochiq va rate limit topilmadi.
+8. **Mahsulot sharhlari 🟠.** `photo_url` Telegram `photo_url` dan to'g'ridan yoziladi (`canonicalReviewRuntime.js`). 2 sharhning ikkalasida ham `t.me` URL, R2 yo'q. Brauzer sessiyasi `supabase.auth.getUser` bilan tekshiriladi, GULI JWT o'tishi `reviewCanonicalAuthBridge.js` ga bog'liq (tekshirilmadi). Sharh rasmlari R2 emas, Supabase Storage'da.
+9. **Eski mijozlar migratsiyasi 🟡, kerak.** `users` 5 (1 tasida rasm), `customers` 4 (2 tasida avatar), `telegram_users` 11 (4 tasida file_id). Hajm kichik.
+10. **Xavfsizlik 🟡.**
+
+   - **Yaxshi:** RLS hamma jadvalda yoqilgan, `users.telegram_id` unique, `product_reviews` da `(product_id, telegram_id, order_number)` unique, bot token frontendga chiqmaydi.
+   - **Muammo:** `customers.telegram_id` da unique yo'q (hozir dublikat 0).
+   - **Muammo:** `AUTH_JWT_SECRET` bo'lmasa avatar imzosi `SUPABASE_SECRET_KEY` yoki `'guli-auth'` literaliga tushadi.
+   - **Muammo:** `/api/customer/sync` va `updateProfile` Telegramda rasm bo'lmasa `avatar_url` ni `null` bilan almashtiradi.
+
+**Dastlabki P0/P1:** avatarni R2 ga ko'chirish (`avatars/{telegram_id}/…webp`) va `users` yagona manba qilib belgilash, `canonicalCustomerProfileRuntime.js` dagi ustunlarni sxemaga moslash, imzo kalitidagi fallback'ni olib tashlash.
+
+Audit davomida hech narsa o'zgartirilmadi. Keyingi bosqichda frontend, `/admin` Mijozlar, Vercel/Render va R2 public URL ni tekshirib, to'liq A–E hisobotini tayyorlayman.
+___________________________________________
+# GULI MARKET avatar audit: yakuniy hisobot (A–E)
+
+`main` HEAD: `5f19914` (2026-11-28). Hech narsa o'zgartirilmadi. Bazadan faqat sxema va umumiy sonlar olindi.
+
+## A. Umumiy natija
+- **Tekshirilgan fayllar:** 13 ta. Backend: `canonicalCustomerProfileRuntime`, `canonicalTelegramSessionAuthPatch`, `guliTelegramProfileAuthPatch`, `r2MediaStorage`, `r2StorageRuntime`, `reelsRuntime`, `canonicalReviewRuntime`, `unifiedCustomerBridgePatch`, `customerIdentityPatch`, `package.json`. Frontend: `ProductReviewsSection.tsx`, `ReelsCommentsModal.tsx`, `AdminPro.tsx`.
+- **Endpointlar:** `/api/v1/auth/*`, `/api/v1/profile/telegram-avatar/*`, `/api/customer/*`, `/api/reels*`, `/api/reviews*`, `/api/admin/users*`, `/api/admin/order/:n/customer-photos`.
+- **Jadvallar:** `users`, `customers`, `telegram_users`, `product_reviews`, `reels`, `reel_comments`, `auth_sessions`. `customer_profiles` mavjud emas.
+- **To'liq ishlaydigan:** yo'q.
+- **Qisman:** browser-bot autentifikatsiya, avatar olish.
+- **Mavjud emas:** R2 avatar upload, R2 URL saqlash.
+- **Tekshirilmagan (⚪):** live R2/Vercel/Render, mobil admin, Safari/Firefox, rate limit testi.
+
+## B. Talablar jadvali
+1. **Telegram avtomatik registratsiya: 🟠.** `/api/customer/sync` yangi mijoz yaratmaydi (409). Fayl bazada yo'q ustunlarni (`first_name`, `username`, `avatar_url`) o'qiydi.
+2. **Brauzer + bot: 🟡.** `canonicalTelegramSessionAuthPatch.js` kuchli: bir martalik ticket, atomik sarflash, 5 daqiqa TTL. Live test yo'q.
+3. **Rasmni olish: 🟡.** `getChat` / `profile_photos` orqali olinadi, lekin saqlanmaydi. Har so'rovda Telegram'dan proxy qilinadi.
+4. **R2 upload: 🔴.** `avatars/` prefiksi yo'q. `sharp` avatar uchun ishlatilmagan.
+5. **Public URL saqlash: 🔴.** Bazada R2 avatar URL 0 ta.
+6. **Admin avatar: 🟠.** Admin rasmlarni har mijoz uchun jonli Telegram API'dan oladi (`customerIdentityPatch.js`). Bir yangilashda 30 tagacha so'rov ketadi.
+7. **Reels: 🟠.** `author_avatar` nisbiy proxy yo'li bo'lib bazaga yoziladi.
+8. **Sharhlar: 🟠.** `photo_url` to'g'ridan Telegram URL (2/2 sharh).
+9. **Migration: 🟡.** Kerak.
+10. **Xavfsizlik: 🟡.**
+
+## C. Aniqlangan muammolar
+1. **Avatar R2 ga ko'chirilmagan (P1).** Sababi: avatar upload kodi yozilmagan. Ta'sir: `users`, `customers`, `product_reviews`, `reel_comments`. Xavf: yuqori. Telegram URL va imzolar eskiradi, rasmlar yo'qoladi.
+2. **Profil endpointi sxemaga mos emas (P1, ishonchli xulosa).** `canonicalCustomerProfileRuntime.js` da `users.first_name`, `last_name`, `username`, `avatar_url` so'raladi, bazada yo'q. Natija: `/api/customer/profile` ehtimol doim 401. Live tasdiqlanmadi.
+3. **Reels avatari 30 kundan keyin 403 (P1/P2).** Nisbiy yo'l frontend domenida 404 bo'lishi mumkin. `onError` rasmni yashiradi, fallback chiqmaydi.
+4. **Brauzer foydalanuvchisi sharh yoza olmaydi (P2).** `ProductReviewsSection.tsx` faqat `X-Telegram-Init-Data` yuboradi, `Authorization` yo'q. Backend esa Bearer'ni `supabase.auth.getUser` bilan tekshiradi, GULI JWT ni emas.
+5. **Brauzerdagi o'z avatari (P2).** `ReelsCommentsModal` `avatar_url` / `avatar` ni o'qiydi, backend esa `telegram_photo_url` qaytaradi. Brauzerda o'z rasmi chiqmaydi.
+6. **Imzo kaliti zaxirasi (P0).** `AUTH_JWT_SECRET` bo'lmasa `SUPABASE_SECRET_KEY` yoki `'guli-auth'` literali ishlatiladi. Production'da `AUTH_JWT_SECRET` borligini tekshirish kerak.
+7. **Mehmon izohlari (P0/P1).** Reels izohida mehmon izohi ochiq, alohida rate limit ko'rinmadi (12/18 izoh mehmonlardan).
+8. **Dublikat manbalar (P2).** `unifiedCustomerBridgePatch.js` preload'da yo'q (o'lik kod), lekin `/api/customer/sync` ni qayta e'lon qiladi. `customers.telegram_id` da unique yo'q (hozir dublikat 0).
+9. **Avatar `null` bilan almashadi (P2).** Telegramda rasm bo'lmasa `avatar_url: telegram.photo_url || null` mavjud rasmni o'chiradi.
+10. **Admin Mijozlar (P2/P3).** `?limit=500` dan ortig'i ko'rinmaydi, pagination yo'q. UI hali Google/Email turlarini ko'rsatadi, backend esa Telegram-only. Rasm xatosida bo'sh doira qoladi.
+
+**Yaxshi tomonlar:** initData HMAC (`timingSafeEqual`, 24 soat), bot token frontendga chiqmaydi, RLS barcha jadvallarda yoqilgan, `users.telegram_id` unique, `product_reviews` da (product, telegram_id, order) unique, R2 object key validatsiyasi, public/private bucket ajratilgan, upload'dan keyin HEAD tekshiruvi.
+
+## D. Tuzatish rejasi
+- **P0:** `AUTH_JWT_SECRET` ni majburiy qilish va zaxira kalitlarni olib tashlash. Mehmon izohiga rate limit qo'yish.
+- **P1:** `avatars` public prefiksi va `uploadMedia` bilan avatar yuklash (`avatars/{telegram_id}/profile.webp`, MIME/hajm cheklovi, `sharp`, HEAD, `Cache-Control`). Bitta canonical manba (`users`) va yagona `avatar_url` ustuni. `canonicalCustomerProfileRuntime.js` ni haqiqiy sxemaga moslash. Rasm yo'q bo'lsa eskisini saqlash. R2 xatosi registratsiyani to'xtatmasligi kerak.
+- **P2** (P1 ga bog'liq): Reels va sharhlarda `author_avatar` / `photo_url` ni canonical R2 URL'dan yozish, brauzer sharh auth'ini GULI JWT bilan ishlatish, admin rasmlarini bazadagi R2 URL'dan o'qish, frontend fallback'larni tuzatish.
+- **P3:** Eski mijozlar migratsiyasi (5 + 4 + 11 yozuv, `telegram_users.profile_photos` file_id'laridan), Admin pagination, `customers.telegram_id` unique, o'lik patchlarni tozalash.
+
+## Testlar (A–L)
+Hozir mavjud test: faqat R2 smoke workflow (presign). Avatar testlari yo'q. Production'da yangi mijoz yaratilmaydi, hammasi staging'da bajariladi.
+- **A–D:** yangi/mavjud mijoz (Mini App va bot orqali). Kutilgan natija: dublikat yo'q, rasm R2 URL.
+- **E–F:** R2 upload va public URL. Kutilgan natija: HEAD ok, URL boshqa brauzerda ochiladi.
+- **G–I:** Admin, Reels, sharhda rasm. Kutilgan natija: bir xil R2 URL.
+- **J–K:** rasm yangilanishi/cache va rasmsiz mijoz (fallback).
+- **L:** R2 vaqtincha ishlamasa registratsiya to'xtamasligi.
+
+Natija: bajarilmagan (⚪).
+
+## E. Production tayyorligi
+**NO.** Telegram profil rasmini R2 ga saqlash kodda yo'q. Admin, Reels va sharhlar Telegram'ga bog'liq, muddati tugaydigan URL'lardan foydalanadi. Profil endpointi sxemaga mos emasligi sababli buzilgan bo'lishi mumkin.

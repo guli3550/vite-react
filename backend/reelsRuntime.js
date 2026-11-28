@@ -2,7 +2,8 @@ const { createClient } = require("@supabase/supabase-js");
 const { install } = require("./routeRegistry");
 const { requireAdmin } = require("./adminAuth");
 const { verifyAccessToken } = require("./guliCustomAuth");
-const { createMediaUploadUrl } = require("./r2StorageRuntime");
+const { createMediaUploadUrl, isR2MediaUrl } = require("./r2StorageRuntime");
+const { uploadTelegramAvatarToR2 } = require("./customerAvatarR2");
 
 let client;
 function db() {
@@ -13,10 +14,62 @@ function db() {
   client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return client;
 }
+const commentRateBuckets = new Map();
+function consumeCommentRateLimit(key, max, windowMs = 10 * 60 * 1000) {
+  const now = Date.now();
+  const current = commentRateBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    commentRateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+  } else {
+    if (current.count >= max) return false;
+    current.count += 1;
+  }
+  if (commentRateBuckets.size > 5000) {
+    for (const [bucketKey, bucket] of commentRateBuckets) {
+      if (bucket.resetAt <= now) commentRateBuckets.delete(bucketKey);
+    }
+  }
+  return true;
+}
+
 function fail(res, error, status = 500) {
   console.error("[Reels API]", error?.message || error);
   return res.status(status).json({ success: false, message: status === 500 ? "Reels server xatoligi. Ma'lumotlar bazasi migratsiyasini tekshiring." : String(error?.message || error) });
 }
+async function resolveCustomerAvatar(user) {
+  const telegramId = Number(user?.telegram_id);
+  const currentUrl = String(user?.telegram_photo_url || user?.avatar_url || user?.photo_url || "").trim();
+  if (isR2MediaUrl(currentUrl)) return currentUrl;
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) return currentUrl;
+
+  let fileId = "";
+  try {
+    const { data } = await db().from("telegram_users")
+      .select("profile_photos")
+      .eq("telegram_id", telegramId)
+      .maybeSingle();
+    fileId = Array.isArray(data?.profile_photos) ? String(data.profile_photos[0] || "") : "";
+  } catch {}
+
+  try {
+    const publicUrl = await uploadTelegramAvatarToR2({
+      telegramId,
+      photoUrl: currentUrl,
+      fileId,
+    });
+    if (publicUrl) {
+      const { error } = await db().from("users")
+        .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq("id", String(user.id));
+      if (error) console.warn("[Reels API] canonical avatar URL save skipped:", error.message);
+      return publicUrl;
+    }
+  } catch (error) {
+    console.warn("[Reels API] customer avatar R2 sync skipped:", error.message);
+  }
+  return currentUrl;
+}
+
 function resolveReelsMediaUrl(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -161,7 +214,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
     if (!exists.data) return fail(res, new Error("Reels topilmadi"), 404);
     const authHeader = String(req.headers.authorization || "");
     const telegramInitData = String(req.headers["x-telegram-init-data"] || "");
-    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null;
+    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null, isVerifiedTelegramCustomer = false, commentRateKey = "";
     let claims = null;
     if (authHeader.startsWith("Bearer ")) {
       try { claims = verifyAccessToken(authHeader.slice(7).trim()); } catch {}
@@ -189,10 +242,24 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
         }
       } catch {}
       if (!telegramId) return fail(res, new Error("Telegram sessiyasi yaroqsiz. Mini App’ni qayta oching."), 401);
+      commentRateKey = "telegram:" + telegramId;
       const profile = await db().from("users").select("*").eq("telegram_id", telegramId).maybeSingle();
       if (profile.error) throw profile.error;
-      if (!profile.data) return fail(res, new Error("Telegram foydalanuvchi profili topilmadi"), 401);
-      claims = { sub: String(profile.data.id) };
+      if (profile.data) {
+        claims = { sub: String(profile.data.id) };
+      } else {
+        // Telegram Mini App customers are registered in public.customers before
+        // they complete the optional phone-verification/browser-login flow.
+        const customer = await db().from("customers")
+          .select("id,telegram_id,full_name,avatar_url")
+          .eq("telegram_id", telegramId)
+          .maybeSingle();
+        if (customer.error) throw customer.error;
+        if (!customer.data) return fail(res, new Error("Telegram mijoz profili topilmadi. Sahifani yangilang."), 401);
+        isVerifiedTelegramCustomer = true;
+        authorName = String(customer.data.full_name || "").trim() || "GULI mijozi";
+        authorAvatar = String(customer.data.avatar_url || "").trim();
+      }
     }
     if (claims?.sub) {
       const profile = await db().from("users").select("*").eq("id", String(claims.sub)).maybeSingle();
@@ -200,12 +267,20 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!profile.data) return fail(res, new Error("Foydalanuvchi profili topilmadi"), 401);
       const user = profile.data;
       authorUserId = String(user.id);
+      commentRateKey = "customer:" + authorUserId;
       authorName = String(user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.telegram_username || user.username || "").trim() || "GULI mijozi";
-      authorAvatar = String(user.telegram_photo_url || user.avatar_url || user.photo_url || "").trim();
-    } else {
+      authorAvatar = await resolveCustomerAvatar(user);
+    } else if (!isVerifiedTelegramCustomer) {
       guestKey = String(req.body?.guestKey || req.headers["x-guli-guest-key"] || "").trim();
       if (!/^guest_[a-f0-9-]{20,64}$/i.test(guestKey)) return fail(res, new Error("Mehmon sessiyasi yaroqsiz. Sahifani yangilang."), 400);
+      const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+      const clientIp = String(req.ip || forwarded || "unknown").slice(0, 120);
+      const guestRateKey = "guest-ip:" + require("crypto").createHash("sha256").update(clientIp).digest("hex");
+      commentRateKey = guestRateKey;
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
+    }
+    if (commentRateKey && !consumeCommentRateLimit(commentRateKey, isVerifiedTelegramCustomer || authorUserId ? 10 : 3)) {
+      return fail(res, new Error("Juda ko‘p izoh yuborildi. Birozdan keyin qayta urinib ko‘ring."), 429);
     }
     const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || "/guli-logo.png", body };
     const { data, error } = await db().from("reel_comments").insert(row).select("*").single();
