@@ -122,14 +122,21 @@ export const VideoAdModal: React.FC<VideoAdModalProps> = ({
       }),
     });
     const signedData = await signedResponse.json();
-    if (!signedResponse.ok || !signedData.success || !signedData.signedUrl || !signedData.url) {
-      throw new Error(signedData.message || "Xavfsiz yuklash havolasini olishda xatolik");
+    if (!signedResponse.ok || !signedData.success) {
+      throw new Error(signedData.message || "Xavfsiz yuklash havolasini olishda xatolik (HTTP " + signedResponse.status + ")");
+    }
+    if (signedData.storage !== "r2" || !signedData.uploadUrl || !signedData.url) {
+      const returnedFields = signedData && typeof signedData === "object" ? Object.keys(signedData).join(", ") : "JSON yo‘q";
+      throw new Error(
+        "Video reklama API R2 javobini qaytarmadi. Kutilgan storage=r2, uploadUrl va url. Olingan maydonlar: " +
+        returnedFields + ". Preview API rewrite va Render Preview backendini tekshiring."
+      );
     }
 
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      // Supabase Storage signed-upload endpoint expects PUT for the raw file body.
-      xhr.open("PUT", signedData.signedUrl);
+      // R2 presigned PUT URL; the binary file is sent directly from the browser.
+      xhr.open("PUT", signedData.uploadUrl);
       xhr.setRequestHeader("Content-Type", file.type);
       xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
       xhr.upload.onprogress = (event) => {

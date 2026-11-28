@@ -1,5 +1,4 @@
 import type { ReelItem } from "../types/reels";
-import { getSupabase } from "./supabaseClient";
 import { buildApiUrl } from "./apiOrigin";
 
 type ApiResponse<T> = { success?: boolean; data?: T; message?: string };
@@ -230,19 +229,115 @@ export async function recordServerReelView(reelId: string): Promise<{ viewsCount
   }
 }
 
+async function convertReelPosterToWebp(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    if (typeof createImageBitmap === "function") {
+      bitmap = await createImageBitmap(file);
+    }
+    let source: CanvasImageSource;
+    let width: number;
+    let height: number;
+
+    if (bitmap) {
+      source = bitmap;
+      width = bitmap.width;
+      height = bitmap.height;
+    } else {
+      const objectUrl = URL.createObjectURL(file);
+      try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const element = new Image();
+          element.onload = () => resolve(element);
+          element.onerror = () => reject(new Error("Poster rasmini o‘qib bo‘lmadi"));
+          element.src = objectUrl;
+        });
+        source = image;
+        width = image.naturalWidth;
+        height = image.naturalHeight;
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    if (!width || !height) throw new Error("Poster rasmi o‘lchamini aniqlab bo‘lmadi");
+    const maxDimension = 1080;
+    const scale = Math.min(1, maxDimension / Math.max(width, height));
+    const outputWidth = Math.max(1, Math.round(width * scale));
+    const outputHeight = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Poster optimizatsiyasi uchun Canvas ochilmadi");
+    context.drawImage(source, 0, 0, outputWidth, outputHeight);
+
+    const webpBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => blob ? resolve(blob) : reject(new Error("WebP formatiga o‘tkazib bo‘lmadi")),
+        "image/webp",
+        0.82
+      );
+    });
+    if (webpBlob.type !== "image/webp") {
+      throw new Error("Brauzer WebP formatini yaratishni qo‘llab-quvvatlamaydi");
+    }
+    const webpName = file.name.replace(/\.[^.]+$/, "") + ".webp";
+    return new File([webpBlob], webpName, {
+      type: "image/webp",
+      lastModified: file.lastModified,
+    });
+  } catch (error) {
+    throw new Error("Poster WebP formatiga optimallashtirilmadi: " + (error instanceof Error ? error.message : "noma’lum xato"));
+  } finally {
+    bitmap?.close();
+  }
+}
+
 export async function uploadReelMedia(file: File): Promise<string> {
-  if (file.size > 100 * 1024 * 1024) throw new Error("Fayl hajmi 100 MB dan oshmasligi kerak");
-  const contentType = file.type || (file.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "");
-  const signed = await request<{ path: string; token: string; publicUrl: string; bucket: string }>("/api/admin/reels/upload-url", {
+  const uploadFile = file.type.startsWith("image/") ? await convertReelPosterToWebp(file) : file;
+  if (uploadFile.size > 100 * 1024 * 1024) throw new Error("Fayl hajmi 100 MB dan oshmasligi kerak");
+  const contentType = uploadFile.type || (uploadFile.name.toLowerCase().endsWith(".mp4") ? "video/mp4" : "");
+  const signed = await request<{ path: string; uploadUrl: string; publicUrl: string; bucket: string }>("/api/admin/reels/upload-url", {
     method: "POST",
-    body: JSON.stringify({ fileName: file.name, contentType }),
+    body: JSON.stringify({ fileName: uploadFile.name, contentType }),
   }, true);
-  const client = getSupabase();
-  if (!client) throw new Error("Supabase public key sozlanmagan; VITE_SUPABASE_ANON_KEY ni tekshiring");
-  const { error } = await client.storage.from(signed.bucket).uploadToSignedUrl(signed.path, signed.token, file, {
-    contentType,
-    upsert: false,
+  if (!signed?.uploadUrl || !signed?.publicUrl) {
+    const returnedFields = signed && typeof signed === "object" ? Object.keys(signed).join(", ") : "data yo‘q";
+    throw new Error(
+      "Preview API R2 upload javobini qaytarmadi. Kutilgan: uploadUrl va publicUrl. Olingan maydonlar: " +
+      returnedFields + ". Preview /api rewrite va Render R2 backendini tekshiring."
+    );
+  }
+  // Use XHR, matching the already-working Video Ads uploader. This also
+  // exposes the actual HTTP status and upload progress instead of hiding all
+  // browser network/CORS failures behind fetch's generic TypeError.
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signed.uploadUrl);
+    xhr.timeout = 180000;
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.setRequestHeader("Cache-Control", "public, max-age=31536000, immutable");
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      const detail = (xhr.responseText || "").slice(0, 180);
+      reject(new Error(
+        "R2 Reels yuklash rad etildi (HTTP " + xhr.status + ")" +
+        (detail ? ": " + detail : "") + ". R2 javobi va bucket sozlamalarini tekshiring."
+      ));
+    };
+    xhr.onerror = () => reject(new Error(
+      "Reels videosi R2 ga yuborilmadi: brauzer CORS/preflight yoki tarmoq xatosi. " +
+      "R2 bucket CORS sozlamasida aynan Preview domeni uchun PUT, OPTIONS, Content-Type va Cache-Control ruxsatlarini tekshiring."
+    ));
+    xhr.ontimeout = () => reject(new Error("R2 video yuklash vaqti tugadi (180 soniya). Internetni tekshirib qayta urinib ko‘ring."));
+    xhr.onabort = () => reject(new Error("R2 video yuklash bekor qilindi."));
+    xhr.send(uploadFile);
   });
-  if (error) throw error;
   return signed.publicUrl;
 }
