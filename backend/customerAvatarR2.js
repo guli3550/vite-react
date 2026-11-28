@@ -6,6 +6,7 @@ const { uploadMedia, isR2MediaUrl } = require("./r2StorageRuntime");
 
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024;
 const MAX_PIXELS = 20_000_000;
+const ALLOWED_IMAGE_FORMATS = new Set(["jpeg", "png", "webp", "avif"]);
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 
 async function fetchWithTimeout(url, options = {}) {
@@ -50,16 +51,31 @@ function safeTelegramPhotoUrl(value) {
 }
 
 async function downloadImage(url) {
-  const response = await fetchWithTimeout(url, { redirect: "error" });
+  // Telegram/CDN may label a valid image as application/octet-stream or use
+  // a non-standard MIME header. Validate the actual bytes with Sharp instead.
+  const response = await fetchWithTimeout(url, { redirect: "follow" });
   if (!response.ok) throw new Error(`Avatar manbasidan HTTP ${response.status}`);
-  const contentType = String(response.headers.get("content-type") || "").split(";")[0].toLowerCase();
-  if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(contentType)) {
-    throw new Error("Telegram avatar MIME turi ruxsat etilmagan");
+
+  const contentType = String(response.headers.get("content-type") || "")
+    .split(";")[0].trim().toLowerCase();
+  if (contentType === "text/html" || contentType === "application/json" || contentType === "text/plain") {
+    throw new Error(`Avatar manbasi rasm emas (Content-Type: ${contentType})`);
   }
+
   const declaredSize = Number(response.headers.get("content-length") || 0);
   if (declaredSize > MAX_SOURCE_BYTES) throw new Error("Telegram avatar hajmi 5 MB dan katta");
   const buffer = Buffer.from(await response.arrayBuffer());
   if (!buffer.length || buffer.length > MAX_SOURCE_BYTES) throw new Error("Telegram avatar hajmi noto'g'ri");
+
+  let metadata;
+  try {
+    metadata = await sharp(buffer, { limitInputPixels: MAX_PIXELS }).metadata();
+  } catch {
+    throw new Error(`Telegram javobi haqiqiy rasm emas (Content-Type: ${contentType || "noma'lum"})`);
+  }
+  if (!ALLOWED_IMAGE_FORMATS.has(String(metadata.format || "").toLowerCase())) {
+    throw new Error(`Telegram avatar formati qo'llab-quvvatlanmaydi: ${metadata.format || "noma'lum"}`);
+  }
   return buffer;
 }
 
@@ -87,7 +103,7 @@ async function uploadTelegramAvatarToR2({ telegramId, photoUrl, fileId }) {
   if (!source) return null;
 
   const metadata = await sharp(source, { limitInputPixels: MAX_PIXELS }).metadata();
-  if (!["jpeg", "png", "webp", "avif"].includes(String(metadata.format || ""))) {
+  if (!ALLOWED_IMAGE_FORMATS.has(String(metadata.format || "").toLowerCase())) {
     throw new Error("Avatar rasm formati qo'llab-quvvatlanmaydi");
   }
 
@@ -114,4 +130,4 @@ async function uploadTelegramAvatarToR2({ telegramId, photoUrl, fileId }) {
   return uploaded.url;
 }
 
-module.exports = { uploadTelegramAvatarToR2, safeTelegramPhotoUrl, telegramProfileFileId };
+module.exports = { uploadTelegramAvatarToR2, safeTelegramPhotoUrl, telegramProfileFileId, downloadImage };
