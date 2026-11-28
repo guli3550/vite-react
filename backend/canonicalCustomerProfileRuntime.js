@@ -77,22 +77,28 @@ async function syncTelegramCustomerProfile(telegram) {
   const telegramId = Number(telegram?.id);
   if (!Number.isSafeInteger(telegramId) || telegramId <= 0) throw new Error('Telegram ID noto‘g‘ri');
 
-  const { data: tgRow, error: tgReadError } = await db.from('telegram_users')
-    .select('profile_photos')
-    .eq('telegram_id', telegramId)
-    .maybeSingle();
+  const [{ data: tgRow, error: tgReadError }, { data: existing, error: customerReadError }, { data: canonicalUser, error: userReadError }] = await Promise.all([
+    db.from('telegram_users').select('profile_photos').eq('telegram_id', telegramId).maybeSingle(),
+    db.from('customers').select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at').eq('telegram_id', telegramId).maybeSingle(),
+    db.from('users').select('telegram_photo_url').eq('telegram_id', telegramId).maybeSingle(),
+  ]);
   if (tgReadError) throw tgReadError;
+  if (customerReadError) throw customerReadError;
+  if (userReadError) throw userReadError;
   const fileId = Array.isArray(tgRow?.profile_photos) ? String(tgRow.profile_photos[0] || '') : '';
+  const previousAvatar = String(canonicalUser?.telegram_photo_url || existing?.avatar_url || '').trim();
 
-  let avatarUrl = null;
-  try {
-    avatarUrl = await uploadTelegramAvatarToR2({
-      telegramId,
-      photoUrl: telegram.photo_url || '',
-      fileId,
-    });
-  } catch (error) {
-    console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
+  let avatarUrl = isR2MediaUrl(previousAvatar) ? previousAvatar : null;
+  if (!avatarUrl) {
+    try {
+      avatarUrl = await uploadTelegramAvatarToR2({
+        telegramId,
+        photoUrl: telegram.photo_url || previousAvatar,
+        fileId,
+      });
+    } catch (error) {
+      console.warn('[GULI] Telegram customer avatar R2 upload skipped:', error.message);
+    }
   }
 
   const now = new Date().toISOString();
@@ -105,12 +111,6 @@ async function syncTelegramCustomerProfile(telegram) {
     updated_at: now,
   }, { onConflict: 'telegram_id' });
   if (tgUpsertError) throw tgUpsertError;
-
-  const { data: existing, error: customerReadError } = await db.from('customers')
-    .select('id,auth_user_id,telegram_id,full_name,phone,avatar_url,auth_provider,created_at,updated_at')
-    .eq('telegram_id', telegramId)
-    .maybeSingle();
-  if (customerReadError) throw customerReadError;
 
   const payload = {
     telegram_id: telegramId,
