@@ -214,7 +214,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
     if (!exists.data) return fail(res, new Error("Reels topilmadi"), 404);
     const authHeader = String(req.headers.authorization || "");
     const telegramInitData = String(req.headers["x-telegram-init-data"] || "");
-    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null, isVerifiedTelegramCustomer = false;
+    let authorUserId = null, authorName = "", authorAvatar = "", guestKey = null, isVerifiedTelegramCustomer = false, commentRateKey = "";
     let claims = null;
     if (authHeader.startsWith("Bearer ")) {
       try { claims = verifyAccessToken(authHeader.slice(7).trim()); } catch {}
@@ -242,6 +242,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
         }
       } catch {}
       if (!telegramId) return fail(res, new Error("Telegram sessiyasi yaroqsiz. Mini App’ni qayta oching."), 401);
+      commentRateKey = "telegram:" + telegramId;
       const profile = await db().from("users").select("*").eq("telegram_id", telegramId).maybeSingle();
       if (profile.error) throw profile.error;
       if (profile.data) {
@@ -266,6 +267,7 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!profile.data) return fail(res, new Error("Foydalanuvchi profili topilmadi"), 401);
       const user = profile.data;
       authorUserId = String(user.id);
+      commentRateKey = "customer:" + authorUserId;
       authorName = String(user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.telegram_username || user.username || "").trim() || "GULI mijozi";
       authorAvatar = await resolveCustomerAvatar(user);
     } else if (!isVerifiedTelegramCustomer) {
@@ -277,9 +279,10 @@ install("post", "/api/reels/:id/comments", async (req, res) => {
       if (!consumeCommentRateLimit(guestRateKey, 3)) {
         return fail(res, new Error("Juda ko‘p izoh yuborildi. 10 daqiqadan keyin qayta urinib ko‘ring."), 429);
       }
+      commentRateKey = guestRateKey;
       authorName = "Mehmon " + guestKey.slice(-4).toUpperCase();
     }
-    if (authorUserId && !consumeCommentRateLimit("customer:" + authorUserId, 10)) {
+    if (commentRateKey && !consumeCommentRateLimit(commentRateKey, isVerifiedTelegramCustomer || authorUserId ? 10 : 3)) {
       return fail(res, new Error("Juda ko‘p izoh yuborildi. Birozdan keyin qayta urinib ko‘ring."), 429);
     }
     const row = { id: "comment-" + require("crypto").randomUUID(), reel_id: reelId, author_user_id: authorUserId, guest_key: guestKey, author_name: authorName, author_avatar: authorAvatar || "/guli-logo.png", body };
