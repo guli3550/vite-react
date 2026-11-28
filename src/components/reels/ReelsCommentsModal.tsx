@@ -85,6 +85,7 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 }) => {
   const [inputText, setInputText] = useState("");
   const [comments, setComments] = useState<ReelComment[]>(reel.comments || []);
+  const [failedAvatars, setFailedAvatars] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [likedComments, setLikedComments] = useState<Record<string, boolean>>({});
@@ -317,12 +318,13 @@ export const ReelsCommentsModal: React.FC<ReelsCommentsModalProps> = ({
 
               return (
                 <div key={comment.id} className="reelsCommentItem">
-                  {comment.authorAvatar ? (
+                  {comment.authorAvatar && !failedAvatars[comment.id] ? (
                     <img
                       src={comment.authorAvatar}
                       alt={comment.authorName}
                       className="reelsCommentAvatar"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      loading="lazy"
+                      onError={() => setFailedAvatars((prev) => ({ ...prev, [comment.id]: true }))}
                     />
                   ) : (
                     <div
