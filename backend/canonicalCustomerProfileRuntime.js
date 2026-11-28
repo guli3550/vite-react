@@ -240,6 +240,17 @@ async function updateProfile(req, res) {
   // dedicated verified Contact Share flow.
   const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
   if (telegram && Number(auth.row.telegram_id) === Number(telegram.id)) {
+    if (auth.source === 'telegram-customer') {
+      const synced = await syncTelegramCustomerProfile(telegram);
+      return res.json({
+        success: true,
+        data: publicProfile({
+          ...synced.customer,
+          username: telegram.username || null,
+          telegram_photo_url: synced.avatarUrl,
+        }),
+      });
+    }
     const update = {
       ...(telegram.username ? { telegram_username: telegram.username } : {}),
       ...([telegram.first_name, telegram.last_name].filter(Boolean).length
