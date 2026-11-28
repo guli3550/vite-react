@@ -47,7 +47,7 @@ function getCurrentUserProfile(): { name: string; avatar: string } {
       const parsed = JSON.parse(raw);
       if (parsed) {
         const name = parsed.full_name || parsed.name || parsed.username || parsed.telegram_username || parsed.email?.split("@")[0] || "";
-        const avatar = parsed.avatar_url || parsed.avatar || "";
+        const avatar = parsed.telegram_photo_url || parsed.avatar_url || parsed.photo_url || parsed.avatar || "";
         if (name) return { name, avatar };
       }
     }
