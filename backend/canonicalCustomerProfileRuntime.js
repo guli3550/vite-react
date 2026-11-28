@@ -136,7 +136,7 @@ async function syncTelegramCustomerProfile(telegram) {
 
 function publicProfile(row) {
   const fullName = String(row.full_name || [row.first_name, row.last_name].filter(Boolean).join(' ')).trim();
-  const nameParts = fullName.split(/\\s+/).filter(Boolean);
+  const nameParts = fullName.split(/[ ]+/).filter(Boolean);
   const avatarUrl = row.telegram_photo_url || row.avatar_url || null;
   return {
     id: row.id,
