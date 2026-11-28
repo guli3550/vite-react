@@ -25,11 +25,13 @@ const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { install } = require('./routeRegistry.js');
 const { issueAccessToken, issueRefreshToken, rotateRefreshToken } = require('./guliCustomAuth.js');
+const { uploadTelegramAvatarToR2 } = require('./customerAvatarR2.js');
+const { isR2MediaUrl } = require('./r2StorageRuntime.js');
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim();
 const SUPABASE_KEY = String(process.env.SUPABASE_SECRET_KEY || '').trim();
 const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-const SECRET = String(process.env.AUTH_JWT_SECRET || process.env.SUPABASE_SECRET_KEY || '').trim();
+const SECRET = String(process.env.AUTH_JWT_SECRET || '').trim();
 
 const supabase = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -51,61 +53,80 @@ function safeEqualHex(a, b) {
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 }
 
-const AVATAR_SIGN_KEY = String(process.env.AUTH_JWT_SECRET || SUPABASE_KEY || 'guli-auth').trim();
-
-function signTelegramAvatar(telegramId, fileId, expires) {
-  return crypto.createHmac('sha256', AVATAR_SIGN_KEY)
-    .update(`${Number(telegramId)}.${String(fileId)}.${Number(expires)}`)
-    .digest('base64url');
-}
-
-async function refreshTelegramPhotoUrl(telegramId) {
+async function refreshTelegramPhotoUrl(telegramId, verifiedPhotoUrl = "") {
   const id = Number(telegramId);
   if (!Number.isSafeInteger(id) || id <= 0 || !supabase) return null;
   try {
-    const { data: current } = await supabase
+    const { data: current, error: currentError } = await supabase
       .from('users')
       .select('telegram_photo_url')
       .eq('telegram_id', id)
       .maybeSingle();
+    if (currentError) throw currentError;
     const currentUrl = String(current?.telegram_photo_url || '').trim();
-    // Telegram's Mini App photo_url is already a browser-safe HTTPS URL.
-    if (/^https:\/\/t\.me\/i\/userpic\//i.test(currentUrl)) return currentUrl;
+    if (isR2MediaUrl(currentUrl)) return currentUrl;
 
-    const { data: tg } = await supabase
+    const { data: tg, error: tgError } = await supabase
       .from('telegram_users')
       .select('profile_photos')
       .eq('telegram_id', id)
       .maybeSingle();
+    if (tgError) console.warn('[auth] Telegram file_id lookup skipped:', tgError.message);
 
     let fileId = Array.isArray(tg?.profile_photos) && tg.profile_photos.length
       ? String(tg.profile_photos[0] || '')
       : '';
 
     if (!fileId && TELEGRAM_BOT_TOKEN) {
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${id}`);
-      const result = await response.json().catch(() => null);
-      if (result?.ok) fileId = String(result.result?.photo?.big_file_id || result.result?.photo?.small_file_id || '');
+      try {
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${id}`, {
+          signal: AbortSignal.timeout(10000),
+        });
+        const result = await response.json().catch(() => null);
+        if (response.ok && result?.ok) {
+          fileId = String(result.result?.photo?.big_file_id || result.result?.photo?.small_file_id || '');
+        }
+      } catch (error) {
+        console.warn('[auth] Telegram getChat avatar lookup skipped:', error.message);
+      }
     }
-    if (!fileId) return currentUrl || null;
 
-    const expires = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
-    const url = `/api/v1/profile/telegram-avatar/${id}/${encodeURIComponent(fileId)}?expires=${expires}&signature=${encodeURIComponent(signTelegramAvatar(id, fileId, expires))}`;
-
-    await supabase.from('users')
-      .update({ telegram_photo_url: url, updated_at: new Date().toISOString() })
-      .eq('telegram_id', id);
-
+    const sourceUrl = String(verifiedPhotoUrl || currentUrl || '').trim();
+    let publicUrl = null;
     try {
-      await supabase.from('telegram_users').upsert({
-        telegram_id: id,
-        profile_photos: [fileId],
-        profile_photo_synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'telegram_id' });
-    } catch {}
+      publicUrl = await uploadTelegramAvatarToR2({
+        telegramId: id,
+        photoUrl: sourceUrl,
+        fileId,
+      });
+    } catch (error) {
+      // Avatar storage is best-effort: an R2 outage must not block a verified
+      // Telegram sign-in or prevent the customer from opening the app.
+      console.warn('[auth] Telegram avatar R2 upload skipped:', error.message);
+    }
 
-    return url;
+    if (publicUrl) {
+      const { error: updateError } = await supabase.from('users')
+        .update({ telegram_photo_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('telegram_id', id);
+      if (updateError) {
+        console.warn('[auth] Canonical R2 avatar URL save skipped:', updateError.message);
+        return currentUrl || null;
+      }
+      if (fileId) {
+        const { error: photoError } = await supabase.from('telegram_users').upsert({
+          telegram_id: id,
+          profile_photos: [fileId],
+          profile_photo_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'telegram_id' });
+        if (photoError) console.warn('[auth] Telegram file_id persistence skipped:', photoError.message);
+      }
+      return publicUrl;
+    }
+
+    // Preserve the previous URL if Telegram/R2 is temporarily unavailable.
+    return currentUrl || null;
   } catch (error) {
     console.warn('[auth] Telegram avatar refresh skipped:', error?.message || error);
     return null;
