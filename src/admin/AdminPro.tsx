@@ -1763,7 +1763,9 @@ GULI Lingerie xizmatidan foydalanganingiz uchun tashakkur! 🌸`;
                                   alt={u.first_name || ""}
                                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                                   onError={(e) => {
-                                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                                    const image = e.currentTarget as HTMLImageElement;
+                                    image.onerror = null;
+                                    image.src = "/guli-logo.png";
                                   }}
                                 />
                               ) : (
