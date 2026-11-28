@@ -50,14 +50,18 @@ function jwtClaims(req) {
 async function canonicalUser(req) {
   if (!db) return null;
   const claims = jwtClaims(req);
+  const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
+
   if (claims?.sub) {
     const { data, error } = await db.from('users')
       .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
       .eq('id', String(claims.sub)).maybeSingle();
-    if (!error && data) return { row: data, source: 'jwt', telegram: null };
+    if (error) throw error;
+    if (!data) return null;
+    if (telegram && Number(data.telegram_id) !== Number(telegram.id)) return null;
+    return { row: data, source: 'jwt', telegram };
   }
 
-  const telegram = verifiedTelegram(req.headers['x-telegram-init-data'] || '');
   if (telegram) {
     const { data, error } = await db.from('users')
       .select('id,telegram_id,full_name,telegram_username,telegram_photo_url,phone_number,created_at,updated_at')
@@ -187,6 +191,9 @@ async function sync(req, res) {
   }
 
   if (telegram) {
+    if (row && Number(row.telegram_id) !== Number(telegram.id)) {
+      return fail(res, 409, 'Telegram identifikatori va canonical sessiya mos emas.', 'IDENTITY_MISMATCH');
+    }
     // A Telegram Mini App visit is itself a verified customer registration.
     // Keep pre-phone customers in public.customers; phone-verified browser
     // authentication later links the same Telegram ID to public.users.
